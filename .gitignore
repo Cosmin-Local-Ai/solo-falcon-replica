@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Environment / local
+.env
+.env.*
+*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Pi agent session data
+.pi/
+
+# Reference material from the original site (IP + large binaries) — not part of the replica
+docs/reference/
