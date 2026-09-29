@@ -14,7 +14,7 @@ export type Page =
   | 'dashboard'
   | 'revenues'
   | 'expenses'
-  | 'efactura'
+  | 'e-factura'
   | 'declarations'
   | 'documents'
   | 'clients'
@@ -24,7 +24,7 @@ const PAGES: Page[] = [
   'dashboard',
   'revenues',
   'expenses',
-  'efactura',
+  'e-factura',
   'declarations',
   'documents',
   'clients',
@@ -35,7 +35,7 @@ const NAV: { page: Page; label: string; icon: string }[] = [
   { page: 'dashboard', label: 'Panou de control', icon: '▦' },
   { page: 'revenues', label: 'Venituri', icon: '↑' },
   { page: 'expenses', label: 'Cheltuieli', icon: '↓' },
-  { page: 'efactura', label: 'e-Factura', icon: '⚡' },
+  { page: 'e-factura', label: 'e-Factura', icon: '⚡' },
   { page: 'declarations', label: 'Declarații', icon: '📋' },
   { page: 'documents', label: 'Documente', icon: '📁' },
   { page: 'clients', label: 'Clienți', icon: '👥' },
@@ -46,7 +46,7 @@ const TITLES: Record<Page, string> = {
   dashboard: 'Panou de control',
   revenues: 'Venituri',
   expenses: 'Cheltuieli',
-  efactura: 'e-Factura',
+  'e-factura': 'e-Factura',
   declarations: 'Declarații',
   documents: 'Documente',
   clients: 'Clienți',
@@ -61,25 +61,26 @@ interface Route {
 }
 
 // Canonical tab keys per page (must match the tab state inside each page).
+// Exact URL forms required:
+//   /revenues#!/registered  /revenues#!/pending  /revenues#!/rejected
+//   /expenses#!/registered  /expenses#!/rejected
+//   /documents#!/company    /settings#!/company
+// Pages may also generate their own extra tabs (e.g. /documents#!/toate).
 const VALID_TABS: Partial<Record<Page, string[]>> = {
-  revenues: ['inregistrata', 'in-asteptare', 'respinsa'],
-  expenses: ['inregistrata', 'respinsa'],
-  documents: ['Venituri', 'Cheltuieli', 'Raport'],
-};
-
-// English aliases accepted in the URL (e.g. /revenues#!/registered).
-const HASH_ALIASES: Partial<Record<Page, Record<string, string>>> = {
-  revenues: { registered: 'inregistrata', pending: 'in-asteptare', rejected: 'respinsa' },
-  expenses: { registered: 'inregistrata', rejected: 'respinsa' },
+  revenues: ['registered', 'pending', 'rejected'],
+  expenses: ['registered', 'rejected'],
+  documents: ['company', 'statements', 'reports'],
+  // Mirrors the live SOLO settings tabs (docs/reference/settings.md);
+  // the real app's "Abonament" (subscription) tab is not replicated.
+  settings: ['company', 'einvoice', 'bankaccounts', 'account'],
 };
 
 export function parseRoute(): Route {
   const seg = window.location.pathname.split('/').filter(Boolean).pop() ?? '';
   const page: Page = (PAGES as string[]).includes(seg) ? (seg as Page) : 'dashboard';
-  const raw = window.location.hash.replace(/^#!?/, '');
-  const normalized = raw ? (HASH_ALIASES[page]?.[raw] ?? raw) : '';
+  const raw = window.location.hash.replace(/^#!\/?/, '');
   const valid = VALID_TABS[page];
-  const tab = valid && normalized && valid.includes(normalized) ? normalized : null;
+  const tab = valid && raw && valid.includes(raw) ? raw : null;
   return { page, tab };
 }
 
@@ -103,11 +104,15 @@ function Shell() {
     setRoute({ page, tab });
   }, []);
 
-  // Back/forward navigation.
+  // Back/forward navigation, plus direct hash edits in the URL bar.
   useEffect(() => {
     const onPop = () => setRoute(parseRoute());
     window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
+    window.addEventListener('hashchange', onPop);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      window.removeEventListener('hashchange', onPop);
+    };
   }, []);
 
   // Normalize the initial URL (e.g. "/" → "/dashboard", aliases → canonical keys)
@@ -159,26 +164,31 @@ function Shell() {
           {route.page === 'dashboard' && <Dashboard onNavigate={navigate} />}
           {route.page === 'revenues' && (
             <Revenues
-              initialTab={route.tab as 'inregistrata' | 'in-asteptare' | 'respinsa' | undefined}
+              initialTab={route.tab as 'registered' | 'pending' | 'rejected' | undefined}
               onTabChange={t => navigate('revenues', t)}
             />
           )}
           {route.page === 'expenses' && (
             <Expenses
-              initialTab={route.tab as 'inregistrata' | 'respinsa' | undefined}
+              initialTab={route.tab as 'registered' | 'rejected' | undefined}
               onTabChange={t => navigate('expenses', t)}
             />
           )}
-          {route.page === 'efactura' && <EFactura />}
+          {route.page === 'e-factura' && <EFactura />}
           {route.page === 'declarations' && <Declarations />}
           {route.page === 'documents' && (
             <Documents
-              initialCategory={route.tab ?? undefined}
-              onCategoryChange={c => navigate('documents', c === 'Toate' ? null : c)}
+              initialTab={route.tab ?? undefined}
+              onTabChange={t => navigate('documents', t)}
             />
           )}
           {route.page === 'clients' && <Clients />}
-          {route.page === 'settings' && <Settings />}
+          {route.page === 'settings' && (
+            <Settings
+              initialTab={route.tab ?? undefined}
+              onTabChange={t => navigate('settings', t)}
+            />
+          )}
         </div>
       </div>
       <Toasts />

@@ -4,11 +4,15 @@ import { fmtRON, fmtDate, total, REV_STATUS_LABEL, statusBadge } from '../data/t
 import type { Revenue } from '../data/types';
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
 
+// Canonical route hash keys (English) mapped to the Romanian data statuses.
 const TABS = [
-  { key: 'inregistrata', label: 'Înregistrate' },
-  { key: 'in-asteptare', label: 'În așteptare' },
-  { key: 'respinsa', label: 'Respinse' },
+  { key: 'registered', label: 'Înregistrate', status: 'inregistrata' },
+  { key: 'pending', label: 'În așteptare', status: 'in-asteptare' },
+  { key: 'rejected', label: 'Respinse', status: 'respinsa' },
 ] as const;
+
+const statusFor = (tab: (typeof TABS)[number]['key']) =>
+  TABS.find(t => t.key === tab)!.status;
 
 const PAGE_SIZE = 8;
 
@@ -131,7 +135,7 @@ interface RevenuesProps {
 export default function Revenues({ initialTab, onTabChange }: RevenuesProps) {
   const { revenues, addRevenue, updateRevenue, deleteRevenue, toast } = useStore();
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>(
-    initialTab && TABS.some(t => t.key === initialTab) ? initialTab : 'inregistrata'
+    initialTab && TABS.some(t => t.key === initialTab) ? initialTab : 'registered'
   );
 
   // Sync tab when the URL changes (back/forward navigation).
@@ -148,14 +152,15 @@ export default function Revenues({ initialTab, onTabChange }: RevenuesProps) {
 
   const rows = useMemo(() =>
     revenues
-      .filter(r => r.status === tab)
+      .filter(r => r.status === statusFor(tab))
       .filter(r => !search || (r.nr + r.client).toLowerCase().includes(search.toLowerCase()))
       .sort((a, b) => b.date.localeCompare(a.date)),
   [revenues, tab, search]);
 
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const counts = (k: string) => revenues.filter(r => r.status === k).length;
+  const counts = (k: (typeof TABS)[number]['key']) =>
+    revenues.filter(r => r.status === statusFor(k)).length;
 
   return (
     <div>
