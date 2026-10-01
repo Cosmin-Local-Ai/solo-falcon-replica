@@ -1,44 +1,115 @@
-import type { Revenue, Expense, Client, Declaration, Document } from './types';
+import type { AppData } from './types';
 
-export const seedClients: Client[] = [
-  { id: 'c1', denumire: 'SC VETRA SRL', cui: 'RO12345678', email: 'contact@vetra.ro', telefon: '0721 111 222', oras: 'Cluj-Napoca' },
-  { id: 'c2', denumire: 'IONEL POPESCU (PFA)', cui: 'RO987654321', email: 'ionel.popescu@gmail.com', telefon: '0733 555 666', oras: 'Timișoara' },
-  { id: 'c3', denumire: 'SC LOGICOM SRL', cui: 'RO45678912', email: 'office@logicom.ro', telefon: '0744 222 333', oras: 'București' },
-  { id: 'c4', denumire: 'ANA MARIN (PFA)', cui: 'RO321654987', email: 'ana.marin@outlook.com', telefon: '0755 999 888', oras: 'Iași' },
-];
-
-export const seedRevenues: Revenue[] = [
-  { id: 'r1', tip: 'factura', nr: 'FCT-2025-0042', date: '2025-09-02', client: 'SC VETRA SRL', cui: 'RO12345678', valoareFaraTva: 4500, tva: 990, status: 'inregistrata', eFacturaStatus: 'Acceptată' },
-  { id: 'r2', tip: 'factura', nr: 'FCT-2025-0043', date: '2025-09-10', client: 'IONEL POPESCU (PFA)', cui: 'RO987654321', valoareFaraTva: 1200, tva: 264, status: 'inregistrata', eFacturaStatus: 'Acceptată' },
-  { id: 'r3', tip: 'notafactura', nr: 'NF-2025-0011', date: '2025-09-18', client: 'SC LOGICOM SRL', cui: 'RO45678912', valoareFaraTva: 7800, tva: 1716, status: 'in-asteptare', eFacturaStatus: 'În așteptare' },
-  { id: 'r4', tip: 'factura', nr: 'FCT-2025-0044', date: '2025-09-25', client: 'ANA MARIN (PFA)', cui: 'RO321654987', valoareFaraTva: 950, tva: 209, status: 'in-asteptare', eFacturaStatus: 'În așteptare' },
-  { id: 'r5', tip: 'factura', nr: 'FCT-2025-0041', date: '2025-08-28', client: 'SC VETRA SRL', cui: 'RO12345678', valoareFaraTva: 3200, tva: 704, status: 'respinsa', statusDetail: 'CUI client nevalidat la ANAF', eFacturaStatus: 'Respinsă' },
-  { id: 'r6', tip: 'notafactura', nr: 'NF-2025-0010', date: '2025-08-14', client: 'SC LOGICOM SRL', cui: 'RO45678912', valoareFaraTva: 5400, tva: 1188, status: 'inregistrata', eFacturaStatus: 'Acceptată' },
-  { id: 'r7', tip: 'factura', nr: 'FCT-2025-0040', date: '2025-07-30', client: 'IONEL POPESCU (PFA)', cui: 'RO987654321', valoareFaraTva: 2100, tva: 462, status: 'inregistrata', eFacturaStatus: 'Acceptată' },
-  { id: 'r8', tip: 'factura', nr: 'FCT-2025-0039', date: '2025-07-12', client: 'ANA MARIN (PFA)', cui: 'RO321654987', valoareFaraTva: 1500, tva: 330, status: 'respinsa', statusDetail: 'Scanare neclară — reîncarcă documentul', eFacturaStatus: 'Respinsă' },
-];
-
-export const seedExpenses: Expense[] = [
-  { id: 'e1', tip: 'factura', nr: 'FCT-09-112043', date: '2025-09-05', furnizor: 'SC ENERGIA DISTRIBUTIE SA', cui: 'RO10102030', valoareFaraTva: 312.4, tva: 68.73, status: 'inregistrata' },
-  { id: 'e2', tip: 'bon-fiscal', nr: 'BF-09-5521', date: '2025-09-12', furnizor: 'SC PETROM AFER TITAN SA', cui: 'RO10102031', valoareFaraTva: 245.8, tva: 54.08, status: 'inregistrata' },
-  { id: 'e3', tip: 'factura', nr: 'FCT-09-8812', date: '2025-09-20', furnizor: 'SC ORANGE ROMANIA SA', cui: 'RO10102032', valoareFaraTva: 189.99, tva: 41.8, status: 'inregistrata' },
-  { id: 'e4', tip: 'bon-fiscal', nr: 'BF-08-3310', date: '2025-08-22', furnizor: 'SC CARREFOUR ROMANIA SA', cui: 'RO10102033', valoareFaraTva: 86.5, tva: 19.03, status: 'respinsa', statusDetail: 'Bon fiscal fără mențiunea CUI' },
-  { id: 'e5', tip: 'factura', nr: 'FCT-08-4471', date: '2025-08-08', furnizor: 'SC DP WORLD SHIPPING RO SA', cui: 'RO10102034', valoareFaraTva: 540, tva: 118.8, status: 'inregistrata' },
-  { id: 'e6', tip: 'bon-fiscal', nr: 'BF-07-1180', date: '2025-07-15', furnizor: 'SC ROMPETROL SA', cui: 'RO10102035', valoareFaraTva: 310.2, tva: 68.24, status: 'inregistrata' },
-];
-
-export const seedDeclarations: Declaration[] = [
-  { id: 'd1', an: 2025, luna: 9, venituri: 15510, cheltuieli: 1384.93, status: 'in-asteptare', dataInregistrare: '2025-10-03' },
-  { id: 'd2', an: 2025, luna: 8, venituri: 10212, cheltuieli: 956.7, status: 'transmisa', dataInregistrare: '2025-09-04', dataTrimitere: '2025-09-05' },
-  { id: 'd3', an: 2025, luna: 7, venituri: 7722, cheltuieli: 968.44, status: 'transmisa', dataInregistrare: '2025-08-04', dataTrimitere: '2025-08-06' },
-  { id: 'd4', an: 2025, luna: 6, venituri: 6100, cheltuieli: 1204.1, status: 'respinsa', dataInregistrare: '2025-07-05', dataTrimitere: '2025-07-07' },
-];
-
-export const seedDocuments: Document[] = [
-  { id: 'doc1', nume: 'FCT-2025-0042.pdf', tip: 'pdf', marime: '214 KB', data: '2025-09-02', categoria: 'Venituri' },
-  { id: 'doc2', nume: 'FCT-2025-0043.pdf', tip: 'pdf', marime: '198 KB', data: '2025-09-10', categoria: 'Venituri' },
-  { id: 'doc3', nume: 'NF-2025-0011.pdf', tip: 'pdf', marime: '242 KB', data: '2025-09-18', categoria: 'Venituri' },
-  { id: 'doc4', nume: 'FCT-09-112043.pdf', tip: 'pdf', marime: '187 KB', data: '2025-09-05', categoria: 'Cheltuieli' },
-  { id: 'doc5', nume: 'BF-09-5521.jpg', tip: 'jpg', marime: '1.2 MB', data: '2025-09-12', categoria: 'Cheltuieli' },
-  { id: 'doc6', nume: 'evidenta-2025.xlsx', tip: 'xlsx', marime: '48 KB', data: '2025-09-28', categoria: 'Raport' },
-];
+export const seedData: AppData = {
+  profile: {
+    id: 'profile-1',
+    pfaStartYear: 2020,
+    fiscalYear: 2026,
+    regime: 'impozit_pe_venit',
+    caen: '6201',
+    salaryStatus: 'nu',
+    pensionStatus: 'nu',
+    otherIncome: [],
+    socialInsuranceStatus: 'obligatoriu',
+    vatExempt: false,
+    cashFloorLei: 0,
+    identity: {
+      nume: 'Popescu Andrei',
+      cnp: '1234567890123',
+      adresa: 'Str. Libertății 12, Cluj-Napoca',
+      telefon: '0750 123 456',
+      email: 'andrei@popescuconsulting.ro',
+      denumire: 'Popescu Consulting SRL',
+      cui: 'RO4455667788990',
+      formaJuridica: 'SRL',
+      numarRegComert: 'J40/1234/2020',
+      adresaSocietate: 'Str. Libertății 12, Cluj-Napoca',
+      telefonSocietate: '0750 123 456',
+      emailSocietate: 'contact@popescuconsulting.ro',
+      contBancar: 'RO44 BACX 0000 0000 1234 5678 9000',
+      banca: 'BCR',
+    },
+    updatedAt: '2026-09-28T10:00:00.000Z',
+  },
+  revenues: [
+    { id: 'r1', tip: 'factura', nr: 'FCT-2026-001', date: '2026-09-02', client: 'Presta Consulting SRL', cui: 'RO12345678', valoareFaraTva: 4500, tva: 945, status: 'inregistrata', eFacturaStatus: 'Acceptată' },
+    { id: 'r2', tip: 'factura', nr: 'FCT-2026-002', date: '2026-09-10', client: 'Andrei Popescu', cui: '1234567890123', valoareFaraTva: 1200, tva: 252, status: 'in-asteptare', eFacturaStatus: 'În așteptare' },
+    { id: 'r3', tip: 'notafactura', nr: 'NF-2026-003', date: '2026-09-18', client: 'Marius Ionescu', cui: '9876543210987', valoareFaraTva: 800, tva: 168, status: 'respinsa', statusDetail: 'CUI nevalid', eFacturaStatus: 'Respinsă' },
+    { id: 'r4', tip: 'factura', nr: 'FCT-2026-004', date: '2026-09-25', client: 'Presta Consulting SRL', cui: 'RO12345678', valoareFaraTva: 3200, tva: 672, status: 'inregistrata', eFacturaStatus: 'Acceptată' },
+  ],
+  expenses: [
+    { id: 'e1', tip: 'factura', nr: 'FCT-PRO-118', date: '2026-09-05', furnizor: 'CloudHost SRL', cui: 'RO87654321', valoareFaraTva: 120, tva: 25.2, status: 'inregistrata' },
+    { id: 'e2', tip: 'bon-fiscal', nr: 'BF-4471', date: '2026-09-12', furnizor: 'Carrefour', cui: 'RO11223344', valoareFaraTva: 85.5, tva: 17.96, status: 'inregistrata' },
+    { id: 'e3', tip: 'factura', nr: 'FCT-PRO-121', date: '2026-09-20', furnizor: 'Office Supplies SA', cui: 'RO55667788', valoareFaraTva: 340, tva: 71.4, status: 'respinsa', statusDetail: 'Document neconform' },
+  ],
+  clients: [
+    { id: 'c1', denumire: 'Presta Consulting SRL', cui: 'RO12345678', email: 'contact@presta.ro', telefon: '0721 111 222', oras: 'București' },
+    { id: 'c2', denumire: 'Andrei Popescu', cui: '1234567890123', email: 'andrei.popescu@mail.ro', telefon: '0731 333 444', oras: 'Cluj-Napoca' },
+    { id: 'c3', denumire: 'Marius Ionescu', cui: '9876543210987', email: 'm.ionescu@mail.ro', telefon: '0742 555 666', oras: 'Timișoara' },
+  ],
+  declarations: [
+    { id: 'd1', an: 2026, luna: 3, venituri: 12500, cheltuieli: 1800, status: 'transmisa', dataInregistrare: '2026-04-10', dataTrimitere: '2026-04-15' },
+    { id: 'd2', an: 2026, luna: 6, venituri: 14200, cheltuieli: 2100, status: 'in-asteptare', dataInregistrare: '2026-07-08' },
+    { id: 'd3', an: 2026, luna: 9, venituri: 9680, cheltuieli: 546, status: 'inregistrata', dataInregistrare: '2026-09-28' },
+  ],
+  documents: [
+    { id: 'doc1', nume: 'FCT-2026-001.pdf', data: '2026-09-02', categoria: 'Facturi' },
+    { id: 'doc2', nume: 'Declarația 220 – Q2 2026.pdf', data: '2026-07-10', categoria: 'Declarații' },
+    { id: 'doc3', nume: 'Contract Presta Consulting.pdf', data: '2026-08-20', categoria: 'Contracte' },
+  ],
+  companyDocs: {
+    im: [
+      { id: 'im1', nume: 'Declarația 100 – Q2 2026.pdf', tip: 'factura', content: 'data:text/plain;base64,SW1wb3ppdCBwZSB2ZW5pdQ==', marime: 48210, data: '2026-07-05', dataDepunere: '2026-07-05', depunere: 'ANAF', perioada: 'Q2 2026' },
+    ],
+    cs: [
+      { id: 'cs1', nume: 'Declarația 220 – Q2 2026.pdf', tip: 'factura', content: 'data:text/plain;base64,Q29udHJpYnV0aWkgc29jaWFsZQ==', marime: 51340, data: '2026-07-10', dataDepunere: '2026-07-10', depunere: 'ANAF', perioada: 'Q2 2026' },
+    ],
+    tva: [
+      { id: 'tva1', nume: 'Declarația 300 – August 2026.pdf', tip: 'factura', content: 'data:text/plain;base64,VERWQSBkZWNsYXJhdGlvbg==', marime: 39870, data: '2026-09-15', dataDepunere: '2026-09-15', depunere: 'ANAF', perioada: 'August 2026' },
+    ],
+    facturi: [
+      { id: 'f1', nume: 'FCT-2026-001.pdf', tip: 'factura', content: 'data:text/plain;base64,GmFjdHVyYQ==', marime: 12480, data: '2026-09-02' },
+      { id: 'f2', nume: 'NF-2026-003.pdf', tip: 'notafactura', content: 'data:text/plain;base64,Tm90YSBmYXJhIGZhY3R1cmE=', marime: 9210, data: '2026-09-18' },
+      { id: 'f3', nume: 'BF-4471.pdf', tip: 'bon-fiscal', content: 'data:text/plain;base64,Bm9uIGZpc2NhbA==', marime: 4102, data: '2026-09-12' },
+    ],
+  },
+  statements: [
+    { id: 's1', tip: '100', perioada: '2026-Q2', depunere: 'SOLO', dataDepunere: '2026-07-05' },
+    { id: 's2', tip: '220', perioada: '2026-Q2', depunere: 'SOLO', dataDepunere: '2026-07-10' },
+    { id: 's3', tip: '300', perioada: '2026-08', depunere: 'personală', dataDepunere: '2026-09-15' },
+  ],
+  snapshots: [],
+  settings: {
+    cotaTva: 9,
+    company: {
+      denumire: 'Popescu Consulting SRL',
+      cui: 'RO4455667788990',
+      numarRegComert: 'J40/1234/2020',
+      adresa: 'Str. Libertății 12, Cluj-Napoca',
+      cnp: 'RO4455667788990',
+      formaJuridica: 'SRL',
+      codFiscal: 'RO4455667788990',
+      codCAEN: '6201',
+      regComerț: 'J40/1234/2020',
+      telefon: '0750 123 456',
+      email: 'contact@popescuconsulting.ro',
+      contBancar: 'RO44 BACX 0000 0000 1234 5678 9000',
+      banca: 'BCR',
+      caen: [{ cod: '6201', descriere: 'Activități de programare computerizate' }],
+    },
+    personal: {
+      nume: 'Popescu Andrei',
+      cnp: '1234567890123',
+      adresa: 'Str. Libertății 12, Cluj-Napoca',
+      telefon: '0750 123 456',
+      email: 'andrei@popescuconsulting.ro',
+    },
+    bankAccounts: [
+      { id: 'ba-1', banca: 'BCR', moneda: 'RON' },
+    ],
+    eFactura: {
+      trimitere: 'manual',
+      dateContact: '2026-09-01',
+    },
+  },
+};

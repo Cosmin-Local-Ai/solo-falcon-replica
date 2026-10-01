@@ -98,7 +98,7 @@ function DeclForm({ initial, onSave, onClose }: {
 }
 
 export default function Declarations() {
-  const { declarations, addDeclaration, sendDeclaration, toast } = useStore();
+  const { declarations, addDeclaration, updateDeclaration, sendDeclaration, toast } = useStore();
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>('inregistrata');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -199,8 +199,13 @@ export default function Declarations() {
           initial={editing === 'new' ? undefined : editing}
           onClose={() => setEditing(null)}
           onSave={d => {
-            addDeclaration(d);
-            toast('success', `Declarația ${d.an}-${String(d.luna).padStart(2, '0')} a fost adăugată`);
+            if (editing !== 'new') {
+              updateDeclaration({ ...editing, ...d });
+              toast('success', `Declarația ${d.an}-${String(d.luna).padStart(2, '0')} a fost actualizată`);
+            } else {
+              addDeclaration(d);
+              toast('success', `Declarația ${d.an}-${String(d.luna).padStart(2, '0')} a fost adăugată`);
+            }
             setEditing(null);
           }}
         />

@@ -69,7 +69,7 @@ function ClientForm({ initial, onSave, onClose }: {
 }
 
 export default function Clients() {
-  const { clients, addClient, toast } = useStore();
+  const { clients, addClient, updateClient, toast } = useStore();
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Client | 'new' | null>(null);
 
@@ -137,8 +137,13 @@ export default function Clients() {
           initial={editing === 'new' ? undefined : editing}
           onClose={() => setEditing(null)}
           onSave={c => {
-            addClient(c);
-            toast('success', `Clientul ${c.denumire} a fost adăugat`);
+            if (editing === 'new') {
+              addClient(c);
+              toast('success', `Clientul ${c.denumire} a fost adăugat`);
+            } else {
+              updateClient({ ...editing, ...c });
+              toast('success', `Clientul ${c.denumire} a fost actualizat`);
+            }
             setEditing(null);
           }}
         />

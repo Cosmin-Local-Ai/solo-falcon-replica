@@ -4,10 +4,14 @@ import { fmtRON, fmtDate, total, EXP_STATUS_LABEL, statusBadge } from '../data/t
 import type { Expense } from '../data/types';
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
 
+// Canonical route hash keys (English) mapped to the Romanian data statuses.
 const TABS = [
-  { key: 'inregistrata', label: 'Înregistrate' },
-  { key: 'respinsa', label: 'Respinse' },
+  { key: 'registered', label: 'Înregistrate', status: 'inregistrata' },
+  { key: 'rejected', label: 'Respinse', status: 'respinsa' },
 ] as const;
+
+const statusFor = (tab: (typeof TABS)[number]['key']) =>
+  TABS.find(t => t.key === tab)!.status;
 
 const PAGE_SIZE = 8;
 
@@ -121,7 +125,7 @@ interface ExpensesProps {
 export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
   const { expenses, addExpense, updateExpense, deleteExpense, toast } = useStore();
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>(
-    initialTab && TABS.some(t => t.key === initialTab) ? initialTab : 'inregistrata'
+    initialTab && TABS.some(t => t.key === initialTab) ? initialTab : 'registered'
   );
 
   // Sync tab when the URL changes (back/forward navigation).
@@ -138,14 +142,15 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
 
   const rows = useMemo(() =>
     expenses
-      .filter(e => e.status === tab)
+      .filter(e => e.status === statusFor(tab))
       .filter(e => !search || (e.nr + e.furnizor).toLowerCase().includes(search.toLowerCase()))
       .sort((a, b) => b.date.localeCompare(a.date)),
   [expenses, tab, search]);
 
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const counts = (k: string) => expenses.filter(e => e.status === k).length;
+  const counts = (k: (typeof TABS)[number]['key']) =>
+    expenses.filter(e => e.status === statusFor(k)).length;
   const sum = rows.reduce((s, e) => s + total(e), 0);
 
   return (

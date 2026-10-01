@@ -1,93 +1,130 @@
+import { useDashboardData } from '../data/dashboardAdapter';
 import { useStore } from '../data/store';
-import { fmtRON, fmtDate, total, REV_STATUS_LABEL, statusBadge } from '../data/types';
-import { Card, StatCard, Badge } from '../components/ui';
-import type { Page } from '../App';
+import { getFinancialSummary } from '../data/dashboard';
+import { fmtRON, fmtDate } from '../data/types';
+import FinancialChart from '../components/FinancialChart';
+import FinancialSummary from '../components/FinancialSummary';
+import TaxReserve from '../components/TaxReserve';
+import Insights from '../components/Insights';
+import ThresholdSection from '../components/dashboard/ThresholdSection';
+import DeadlineSection from '../components/dashboard/DeadlineSection';
+import CompletenessSection from '../components/dashboard/CompletenessSection';
+import ActionSection from '../components/dashboard/ActionSection';
+import LegislationSection from '../components/dashboard/LegislationSection';
 
-export default function Dashboard({ onNavigate }: { onNavigate: (p: Page) => void }) {
-  const { revenues, expenses, declarations, documents } = useStore();
+function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="stat-card">
+      <div className="label">{label}</div>
+      <div className="value mono">{value}</div>
+      {hint ? <div className="hint">{hint}</div> : null}
+    </div>
+  );
+}
 
-  const revTotal = revenues.filter(r => r.status === 'inregistrata').reduce((s, r) => s + total(r), 0);
-  const expTotal = expenses.filter(e => e.status === 'inregistrata').reduce((s, e) => s + total(e), 0);
-  const sold = revTotal - expTotal;
-  const pendingRev = revenues.filter(r => r.status === 'in-asteptare').length;
-  const respins = revenues.filter(r => r.status === 'respinsa').length + expenses.filter(e => e.status === 'respinsa').length;
-  const declPENDING = declarations.filter(d => d.status === 'in-asteptare').length;
+function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h2 className="card-title">{title}</h2>
+      </div>
+      <div className="card-body">{children}</div>
+    </section>
+  );
+}
 
-  const recent = [...revenues].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+export default function DashboardPage() {
+  const data = useDashboardData();
+  const { snapshot, tax, completeness, reserve, pendingCounts } = data;
+  const appData = useStore();
+  const summary = getFinancialSummary(appData, snapshot.asOf);
+
+  const hasData =
+    snapshot.pfaRevenue > 0 ||
+    pendingCounts.revenuesInAsteptare > 0 ||
+    pendingCounts.revenuesRespinsa > 0 ||
+    pendingCounts.expensesRespinsa > 0;
+
+  const taxTotal = tax.status === 'computed' ? tax.output.total : null;
 
   return (
-    <div>
-      <div className="stat-grid">
-        <StatCard label="Venituri înregistrate" value={fmtRON(revTotal)} hint="Facturi și notele fără factură validate" />
-        <StatCard label="Cheltuieli înregistrate" value={fmtRON(expTotal)} hint="Facturi și bonuri fiscale validate" />
-        <StatCard label="Sold curent" value={fmtRON(sold)} tone={sold >= 0 ? 'pos' : 'neg'} hint="Venituri − cheltuieli" />
-        <StatCard
-          label="De verificat"
-          value={String(pendingRev + respins + declPENDING)}
-          hint={`${pendingRev} venituri în așteptare · ${respins} respinse · ${declPENDING} declarații`}
-        />
+    <div className="dashboard">
+      <div className="row between">
+        <h1>Tablou de bord</h1>
+        <span className="muted">
+          An fiscal {snapshot.taxYear} · actualizat la {fmtDate(snapshot.asOf)}
+        </span>
       </div>
 
-      <div className="stack">
-        <Card
-          title="Ultimii venituri"
-          action={<button className="btn btn-sm btn-outline" onClick={() => onNavigate('revenues')}>Vezi toate</button>}
-        >
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Document</th><th>Client</th><th>Data</th><th>Status</th><th className="amount">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recent.map(r => (
-                <tr key={r.id} className="clickable" onClick={() => onNavigate('revenues')}>
-                  <td>{r.nr}</td>
-                  <td>{r.client}</td>
-                  <td>{fmtDate(r.date)}</td>
-                  <td><Badge kind={statusBadge(r.status)}>{REV_STATUS_LABEL[r.status]}</Badge></td>
-                  <td className="amount">{fmtRON(total(r))}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
-
-        <div className="flex gap-2">
-          <Card title="Declarații" action={<button className="btn btn-sm btn-outline" onClick={() => onNavigate('declarations')}>Vezi toate</button>}>
-            <table className="table">
-              <thead>
-                <tr><th>Perioada</th><th>Venituri</th><th>Status</th></tr>
-              </thead>
-              <tbody>
-                {declarations.slice(0, 3).map(d => (
-                  <tr key={d.id} className="clickable" onClick={() => onNavigate('declarations')}>
-                    <td>{d.luna}/{d.an}</td>
-                    <td className="amount">{fmtRON(d.venituri)}</td>
-                    <td><Badge kind={statusBadge(d.status)}>{d.status === 'transmisa' ? 'Transmisa' : d.status === 'respinsa' ? 'Respinsă' : d.status === 'in-asteptare' ? 'În așteptare' : 'Înregistrată'}</Badge></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
-          <Card title="Documente recente" action={<button className="btn btn-sm btn-outline" onClick={() => onNavigate('documents')}>Vezi toate</button>}>
-            <table className="table">
-              <thead>
-                <tr><th>Nume</th><th>Data</th><th>Categorie</th></tr>
-              </thead>
-              <tbody>
-                {documents.slice(0, 3).map(d => (
-                  <tr key={d.id} className="clickable" onClick={() => onNavigate('documents')}>
-                    <td>{d.nume}</td>
-                    <td>{fmtDate(d.data)}</td>
-                    <td>{d.categoria}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
+      {!hasData ? (
+        <div className="empty-state">
+          <h2>Începe înregistrarea activității</h2>
+          <p>
+            Adaugă prima factură de venit și prima cheltuială pentru a vedea estimarea taxelor, termenele
+            limită și recomandarea de rezervă lunară.
+          </p>
+          <div className="row">
+            <a className="btn btn-primary" href="/revenues">Adaugă un venit</a>
+            <a className="btn" href="/expenses">Adaugă o cheltuială</a>
+          </div>
         </div>
-      </div>
+      ) : (
+        <>
+          {/* 1. Cockpit strip — headline numbers */}
+          <div className="grid grid-5">
+            <StatCard label="Venituri PFA (an)" value={fmtRON(snapshot.pfaRevenue)} />
+            <StatCard
+              label="Impozit estimat"
+              value={taxTotal === null ? '—' : fmtRON(taxTotal)}
+              hint="de pus deoparte"
+            />
+            <StatCard label="Rezervă lunară" value={fmtRON(reserve.recommendedMonthlyReserve)} />
+            <StatCard label="Rămâne de pus deoparte" value={fmtRON(reserve.remainingTarget)} />
+            <StatCard
+              label="Date complete"
+              value={`${completeness.satisfiedCount}/${completeness.totalCount}`}
+              hint="verificări"
+            />
+          </div>
+
+          {/* 2. Tax hero — estimate, completeness, reserve, calculation access */}
+          <SectionCard title="Estimare impozit">
+            <div className="stack">
+              <div className="row between">
+                <span className="muted">ESTIMARE · An fiscal {snapshot.taxYear}</span>
+                <span className="muted">
+                  Date complete: {completeness.satisfiedCount}/{completeness.totalCount}
+                </span>
+              </div>
+              <div className="tax-hero-value mono">{taxTotal === null ? '—' : fmtRON(taxTotal)}</div>
+              <p className="hint">
+                Impozit estimat de pus deoparte. Pune deoparte{' '}
+                <strong className="mono">{fmtRON(reserve.recommendedMonthlyReserve)}</strong> pe lună.
+              </p>
+              <a className="btn" href="/calcul">Deschide calculul</a>
+            </div>
+          </SectionCard>
+
+          {/* 3. Financial graph (Step 20) */}
+          <FinancialChart />
+
+          {/* 4. Summary (Step 21) */}
+          <FinancialSummary summary={summary} />
+
+          {/* 5. Insights (Step 21) */}
+          <Insights insights={data.insights} />
+
+          {/* 6. Lower sections — Rezervă fiscală (Step 21); thresholds, deadlines, completeness, actions (Step 22) */}
+          <div className="grid grid-2">
+            <TaxReserve reserve={data.reserve} />
+            <ThresholdSection thresholds={data.thresholds} />
+            <DeadlineSection deadlines={data.deadlines} asOfDate={data.snapshot.asOf} />
+            <CompletenessSection completeness={data.completeness} />
+            <ActionSection pendingCounts={data.pendingCounts} />
+            <LegislationSection state={data.legislation} />
+          </div>
+        </>
+      )}
     </div>
   );
 }
