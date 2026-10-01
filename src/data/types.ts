@@ -1,3 +1,6 @@
+import type { PfaProfile } from '../domain/models';
+import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
+
 // ── Venituri ──────────────────────────────────────────────
 export type RevenueStatus = 'inregistrata' | 'in-asteptare' | 'respinsa';
 export type EFacturaStatus = 'Acceptată' | 'În așteptare' | 'Respinsă';
@@ -147,6 +150,7 @@ export interface Toast {
 
 // ── App data ──────────────────────────────────────────────
 export interface AppData {
+  profile: PfaProfile;
   revenues: Revenue[];
   expenses: Expense[];
   clients: Client[];
@@ -154,6 +158,7 @@ export interface AppData {
   documents: DocumentItem[];
   companyDocs: Record<DocTypeCode, CompanyDocument[]>;
   statements: TaxStatement[];
+  snapshots: TaxCalculationSnapshot[];
   settings: SettingsState;
 }
 

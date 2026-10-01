@@ -138,10 +138,12 @@ export default function Revenues({ initialTab, onTabChange }: RevenuesProps) {
     initialTab && TABS.some(t => t.key === initialTab) ? initialTab : 'registered'
   );
 
-  // Sync tab when the URL changes (back/forward navigation).
+  // Sync tab when the URL changes (back/forward navigation). When the URL has no
+  // valid tab key (bare /revenues), reset to the canonical default `registered`.
   useEffect(() => {
-    if (initialTab && TABS.some(t => t.key === initialTab) && initialTab !== tab) {
-      setTab(initialTab);
+    const next = initialTab && TABS.some(t => t.key === initialTab) ? initialTab : 'registered';
+    if (next !== tab) {
+      setTab(next);
       setPage(1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

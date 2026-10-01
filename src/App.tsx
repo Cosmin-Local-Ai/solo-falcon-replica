@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StoreProvider, useStore } from './data/store';
+import { useDashboardData } from './data/dashboardAdapter';
 import Dashboard from './pages/Dashboard';
 import Revenues from './pages/Revenues';
 import Expenses from './pages/Expenses';
@@ -88,13 +89,23 @@ function routeToUrl(page: Page, tab: string | null): string {
   return `/${page}${tab ? `#!/${tab}` : ''}`;
 }
 
+const initials = (name: string) =>
+  name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(w => w[0] ?? '')
+    .join('')
+    .toUpperCase();
+
 function Shell() {
   const [route, setRoute] = useState<Route>(parseRoute);
-  const { revenues, expenses, declarations } = useStore();
+  const { profile } = useStore();
+  const { pendingCounts } = useDashboardData();
   const pendingCount =
-    revenues.filter(r => r.status === 'in-asteptare').length +
-    expenses.filter(e => e.status === 'respinsa').length +
-    declarations.filter(d => d.status === 'in-asteptare').length;
+    pendingCounts.revenuesInAsteptare +
+    pendingCounts.expensesRespinsa +
+    pendingCounts.declarationsInAsteptare;
 
   const navigate = useCallback((page: Page, tab: string | null = null) => {
     const url = routeToUrl(page, tab);
@@ -156,12 +167,12 @@ function Shell() {
           <span className="page-title">{TITLES[route.page]}</span>
           <span className="spacer" />
           <div className="topbar-user">
-            <span>Popescu Ion</span>
-            <span className="avatar">PI</span>
+            <span>{profile.identity.nume}</span>
+            <span className="avatar">{initials(profile.identity.nume)}</span>
           </div>
         </header>
         <div className="main-content">
-          {route.page === 'dashboard' && <Dashboard onNavigate={navigate} />}
+          {route.page === 'dashboard' && <Dashboard />}
           {route.page === 'revenues' && (
             <Revenues
               initialTab={route.tab as 'registered' | 'pending' | 'rejected' | undefined}

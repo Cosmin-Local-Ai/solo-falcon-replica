@@ -1,6 +1,36 @@
 import type { AppData } from './types';
 
 export const seedData: AppData = {
+  profile: {
+    id: 'profile-1',
+    pfaStartYear: 2020,
+    fiscalYear: 2026,
+    regime: 'impozit_pe_venit',
+    caen: '6201',
+    salaryStatus: 'nu',
+    pensionStatus: 'nu',
+    otherIncome: [],
+    socialInsuranceStatus: 'obligatoriu',
+    vatExempt: false,
+    cashFloorLei: 0,
+    identity: {
+      nume: 'Popescu Andrei',
+      cnp: '1234567890123',
+      adresa: 'Str. Libertății 12, Cluj-Napoca',
+      telefon: '0750 123 456',
+      email: 'andrei@popescuconsulting.ro',
+      denumire: 'Popescu Consulting SRL',
+      cui: 'RO4455667788990',
+      formaJuridica: 'SRL',
+      numarRegComert: 'J40/1234/2020',
+      adresaSocietate: 'Str. Libertății 12, Cluj-Napoca',
+      telefonSocietate: '0750 123 456',
+      emailSocietate: 'contact@popescuconsulting.ro',
+      contBancar: 'RO44 BACX 0000 0000 1234 5678 9000',
+      banca: 'BCR',
+    },
+    updatedAt: '2026-09-28T10:00:00.000Z',
+  },
   revenues: [
     { id: 'r1', tip: 'factura', nr: 'FCT-2026-001', date: '2026-09-02', client: 'Presta Consulting SRL', cui: 'RO12345678', valoareFaraTva: 4500, tva: 945, status: 'inregistrata', eFacturaStatus: 'Acceptată' },
     { id: 'r2', tip: 'factura', nr: 'FCT-2026-002', date: '2026-09-10', client: 'Andrei Popescu', cui: '1234567890123', valoareFaraTva: 1200, tva: 252, status: 'in-asteptare', eFacturaStatus: 'În așteptare' },
@@ -48,6 +78,7 @@ export const seedData: AppData = {
     { id: 's2', tip: '220', perioada: '2026-Q2', depunere: 'SOLO', dataDepunere: '2026-07-10' },
     { id: 's3', tip: '300', perioada: '2026-08', depunere: 'personală', dataDepunere: '2026-09-15' },
   ],
+  snapshots: [],
   settings: {
     cotaTva: 9,
     company: {

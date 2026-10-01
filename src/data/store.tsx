@@ -4,6 +4,8 @@ import type {
   AppData, Client, CompanyDocument, Declaration, DocTypeCode, DocumentItem,
   Expense, Revenue, SettingsState, TaxStatement, Toast, ToastKind,
 } from './types';
+import type { PfaProfile } from '../domain/models';
+import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import { todayISO } from './types';
 import { seedData } from './seed';
 
@@ -18,12 +20,17 @@ interface StoreValue extends AppData {
   updateExpense: (e: Expense) => void;
   deleteExpense: (id: string) => void;
   addClient: (c: Omit<Client, 'id'>) => void;
+  updateClient: (c: Client) => void;
   addDeclaration: (d: Omit<Declaration, 'id'>) => void;
+  updateDeclaration: (d: Declaration) => void;
   sendDeclaration: (id: string) => void;
   uploadDocument: (code: DocTypeCode, doc: Omit<CompanyDocument, 'id'>) => void;
   deleteDocument: (code: DocTypeCode, id: string) => void;
   addStatement: (s: Omit<TaxStatement, 'id'>) => void;
   deleteStatement: (id: string) => void;
+  addSnapshot: (s: TaxCalculationSnapshot) => void;
+  getSnapshot: (id: string) => TaxCalculationSnapshot | undefined;
+  updateProfile: (patch: Partial<PfaProfile>) => void;
   updateSettings: (patch: Partial<SettingsState> | ((current: SettingsState) => SettingsState)) => void;
   toast: (kind: ToastKind, text: string) => void;
   dismissToast: (id: string) => void;
@@ -34,12 +41,56 @@ const StoreContext = createContext<StoreValue | null>(null);
 let counter = 0;
 const uid = () => `${Date.now().toString(36)}-${(counter++).toString(36)}`;
 
+/**
+ * Backfill a profile for data saved before the profile collection existed.
+ * Identity/contact fields are carried over from the legacy settings so the
+ * profile becomes the source of truth without losing user data.
+ */
+export function legacyProfileFromSettings(s: SettingsState): PfaProfile {
+  const c = s.company;
+  const p = s.personal;
+  return {
+    id: 'profile-1',
+    pfaStartYear: new Date().getFullYear(),
+    fiscalYear: new Date().getFullYear(),
+    regime: 'impozit_pe_venit',
+    caen: c.caen?.[0]?.cod ?? c.codCAEN ?? '',
+    salaryStatus: 'nu',
+    pensionStatus: 'nu',
+    otherIncome: [],
+    socialInsuranceStatus: 'neplata',
+    vatExempt: false,
+    cashFloorLei: 0,
+    identity: {
+      nume: p.nume,
+      cnp: p.cnp,
+      adresa: p.adresa,
+      telefon: p.telefon,
+      email: p.email,
+      denumire: c.denumire,
+      cui: c.cui,
+      formaJuridica: c.formaJuridica ?? '',
+      numarRegComert: c.numarRegComert,
+      adresaSocietate: c.adresa,
+      telefonSocietate: c.telefon ?? '',
+      emailSocietate: c.email ?? '',
+      contBancar: c.contBancar ?? '',
+      banca: c.banca ?? '',
+    },
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 function loadInitial(): AppData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as AppData;
-      if (parsed && Array.isArray(parsed.revenues) && parsed.settings) return parsed;
+      if (parsed && Array.isArray(parsed.revenues) && parsed.settings) {
+        if (!parsed.profile) parsed.profile = legacyProfileFromSettings(parsed.settings);
+        if (!Array.isArray(parsed.snapshots)) parsed.snapshots = [];
+        return parsed;
+      }
     }
   } catch {
     // ignore corrupt storage
@@ -86,8 +137,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     deleteExpense: id => setData(d => ({ ...d, expenses: d.expenses.filter(x => x.id !== id) })),
 
     addClient: c => setData(d => ({ ...d, clients: [...d.clients, { ...c, id: uid() }] })),
+    updateClient: c => setData(d => ({ ...d, clients: d.clients.map(x => x.id === c.id ? c : x) })),
 
     addDeclaration: decl => setData(d => ({ ...d, declarations: [{ ...decl, id: uid() }, ...d.declarations] })),
+    updateDeclaration: d => setData(prev => ({ ...prev, declarations: prev.declarations.map(x => x.id === d.id ? d : x) })),
     sendDeclaration: id => setData(d => ({
       ...d,
       declarations: d.declarations.map(x =>
@@ -109,6 +162,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     addStatement: s => setData(d => ({ ...d, statements: [{ ...s, id: uid() }, ...d.statements] })),
     deleteStatement: id => setData(d => ({ ...d, statements: d.statements.filter(x => x.id !== id) })),
+    addSnapshot: s => setData(d => ({ ...d, snapshots: [...d.snapshots, s] })),
+    getSnapshot: id => data.snapshots.find(x => x.calculationId === id),
+
+    updateProfile: patch => setData(d => ({
+      ...d,
+      profile: { ...d.profile, ...patch, updatedAt: new Date().toISOString() },
+    })),
 
     updateSettings: patch => setData(d => ({
       ...d,
