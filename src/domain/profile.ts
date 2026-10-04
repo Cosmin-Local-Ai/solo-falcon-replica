@@ -6,6 +6,7 @@
  * source of truth for identity/contact data).
  */
 import type { PfaIdentity, PfaProfile } from './models';
+import { localYear, now, toInstantISO } from './date';
 
 const EMPTY_IDENTITY: PfaIdentity = {
   nume: '',
@@ -28,11 +29,14 @@ const EMPTY_IDENTITY: PfaIdentity = {
  * Create a profile with safe defaults (cashFloorLei 0, no other income,
  * non-exempt VAT, no salary/pension). `overrides` fills in the rest.
  */
-export function createDefaultProfile(overrides: Partial<PfaProfile> = {}): PfaProfile {
+export function createDefaultProfile(
+  overrides: Partial<PfaProfile> = {},
+  instant: Date = now(),
+): PfaProfile {
   return {
     id: 'profile-1',
-    pfaStartYear: new Date().getFullYear(),
-    fiscalYear: new Date().getFullYear(),
+    pfaStartYear: localYear(instant),
+    fiscalYear: localYear(instant),
     regime: 'impozit_pe_venit',
     caen: '',
     salaryStatus: 'nu',
@@ -42,7 +46,7 @@ export function createDefaultProfile(overrides: Partial<PfaProfile> = {}): PfaPr
     vatExempt: false,
     cashFloorLei: 0,
     identity: { ...EMPTY_IDENTITY },
-    updatedAt: new Date().toISOString(),
+    updatedAt: toInstantISO(instant),
     ...overrides,
   };
 }

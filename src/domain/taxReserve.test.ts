@@ -144,6 +144,28 @@ describe('computeTaxReserve', () => {
     expect(a).toEqual(b);
   });
 
+  it('carries a null reserve through verbatim and targets the full liability', () => {
+    const rec = computeTaxReserve(makeComputedEstimate(18_535), createTaxReserveState(null), {
+      asOfDate: '2026-06-15',
+      fiscalYear: 2026,
+    });
+    expect(rec.reservedAmount).toBeNull();
+    // null is treated as 0 for the math: the full liability remains to reserve.
+    expect(rec.remainingTarget).toBe(18_535);
+    expect(rec.monthsRemaining).toBe(7);
+    expect(rec.recommendedMonthlyReserve).toBeCloseTo(18_535 / 7, 6);
+  });
+
+  it('keeps an explicit zero reserve as zero (distinct from null)', () => {
+    const rec = computeTaxReserve(makeComputedEstimate(18_535), createTaxReserveState(0), {
+      asOfDate: '2026-06-15',
+      fiscalYear: 2026,
+    });
+    expect(rec.reservedAmount).toBe(0);
+    expect(rec.remainingTarget).toBe(18_535);
+    expect(rec.recommendedMonthlyReserve).toBeCloseTo(18_535 / 7, 6);
+  });
+
   it('derives recommendedMonthlyReserve from its own remainingTarget and monthsRemaining', () => {
     const rec = computeTaxReserve(
       makeComputedEstimate(18_535),
@@ -174,5 +196,17 @@ describe('tax reserve state', () => {
     const s0 = createTaxReserveState(1_000);
     expect(addToTaxReserve(s0, -400)).toEqual({ reservedAmount: 600 });
     expect(addToTaxReserve(s0, -5_000)).toEqual({ reservedAmount: 0 });
+  });
+
+  it('passes null through as "no data recorded"', () => {
+    expect(createTaxReserveState(null)).toEqual({ reservedAmount: null });
+  });
+
+  it('adds to a null state, recording the clamped amount', () => {
+    const s0 = createTaxReserveState(null);
+    expect(addToTaxReserve(s0, 3_000)).toEqual({ reservedAmount: 3_000 });
+    expect(addToTaxReserve(s0, -400)).toEqual({ reservedAmount: 0 });
+    // The original null state is never mutated.
+    expect(s0).toEqual({ reservedAmount: null });
   });
 });

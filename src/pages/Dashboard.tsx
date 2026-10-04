@@ -87,7 +87,7 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* 2. Tax hero — estimate, completeness, reserve, calculation access */}
+          {/* 2. Tax hero — estimate, completeness, reserve */}
           <SectionCard title="Estimare impozit">
             <div className="stack">
               <div className="row between">
@@ -101,7 +101,6 @@ export default function DashboardPage() {
                 Impozit estimat de pus deoparte. Pune deoparte{' '}
                 <strong className="mono">{fmtRON(reserve.recommendedMonthlyReserve)}</strong> pe lună.
               </p>
-              <a className="btn" href="/calcul">Deschide calculul</a>
             </div>
           </SectionCard>
 
@@ -120,7 +119,7 @@ export default function DashboardPage() {
             <ThresholdSection thresholds={data.thresholds} />
             <DeadlineSection deadlines={data.deadlines} asOfDate={data.snapshot.asOf} />
             <CompletenessSection completeness={data.completeness} />
-            <ActionSection pendingCounts={data.pendingCounts} />
+            <ActionSection actions={data.actions} />
             <LegislationSection state={data.legislation} />
           </div>
         </>

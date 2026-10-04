@@ -10,15 +10,16 @@ import { assessCompleteness, type CompletenessReport } from '../domain/completen
 import { selectProjectionV1, type ProjectionV1 } from '../domain/projection';
 import { computeTaxEstimate, type TaxEstimateResult } from '../domain/tax';
 import { computeThresholds, type FiscalThreshold } from '../domain/thresholds';
-import { computeDeadlines, type Deadline } from '../domain/deadlines';
+import { computeDeadlines, filterUpcoming, type Deadline } from '../domain/deadlines';
 import {
   computeTaxReserve,
   createTaxReserveState,
   type TaxReserveRecommendation,
 } from '../domain/taxReserve';
-import { buildInsights, type Insight } from '../domain/insights';
+import { getInsights as buildInsights, type Insight } from '../domain/insights';
 import { selectTaxDerived } from '../domain/derived';
 import { PFA_2026_RELEASE, PFA_2026_SYSTEM_REAL_PACKAGE } from '../domain/fiscal';
+import { localDateISO, now } from '../domain/date';
 
 export interface PendingCounts {
   revenuesInAsteptare: number;
@@ -38,14 +39,15 @@ export interface DashboardData {
   thresholds: FiscalThreshold[];
   deadlines: Deadline[];
   completeness: CompletenessReport;
+  actions: ActionItem[];
   reserve: TaxReserveRecommendation;
   insights: Insight[];
   pendingCounts: PendingCounts;
   legislation: LegislationState;
 }
 
-function isoToday(): string {
-  return new Date().toISOString().slice(0, 10);
+function isoToday(instant: Date = now()): string {
+  return localDateISO(instant);
 }
 
 function daysBetween(from: string, to: string): number {
@@ -85,6 +87,8 @@ export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEsti
     profile: data.profile,
     revenues: ytd.revenue,
     expenses: ytd.expenses,
+    revenuesNet: ytd.revenueNet,
+    expensesNet: ytd.expenseNet,
     ruleRelease: PFA_2026_RELEASE,
     rules: PFA_2026_SYSTEM_REAL_PACKAGE,
   });
@@ -96,15 +100,21 @@ export function getThresholdStatuses(data: AppData, asOfDate: string): FiscalThr
     taxYear: data.profile.fiscalYear,
     asOfDate,
     currentValue: ytd.revenue,
+    fiscalBase: 'gross-revenue',
     ruleRelease: PFA_2026_RELEASE.ruleIds[0],
   });
 }
 
 export function getUpcomingDeadlines(data: AppData, asOfDate: string): Deadline[] {
-  return computeDeadlines(PFA_2026_SYSTEM_REAL_PACKAGE, {
-    taxYear: data.profile.fiscalYear,
+  // Step 31: only applicable upcoming deadlines — past, due-today, and
+  // null-dated deadlines are excluded by the domain `filterUpcoming`.
+  return filterUpcoming(
+    computeDeadlines(PFA_2026_SYSTEM_REAL_PACKAGE, {
+      taxYear: data.profile.fiscalYear,
+      asOfDate,
+    }),
     asOfDate,
-  });
+  );
 }
 
 export function getTaxReserve(
@@ -112,17 +122,18 @@ export function getTaxReserve(
   asOfDate: string,
   tax: TaxEstimateResult,
 ): TaxReserveRecommendation {
-  const state = createTaxReserveState(0);
+  const state = createTaxReserveState(null); // honest "no data recorded"
   return computeTaxReserve(tax, state, {
     asOfDate,
     fiscalYear: data.profile.fiscalYear,
   });
 }
 
-export function getInsights(data: AppData, snapshot: DashboardSnapshot): Insight[] {
+export function getInsights(data: AppData, snapshot: DashboardSnapshot, tax?: TaxEstimateResult): Insight[] {
   return buildInsights({
     snapshot,
     expenses: data.expenses,
+    tax,
   });
 }
 
@@ -132,8 +143,8 @@ export interface ActionItem {
   source: 'deadline' | 'completeness' | 'tax';
 }
 
-export function getActionItems(data: AppData): ActionItem[] {
-  const asOfDate = isoToday();
+export function getActionItems(data: AppData, instant: Date = now()): ActionItem[] {
+  const asOfDate = isoToday(instant);
   const items: ActionItem[] = [];
 
   for (const d of getUpcomingDeadlines(data, asOfDate)) {
@@ -145,7 +156,7 @@ export function getActionItems(data: AppData): ActionItem[] {
   }
 
   if (selectYtd(data, asOfDate).revenue > 0) {
-    items.push({ id: 'tax-review', label: 'Review tax estimates', source: 'tax' });
+    items.push({ id: 'tax-review', label: 'Revizuire estimări fiscale', source: 'tax' });
   }
 
   return items;
@@ -185,9 +196,10 @@ function buildSnapshot(
     taxYear,
     asOfDate,
     currentValue: ytd.revenue,
+    fiscalBase: 'gross-revenue',
     ruleRelease: PFA_2026_RELEASE.ruleIds[0],
   });
-  const reserve = computeTaxReserve(tax, createTaxReserveState(0), {
+  const reserve = computeTaxReserve(tax, createTaxReserveState(null), {
     asOfDate,
     fiscalYear: taxYear,
   });
@@ -212,11 +224,12 @@ function buildSnapshot(
       ratio: t.thresholdValue === 0 ? 0 : t.currentValue / t.thresholdValue,
       breached: t.distance > 0,
       type: t.affectedTax === 'vat' ? 'vat' : 'income',
+      affectedTax: t.affectedTax,
     })),
     taxReserve: {
       projectedLiabilityCents: (reserve.estimatedTaxLiability ?? 0) * 100,
       targetReserveCents: reserve.remainingTarget * 100,
-      currentReserveCents: reserve.reservedAmount * 100,
+      currentReserveCents: (reserve.reservedAmount ?? 0) * 100,
       gapCents: reserve.remainingTarget * 100,
       coverageMonths: reserve.monthsRemaining,
       projectedQ4LiabilityCents: 0,
@@ -225,8 +238,8 @@ function buildSnapshot(
   };
 }
 
-export function buildDashboardData(data: AppData, tax: TaxEstimateResult): DashboardData {
-  const asOfDate = isoToday();
+export function buildDashboardData(data: AppData, tax: TaxEstimateResult, instant: Date = now()): DashboardData {
+  const asOfDate = isoToday(instant);
   const snapshot = buildSnapshot(data, asOfDate, tax);
   return {
     taxYear: data.profile.fiscalYear,
@@ -235,8 +248,9 @@ export function buildDashboardData(data: AppData, tax: TaxEstimateResult): Dashb
     thresholds: getThresholdStatuses(data, asOfDate),
     deadlines: getUpcomingDeadlines(data, asOfDate),
     completeness: getDataCompleteness(data),
+    actions: getActionItems(data, instant),
     reserve: getTaxReserve(data, asOfDate, tax),
-    insights: getInsights(data, snapshot),
+    insights: getInsights(data, snapshot, tax),
     pendingCounts: getPendingCounts(data),
     legislation: getLegislationState(data),
   };

@@ -1,5 +1,6 @@
 import type { PfaProfile } from '../domain/models';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
+import { localDateISO, now } from '../domain/date';
 
 // ── Venituri ──────────────────────────────────────────────
 export type RevenueStatus = 'inregistrata' | 'in-asteptare' | 'respinsa';
@@ -245,7 +246,7 @@ export const formatBytes = (bytes: number) => {
   return `${bytes} B`;
 };
 
-export const todayISO = () => new Date().toISOString().slice(0, 10);
+export const todayISO = (instant: Date = now()) => localDateISO(instant);
 
 export const downloadDataUrl = (content: string, name: string) => {
   const a = document.createElement('a');

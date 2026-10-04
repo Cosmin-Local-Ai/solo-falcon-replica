@@ -1,67 +1,76 @@
-# SOLO Replica AI State
+# STATE
 
-## Current Phase
+Last sync: 2026-10-02 (step 27 — state sync). This document reflects the repository as
+verified on that date, not what earlier documents claimed.
 
-Step 21 complete — Dashboard financial panels (revenue/expenses/net profit, tax reserve, insights) implemented (`docs/ai/steps/21_dashboard_financial_panels.md`). Next: remaining Dashboard sections (praguri fiscale, termene limită, date necesare, în așteptare).
+## Verification summary
 
-## Completed Steps
+- `npx vitest run`: **28 test files, 102 tests, all passing**.
+- Test files by area: 1 app, 6 components, 4 data, 13 domain, 4 pages.
+- Latest commit: `952ac07` — "Dashboard: financial intelligence, domain tax engine, and full docs"
+  (109 files).
+- No application code was modified during the state sync.
 
-- [x] Step 02 — Repository inspection (report: `docs/ai/steps/02_repo_scout.md`)
-- [x] Step 03 — Dashboard data scout (report: `docs/ai/steps/03_dashboard_data_scout.md`) — **patched 2026-09-30** (rewritten data model, store, Dashboard)
-- [x] Step 04 — Defect verification (report: `docs/ai/steps/04_defect_scout.md`) — **patched 2026-09-30** (store update/delete primitives, uid counter, Dashboard formulas, line numbers)
-- [x] Step 05 — UX research (report: `docs/ai/research/05_ux_research.md`)
-- [x] Step 06 — Fiscal research (2026 fiscal specification externally verified)
-- [x] Step 07 — Legislation architecture/specification (specification established: `docs/ai/decisions/07_LEGISLATION_SPEC.md`; report: `docs/ai/steps/07_legislation_spec.md`)
-- [x] Step 08 — Stack/Dependency Setup (report: `docs/ai/steps/08_stack_setup.md`)
-- [x] Step 09 — Implementation architecture (document: `docs/ai/decisions/09_IMPLEMENTATION_ARCHITECTURE.md`)
-- [x] Step 10 — PFA profile domain (report: `docs/ai/steps/10_profile_domain.md`)
-- [x] Step 11 — Fiscal rules (report: `docs/ai/steps/11_fiscal_rules.md`)
-- [x] Step 12 — Calculation snapshots (report: `docs/ai/steps/12_calculation_snapshots.md`)
-- [x] Step 13 — Financial aggregation (report: `docs/ai/steps/13_financial_aggregation.md`)
-- [x] Step 14 — Derived state (report: `docs/ai/steps/14_derived_state.md`)
-- [x] Step 15 — Tax engine (report: `docs/ai/steps/15_tax_engine.md`)
-- [x] Step 16 — Thresholds & deadlines (report: `docs/ai/steps/16_thresholds_deadlines.md`)
-- [x] Step 17 — Dashboard intelligence (report: `docs/ai/steps/17_dashboard_intelligence.md`)
-- [x] Step 18 — Dashboard data layer (report: `docs/ai/steps/18_dashboard_data_layer.md`)
-- [x] Step 19 — Dashboard shell (report: `docs/ai/steps/19_dashboard_shell.md`)
-- [x] Step 20 — Financial graph (report: `docs/ai/steps/20_financial_graph.md`)
-- [x] Step 21 — Dashboard financial panels (report: `docs/ai/steps/21_dashboard_financial_panels.md`)
+## Implemented (verified in repository)
 
-## Product
+- **Domain foundation** — `src/domain/`: aggregation, completeness, deadlines, derived,
+  profile, projection, snapshots, taxReserve, thresholds, tax, insights.
+- **Profile domain** — `src/domain/profile.ts`.
+- **Fiscal rule package** — `src/domain/fiscal/` (rules, calculators, package2026).
+- **Calculation snapshots** — `src/domain/snapshots/` (serialize + hash).
+- **Aggregation** — `src/domain/aggregation.ts`.
+- **Derived state** — `src/domain/derived.ts`.
+- **Tax engine** — `src/domain/tax.ts` (with `review_required` handling).
+- **Thresholds/deadlines** — `src/domain/thresholds.ts`, `src/domain/deadlines.ts`.
+- **Dashboard intelligence / data layer** — `src/data/dashboard.ts`
+  (15 public functions: summary, monthly series, projection, completeness, pending counts,
+  tax estimate, thresholds, deadlines, tax reserve, insights, action items, legislation,
+  snapshot builder).
+- **Dashboard shell** — `src/pages/Dashboard.tsx`.
+- **Recharts financial graph** — `src/components/FinancialChart.tsx`.
+- **Financial summary / insights / tax reserve panels** — `FinancialSummary.tsx`,
+  `Insights.tsx`, `TaxReserve.tsx`.
+- **Additional dashboard sections** — Threshold, Deadline, Completeness, Action,
+  Legislation sections (`src/components/dashboard/`).
+- **Store methods** — `markExpenseAsPaid`, `addDeclaration`, `completeDeclaration` in
+  `src/store.ts`.
+- **Unit tests** — 102 passing tests across domain, data, components, pages.
 
-Romanian PFA financial operating system.
+## Partially implemented
 
-## Starting fiscal year
+- **e2e coverage (step 19)** — unit tests exist and pass; **no e2e/Playwright specs exist**.
+  `playwright.config.ts` is present but no spec files are written.
+- **Regression fixes (step 25)** — store methods exist and are unit-tested, but no e2e
+  regression tests exist.
 
-2026
+## Scaffolded
 
-## Important product principle
+- **Playwright** — config present (`playwright.config.ts`), zero specs.
 
-The product itself must not require a local AI model.
+## Known broken / requires correction
 
-## Agent roles
+- **The fiscal implementation currently requires correction before being treated as
+  trustworthy**:
+  - 16% surcharge (suplimentar) is not implemented — impozit pe venit returns
+    `review_required` from the engine.
+  - CASS minimum-base handling halts the engine.
+  - Fiscal-loss (prior-year loss deduction) handling is absent.
+  - Fiscal package values must be re-verified against
+    `docs/ai/research/06_2026_fiscal_research.md` before engine outputs are trusted.
+- Stale doc references in the thresholds/deadlines documentation (noted in step 26).
 
-SCOUT
+## Not implemented
 
-* local repository inspection only
-* no internet research
-* no application-code changes
+- e2e/Playwright test specs.
+- 16% surcharge calculation.
+- Fiscal-loss carry-forward.
+- CASS minimum-base handling.
 
-RESEARCHER
+## Documentation status
 
-* internet research
-* authoritative sources
-* no application-code changes
-
-WORKER
-
-* implementation
-* tests
-* may modify assigned code
-
-ORCHESTRATOR
-
-* coordinates work
-* reads all documentation
-* assigns next step
-* integrates and verifies
+- `docs/ai/steps/` — steps 02–27 present (step 27 is this state sync; steps 02–26 are
+  recorded in PLAN.md).
+- `docs/ai/PLAN.md` — updated 2026-10-02 to match the actual completed-step history.
+- `docs/ai/research/` — 2026 fiscal research present (doc 06); fiscal code has not yet
+  been corrected to match it.
+- `docs/ai/decisions/` — ADRs pending for the fiscal corrections listed above.

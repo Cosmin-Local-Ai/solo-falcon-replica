@@ -18,6 +18,10 @@ export interface YtdTotals {
   revenue: number;
   expenses: number;
   net: number;
+  /** Total revenues without VAT (valoareFaraTva only), lei. */
+  revenueNet: number;
+  /** Total expenses without VAT (valoareFaraTva only), lei. */
+  expenseNet: number;
 }
 
 export interface MonthlyTotals {
@@ -88,19 +92,23 @@ export function selectYtd(data: AppData, asOfDate: string): YtdTotals {
   const fiscalYear = data.profile.fiscalYear;
   let revenue = 0;
   let expenses = 0;
+  let revenueNet = 0;
+  let expenseNet = 0;
 
   for (const r of data.revenues) {
     if (r.status === 'inregistrata' && inPeriod(r.date, asOfDate, fiscalYear)) {
       revenue += recordTotal(r);
+      revenueNet += r.valoareFaraTva;
     }
   }
   for (const e of data.expenses) {
     if (e.status === 'inregistrata' && inPeriod(e.date, asOfDate, fiscalYear)) {
       expenses += recordTotal(e);
+      expenseNet += e.valoareFaraTva;
     }
   }
 
-  return { revenue, expenses, net: revenue - expenses };
+  return { revenue, expenses, net: revenue - expenses, revenueNet, expenseNet };
 }
 
 /**

@@ -1,12 +1,15 @@
 import type { CompletenessReport } from '../../domain/completeness';
 import { Card, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import { checkLabel } from './checkLabels';
 
 /**
- * CompletenessSection (Step 22) — presentational only.
+ * CompletenessSection (Step 22, upgraded in Step 31) — presentational only.
  *
  * Formats and presents a `CompletenessReport`: no completeness calculation,
- * no data fetching, no persistence. Only the satisfied/total counts from the
- * report are shown; missing checks are highlighted (no invented values).
+ * no data fetching, no persistence. Only the real satisfied/total counts
+ * from the report are shown (no invented percentage or score); every check
+ * is listed with its real satisfied/unsatisfied state and `detail`, and
+ * unsatisfied checks stay visible with the calm danger-soft row styling.
  */
 
 export interface CompletenessSectionProps {
@@ -18,31 +21,23 @@ export default function CompletenessSection({ completeness }: CompletenessSectio
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Data completeness</CardTitle>
+        <CardTitle>Completitudine date</CardTitle>
         <CardDescription>
-          {satisfiedCount} of {totalCount} checks satisfied
+          {satisfiedCount} din {totalCount} verificări îndeplinite
         </CardDescription>
       </CardHeader>
       {checks.length === 0 ? (
-        <p className="hint">No completeness checks</p>
+        <p className="hint">Nicio verificare de completitudine</p>
       ) : (
         checks.map((c) => (
-          <div
-            key={c.key}
-            style={{
-              display: 'flex',
-              gap: 8,
-              alignItems: 'baseline',
-              padding: '6px 8px',
-              borderRadius: 6,
-              background: c.satisfied ? 'transparent' : 'var(--danger-soft)',
-            }}
-          >
-            <span aria-hidden>{c.satisfied ? '✓' : '✗'}</span>
+          <div key={c.key} className={`row between check-row${c.satisfied ? '' : ' missing'}`}>
             <div>
-              <strong style={{ fontSize: 13 }}>{c.key}</strong>
+              <div className="check-title">{checkLabel(c.key)}</div>
               <div className="hint">{c.detail}</div>
             </div>
+            <span className={c.satisfied ? 'badge badge-success' : 'badge badge-danger'}>
+              {c.satisfied ? 'Complet' : 'Lipsă'}
+            </span>
           </div>
         ))
       )}

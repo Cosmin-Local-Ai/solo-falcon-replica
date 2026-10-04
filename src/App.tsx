@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore, type HTMLAttributes } from 'react';
 import { StoreProvider, useStore } from './data/store';
 import { useDashboardData } from './data/dashboardAdapter';
 import Dashboard from './pages/Dashboard';
@@ -98,8 +98,32 @@ const initials = (name: string) =>
     .join('')
     .toUpperCase();
 
+/**
+ * True when the viewport is at/below the mobile breakpoint (≤768px), where
+ * the sidebar is an off-canvas drawer. Above that it is a static column that
+ * must stay interactive (never `inert` / `aria-hidden`).
+ */
+function useIsMobile() {
+  // Degrades to `false` (desktop) in environments without matchMedia (jsdom).
+  return useSyncExternalStore(
+    (onChange) => {
+      if (typeof window.matchMedia !== 'function') return () => {};
+      const mq = window.matchMedia('(max-width: 768px)');
+      mq.addEventListener('change', onChange);
+      return () => mq.removeEventListener('change', onChange);
+    },
+    () =>
+      typeof window.matchMedia === 'function'
+        ? window.matchMedia('(max-width: 768px)').matches
+        : false,
+    () => false,
+  );
+}
+
 function Shell() {
   const [route, setRoute] = useState<Route>(parseRoute);
+  const [navOpen, setNavOpen] = useState(false);
+  const isMobile = useIsMobile();
   const { profile } = useStore();
   const { pendingCounts } = useDashboardData();
   const pendingCount =
@@ -117,7 +141,10 @@ function Shell() {
 
   // Back/forward navigation, plus direct hash edits in the URL bar.
   useEffect(() => {
-    const onPop = () => setRoute(parseRoute());
+    const onPop = () => {
+      setRoute(parseRoute());
+      setNavOpen(false); // close the mobile drawer on navigation
+    };
     window.addEventListener('popstate', onPop);
     window.addEventListener('hashchange', onPop);
     return () => {
@@ -125,6 +152,16 @@ function Shell() {
       window.removeEventListener('hashchange', onPop);
     };
   }, []);
+
+  // Close the mobile drawer with Escape.
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNavOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [navOpen]);
 
   // Normalize the initial URL (e.g. "/" → "/dashboard", aliases → canonical keys)
   // without adding a history entry.
@@ -138,7 +175,11 @@ function Shell() {
 
   return (
     <div className="app">
-      <aside className="sidebar">
+      <aside
+        className={`sidebar${navOpen ? ' open' : ''}`}
+        aria-hidden={isMobile && !navOpen}
+        {...(isMobile && !navOpen ? ({ inert: '' } as unknown as HTMLAttributes<HTMLElement>) : {})}
+      >
         <div className="sidebar-logo">
           <span className="mark">S</span> SOLO
         </div>
@@ -151,6 +192,7 @@ function Shell() {
               onClick={e => {
                 e.preventDefault();
                 navigate(n.page);
+                setNavOpen(false); // close the drawer after choosing a page
               }}
             >
               <span className="icon">{n.icon}</span>
@@ -162,8 +204,17 @@ function Shell() {
           ))}
         </nav>
       </aside>
+      {navOpen && <div className="nav-overlay" onClick={() => setNavOpen(false)} />}
       <div className="main">
         <header className="topbar">
+          <button
+            className="nav-toggle"
+            aria-label="Meniu"
+            aria-expanded={navOpen}
+            onClick={() => setNavOpen(v => !v)}
+          >
+            ☰
+          </button>
           <span className="page-title">{TITLES[route.page]}</span>
           <span className="spacer" />
           <div className="topbar-user">

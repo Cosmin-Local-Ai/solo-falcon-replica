@@ -124,6 +124,20 @@ describe('selectYtd', () => {
     expect(ytd.net).toBe(715.6);
   });
 
+  it('accumulates net (valoareFaraTva) fields separately from gross (Area 6)', () => {
+    const data = makeData({
+      revenues: [revenue('2026-03-01', 100, 10)],
+      expenses: [expense('2026-03-02', 50, 5)],
+    });
+
+    const ytd = selectYtd(data, '2026-12-31');
+    expect(ytd.revenue).toBe(110);
+    expect(ytd.revenueNet).toBe(100);
+    expect(ytd.expenses).toBe(55);
+    expect(ytd.expenseNet).toBe(50);
+    expect(ytd.net).toBe(55);
+  });
+
   it('respects the fiscalYear boundary (profile.fiscalYear, calendar year)', () => {
     const data = makeData({
       revenues: [
@@ -166,7 +180,7 @@ describe('selectYtd', () => {
 
   it('returns zeros for empty data', () => {
     const ytd = selectYtd(makeData(), '2026-06-30');
-    expect(ytd).toEqual({ revenue: 0, expenses: 0, net: 0 });
+    expect(ytd).toEqual({ revenue: 0, expenses: 0, net: 0, revenueNet: 0, expenseNet: 0 });
   });
 
   it('computes negative net when expenses exceed revenue (zero income)', () => {
@@ -193,6 +207,33 @@ describe('selectYtd', () => {
     });
     const ytd = selectYtd(data, '2026-12-31');
     expect(ytd.revenue).toBe(119);
+  });
+
+  it('tva=0 record: revenueNet equals revenue (no VAT to net)', () => {
+    const data = makeData({
+      revenues: [revenue('2026-03-01', 100, 0)],
+      expenses: [expense('2026-03-02', 50, 0)],
+    });
+
+    const ytd = selectYtd(data, '2026-12-31');
+    expect(ytd.revenue).toBe(100);
+    expect(ytd.revenueNet).toBe(100);
+    expect(ytd.expenses).toBe(50);
+    expect(ytd.expenseNet).toBe(50);
+    expect(ytd.net).toBe(50);
+  });
+
+  it('returns all-zero YTD when asOfDate is before the fiscal year start', () => {
+    const data = makeData({
+      profile: profile(2026),
+      revenues: [
+        revenue('2026-01-15', 100, 19),
+        revenue('2026-06-15', 200, 38),
+      ],
+    });
+
+    const ytd = selectYtd(data, '2025-06-15');
+    expect(ytd).toEqual({ revenue: 0, expenses: 0, net: 0, revenueNet: 0, expenseNet: 0 });
   });
 });
 

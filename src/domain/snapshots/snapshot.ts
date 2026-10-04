@@ -2,6 +2,7 @@ import type { PfaProfile } from '../models';
 import type { RuleRelease } from '../fiscal/rules';
 import type { CalculationInput, CalculationLine, CalculationOutput, SnapshotStatus, TaxCalculationSnapshot } from './types';
 import { computeInputsHash } from './hash';
+import { toInstantISO } from '../date';
 
 export interface CreateSnapshotParams {
   profile: PfaProfile;
@@ -33,7 +34,7 @@ export async function createCalculationSnapshot(p: CreateSnapshotParams): Promis
   return {
     calculationId: `calc-${p.ruleRelease.taxYear}-${crypto.randomUUID()}`,
     taxYear: p.ruleRelease.taxYear,
-    calculatedAt: p.calculatedAt ?? new Date().toISOString(),
+    calculatedAt: p.calculatedAt ?? toInstantISO(),
     ruleRelease: p.ruleRelease,
     inputSnapshot,
     inputsHash: await computeInputsHash(inputSnapshot),

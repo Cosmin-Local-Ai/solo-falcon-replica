@@ -1,40 +1,54 @@
-import { describe, it, expect } from 'vitest';
-import { buildInsights } from './insights';
-import type {
-  Insight,
-  InsightEventType,
-  InsightInput,
-  InsightPriority,
-  InsightSeverity,
-} from './insights';
+/**
+ * Tests for the dashboard insights engine (`getInsights`) — Step 30 emission contract:
+ *
+ * | Source       | Condition                                   | Severity |
+ * |--------------|---------------------------------------------|----------|
+ * | Threshold    | breached                                      | danger   |
+ * | Threshold    | !breached && ratio >= 0.8                    | warning  |
+ * | Threshold    | ratio < 0.8                                  | —        |
+ * | Threshold    | CASS + CAS both alerting                     | one canonical alert |
+ * | Deadline     | daysUntil < 0 / === 0                        | danger   |
+ * | Deadline     | 1..30                                        | warning  |
+ * | Deadline     | > 30 / non-finite / empty date               | —        |
+ * | Reserve      | projectedLiabilityCents > 0 && gapCents > 0   | warning  |
+ * | Completeness | missing.length > 0                           | warning  |
+ * | Tax          | review_required / computed                   | info     |
+ *
+ * Invariants: raw keys never leak into user-facing strings, all strings are
+ * Romanian, output is sorted danger → warning → info, engine is deterministic.
+ */
+import { describe, expect, it } from 'vitest';
+import { getInsights } from './insights';
+import type { Insight, InsightInput } from './insights';
 import type { DashboardSnapshot, Threshold } from './aggregation';
-import type { Expense } from '../data/types';
+import type { TaxEstimateResult } from './tax';
+import type { TaxCalculationSnapshot } from './snapshots/types';
+import { assessCompleteness } from './completeness';
+import type { AppData, SettingsState } from '../data/types';
+import type { PfaProfile } from './models';
 
-// ── helpers ──────────────────────────────────────────────────────────
-
-function expense(overrides: Partial<Expense> = {}): Expense {
-  return {
-    id: 'e1',
-    tip: 'factura',
-    nr: 'F1',
-    date: '2026-05-10',
-    furnizor: 'Test',
-    cui: 'RO123',
-    valoareFaraTva: 10000,
-    tva: 1900,
-    status: 'inregistrata',
-    ...overrides,
-  };
-}
+// Factories
 
 function threshold(overrides: Partial<Threshold> = {}): Threshold {
   return {
     id: 't1',
-    label: 'Test threshold',
-    current: 500000,
-    limit: 1000000,
+    label: 'pfa-revenue',
+    current: 500_000,
+    limit: 1_000_000,
     ratio: 0.5,
     breached: false,
+    ...overrides,
+  };
+}
+
+type DeadlineEntry = DashboardSnapshot['deadlines'][number];
+
+function deadline(overrides: Partial<DeadlineEntry> = {}): DeadlineEntry {
+  return {
+    id: 'd1',
+    label: 'pfa',
+    daysUntil: 10,
+    date: '2026-06-01',
     ...overrides,
   };
 }
@@ -61,627 +75,502 @@ function snapshot(overrides: Partial<DashboardSnapshot> = {}): DashboardSnapshot
 }
 
 function input(overrides: Partial<InsightInput> = {}): InsightInput {
+  return { snapshot: snapshot(), ...overrides };
+}
+
+/** Minimal `computed` tax result — the engine only reads `status` and `output.total`. */
+function taxComputed(total: number): TaxEstimateResult {
   return {
-    snapshot: snapshot(),
-    ...overrides,
+    status: 'computed',
+    lines: [],
+    output: { total },
+    snapshot: undefined as unknown as TaxCalculationSnapshot,
   };
 }
 
-function find(insights: Insight[], eventType: string): Insight | undefined {
-  return insights.find((i) => i.eventType === eventType);
+function taxReviewRequired(reason: string): TaxEstimateResult {
+  return { status: 'review_required', reason, lines: [] };
 }
 
-// ── 1. INCOME_THRESHOLD_APPROACHING ──────────────────────────────────
+// Helpers
 
-describe('INCOME_THRESHOLD_APPROACHING', () => {
-  it('emits warning when income threshold ratio is between 0.8 and 0.95', () => {
-    const snap = snapshot({
-      thresholds: [threshold({ type: 'income', ratio: 0.85, current: 850000, limit: 1000000 })],
-    });
-    const result = buildInsights(input({ snapshot: snap }));
-    const insight = find(result, 'INCOME_THRESHOLD_APPROACHING');
-    expect(insight).toBeDefined();
-    expect(insight!.severity).toBe('warning');
-    expect(insight!.priority).toBe('medium');
+function texts(insights: Insight[]): string {
+  return insights.map((i) => `${i.title} ${i.description} ${i.action}`).join('\n');
+}
+
+function formatLei(value: number): string {
+  return new Intl.NumberFormat('ro-RO', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+// Thresholds
+
+describe('thresholds', () => {
+  it('emits exactly one danger when a threshold is breached', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          thresholds: [threshold({ id: 'cass', affectedTax: 'cass', ratio: 1.1, breached: true })],
+        }),
+      }),
+    );
+
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('danger');
+    expect(insights[0].id).toBe('threshold-cass');
+    expect(insights[0].title).toContain('Prag depășit');
   });
 
-  it('emits danger when income threshold ratio is >= 0.95', () => {
-    const snap = snapshot({
-      thresholds: [threshold({ type: 'income', ratio: 0.97, current: 970000, limit: 1000000 })],
-    });
-    const result = buildInsights(input({ snapshot: snap }));
-    const insight = find(result, 'INCOME_THRESHOLD_APPROACHING');
-    expect(insight).toBeDefined();
-    expect(insight!.severity).toBe('danger');
-    expect(insight!.priority).toBe('high');
+  it('emits a warning when not breached but ratio >= 0.8', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          thresholds: [threshold({ id: 'cass', affectedTax: 'cass', ratio: 0.85 })],
+        }),
+      }),
+    );
+
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('warning');
+    expect(insights[0].id).toBe('threshold-cass');
+    expect(insights[0].title).toContain('Aproape de prag');
   });
 
-  it('does not emit when ratio is below 0.8', () => {
-    const snap = snapshot({
-      thresholds: [threshold({ type: 'income', ratio: 0.5, current: 500000, limit: 1000000 })],
-    });
-    const result = buildInsights(input({ snapshot: snap }));
-    expect(find(result, 'INCOME_THRESHOLD_APPROACHING')).toBeUndefined();
+  it('emits a warning at exactly ratio 0.8 (boundary)', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          thresholds: [threshold({ id: 'cass', affectedTax: 'cass', ratio: 0.8 })],
+        }),
+      }),
+    );
+
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('warning');
   });
 
-  it('does not emit when threshold is breached', () => {
-    const snap = snapshot({
-      thresholds: [threshold({ type: 'income', ratio: 1.1, breached: true, current: 1100000, limit: 1000000 })],
-    });
-    const result = buildInsights(input({ snapshot: snap }));
-    expect(find(result, 'INCOME_THRESHOLD_APPROACHING')).toBeUndefined();
+  it('emits nothing when ratio < 0.8', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          thresholds: [threshold({ id: 'cass', affectedTax: 'cass', ratio: 0.79 })],
+        }),
+      }),
+    );
+
+    expect(insights).toEqual([]);
   });
 
-  it('does not emit for vat-type thresholds', () => {
-    const snap = snapshot({
-      thresholds: [threshold({ type: 'vat', ratio: 0.9, current: 900000, limit: 1000000 })],
-    });
-    const result = buildInsights(input({ snapshot: snap }));
-    expect(find(result, 'INCOME_THRESHOLD_APPROACHING')).toBeUndefined();
-  });
-});
+  it('emits danger at exactly ratio 1.0 when breached (boundary)', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          thresholds: [threshold({ id: 'cass', affectedTax: 'cass', ratio: 1.0, breached: true })],
+        }),
+      }),
+    );
 
-// ── 2. MISSING_DOCUMENTS ─────────────────────────────────────────────
-
-describe('MISSING_DOCUMENTS', () => {
-  it('emits one insight per missing field', () => {
-    const snap = snapshot({ missing: ['cui', 'adresa'] });
-    const result = buildInsights(input({ snapshot: snap }));
-    const missing = result.filter((i) => i.eventType === 'MISSING_DOCUMENTS');
-    expect(missing).toHaveLength(2);
-    expect(missing[0].id).toBe('missing:cui');
-    expect(missing[1].id).toBe('missing:adresa');
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('danger');
+    expect(insights[0].id).toBe('threshold-cass');
   });
 
-  it('emits warning severity and high priority', () => {
-    const snap = snapshot({ missing: ['cui'] });
-    const result = buildInsights(input({ snapshot: snap }));
-    const insight = find(result, 'MISSING_DOCUMENTS');
-    expect(insight!.severity).toBe('warning');
-    expect(insight!.priority).toBe('high');
+  it('canonicalizes CASS + CAS alerts into one (worst severity wins)', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          thresholds: [
+            threshold({ id: 'cass', affectedTax: 'cass', ratio: 1.05, breached: true }),
+            threshold({ id: 'cas', affectedTax: 'cas', ratio: 0.9 }),
+          ],
+        }),
+      }),
+    );
+
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('danger');
+    expect(insights[0].id).toBe('threshold-cass');
   });
 
-  it('does not emit when no fields are missing', () => {
-    const snap = snapshot({ missing: [] });
-    const result = buildInsights(input({ snapshot: snap }));
-    expect(find(result, 'MISSING_DOCUMENTS')).toBeUndefined();
-  });
-});
+  it('canonicalizes CASS + CAS alerts on a severity tie by highest ratio', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          thresholds: [
+            threshold({ id: 'cass', affectedTax: 'cass', ratio: 0.82 }),
+            threshold({ id: 'cas', affectedTax: 'cas', ratio: 0.9 }),
+          ],
+        }),
+      }),
+    );
 
-// ── 3. VAT_THRESHOLD_APPROACHING ─────────────────────────────────────
-
-describe('VAT_THRESHOLD_APPROACHING', () => {
-  it('emits warning when vat threshold ratio is between 0.8 and 0.95', () => {
-    const snap = snapshot({
-      thresholds: [threshold({ type: 'vat', ratio: 0.85, current: 850000, limit: 1000000 })],
-    });
-    const result = buildInsights(input({ snapshot: snap }));
-    const insight = find(result, 'VAT_THRESHOLD_APPROACHING');
-    expect(insight).toBeDefined();
-    expect(insight!.severity).toBe('warning');
-    expect(insight!.priority).toBe('medium');
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('warning');
+    expect(insights[0].id).toBe('threshold-cas');
   });
 
-  it('emits danger when vat threshold threshold ratio is >= 0.95', () => {
-    const snap = snapshot({
-      thresholds: [threshold({ type: 'vat', ratio: 0.96, current: 960000, limit: 1000000 })],
-    });
-    const result = buildInsights(input({ snapshot: snap }));
-    const insight = find(result, 'VAT_THRESHOLD_APPROACHING');
-    expect(insight).toBeDefined();
-    expect(insight!.severity).toBe('danger');
-    expect(insight!.priority).toBe('high');
-  });
+  it('keeps CASS and VAT alerts as two distinct insights', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          thresholds: [
+            threshold({ id: 'cass', affectedTax: 'cass', ratio: 0.85 }),
+            threshold({ id: 'vat', affectedTax: 'vat', ratio: 0.85 }),
+          ],
+        }),
+      }),
+    );
 
-  it('does not emit when ratio is below 0.8', () => {
-    const snap = snapshot({
-      thresholds: [threshold({ type: 'vat', ratio: 0.5, current: 500000, limit: 1000000 })],
-    });
-    const result = buildInsights(input({ snapshot: snap }));
-    expect(find(result, 'VAT_THRESHOLD_APPROACHING')).toBeUndefined();
-  });
-
-  it('does not emit when threshold is breached', () => {
-    const snap = snapshot({
-      thresholds: [threshold({ type: 'vat', ratio: 1.2, breached: true, current: 1200000, limit: 1000000 })],
-    });
-    const result = buildInsights(input({ snapshot: snap }));
-    expect(find(result, 'VAT_THRESHOLD_APPROACHING')).toBeUndefined();
-  });
-});
-
-// ── 4. DEADLINE_APPROACHING ──────────────────────────────────────
-
-describe('DEADLINE_APPROACHING', () => {
-  it('emits danger when deadline is within 7 days', () => {
-    const snap = snapshot({
-      deadlines: [{
-        id: 'd1',
-        label: 'TVA 3Q',
-        date: '2026-05-20',
-        daysUntil: 5,
-      }],
-    });
-    const result = buildInsights(input({ snapshot: snap }));
-    const insight = find(result, 'DEADLINE_APPROACHING');
-    expect(insight).toBeDefined();
-    expect(insight!.severity).toBe('danger');
-    expect(insight!.priority).toBe('high');
-  });
-
-  it('emits warning when deadline is within 30 days', () => {
-    const snap = snapshot({
-      deadlines: [{
-        id: 'd1',
-        label: 'TVA 3Q',
-        date: '2026-06-10',
-        daysUntil: 25,
-      }],
-    });
-    const result = buildInsights(input({ snapshot: snap }));
-    const insight = find(result, 'DEADLINE_APPROACHING');
-    expect(insight).toBeDefined();
-    expect(insight!.severity).toBe('warning');
-    expect(insight!.priority).toBe('medium');
-  });
-
-  it('does not emit when deadline is > 30 days away', () => {
-    const snap = snapshot({
-      deadlines: [{
-        id: 'd1',
-        label: 'TVA 3Q',
-        date: '2026-07-15',
-        daysUntil: 60,
-      }],
-    });
-    const result = buildInsights(input({ snapshot: snap }));
-    expect(find(result, 'DEADLINE_APPROACHING')).toBeUndefined();
+    expect(insights).toHaveLength(2);
+    expect(insights.map((i) => i.id).sort()).toEqual(['threshold-cass', 'threshold-vat']);
   });
 });
 
-// ── 5. TAX_ESTIMATE_CHANGED ──────────────────────────────────────────
+// Deadlines
 
-describe('TAX_ESTIMATE_CHANGED', () => {
-  it('does not emit when estimate increased < 10%', () => {
-    const result = buildInsights(input({
-      currentTaxEstimateCents: 105000,
-      previousTaxEstimateCents: 100000,
-    }));
-    expect(result.filter((i) => i.eventType === 'TAX_ESTIMATE_CHANGED')).toHaveLength(0);
+describe('deadlines', () => {
+  it('emits danger for an overdue deadline (daysUntil < 0)', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          deadlines: [deadline({ id: 'pfa', label: 'pfa', daysUntil: -3, date: '2026-05-12' })],
+        }),
+      }),
+    );
+
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('danger');
+    expect(insights[0].title).toContain('Termen depășit');
+    expect(insights[0].description).toContain('a expirat pe');
   });
 
-  it('emits warning when estimate increased > 10%', () => {
-    const result = buildInsights(input({
-      currentTaxEstimateCents: 115000,
-      previousTaxEstimateCents: 100000,
-    }));
-    const insight = find(result, 'TAX_ESTIMATE_CHANGED');
-    expect(insight).toBeDefined();
-    expect(insight!.severity).toBe('warning');
-    expect(insight!.priority).toBe('high');
+  it('emits danger when daysUntil === 0', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          deadlines: [deadline({ id: 'pfa', label: 'pfa', daysUntil: 0, date: '2026-05-15' })],
+        }),
+      }),
+    );
+
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('danger');
+    expect(insights[0].title).toContain('Termen depășit');
+    expect(insights[0].description).toContain('este astăzi');
   });
 
-  it('does not emit when estimate decreased < 10%', () => {
-    const result = buildInsights(input({
-      currentTaxEstimateCents: 95000,
-      previousTaxEstimateCents: 100000,
-    }));
-    expect(result.filter((i) => i.eventType === 'TAX_ESTIMATE_CHANGED')).toHaveLength(0);
+  it.each([1, 15, 30])('emits a warning for daysUntil = %i', (daysUntil) => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          deadlines: [deadline({ id: 'pfa', label: 'pfa', daysUntil })],
+        }),
+      }),
+    );
+
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('warning');
+    expect(insights[0].title).toContain('Termen apropiat');
   });
 
-  it('emits warning when estimate decreased > 10%', () => {
-    const result = buildInsights(input({
-      currentTaxEstimateCents: 85000,
-      previousTaxEstimateCents: 100000,
-    }));
-    const insight = find(result, 'TAX_ESTIMATE_CHANGED');
-    expect(insight).toBeDefined();
-    expect(insight!.severity).toBe('warning');
-    expect(insight!.priority).toBe('high');
+  it('emits nothing for daysUntil > 30', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          deadlines: [deadline({ id: 'pfa', label: 'pfa', daysUntil: 31 })],
+        }),
+      }),
+    );
+
+    expect(insights).toEqual([]);
   });
 
-  it('does not emit when estimates are equal', () => {
-    const result = buildInsights(input({
-      currentTaxEstimateCents: 100000,
-      previousTaxEstimateCents: 100000,
-    }));
-    expect(find(result, 'TAX_ESTIMATE_CHANGED')).toBeUndefined();
-  });
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'skips non-finite daysUntil (%f)',
+    (daysUntil) => {
+      const insights = getInsights(
+        input({
+          snapshot: snapshot({
+            deadlines: [deadline({ id: 'pfa', label: 'pfa', daysUntil })],
+          }),
+        }),
+      );
 
-  it('does not emit when previous is 0', () => {
-    const result = buildInsights(input({
-      currentTaxEstimateCents: 100000,
-      previousTaxEstimateCents: 0,
-    }));
-    expect(find(result, 'TAX_ESTIMATE_CHANGED')).toBeUndefined();
-  });
+      expect(insights).toEqual([]);
+    },
+  );
 
-  it('does not emit when previous is undefined', () => {
-    const result = buildInsights(input({
-      currentTaxEstimateCents: 100000,
-    }));
-    expect(find(result, 'TAX_ESTIMATE_CHANGED')).toBeUndefined();
-  });
-});
+  it('skips an empty date', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          deadlines: [deadline({ id: 'pfa', label: 'pfa', daysUntil: 5, date: '' })],
+        }),
+      }),
+    );
 
-// ── 6. LEGISLATION_CHANGED ───────────────────────────────────────────
-
-describe('LEGISLATION_CHANGED', () => {
-  it('emits info when legislation change date is provided', () => {
-    const result = buildInsights(input({
-      legislationChangeDate: '2026-05-01',
-    }));
-    const insight = find(result, 'LEGISLATION_CHANGED');
-    expect(insight).toBeDefined();
-    expect(insight!.severity).toBe('info');
-    expect(insight!.priority).toBe('low');
-    expect(insight!.description).toContain('2026-05-01');
-  });
-
-  it('does not emit when no legislation change date', () => {
-    const result = buildInsights(input({}));
-    expect(find(result, 'LEGISLATION_CHANGED')).toBeUndefined();
-  });
-});
-
-// ── 7. PROJECTED_REVENUE_DROP ────────────────────────────────────────
-
-describe('PROJECTED_REVENUE_DROP', () => {
-  it('emits warning when revenue dropped > 30%', () => {
-    const result = buildInsights(input({
-      currentMonthRevenueCents: 70000,
-      previousMonthRevenueCents: 100000,
-    }));
-    const insight = find(result, 'PROJECTED_REVENUE_DROP');
-    expect(insight).toBeDefined();
-    expect(insight!.severity).toBe('warning');
-    expect(insight!.priority).toBe('high');
-  });
-
-  it('does not emit when revenue increased', () => {
-    const result = buildInsights(input({
-      currentMonthRevenueCents: 130000,
-      previousMonthRevenueCents: 100000,
-    }));
-    expect(find(result, 'PROJECTED_REVENUE_DROP')).toBeUndefined();
-  });
-
-  it('does not emit when change is < 30%', () => {
-    const result = buildInsights(input({
-      currentMonthRevenueCents: 90000,
-      previousMonthRevenueCents: 100000,
-    }));
-    expect(find(result, 'PROJECTED_REVENUE_DROP')).toBeUndefined();
-  });
-
-  it('does not emit when previous revenue is 0', () => {
-    const result = buildInsights(input({
-      currentMonthRevenueCents: 100000,
-      previousMonthRevenueCents: 0,
-    }));
-    expect(find(result, 'PROJECTED_REVENUE_DROP')).toBeUndefined();
-  });
-
-  it('does not emit when previous revenue is undefined', () => {
-    const result = buildInsights(input({
-      currentMonthRevenueCents: 100000,
-    }));
-    expect(find(result, 'PROJECTED_REVENUE_DROP')).toBeUndefined();
+    expect(insights).toEqual([]);
   });
 });
 
-// ── 8. STRUCTURE_COMPARISON_RELEVANT ─────────────────────────────────
+// Tax reserve
 
-describe('STRUCTURE_COMPARISON_RELEVANT', () => {
-  it('emits info when CASS threshold is within 20% of the limit', () => {
-    const snap = snapshot({
-      thresholds: [threshold({ affectedTax: 'cass', ratio: 0.85, current: 850000, limit: 1000000 })],
-    });
-    const result = buildInsights(input({ snapshot: snap }));
-    const insight = find(result, 'STRUCTURE_COMPARISON_RELEVANT');
-    expect(insight).toBeDefined();
-    expect(insight!.severity).toBe('info');
-    expect(insight!.priority).toBe('medium');
-  });
-
-  it('does not emit when expenses are empty', () => {
-    const result = buildInsights(input({ expenses: [] }));
-    expect(find(result, 'STRUCTURE_COMPARISON_RELEVANT')).toBeUndefined();
-  });
-
-  it('does not emit when expenses are undefined', () => {
-    const result = buildInsights(input({}));
-    expect(find(result, 'STRUCTURE_COMPARISON_RELEVANT')).toBeUndefined();
-  });
-});
-
-// ── 9. RESERVE_BEHIND ────────────────────────────────────────────────
-
-describe('RESERVE_BEHIND', () => {
-  it('emits warning when gap is > 0', () => {
-    const snap = snapshot({
+describe('tax reserve', () => {
+  const reserve = (gapCents: number, projectedLiabilityCents: number) =>
+    snapshot({
       taxReserve: {
-        projectedLiabilityCents: 100000,
-        targetReserveCents: 120000,
-        currentReserveCents: 50000,
-        gapCents: 70000,
-        coverageMonths: 6,
-        projectedQ4LiabilityCents: 30000,
-        taxYear: 2026,
-      },
-    });
-    const result = buildInsights(input({ snapshot: snap }));
-    const insight = find(result, 'RESERVE_BEHIND');
-    expect(insight).toBeDefined();
-    expect(insight!.severity).toBe('warning');
-    expect(insight!.priority).toBe('high');
-  });
-
-  it('does not emit when gap is 0', () => {
-    const snap = snapshot({
-      taxReserve: {
-        projectedLiabilityCents: 100000,
-        targetReserveCents: 100000,
-        currentReserveCents: 100000,
-        gapCents: 0,
+        projectedLiabilityCents,
+        targetReserveCents: 100_000,
+        currentReserveCents: 100_000 - gapCents,
+        gapCents,
         coverageMonths: 12,
         projectedQ4LiabilityCents: 0,
         taxYear: 2026,
       },
     });
-    const result = buildInsights(input({ snapshot: snap }));
-    expect(result.filter((i) => i.eventType === 'RESERVE_BEHIND')).toHaveLength(0);
+
+  it('emits exactly one warning when projected liability > 0 and gap > 0', () => {
+    const insights = getInsights(input({ snapshot: reserve(25_000, 100_000) }));
+
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('warning');
+    expect(insights[0].id).toBe('reserve');
   });
 
-  it('emits warning when reserve coverage is below 3 months', () => {
-    const snap = snapshot({
-      taxReserve: {
-        projectedLiabilityCents: 100000,
-        targetReserveCents: 120000,
-        currentReserveCents: 50000,
-        gapCents: 0,
-        coverageMonths: 2,
-        projectedQ4LiabilityCents: 0,
-        taxYear: 2026,
-      },
-    });
-    const result = buildInsights(input({ snapshot: snap }));
-    const insight = find(result, 'RESERVE_BEHIND');
-    expect(insight).toBeDefined();
-    expect(insight!.severity).toBe('warning');
-    expect(insight!.priority).toBe('high');
+  it('emits nothing when gapCents === 0', () => {
+    expect(getInsights(input({ snapshot: reserve(0, 100_000) }))).toEqual([]);
+  });
+
+  it('emits nothing when gapCents < 0', () => {
+    expect(getInsights(input({ snapshot: reserve(-25_000, 100_000) }))).toEqual([]);
+  });
+
+  it('emits nothing when projectedLiabilityCents === 0', () => {
+    expect(getInsights(input({ snapshot: reserve(100_000, 0) }))).toEqual([]);
+  });
+
+  it('emits nothing when projectedLiabilityCents < 0', () => {
+    expect(getInsights(input({ snapshot: reserve(25_000, -100_000) }))).toEqual([]);
   });
 });
 
-// ── 10. SEVERITY_PRIORITY_CONSISTENCY ────────────────────────────────
+// Completeness
 
-describe('SEVERITY_PRIORITY_CONSISTENCY', () => {
-  it('danger always has high priority', () => {
-    const snap = snapshot({
-      thresholds: [threshold({ type: 'income', ratio: 0.97, current: 970000, limit: 1000000 })],
-    });
-    const result = buildInsights(input({ snapshot: snap }));
-    for (const insight of result) {
-      if (insight.severity === 'danger') {
-        expect(insight.priority).toBe('high');
-      }
+describe('completeness', () => {
+  it('emits one warning with the Romanian label for a known missing key', () => {
+    const insights = getInsights(input({ snapshot: snapshot({ missing: ['profile'] }) }));
+
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('warning');
+    expect(insights[0].id).toBe('completeness');
+    expect(insights[0].description).toContain('Profil');
+  });
+
+  it('lists multiple known keys with their Romanian labels', () => {
+    const insights = getInsights(input({ snapshot: snapshot({ missing: ['profile', 'income'] }) }));
+
+    expect(insights).toHaveLength(1);
+    expect(insights[0].description).toContain('Profil');
+    expect(insights[0].description).toContain('Venituri înregistrate');
+  });
+
+  it('falls back to "date" for unknown keys', () => {
+    const insights = getInsights(input({ snapshot: snapshot({ missing: ['totally_unknown_key'] }) }));
+
+    expect(insights).toHaveLength(1);
+    expect(insights[0].description).toContain('date');
+  });
+
+  it('emits nothing when missing is empty', () => {
+    expect(getInsights(input({ snapshot: snapshot({ missing: [] }) }))).toEqual([]);
+  });
+
+  it('renders the Romanian label for every one of the 9 completeness keys', () => {
+    const labels: Record<string, string> = {
+      profile: 'Profil',
+      income: 'Venituri înregistrate',
+      expenses: 'Cheltuieli înregistrate',
+      clients: 'Clienți',
+      documents: 'Documente',
+      companyDocuments: 'Documente de firmă',
+      declarations: 'Declarații',
+      statements: 'Declarații fiscale',
+      taxEstimate: 'Estimare impozit',
+    };
+
+    for (const [key, label] of Object.entries(labels)) {
+      const insights = getInsights(input({ snapshot: snapshot({ missing: [key] }) }));
+      expect(insights).toHaveLength(1);
+      expect(insights[0].severity).toBe('warning');
+      expect(insights[0].description).toContain(label);
     }
   });
 
-  it('warning has medium or high priority', () => {
-    const snap = snapshot({
-      thresholds: [threshold({ type: 'income', ratio: 0.85, current: 850000, limit: 1000000 })],
-      missing: ['cui'],
-      stale: ['expenses'],
-    });
-    const result = buildInsights(input({ snapshot: snap }));
-    for (const insight of result) {
-      if (insight.severity === 'warning') {
-        expect(['medium', 'high']).toContain(insight.priority);
-      }
-    }
-  });
+  it('works with real assessCompleteness output (integration)', () => {
+    const emptyData: AppData = {
+      profile: null as unknown as PfaProfile,
+      revenues: [],
+      expenses: [],
+      clients: [],
+      declarations: [],
+      documents: [],
+      companyDocs: { im: [], cs: [], tva: [], facturi: [] },
+      statements: [],
+      snapshots: [],
+      settings: {} as SettingsState,
+    };
 
-  it('info always has low priority', () => {
-    const result = buildInsights(input({
-      currentTaxEstimateCents: 105000,
-      previousTaxEstimateCents: 100000,
-    }));
-    for (const insight of result) {
-      if (insight.severity === 'info') {
-        expect(insight.priority).toBe('low');
-      }
-    }
-  });
-});
+    const report = assessCompleteness(emptyData);
+    const missing = report.checks.filter((c) => !c.satisfied).map((c) => c.key);
+    expect(missing).toHaveLength(9); // every check fails on empty data
 
-// ── 11. UNUSUAL_EXPENSE ─────────────────────────────────────────────
-
-describe('UNUSUAL_EXPENSE', () => {
-  it('flag unusual expense', () => {
-    const data = input({
-      expenses: [
-        ...Array.from({ length: 10 }, (_, i) =>
-          expense({ id: `e-small-${i}`, valoareFaraTva: 10000, tva: 0 }),
-        ),
-        expense({ id: 'e-big', valoareFaraTva: 1000000, tva: 0 }),
-      ],
-    });
-    const result = buildInsights(data);
-    const unusual = result.filter((i) => i.eventType === 'UNUSUAL_EXPENSE');
-    expect(unusual).toHaveLength(1);
-    const insight = unusual[0]!;
-    expect(insight.severity).toBe('danger');
-    expect(insight.priority).toBe('high');
-    expect(insight.conditions.amountCents).toBe(1000000);
-    expect(insight.conditions.meanCents).toBe(100000);
-    expect(insight.conditions.stdCents).toBe(284605);
+    const insights = getInsights(input({ snapshot: snapshot({ missing }) }));
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('warning');
+    expect(insights[0].id).toBe('completeness');
+    // Every Romanian label must appear for the 9 missing keys.
+    expect(insights[0].description).toContain('Profil');
+    expect(insights[0].description).toContain('Estimare impozit');
   });
 });
 
-// ── 12. PROJECTED_TAX_INCREASE ───────────────────────────────────────
+// Tax
 
-describe('PROJECTED_TAX_INCREASE', () => {
-  it('flag projected tax increase', () => {
-    const data = input({
-      previousTaxEstimateCents: 1000000,
-      currentTaxEstimateCents: 1600000,
-    });
-    const result = buildInsights(data);
-    const increases = result.filter((i) => i.eventType === 'PROJECTED_TAX_INCREASE');
-    expect(increases).toHaveLength(1);
-    const insight = increases[0]!;
-    expect(insight.severity).toBe('warning');
-    expect(insight.priority).toBe('high');
-    expect(insight.conditions.increaseCents).toBe(600000);
+describe('tax', () => {
+  it('emits nothing when tax is undefined', () => {
+    expect(getInsights(input({ snapshot: snapshot() }))).toEqual([]);
+  });
+
+  it('emits exactly one info for review_required, without numbers or the raw reason', () => {
+    const reason = 'CAS rule not found for tax year 2026';
+    const insights = getInsights(input({ snapshot: snapshot(), tax: taxReviewRequired(reason) }));
+
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('info');
+    expect(insights[0].id).toBe('tax');
+    const text = `${insights[0].title} ${insights[0].description}`;
+    expect(text).not.toMatch(/[0-9]/);
+    expect(text).not.toContain(reason);
+  });
+
+  it('emits exactly one info with the formatted total for a computed tax', () => {
+    const total = 1234.567;
+    const insights = getInsights(input({ snapshot: snapshot(), tax: taxComputed(total) }));
+
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('info');
+    expect(insights[0].id).toBe('tax');
+    expect(insights[0].description).toContain(`${formatLei(total)} RON`);
   });
 });
 
-// ── 13. DETERMINISM ──────────────────────────────────────────────────
+// Invariants
 
-describe('DETERMINISM', () => {
-  it('is deterministic', () => {
-    const data = input({
-      snapshot: snapshot({
-        deadlines: [
-          { id: 'd1', label: 'TVA 3Q', date: '2026-05-20', daysUntil: 5 },
-        ],
-        missing: ['cui'],
+describe('invariants', () => {
+  it('never exposes raw key strings in user-facing text', () => {
+    const rawKeys = ['profile_field_raw', 'unknown_key_xyz', 'cass-max-raw', 'some-raw-label'];
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          missing: ['profile_field_raw', 'unknown_key_xyz'],
+          thresholds: [threshold({ id: 't1', label: 'cass-max-raw', affectedTax: 'cass', ratio: 0.9 })],
+          deadlines: [deadline({ id: 'd1', label: 'some-raw-label', daysUntil: 5 })],
+        }),
       }),
-      currentTaxEstimateCents: 105000,
-      previousTaxEstimateCents: 100000,
-    });
-    const a = buildInsights(data);
-    const b = buildInsights(data);
-    expect(a).toEqual(b);
-  });
-});
+    );
 
-// ── 14. DATA_INCOMPLETE ──────────────────────────────────────────────
-
-describe('DATA_INCOMPLETE', () => {
-  it('emits warning when profile fields are missing', () => {
-    const data = input({
-      snapshot: snapshot({ missing: ['cui'] }),
-    });
-    const result = buildInsights(data);
-    const incomplete = result.filter((i) => i.eventType === 'DATA_INCOMPLETE');
-    expect(incomplete).toHaveLength(1);
-    const insight = incomplete[0]!;
-    expect(insight.severity).toBe('warning');
-    expect(insight.priority).toBe('medium');
-    expect(insight.conditions.missingCount).toBe(1);
-    expect(insight.conditions.fields).toBe('cui');
-  });
-
-  it('does not emit when only stale data is present', () => {
-    const data = input({
-      snapshot: snapshot({ stale: ['expenses'] }),
-    });
-    const result = buildInsights(data);
-    const incomplete = result.filter((i) => i.eventType === 'DATA_INCOMPLETE');
-    expect(incomplete).toHaveLength(0);
-  });
-});
-
-// ── 15. NO_FABRICATION ───────────────────────────────────────────────
-
-describe('NO_FABRICATION', () => {
-  it('returns no insights for a clean snapshot with no optional context', () => {
-    // Clean snapshot: no thresholds, no deadlines, no missing fields, no
-    // reserve gap, full coverage — and no estimate/revenue/legislation/expense
-    // context. Nothing may be fabricated.
-    const result = buildInsights(input({}));
-    expect(result).toEqual([]);
-  });
-});
-
-// ── 16. CONDITIONS_CONTENT ───────────────────────────────────────────
-
-describe('CONDITIONS_CONTENT', () => {
-  it('conditions is a stable Record with exact keys per event type and no personal data', () => {
-    const snap = snapshot({
-      deadlines: [{ id: 'd1', label: 'TVA 3Q', date: '2026-05-20', daysUntil: 5 }],
-      missing: ['cui'],
-    });
-    const result = buildInsights(input({ snapshot: snap }));
-    const deadline = find(result, 'DEADLINE_APPROACHING')!;
-    // Exact key set for DEADLINE_APPROACHING — stable, no personal data.
-    expect(Object.keys(deadline.conditions).sort()).toEqual(['date', 'daysUntil']);
-    expect(deadline.conditions).toEqual({ daysUntil: 5, date: '2026-05-20' });
-    // Every condition value across all insights is number|string|boolean.
-    for (const insight of result) {
-      for (const value of Object.values(insight.conditions)) {
-        expect(['number', 'string', 'boolean']).toContain(typeof value);
-      }
+    expect(insights.length).toBeGreaterThan(0);
+    const text = texts(insights);
+    for (const raw of rawKeys) {
+      expect(text).not.toContain(raw);
     }
   });
-});
 
-// ── 17. SEVERITY_PRIORITY_MATRIX ─────────────────────────────────────
-
-describe('SEVERITY_PRIORITY_MATRIX', () => {
-  // One input that fires all 12 event types at once, each in its primary
-  // (non-escalated) band, so the table pins severity+priority per type.
-  const allEventsInput = () =>
-    input({
-      snapshot: snapshot({
-        thresholds: [
-          threshold({ id: 'income', label: 'CA 2026', type: 'income', current: 850_000, limit: 1_000_000, ratio: 0.85 }),
-          threshold({ id: 'vat', label: 'TVA 2026', type: 'vat', current: 850_000, limit: 1_000_000, ratio: 0.85 }),
-          threshold({ id: 'cass', label: 'CASS 2026', affectedTax: 'cass', current: 850_000, limit: 1_000_000, ratio: 0.85 }),
-        ],
-        deadlines: [{ id: 'd1', label: 'TVA 3Q', date: '2026-07-15', daysUntil: 25 }],
-        missing: ['cui'],
-        taxReserve: {
-          projectedLiabilityCents: 100_000,
-          targetReserveCents: 170_000,
-          currentReserveCents: 100_000,
-          gapCents: 70_000,
-          coverageMonths: 6,
-          projectedQ4LiabilityCents: 30_000,
-          taxYear: 2026,
-        },
+  it('contains no English leak patterns in user-facing text', () => {
+    const englishLeaks = ['Missing', 'Deadline', 'Urgent', 'Warning', 'Approaching'];
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          missing: ['profile'],
+          thresholds: [threshold({ id: 'cass', affectedTax: 'cass', ratio: 1.1, breached: true })],
+          deadlines: [deadline({ id: 'pfa', label: 'pfa', daysUntil: -1, date: '2026-05-14' })],
+          taxReserve: {
+            projectedLiabilityCents: 100_000,
+            targetReserveCents: 100_000,
+            currentReserveCents: 75_000,
+            gapCents: 25_000,
+            coverageMonths: 12,
+            projectedQ4LiabilityCents: 0,
+            taxYear: 2026,
+          },
+        }),
+        tax: taxComputed(1234.567),
       }),
-      currentTaxEstimateCents: 1_600_000,
-      previousTaxEstimateCents: 1_000_000,
-      currentMonthRevenueCents: 70_000,
-      previousMonthRevenueCents: 100_000,
-      legislationChangeDate: '2026-05-01',
-      expenses: [
-        ...Array.from({ length: 10 }, (_, i) =>
-          expense({ id: `e-small-${i}`, valoareFaraTva: 10_000, tva: 0 }),
-        ),
-        expense({ id: 'e-big', valoareFaraTva: 1_000_000, tva: 0 }),
-      ],
-    });
+    );
 
-  const MATRIX: Record<InsightEventType, { severity: InsightSeverity; priority: InsightPriority }> = {
-    INCOME_THRESHOLD_APPROACHING: { severity: 'warning', priority: 'medium' },
-    MISSING_DOCUMENTS: { severity: 'warning', priority: 'high' },
-    DATA_INCOMPLETE: { severity: 'warning', priority: 'medium' },
-    VAT_THRESHOLD_APPROACHING: { severity: 'warning', priority: 'medium' },
-    DEADLINE_APPROACHING: { severity: 'warning', priority: 'medium' },
-    TAX_ESTIMATE_CHANGED: { severity: 'warning', priority: 'high' },
-    LEGISLATION_CHANGED: { severity: 'info', priority: 'low' },
-    PROJECTED_TAX_INCREASE: { severity: 'warning', priority: 'high' },
-    PROJECTED_REVENUE_DROP: { severity: 'warning', priority: 'high' },
-    STRUCTURE_COMPARISON_RELEVANT: { severity: 'info', priority: 'medium' },
-    UNUSUAL_EXPENSE: { severity: 'danger', priority: 'high' },
-    RESERVE_BEHIND: { severity: 'warning', priority: 'high' },
-  };
-
-  it('fires all 12 event types in a single input', () => {
-    const result = buildInsights(allEventsInput());
-    expect(result).toHaveLength(12);
-    for (const type of Object.keys(MATRIX) as InsightEventType[]) {
-      expect(find(result, type)).toBeDefined();
+    expect(insights.length).toBeGreaterThan(0);
+    const text = texts(insights).toLowerCase();
+    for (const word of englishLeaks) {
+      expect(text).not.toContain(word.toLowerCase());
     }
   });
 
-  it.each(Object.entries(MATRIX))('maps %s → severity=%s, priority=%s', (type, expected) => {
-    const insight = find(buildInsights(allEventsInput()), type as InsightEventType)!;
-    expect(insight.severity).toBe(expected.severity);
-    expect(insight.priority).toBe(expected.priority);
+  it('sorts danger → warning → info, stable within a severity', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          missing: ['profile'],
+          thresholds: [
+            threshold({ id: 'cass', affectedTax: 'cass', ratio: 1.1, breached: true }),
+            threshold({ id: 'vat', affectedTax: 'vat', ratio: 0.85 }),
+          ],
+          deadlines: [
+            deadline({ id: 'pfa', label: 'pfa', daysUntil: -1, date: '2026-05-14' }),
+            deadline({ id: 'vat', label: 'vat', daysUntil: 10 }),
+          ],
+          taxReserve: {
+            projectedLiabilityCents: 100_000,
+            targetReserveCents: 100_000,
+            currentReserveCents: 75_000,
+            gapCents: 25_000,
+            coverageMonths: 12,
+            projectedQ4LiabilityCents: 0,
+            taxYear: 2026,
+          },
+        }),
+        tax: taxComputed(100),
+      }),
+    );
+
+    expect(insights.map((i) => i.severity)).toEqual([
+      'danger',
+      'danger',
+      'warning',
+      'warning',
+      'warning',
+      'warning',
+      'info',
+    ]);
+    // Within warnings: thresholds, deadlines, reserve, completeness (insertion order).
+    expect(insights.filter((i) => i.severity === 'warning').map((i) => i.id)).toEqual([
+      'threshold-vat',
+      'deadline-vat',
+      'reserve',
+      'completeness',
+    ]);
+  });
+
+  it('is deterministic for the same input', () => {
+    const i = input({
+      snapshot: snapshot({
+        missing: ['profile'],
+        thresholds: [threshold({ id: 'cass', affectedTax: 'cass', ratio: 0.9 })],
+        deadlines: [deadline({ id: 'pfa', label: 'pfa', daysUntil: 5 })],
+      }),
+    });
+
+    expect(getInsights(i)).toEqual(getInsights(i));
   });
 });

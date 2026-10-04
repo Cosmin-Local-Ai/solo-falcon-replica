@@ -8,11 +8,30 @@ import type { PfaProfile } from '../domain/models';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import { todayISO } from './types';
 import { seedData } from './seed';
+import { parseAppData } from './schema';
+import { epochMs, localYear, now, toInstantISO } from '../domain/date';
 
 const STORAGE_KEY = 'pfa-app-data-v2';
 
+/**
+ * Where the initial dataset came from.
+ * - 'seed': storage was empty OR the stored payload failed validation and
+ *   the app recovered to seed data.
+ * - 'persisted': a valid stored dataset was loaded.
+ * Store-level only — never part of the persisted `AppData` shape.
+ */
+export type DataOrigin = 'seed' | 'persisted';
+
+interface LoadedData {
+  data: AppData;
+  dataOrigin: DataOrigin;
+}
+
 interface StoreValue extends AppData {
   toasts: Toast[];
+  /** 'seed' when the app started from/recovered to seed data, 'persisted'
+   *  when a valid stored dataset was loaded. */
+  dataOrigin: DataOrigin;
   addRevenue: (r: Omit<Revenue, 'id'>) => void;
   updateRevenue: (r: Revenue) => void;
   deleteRevenue: (id: string) => void;
@@ -39,20 +58,20 @@ interface StoreValue extends AppData {
 const StoreContext = createContext<StoreValue | null>(null);
 
 let counter = 0;
-const uid = () => `${Date.now().toString(36)}-${(counter++).toString(36)}`;
+const uid = () => `${epochMs().toString(36)}-${(counter++).toString(36)}`;
 
 /**
  * Backfill a profile for data saved before the profile collection existed.
  * Identity/contact fields are carried over from the legacy settings so the
  * profile becomes the source of truth without losing user data.
  */
-export function legacyProfileFromSettings(s: SettingsState): PfaProfile {
+export function legacyProfileFromSettings(s: SettingsState, instant: Date = now()): PfaProfile {
   const c = s.company;
   const p = s.personal;
   return {
     id: 'profile-1',
-    pfaStartYear: new Date().getFullYear(),
-    fiscalYear: new Date().getFullYear(),
+    pfaStartYear: localYear(instant),
+    fiscalYear: localYear(instant),
     regime: 'impozit_pe_venit',
     caen: c.caen?.[0]?.cod ?? c.codCAEN ?? '',
     salaryStatus: 'nu',
@@ -77,34 +96,59 @@ export function legacyProfileFromSettings(s: SettingsState): PfaProfile {
       contBancar: c.contBancar ?? '',
       banca: c.banca ?? '',
     },
-    updatedAt: new Date().toISOString(),
+    updatedAt: toInstantISO(instant),
   };
 }
 
-function loadInitial(): AppData {
+function loadInitial(): LoadedData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as AppData;
-      if (parsed && Array.isArray(parsed.revenues) && parsed.settings) {
-        if (!parsed.profile) parsed.profile = legacyProfileFromSettings(parsed.settings);
-        if (!Array.isArray(parsed.snapshots)) parsed.snapshots = [];
-        return parsed;
-      }
+    if (!raw) {
+      return { data: seedData, dataOrigin: 'seed' };
     }
+    const parsed = parseAppData(raw);
+    if (!parsed) {
+      // Corrupt stored dataset (bad JSON, wrong types, invalid numbers,
+      // missing required collections, invalid profile/settings/snapshots):
+      // recover to seed data and let the save effect persist the clean state.
+      return { data: seedData, dataOrigin: 'seed' };
+    }
+    return {
+      data: {
+        profile: parsed.profile ?? legacyProfileFromSettings(parsed.settings),
+        revenues: parsed.revenues,
+        expenses: parsed.expenses ?? [],
+        clients: parsed.clients ?? [],
+        declarations: parsed.declarations ?? [],
+        documents: parsed.documents ?? [],
+        companyDocs: parsed.companyDocs ?? { im: [], cs: [], tva: [], facturi: [] },
+        statements: parsed.statements ?? [],
+        snapshots: parsed.snapshots ?? [],
+        settings: parsed.settings,
+      },
+      dataOrigin: 'persisted',
+    };
   } catch {
-    // ignore corrupt storage
+    return { data: seedData, dataOrigin: 'seed' };
   }
-  return seedData;
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<AppData>(loadInitial);
+  const [initial] = useState(loadInitial);
+  const [data, setData] = useState<AppData>(initial.data);
+  const [dataOrigin] = useState<DataOrigin>(initial.dataOrigin);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const timers = useRef<number[]>([]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (err) {
+      // Controlled write failure (e.g. storage quota exceeded, setItem
+      // throwing): log and continue. The in-memory state stays usable and
+      // the next mutation retries the write; no retry/backoff machinery.
+      console.warn('[store] failed to persist app data to localStorage', err);
+    }
   }, [data]);
 
   useEffect(() => () => { timers.current.forEach(t => window.clearTimeout(t)); }, []);
@@ -125,6 +169,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value: StoreValue = {
     ...data,
     toasts,
+    dataOrigin,
     toast,
     dismissToast,
 
@@ -167,7 +212,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     updateProfile: patch => setData(d => ({
       ...d,
-      profile: { ...d.profile, ...patch, updatedAt: new Date().toISOString() },
+      profile: { ...d.profile, ...patch, updatedAt: toInstantISO() },
     })),
 
     updateSettings: patch => setData(d => ({

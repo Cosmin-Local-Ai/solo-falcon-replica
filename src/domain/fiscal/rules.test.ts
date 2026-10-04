@@ -99,7 +99,7 @@ describe('selectApplicableRules — status filtering', () => {
   it('excludes a non-ACTIVE rule even when its date window matches', () => {
     const draft = makeRule({
       ruleId: 'TEST_DRAFT',
-      status: 'DRAFT',
+      status: 'PROPOSED',
       effectiveFrom: '2026-01-01',
       effectiveTo: null,
     });

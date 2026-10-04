@@ -1,5 +1,6 @@
 import type { AppData } from '../data/types';
 import { selectMonthly, selectYtd } from './aggregation';
+import { daysInMonth } from './date';
 
 /**
  * Projection v1 — transparent current run rate (Step 13, Part B).
@@ -8,8 +9,9 @@ import { selectMonthly, selectYtd } from './aggregation';
  * Deterministic for the same (data, asOfDate) inputs. No ML, no statistical
  * forecasting, no tax logic. The method is exactly:
  *
- *   run rate   = YTD totals / elapsed months (fiscal-year start → asOfDate,
- *                inclusive of both end months)
+ *   run rate   = YTD totals / elapsed months, where elapsed months is a fraction:
+ *                full months elapsed + day/daysInMonth for the current partial month;
+ *                denominator floored to 1 for dates inside the fiscal year, 0 before the fiscal year start.
  *   annual     = run rate × 12
  *
  * Every projected value is explicitly tagged: series entries carry
@@ -44,18 +46,20 @@ export interface ProjectionV1 {
   annualProjected: Totals;
   series: ProjectionMonth[];
   method: 'run-rate-v1';
+  elapsedMonths: number; // actual denominator used (after the lower bound)
 }
 
 function elapsedMonths(fiscalYear: number, asOfDate: string): number {
   const asOfYear = Number(asOfDate.slice(0, 4));
   const asOfMonth = Number(asOfDate.slice(5, 7));
-  return (asOfYear - fiscalYear) * 12 + (asOfMonth - 1) + 1;
+  const asOfDay = Number(asOfDate.slice(8, 10));
+  return (asOfYear - fiscalYear) * 12 + (asOfMonth - 1) + asOfDay / daysInMonth(asOfYear, asOfMonth);
 }
 
 export function selectProjectionV1(data: AppData, asOfDate: string): ProjectionV1 {
   const fiscalYear = data.profile.fiscalYear;
   const months = elapsedMonths(fiscalYear, asOfDate);
-  const denom = months > 0 ? months : 0;
+  const denom = months > 0 ? Math.max(1, months) : 0;
 
   const ytd = selectYtd(data, asOfDate);
   const runRate: RunRate = {
@@ -91,6 +95,7 @@ export function selectProjectionV1(data: AppData, asOfDate: string): ProjectionV
 
   return {
     periodActual: { from: `${fiscalYear}-01-01`, to: asOfDate },
+    elapsedMonths: denom,
     runRate,
     annualProjected,
     series,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { StoreProvider } from '../data/store';
 import Revenues from './Revenues';
 
@@ -53,5 +53,60 @@ describe('Revenues (Step 25 — Defect 4)', () => {
     );
 
     expect(activeTabText()).toContain('Înregistrate');
+  });
+});
+
+describe('Revenues — data preservation across tab navigation', () => {
+  // Seed data: registered = FCT-2026-001, FCT-2026-004 (2)
+  //             pending    = FCT-2026-002 (1)
+  //             rejected   = NF-2026-003 (1)
+  it('rows reappear unchanged after navigating between tabs and back', () => {
+    render(
+      <StoreProvider>
+        <Revenues />
+      </StoreProvider>,
+    );
+
+    // Default tab: registered shows both seed rows.
+    expect(screen.getByText('FCT-2026-001')).toBeInTheDocument();
+    expect(screen.getByText('FCT-2026-004')).toBeInTheDocument();
+
+    // Navigate to pending: only that tab's row is visible.
+    fireEvent.click(screen.getByRole('button', { name: /În așteptare/ }));
+    expect(screen.getByText('FCT-2026-002')).toBeInTheDocument();
+    expect(screen.queryByText('FCT-2026-001')).not.toBeInTheDocument();
+    expect(screen.queryByText('FCT-2026-004')).not.toBeInTheDocument();
+
+    // Navigate to rejected.
+    fireEvent.click(screen.getByRole('button', { name: /Respinse/ }));
+    expect(screen.getByText('NF-2026-003')).toBeInTheDocument();
+    expect(screen.queryByText('FCT-2026-002')).not.toBeInTheDocument();
+
+    // Back to registered: the original rows are still there, intact.
+    fireEvent.click(screen.getByRole('button', { name: /Înregistrate/ }));
+    expect(screen.getByText('FCT-2026-001')).toBeInTheDocument();
+    expect(screen.getByText('FCT-2026-004')).toBeInTheDocument();
+  });
+
+  it('tab counts stay stable while navigating', () => {
+    const { container } = render(
+      <StoreProvider>
+        <Revenues />
+      </StoreProvider>,
+    );
+
+    const counts = () =>
+      Array.from(container.querySelectorAll('.tab .count')).map(el => el.textContent);
+
+    expect(counts()).toEqual(['2', '1', '1']);
+
+    fireEvent.click(screen.getByRole('button', { name: /În așteptare/ }));
+    expect(counts()).toEqual(['2', '1', '1']);
+
+    fireEvent.click(screen.getByRole('button', { name: /Respinse/ }));
+    expect(counts()).toEqual(['2', '1', '1']);
+
+    fireEvent.click(screen.getByRole('button', { name: /Înregistrate/ }));
+    expect(counts()).toEqual(['2', '1', '1']);
   });
 });

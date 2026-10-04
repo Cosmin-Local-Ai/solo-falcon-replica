@@ -34,9 +34,16 @@ export default function TaxReserve({ reserve }: TaxReserveProps) {
             <div className="grid grid-2">
               <div className="stat-card">
                 <div className="label">Rezervat deja</div>
-                <div className={reserve.reservedAmount < 0 ? 'value mono neg' : 'value mono'}>
-                  {fmtRON(reserve.reservedAmount)}
-                </div>
+                {reserve.reservedAmount === null ? (
+                  <>
+                    <div className="value mono">—</div>
+                    <div className="hint">Nicio sumă înregistrată.</div>
+                  </>
+                ) : (
+                  <div className={reserve.reservedAmount < 0 ? 'value mono neg' : 'value mono'}>
+                    {fmtRON(reserve.reservedAmount)}
+                  </div>
+                )}
               </div>
               <div className="stat-card">
                 <div className="label">Estimare obligație fiscală</div>

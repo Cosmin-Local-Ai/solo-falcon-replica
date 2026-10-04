@@ -17,12 +17,20 @@ import type { TaxEstimateResult } from './tax';
  * Minimal deterministic cash-planning state for the tax reserve.
  *
  * `reservedAmount` is a lei amount managed by the user (cash already set
- * aside for taxes). This is NOT persisted by this module — the UI step wires
+ * aside for taxes). Tri-state semantics:
+ * - `null` — no data recorded (no amount has ever been entered);
+ * - `0` — an explicit zero;
+ * - `> 0` — a real reserved amount.
+ *
+ * This is NOT persisted by this module — the UI step wires
  * state/persistence later. No AppData/store changes.
  */
 export interface TaxReserveState {
-  /** Lei already reserved for taxes (>= 0). */
-  reservedAmount: number;
+  /**
+   * Lei already reserved for taxes. Tri-state: `null` = no data recorded,
+   * `0` = explicit zero, `> 0` = real amount (always >= 0 when a number).
+   */
+  reservedAmount: number | null;
 }
 
 /** Calendar query parameters for the reserve recommendation. */
@@ -40,13 +48,18 @@ export interface TaxReserveQuery {
  *   verbatim, or null when no estimate is available.
  * - `reservedAmount` / `remainingTarget` / `recommendedMonthlyReserve` are
  *   cash-planning numbers, never tax liability.
+ * - `reservedAmount` is the tri-state carried through verbatim from the
+ *   state: `null` = no data recorded, `0` = explicit zero, `> 0` = real.
  */
 export interface TaxReserveRecommendation {
   /** Estimated full-year tax liability (lei) from the tax engine. null when unavailable. */
   estimatedTaxLiability: number | null;
-  /** Lei already reserved (cash-planning input). */
-  reservedAmount: number;
-  /** max(0, estimatedTaxLiability − reservedAmount). 0 when no estimate. */
+  /**
+   * Lei already reserved (cash-planning input), carried through verbatim.
+   * Tri-state: `null` = no data recorded, `0` = explicit zero, `> 0` = real.
+   */
+  reservedAmount: number | null;
+  /** max(0, estimatedTaxLiability − (reservedAmount ?? 0)). 0 when no estimate. */
   remainingTarget: number;
   /** Calendar months remaining from asOfDate through fiscalYear-12, inclusive (0–12). */
   monthsRemaining: number;
@@ -54,18 +67,23 @@ export interface TaxReserveRecommendation {
   recommendedMonthlyReserve: number;
 }
 
-/** Create a tax-reserve state, clamped to a non-negative lei amount. */
-export function createTaxReserveState(reservedAmount: number): TaxReserveState {
-  return { reservedAmount: Math.max(0, reservedAmount) };
+/**
+ * Create a tax-reserve state. `null` passes through unchanged (no data
+ * recorded); numbers are clamped to a non-negative lei amount.
+ */
+export function createTaxReserveState(reservedAmount: number | null): TaxReserveState {
+  return { reservedAmount: reservedAmount === null ? null : Math.max(0, reservedAmount) };
 }
 
 /**
  * Return a NEW state with `amount` lei added to the reserve.
  * A negative `amount` is a withdrawal; the result is clamped at 0.
+ * A `null` reserve (no data recorded) becomes the clamped `amount` —
+ * adding to it records an explicit amount for the first time.
  * Pure — the input state is never mutated.
  */
 export function addToTaxReserve(state: TaxReserveState, amount: number): TaxReserveState {
-  return { reservedAmount: Math.max(0, state.reservedAmount + amount) };
+  return { reservedAmount: Math.max(0, (state.reservedAmount ?? 0) + amount) };
 }
 
 /**
@@ -90,7 +108,10 @@ export function monthsRemainingInFiscalYear(asOfDate: string, fiscalYear: number
  *   estimate is available. Only `status === 'computed'` carries a liability
  *   (`output.total`); anything else (null / review_required) → liability null,
  *   remaining target 0, monthly reserve 0.
- * - `state` supplies the already-reserved lei (cash-planning input).
+ * - `state` supplies the already-reserved lei (cash-planning input,
+ *   tri-state: null = no data recorded, 0 = explicit zero, > 0 = real).
+ *   The tri-state is carried through verbatim in the recommendation;
+ *   `null` is treated as 0 only for the remaining-target math.
  * - `query` supplies asOfDate + fiscalYear for the calendar month math.
  *
  * Synchronous and pure: same (estimate, state, query) ⇒ same output.
@@ -109,7 +130,7 @@ export function computeTaxReserve(
   const remainingTarget =
     estimatedTaxLiability === null
       ? 0
-      : Math.max(0, estimatedTaxLiability - reservedAmount);
+      : Math.max(0, estimatedTaxLiability - (reservedAmount ?? 0));
   const recommendedMonthlyReserve =
     estimatedTaxLiability === null || monthsRemaining === 0
       ? 0

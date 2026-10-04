@@ -1,48 +1,54 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import ActionSection from './ActionSection';
-import type { PendingCounts } from '../../data/dashboard';
+import type { ActionItem } from '../../data/dashboard';
 
-function makeCounts(overrides: Partial<PendingCounts> = {}): PendingCounts {
-  return {
-    revenuesInAsteptare: 2,
-    revenuesRespinsa: 1,
-    expensesRespinsa: 0,
-    declarationsInAsteptare: 3,
-    ...overrides,
-  };
+function makeActions(): ActionItem[] {
+  return [
+    { id: 'deadline-cas-q1', label: 'cas_quarterly', source: 'deadline' },
+    { id: 'completeness-profile', label: 'profile', source: 'completeness' },
+    { id: 'completeness-statements', label: 'statements', source: 'completeness' },
+    { id: 'tax-review', label: 'Revizuire estimări fiscale', source: 'tax' },
+  ];
 }
 
-describe('ActionSection', () => {
-  it('renders the four real pending counts as a checklist', () => {
-    render(<ActionSection pendingCounts={makeCounts()} />);
-    expect(screen.getByText('Revenues awaiting declaration')).toBeInTheDocument();
-    expect(screen.getByText('Rejected revenues to review')).toBeInTheDocument();
-    expect(screen.getByText('Rejected expenses to review')).toBeInTheDocument();
-    expect(screen.getByText('Declarations awaiting filing')).toBeInTheDocument();
-    expect(screen.getByText('2')).toBeInTheDocument();
-    expect(screen.getByText('1')).toBeInTheDocument();
-    expect(screen.getByText('3')).toBeInTheDocument();
+describe('ActionSection (Step 31 — ActionItem-driven)', () => {
+  it('renders every real action item, in the data layer order', () => {
+    render(<ActionSection actions={makeActions()} />);
+    expect(screen.getByText('CAS trimestrial')).toBeInTheDocument();
+    expect(screen.getByText('Revizuire estimări fiscale')).toBeInTheDocument();
+    expect(screen.getByText('4 item de rezolvat')).toBeInTheDocument();
   });
 
-  it('marks zero-count items as clear (✓) instead of hiding them', () => {
-    render(<ActionSection pendingCounts={makeCounts()} />);
-    expect(screen.getByText('✓')).toBeInTheDocument();
+  it('shows the source badge for each item (deadline / completeness / tax)', () => {
+    render(<ActionSection actions={makeActions()} />);
+    expect(screen.getByText('Termen limită')).toBeInTheDocument();
+    expect(screen.getAllByText('Completitudine').length).toBe(2);
+    expect(screen.getByText('Impozit')).toBeInTheDocument();
   });
 
-  it('shows the honest all-clear state when all four counts are 0', () => {
+  it('maps completeness raw keys to plain-language Romanian display labels', () => {
+    render(<ActionSection actions={makeActions()} />);
+    expect(screen.getByText('Profil')).toBeInTheDocument();
+    expect(screen.getByText('Declarații fiscale')).toBeInTheDocument();
+    // The raw keys are not shown as labels.
+    expect(screen.queryByText('profile')).not.toBeInTheDocument();
+    expect(screen.queryByText('statements')).not.toBeInTheDocument();
+  });
+
+  it('falls back to the raw key for unknown completeness keys (no item dropped)', () => {
     render(
       <ActionSection
-        pendingCounts={makeCounts({
-          revenuesInAsteptare: 0,
-          revenuesRespinsa: 0,
-          expensesRespinsa: 0,
-          declarationsInAsteptare: 0,
-        })}
+        actions={[{ id: 'completeness-future', label: 'futureKey', source: 'completeness' }]}
       />,
     );
-    expect(screen.getByText("You're all caught up — no pending items.")).toBeInTheDocument();
-    expect(screen.queryByText('Revenues awaiting declaration')).not.toBeInTheDocument();
-    expect(screen.queryByText('Declarations awaiting filing')).not.toBeInTheDocument();
+    expect(screen.getByText('futureKey')).toBeInTheDocument();
+    expect(screen.getByText('1 item de rezolvat')).toBeInTheDocument();
+  });
+
+  it('shows the honest up-to-date state when there are no action items', () => {
+    render(<ActionSection actions={[]} />);
+    expect(screen.getByText('Totul este la zi — nimic nu necesită atenție.')).toBeInTheDocument();
+    expect(screen.getByText('Nimic nu necesită atenția ta în acest moment.')).toBeInTheDocument();
   });
 });

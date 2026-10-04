@@ -220,7 +220,7 @@ describe('selectFinancialDerived (Step 14)', () => {
 
   it('preserves full revenue-line provenance (all fields)', () => {
     const data = makeData({
-      revenues: [revenue({ id: 'rev-p', tip: 'nota-impozit', nr: 'NI-42', date: '2026-05-20', valoareFaraTva: 800, tva: 152 })],
+      revenues: [revenue({ id: 'rev-p', tip: 'notafactura', nr: 'NI-42', date: '2026-05-20', valoareFaraTva: 800, tva: 152 })],
     });
     const view = selectFinancialDerived(data, AS_OF);
     expect(view.lines.revenues[0]).toEqual({
@@ -229,7 +229,7 @@ describe('selectFinancialDerived (Step 14)', () => {
       total: 952,
       status: 'inregistrata',
       counted: true,
-      document: { tip: 'nota-impozit', nr: 'NI-42' },
+      document: { tip: 'notafactura', nr: 'NI-42' },
     });
   });
 
@@ -249,7 +249,7 @@ describe('selectFinancialDerived (Step 14)', () => {
     const view = selectFinancialDerived(makeData(), AS_OF);
     expect(view.lines.revenues).toEqual([]);
     expect(view.lines.expenses).toEqual([]);
-    expect(view.ytd).toEqual({ revenue: 0, expenses: 0, net: 0 });
+    expect(view.ytd).toEqual({ revenue: 0, expenses: 0, net: 0, revenueNet: 0, expenseNet: 0 });
     expect(view.monthly.size).toBe(0);
   });
 

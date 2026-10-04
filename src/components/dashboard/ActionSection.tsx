@@ -1,41 +1,72 @@
-import type { PendingCounts } from '../../data/dashboard';
-import { Card } from '../ui/card';
+import type { ActionItem } from '../../data/dashboard';
+import { Card, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import { checkLabel } from './checkLabels';
 
-interface ActionSectionProps {
-  pendingCounts: PendingCounts;
+/**
+ * ActionSection (Step 22, upgraded in Step 31) — presentational only.
+ *
+ * Renders the real action items from the deterministic data layer
+ * (`ActionItem[]` — sources: 'deadline' | 'completeness' | 'tax'). No
+ * actions are invented, none are dropped: every item is listed with its
+ * source, in the data layer's order. Completeness items carry the raw
+ * check key as `label`; it is mapped to a plain-language display label
+ * here (presentation only). Deadline items carry the raw `appliesTo` key;
+ * it is mapped to a Romanian display label here as well. When there are
+ * no action items, an honest "up to date" state is shown — never a blank
+ * panel.
+ */
+
+/** Presentation-only source labels (the data layer defines the sources). */
+const SOURCE_LABEL: Record<ActionItem['source'], string> = {
+  deadline: 'Termen limită',
+  completeness: 'Completitudine',
+  tax: 'Impozit',
+};
+
+/** Presentation-only Romanian labels for deadline `appliesTo` keys. */
+const DEADLINE_LABELS: Record<string, string> = {
+  pfa: 'PFA',
+  new_pfa: 'Declarație estimativă PFA',
+  'vat-registered-pfa': 'Înregistrare în scop de TVA',
+  cas_quarterly: 'CAS trimestrial',
+  cass_quarterly: 'CASS trimestrial',
+  cas_annual: 'CAS anual',
+  cass_annual: 'CASS anual',
+  vat_periodic: 'TVA periodic',
+  pfa_estimated_declaration: 'Declarație estimativă PFA',
+  vat_registration: 'Înregistrare în scop de TVA',
+};
+
+export interface ActionSectionProps {
+  actions: ActionItem[];
 }
 
-interface PendingItem {
-  label: string;
-  count: number;
-}
-
-export default function ActionSection({ pendingCounts }: ActionSectionProps) {
-  const items: PendingItem[] = [
-    { label: 'Revenues awaiting declaration', count: pendingCounts.revenuesInAsteptare },
-    { label: 'Rejected revenues to review', count: pendingCounts.revenuesRespinsa },
-    { label: 'Rejected expenses to review', count: pendingCounts.expensesRespinsa },
-    { label: 'Declarations awaiting filing', count: pendingCounts.declarationsInAsteptare },
-  ];
-
-  const allClear = items.every((item) => item.count === 0);
+export default function ActionSection({ actions }: ActionSectionProps) {
+  const labelFor = (item: ActionItem): string => {
+    if (item.source === 'completeness') return checkLabel(item.label);
+    if (item.source === 'deadline') return DEADLINE_LABELS[item.label] ?? item.label;
+    return item.label;
+  };
 
   return (
     <Card>
-      <h2>What you need to do</h2>
-      {allClear ? (
-        <p className="muted">You're all caught up — no pending items.</p>
+      <CardHeader>
+        <CardTitle>Ce trebuie să faci</CardTitle>
+        <CardDescription>
+          {actions.length === 0
+            ? 'Nimic nu necesită atenția ta în acest moment.'
+            : `${actions.length} item de rezolvat`}
+        </CardDescription>
+      </CardHeader>
+      {actions.length === 0 ? (
+        <p className="muted">Totul este la zi — nimic nu necesită atenție.</p>
       ) : (
-        <ul className="list">
-          {items.map((item) => (
-            <li key={item.label}>
-              <span className="label">{item.label}</span>
-              <span className={item.count > 0 ? 'value' : 'value muted'}>
-                {item.count > 0 ? item.count : '✓'}
-              </span>
-            </li>
-          ))}
-        </ul>
+        actions.map((item) => (
+          <div key={item.id} className="row between">
+            <span className="action-label">{labelFor(item)}</span>
+            <span className="badge badge-neutral">{SOURCE_LABEL[item.source]}</span>
+          </div>
+        ))
       )}
     </Card>
   );

@@ -16,6 +16,10 @@ export interface TaxCalculationInput {
   profile: PfaProfile;
   revenues: number;
   expenses: number;
+  /** Total revenues without VAT (valoareFaraTva only), lei. */
+  revenuesNet: number;
+  /** Total expenses without VAT (valoareFaraTva only), lei. */
+  expensesNet: number;
   ruleRelease: RuleRelease;
   rules: FiscalRule[];
 }
@@ -29,30 +33,35 @@ function rr(reason: string, lines: CalculationLine[] = []): TaxEstimateResult {
 }
 
 export async function computeTaxEstimate(input: TaxCalculationInput): Promise<TaxEstimateResult> {
-  const { inputs, profile, revenues, expenses, ruleRelease, rules } = input;
-  if (!Number.isFinite(revenues) || revenues < 0) return rr(`Revenues must be >= 0, got ${revenues}`);
-  if (!Number.isFinite(expenses) || expenses < 0) return rr(`Expenses must be >= 0, got ${expenses}`);
-  if (!profile?.id) return rr('Profile is missing or has no id');
+  const { inputs, profile, revenues, expenses, revenuesNet, expensesNet, ruleRelease, rules } = input;
+  if (!Number.isFinite(revenues) || revenues < 0) return rr(`Veniturile trebuie să fie >= 0, s-a obținut ${revenues}`);
+  if (!Number.isFinite(expenses) || expenses < 0) return rr(`Cheltuielile trebuie să fie >= 0, s-a obținut ${expenses}`);
+  if (!Number.isFinite(revenuesNet) || revenuesNet < 0) return rr(`Veniturile nete (fără TVA) trebuie să fie >= 0, s-a obținut ${revenuesNet}`);
+  if (!Number.isFinite(expensesNet) || expensesNet < 0) return rr(`Cheltuielile nete (fără TVA) trebuie să fie >= 0, s-a obținut ${expensesNet}`);
+  if (!profile?.id) return rr('Profilul lipsește sau nu are id');
   const lines: CalculationLine[] = [];
   const asOf = `${inputs.fiscalYear}-01-01`;
   const applicable = selectApplicableRules(rules, { taxYear: inputs.fiscalYear, asOfDate: asOf });
   const casRule = applicable.find((r) => r.taxRegime === 'cas');
   const cassRule = applicable.find((r) => r.taxRegime === 'cass');
   const incomeTaxRule = applicable.find((r) => r.taxRegime === 'income-tax');
-  if (!casRule) return rr(`CAS rule not found for tax year ${inputs.fiscalYear}`, lines);
-  if (!cassRule) return rr(`CASS rule not found for tax year ${inputs.fiscalYear}`, lines);
-  if (!incomeTaxRule) return rr(`Income tax rule not found for tax year ${inputs.fiscalYear}`, lines);
+  if (!casRule) return rr(`Regula CAS nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}`, lines);
+  if (!cassRule) return rr(`Regula CASS nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}`, lines);
+  if (!incomeTaxRule) return rr(`Regula de impozit pe venit nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}`, lines);
 
   if (inputs.regime === 'impozit_pe_venit') {
-    return rr('Deductible expense limit for impozit pe venit (30% of gross) is not in the rule store.', lines);
+    return rr('Plafonul cheltuielilor deductibile pentru impozit pe venit (30% din brut) nu este în stocul de reguli.', lines);
   }
 
-  const gross = revenues;
-  lines.push({ label: 'Gross revenue', value: gross });
-  const deductible = Math.min(expenses, gross);
-  lines.push({ label: 'Deductible expenses', value: deductible });
+  // Area 6: VAT is not taxable income. Non-exempt profiles are taxed on the net base
+  // (VAT excluded); exempt profiles keep the gross base.
+  const gross = inputs.vatExempt ? revenues : revenuesNet;
+  const deductibleBase = inputs.vatExempt ? expenses : expensesNet;
+  lines.push({ label: 'Venit brut', value: gross });
+  const deductible = Math.min(deductibleBase, gross);
+  lines.push({ label: 'Cheltuieli deductibile', value: deductible });
   const net = gross - deductible;
-  lines.push({ label: 'Net business income', value: net });
+  lines.push({ label: 'Venit net din activitate', value: net });
 
   const casRes = calculatorRegistry['calc-cas'](casRule, { base: net });
   if ('reviewRequired' in casRes) return rr(casRes.reason, lines);
@@ -69,21 +78,21 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   }
 
   const taxable = net - casRes.value - cassValue;
-  lines.push({ label: 'Taxable income (net - CAS - CASS)', value: taxable });
+  lines.push({ label: 'Venit impozabil (net - CAS - CASS)', value: taxable });
 
   if (taxable <= 0) {
     const total = casRes.value + cassValue;
-    lines.push({ label: 'Income tax (no taxable base)', value: 0 });
-    lines.push({ label: 'Total tax', value: total });
-    const snap = await createCalculationSnapshot({ profile, revenues, expenses, ruleRelease, calculationLines: lines, output: { total } });
+    lines.push({ label: 'Impozit pe venit (fără bază impozabilă)', value: 0 });
+    lines.push({ label: 'Total taxe', value: total });
+    const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, calculationLines: lines, output: { total } });
     return { status: 'computed', lines, output: { total }, snapshot: snap };
   }
 
   const incomeTaxRes = calculatorRegistry['calc-income-tax'](incomeTaxRule, { base: taxable });
   if ('reviewRequired' in incomeTaxRes) return rr(incomeTaxRes.reason, lines);
-  lines.push({ label: 'Income tax (10% base rate)', value: incomeTaxRes.value });
+  lines.push({ label: 'Impozit pe venit (rată de bază 10%)', value: incomeTaxRes.value });
   const total = casRes.value + cassValue + incomeTaxRes.value;
-  lines.push({ label: 'Total tax', value: total });
-  const snap = await createCalculationSnapshot({ profile, revenues, expenses, ruleRelease, calculationLines: lines, output: { total } });
+  lines.push({ label: 'Total taxe', value: total });
+  const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, calculationLines: lines, output: { total } });
   return { status: 'computed', lines, output: { total }, snapshot: snap };
 }

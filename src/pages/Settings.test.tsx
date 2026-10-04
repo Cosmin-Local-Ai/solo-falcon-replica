@@ -76,4 +76,27 @@ describe('Settings persistence (Defect 3 regression)', () => {
 
     expect(screen.getByDisplayValue(NEW_DENUMIRE)).toBeInTheDocument();
   });
+
+  it('does not duplicate bank account rows when saving company data', () => {
+    render(
+      <StoreProvider>
+        <Settings />
+      </StoreProvider>,
+    );
+
+    // Save the company data on the PFA tab (header "Salvează" button).
+    const saveButtons = screen.getAllByRole('button', { name: 'Salvează' });
+    act(() => {
+      saveButtons[0].click();
+    });
+
+    // Navigate to the bank accounts tab.
+    act(() => {
+      screen.getByRole('button', { name: 'Conturi bancare' }).click();
+    });
+
+    // Seed: exactly one bank account (BCR / RON) — saving must not duplicate it.
+    expect(document.querySelectorAll('tbody tr').length).toBe(1);
+    expect(screen.getByText('BCR')).toBeInTheDocument();
+  });
 });

@@ -4,7 +4,7 @@ import FinancialSummary from './FinancialSummary';
 
 describe('FinancialSummary', () => {
   it('renders Venituri / Cheltuieli / Profit net with formatted values', () => {
-    render(<FinancialSummary summary={{ revenue: 156000, expenses: 54000, net: 102000 }} />);
+    render(<FinancialSummary summary={{ revenue: 156000, expenses: 54000, net: 102000, revenueNet: 156000, expenseNet: 54000 }} />);
     expect(screen.getByText('Venituri')).toBeInTheDocument();
     expect(screen.getByText('Cheltuieli')).toBeInTheDocument();
     expect(screen.getByText('Profit net')).toBeInTheDocument();
@@ -14,7 +14,7 @@ describe('FinancialSummary', () => {
   });
 
   it('renders plain zero when values are 0 (no invented empty state)', () => {
-    render(<FinancialSummary summary={{ revenue: 0, expenses: 0, net: 0 }} />);
+    render(<FinancialSummary summary={{ revenue: 0, expenses: 0, net: 0, revenueNet: 0, expenseNet: 0 }} />);
     expect(screen.getByText('Venituri')).toBeInTheDocument();
     expect(screen.getByText('Cheltuieli')).toBeInTheDocument();
     expect(screen.getByText('Profit net')).toBeInTheDocument();
@@ -22,7 +22,7 @@ describe('FinancialSummary', () => {
   });
 
   it('renders negative net honestly (not hidden)', () => {
-    render(<FinancialSummary summary={{ revenue: 40000, expenses: 60000, net: -20000 }} />);
+    render(<FinancialSummary summary={{ revenue: 40000, expenses: 60000, net: -20000, revenueNet: 40000, expenseNet: 60000 }} />);
     const value = screen.getByText('-20.000,00 RON');
     expect(value).toBeInTheDocument();
     // Negative net keeps the `neg` tone — it is displayed, not suppressed.

@@ -55,25 +55,34 @@ function asArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [];
 }
 
-/** Deterministic English plural suffix ('record' vs 'records'). */
-function plural(n: number): string {
-  return n === 1 ? '' : 's';
+/**
+ * Romanian count + noun form. `n === 1` uses the singular noun, otherwise
+ * the plural noun. Returns e.g. "1 client prezent" / "3 clienți prezenți".
+ */
+function ro(n: number, singular: string, plural: string): string {
+  return n === 1 ? `1 ${singular}` : `${n} ${plural}`;
 }
+
+/** Romanian labels for raw regime keys (never render raw keys). */
+const REGIME_LABELS: Record<string, string> = {
+  impozit_pe_venit: 'impozit pe venit',
+  impozit_pe_cit: 'impozit pe CIT',
+};
 
 /** profile present and usable: exists, fiscalYear set, regime set. */
 function profileCheck(profile: PfaProfile | null | undefined): CompletenessCheck {
   if (profile == null) {
-    return { key: 'profile', satisfied: false, detail: 'profile missing' };
+    return { key: 'profile', satisfied: false, detail: 'profil lipsă' };
   }
   const fiscalYearSet = typeof profile.fiscalYear === 'number' && profile.fiscalYear > 0;
   const regimeSet = typeof profile.regime === 'string' && profile.regime.length > 0;
   const issues: string[] = [];
-  if (!fiscalYearSet) issues.push('fiscal year');
-  if (!regimeSet) issues.push('regime');
+  if (!fiscalYearSet) issues.push('an fiscal');
+  if (!regimeSet) issues.push('regim');
   const detail =
     issues.length === 0
-      ? `profile present (fiscal year ${profile.fiscalYear}, regime ${profile.regime})`
-      : `profile present but ${issues.join(' and ')} not set`;
+      ? `profil prezent (an fiscal ${profile.fiscalYear}, regim ${REGIME_LABELS[profile.regime] ?? profile.regime})`
+      : `profil prezent, dar ${issues.join(' și ')} nesetat`;
   return { key: 'profile', satisfied: issues.length === 0, detail };
 }
 
@@ -81,13 +90,13 @@ function profileCheck(profile: PfaProfile | null | undefined): CompletenessCheck
 function incomeCheck(revenues: Revenue[] | null | undefined): CompletenessCheck {
   const list = asArray(revenues);
   if (list.length === 0) {
-    return { key: 'income', satisfied: false, detail: 'no income records' };
+    return { key: 'income', satisfied: false, detail: 'nu există înregistrări de venituri' };
   }
   const inregistrata = list.filter(r => r.status === 'inregistrata').length;
   return {
     key: 'income',
     satisfied: true,
-    detail: `${list.length} income record${plural(list.length)} present (${inregistrata} inregistrata)`,
+    detail: `${ro(list.length, 'înregistrare de venituri prezentă', 'înregistrări de venituri prezente')} (${inregistrata} înregistrate)`,
   };
 }
 
@@ -95,13 +104,13 @@ function incomeCheck(revenues: Revenue[] | null | undefined): CompletenessCheck 
 function expenseCheck(expenses: Expense[] | null | undefined): CompletenessCheck {
   const list = asArray(expenses);
   if (list.length === 0) {
-    return { key: 'expenses', satisfied: false, detail: 'no expense records' };
+    return { key: 'expenses', satisfied: false, detail: 'nu există înregistrări de cheltuieli' };
   }
   const inregistrata = list.filter(e => e.status === 'inregistrata').length;
   return {
     key: 'expenses',
     satisfied: true,
-    detail: `${list.length} expense record${plural(list.length)} present (${inregistrata} inregistrata)`,
+    detail: `${ro(list.length, 'înregistrare de cheltuieli prezentă', 'înregistrări de cheltuieli prezente')} (${inregistrata} înregistrate)`,
   };
 }
 
@@ -111,7 +120,7 @@ function clientCheck(clients: Client[] | null | undefined): CompletenessCheck {
   return {
     key: 'clients',
     satisfied: list.length > 0,
-    detail: list.length > 0 ? `${list.length} client${plural(list.length)} present` : 'no clients',
+    detail: list.length > 0 ? ro(list.length, 'client prezent', 'clienți prezenți') : 'nu există clienți',
   };
 }
 
@@ -121,7 +130,7 @@ function documentCheck(documents: DocumentItem[] | null | undefined): Completene
   return {
     key: 'documents',
     satisfied: list.length > 0,
-    detail: list.length > 0 ? `${list.length} document${plural(list.length)} present` : 'no documents',
+    detail: list.length > 0 ? ro(list.length, 'document prezent', 'documente prezente') : 'nu există documente',
   };
 }
 
@@ -138,10 +147,10 @@ function companyDocumentCheck(
   const total = sections.reduce((sum, s) => sum + s.count, 0);
   const detail =
     total > 0
-      ? `${total} company document${plural(total)} present (${sections
+      ? `${ro(total, 'document de firmă prezent', 'documente de firmă prezente')} (${sections
           .map(s => `${s.code}: ${s.count}`)
           .join(', ')})`
-      : 'no company documents';
+      : 'nu există documente de firmă';
   return { key: 'companyDocuments', satisfied: total > 0, detail };
 }
 
@@ -152,7 +161,7 @@ function declarationCheck(declarations: Declaration[] | null | undefined): Compl
     key: 'declarations',
     satisfied: list.length > 0,
     detail:
-      list.length > 0 ? `${list.length} declaration${plural(list.length)} present` : 'no declarations',
+      list.length > 0 ? ro(list.length, 'declarație prezentă', 'declarații prezente') : 'nu există declarații',
   };
 }
 
@@ -163,7 +172,7 @@ function statementCheck(statements: TaxStatement[] | null | undefined): Complete
     key: 'statements',
     satisfied: list.length > 0,
     detail:
-      list.length > 0 ? `${list.length} tax statement${plural(list.length)} present` : 'no tax statements',
+      list.length > 0 ? ro(list.length, 'situație de taxe prezentă', 'situații de taxe prezente') : 'nu există situații de taxe',
   };
 }
 
@@ -176,11 +185,11 @@ function taxEstimateCheck(snapshots: TaxCalculationSnapshot[] | null | undefined
   const computed = list.filter(s => s.status === 'computed').length;
   let detail: string;
   if (computed > 0) {
-    detail = `${computed} computed tax estimate${plural(computed)} available`;
+    detail = ro(computed, 'estimare de taxe calculată disponibilă', 'estimări de taxe calculate disponibile');
   } else if (list.length > 0) {
-    detail = `no computed tax estimate (0 of ${list.length} snapshots computed)`;
+    detail = `nicio estimare de taxe calculată (0 din ${list.length} instantanee calculate)`;
   } else {
-    detail = 'no tax snapshots';
+    detail = 'nu există instantanee de taxe';
   }
   return { key: 'taxEstimate', satisfied: computed > 0, detail };
 }

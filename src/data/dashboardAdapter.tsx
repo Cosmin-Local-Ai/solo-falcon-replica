@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
 import { useStore } from './store';
 import {
   buildDashboardData,
-  getTaxEstimate,
   type DashboardData,
   type PendingCounts,
 } from './dashboard';
+import { useLatestTaxEstimate } from './derived';
 import type { TaxEstimateResult } from '../domain/tax';
+import { localDateISO } from '../domain/date';
 
 export type { DashboardData, PendingCounts };
 
@@ -18,17 +18,6 @@ const LOADING_TAX: TaxEstimateResult = {
 
 export function useDashboardData(): DashboardData {
   const data = useStore();
-  const [tax, setTax] = useState<TaxEstimateResult>(LOADING_TAX);
-
-  useEffect(() => {
-    let cancelled = false;
-    getTaxEstimate(data, new Date().toISOString().slice(0, 10)).then((result) => {
-      if (!cancelled) setTax(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [data]);
-
-  return buildDashboardData(data, tax);
+  const { estimate } = useLatestTaxEstimate(localDateISO());
+  return buildDashboardData(data, estimate ?? LOADING_TAX);
 }

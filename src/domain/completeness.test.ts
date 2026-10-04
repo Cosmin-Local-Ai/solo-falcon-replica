@@ -11,7 +11,7 @@ import type {
   TaxStatement,
 } from '../data/types';
 import type { RuleRelease } from './fiscal/rules';
-import type { PfaProfile } from './models';
+import type { PfaProfile, PfaRegime } from './models';
 import { assessCompleteness } from './completeness';
 import type { TaxCalculationSnapshot } from './snapshots/types';
 
@@ -211,9 +211,9 @@ describe('assessCompleteness', () => {
     for (const check of report.checks) {
       expect(check.satisfied).toBe(false);
     }
-    expect(report.checks[0].detail).toBe('profile missing');
-    expect(report.checks[1].detail).toBe('no income records');
-    expect(report.checks[8].detail).toBe('no tax snapshots');
+    expect(report.checks[0].detail).toBe('profil lipsă');
+    expect(report.checks[1].detail).toBe('nu există înregistrări de venituri');
+    expect(report.checks[8].detail).toBe('nu există instantanee de taxe');
   });
 
   it('reports every check satisfied for fully-populated data', () => {
@@ -236,11 +236,11 @@ describe('assessCompleteness', () => {
     expect(report.satisfiedCount).toBe(6);
     const byKey = Object.fromEntries(report.checks.map(c => [c.key, c]));
     expect(byKey.expenses.satisfied).toBe(false);
-    expect(byKey.expenses.detail).toBe('no expense records');
+    expect(byKey.expenses.detail).toBe('nu există înregistrări de cheltuieli');
     expect(byKey.statements.satisfied).toBe(false);
-    expect(byKey.statements.detail).toBe('no tax statements');
+    expect(byKey.statements.detail).toBe('nu există situații de taxe');
     expect(byKey.taxEstimate.satisfied).toBe(false);
-    expect(byKey.taxEstimate.detail).toBe('no computed tax estimate (0 of 1 snapshots computed)');
+    expect(byKey.taxEstimate.detail).toBe('nicio estimare de taxe calculată (0 din 1 instantanee calculate)');
   });
 
   it('satisfies the tax estimate check only when a snapshot is computed', () => {
@@ -248,13 +248,13 @@ describe('assessCompleteness', () => {
       makeData({ snapshots: [makeSnapshot('computed'), makeSnapshot('superseded')] }),
     ).checks.find(c => c.key === 'taxEstimate')!;
     expect(withComputed.satisfied).toBe(true);
-    expect(withComputed.detail).toBe('1 computed tax estimate available');
+    expect(withComputed.detail).toBe('1 estimare de taxe calculată disponibilă');
 
     const withoutComputed = assessCompleteness(
       makeData({ snapshots: [makeSnapshot('superseded'), makeSnapshot('void')] }),
     ).checks.find(c => c.key === 'taxEstimate')!;
     expect(withoutComputed.satisfied).toBe(false);
-    expect(withoutComputed.detail).toBe('no computed tax estimate (0 of 2 snapshots computed)');
+    expect(withoutComputed.detail).toBe('nicio estimare de taxe calculată (0 din 2 instantanee calculate)');
   });
 
   it('satisfies the company documents check when any section has entries', () => {
@@ -269,7 +269,7 @@ describe('assessCompleteness', () => {
       }),
     ).checks.find(c => c.key === 'companyDocuments')!;
     expect(onlyIm.satisfied).toBe(true);
-    expect(onlyIm.detail).toBe('1 company document present (im: 1)');
+    expect(onlyIm.detail).toBe('1 document de firmă prezent (im: 1)');
 
     const onlyFacturi = assessCompleteness(
       makeData({
@@ -282,33 +282,33 @@ describe('assessCompleteness', () => {
       }),
     ).checks.find(c => c.key === 'companyDocuments')!;
     expect(onlyFacturi.satisfied).toBe(true);
-    expect(onlyFacturi.detail).toBe('1 company document present (facturi: 1)');
+    expect(onlyFacturi.detail).toBe('1 document de firmă prezent (facturi: 1)');
   });
 
   it('notes inregistrata income records in the income detail', () => {
     const income = assessCompleteness(makeData()).checks.find(c => c.key === 'income')!;
     // 3 revenues, 2 with status 'inregistrata'
-    expect(income.detail).toBe('3 income records present (2 inregistrata)');
+    expect(income.detail).toBe('3 înregistrări de venituri prezente (2 înregistrate)');
   });
 
   it('reports profile details with fiscal year and regime', () => {
     const ok = assessCompleteness(makeData()).checks.find(c => c.key === 'profile')!;
     expect(ok.satisfied).toBe(true);
-    expect(ok.detail).toBe('profile present (fiscal year 2026, regime impozit_pe_venit)');
+    expect(ok.detail).toBe('profil prezent (an fiscal 2026, regim impozit pe venit)');
 
     const noFiscalYear = assessCompleteness(
       makeData({ profile: { ...makeProfile(), fiscalYear: 0 } }),
     ).checks.find(c => c.key === 'profile')!;
     expect(noFiscalYear.satisfied).toBe(false);
-    expect(noFiscalYear.detail).toBe('profile present but fiscal year not set');
+    expect(noFiscalYear.detail).toBe('profil prezent, dar an fiscal nesetat');
   });
 
   it('reports profile unsatisfied when regime is an empty string', () => {
     const noRegime = assessCompleteness(
-      makeData({ profile: { ...makeProfile(), regime: '' } }),
+      makeData({ profile: { ...makeProfile(), regime: '' as unknown as PfaRegime } }),
     ).checks.find(c => c.key === 'profile')!;
     expect(noRegime.satisfied).toBe(false);
-    expect(noRegime.detail).toBe('profile present but regime not set');
+    expect(noRegime.detail).toBe('profil prezent, dar regim nesetat');
   });
 
   it('is deterministic for identical inputs', () => {

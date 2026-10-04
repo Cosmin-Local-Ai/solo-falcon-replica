@@ -15,7 +15,7 @@ function makeInputs(overrides: Partial<TaxInputsReference> = {}): TaxInputsRefer
 
 describe('computeTaxEstimate', () => {
   it('computes CAS + CASS + income tax for a basic profile', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 50_000, expenses: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // net=40000, CAS=12150 (min base), CASS=4000, taxable=23850, income=2385, total=18535
@@ -25,44 +25,44 @@ describe('computeTaxEstimate', () => {
   });
 
   it('skips CASS for non-obligatoriu status', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ socialInsuranceStatus: 'exempt' }), profile: makeProfile({ socialInsuranceStatus: 'exempt' }), revenues: 50_000, expenses: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs({ socialInsuranceStatus: 'exempt' }), profile: makeProfile({ socialInsuranceStatus: 'exempt' }), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     expect(res.output.total).toBe(14_935);
   });
 
   it('returns REVIEW_REQUIRED when net = 0 (CASS base below minimum)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 10_000, expenses: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 10_000, expenses: 10_000, revenuesNet: 10_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
   });
 
   it('returns REVIEW_REQUIRED for impozit_pe_venit regime', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ regime: 'impozit_pe_venit' }), profile: makeProfile({ regime: 'impozit_pe_venit' }), revenues: 50_000, expenses: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs({ regime: 'impozit_pe_venit' }), profile: makeProfile({ regime: 'impozit_pe_venit' }), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
   });
 
   it('returns REVIEW_REQUIRED for negative revenues', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: -1, expenses: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: -1, expenses: 10_000, revenuesNet: -1, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
   });
 
   it('returns REVIEW_REQUIRED for negative expenses', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 50_000, expenses: -1, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 50_000, expenses: -1, revenuesNet: 50_000, expensesNet: -1, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
   });
 
   it('returns REVIEW_REQUIRED when profile id is missing', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile({ id: '' }), revenues: 50_000, expenses: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile({ id: '' }), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
   });
 
   it('returns REVIEW_REQUIRED when rules package is empty', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 50_000, expenses: 10_000, ruleRelease: PFA_2026_RELEASE, rules: [] });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: [] });
     expect(res.status).toBe('review_required');
   });
 
   it('creates a snapshot with provenance', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 50_000, expenses: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     const snap = res.snapshot;
@@ -76,12 +76,12 @@ describe('computeTaxEstimate', () => {
   });
 
   it('returns REVIEW_REQUIRED for zero revenues (CASS base below minimum)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 0, expenses: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 0, expenses: 0, revenuesNet: 0, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
   });
 
   it('applies 10% flat income tax at 50,000 net', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 60_000, expenses: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 60_000, expenses: 10_000, revenuesNet: 60_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // net=50000, CAS=12500, CASS=5000, taxable=32500, income=3250, total=20750
@@ -89,7 +89,7 @@ describe('computeTaxEstimate', () => {
   });
 
   it('caps CAS at max_base for high income', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 250_000, expenses: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 250_000, expenses: 0, revenuesNet: 250_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // net=250000, CAS=min(250000,97200)*0.25=24300, CASS=25000, taxable=200700, income=20070, total=69370
@@ -97,7 +97,7 @@ describe('computeTaxEstimate', () => {
   });
 
   it('applies 10% flat income tax above 200,000 (no progressive bracket)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 300_000, expenses: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 300_000, expenses: 0, revenuesNet: 300_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // net=300000, CAS=24300 (capped), CASS=29160 (capped at 291600), taxable=246540, income=24654, total=78114
@@ -105,8 +105,8 @@ describe('computeTaxEstimate', () => {
   });
 
   it('is deterministic for identical inputs', async () => {
-    const a = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 123_456, expenses: 78_900, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
-    const b = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 123_456, expenses: 78_900, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const a = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 123_456, expenses: 78_900, revenuesNet: 123_456, expensesNet: 78_900, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const b = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 123_456, expenses: 78_900, revenuesNet: 123_456, expensesNet: 78_900, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(a.status).toBe('computed');
     expect(b.status).toBe('computed');
     if (a.status !== 'computed' || b.status !== 'computed') return;
@@ -115,7 +115,7 @@ describe('computeTaxEstimate', () => {
   });
 
   it('computes at 71,280 net (CAS below max_base)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 71_280, expenses: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 71_280, expenses: 0, revenuesNet: 71_280, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // net=71280, CAS=71280*0.25=17820, CASS=7128, taxable=46332, income=4633.2, total=29581.2
@@ -123,22 +123,22 @@ describe('computeTaxEstimate', () => {
   });
 
   it('computes for a high-revenue profile', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 100_000, expenses: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 100_000, expenses: 10_000, revenuesNet: 100_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res).toBeDefined();
   });
 
   it('returns review_required for zero revenues', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 0, expenses: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 0, expenses: 0, revenuesNet: 0, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
   });
 
   it('returns review_required when expenses exceed revenues', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 10_000, expenses: 20_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 10_000, expenses: 20_000, revenuesNet: 10_000, expensesNet: 20_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
   });
 
   it('computes at 72,000 net (CAS below max_base)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 72_000, expenses: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 72_000, expenses: 0, revenuesNet: 72_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // net=72000, CAS=72000*0.25=18000, CASS=7200, taxable=46800, income=4680, total=29880
@@ -148,7 +148,7 @@ describe('computeTaxEstimate', () => {
   // ── Boundary: CASS minimum base ──
 
   it('net exactly at CASS min base (24,300) → computed with CASS = 2430', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 24_300, expenses: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 24_300, expenses: 0, revenuesNet: 24_300, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CASS = max(min(24300, 291600) * 0.10, 2430) = max(2430, 2430) = 2430
@@ -157,14 +157,43 @@ describe('computeTaxEstimate', () => {
   });
 
   it('net just below CASS min base (24,299) → review_required', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 24_299, expenses: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 24_299, expenses: 0, revenuesNet: 24_299, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
+  });
+
+  // ── Boundary: CAS min base ──
+
+  it('net exactly at CAS min base (48,600) → CAS = 12,150 (floor)', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 48_600, expenses: 0, revenuesNet: 48_600, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    // CAS = max(clamp(48600, 48600, 97200) * 0.25, 12150) = max(12150, 12150) = 12150
+    const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
+    expect(cas).toBe(12_150);
+  });
+
+  it('net just below CAS min base (48,599) → CAS floored at 12,150', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 48_599, expenses: 0, revenuesNet: 48_599, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    // CAS = max(clamp(48599, 48600, 97200) * 0.25, 12150) = max(48600*0.25, 12150) = 12150
+    const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
+    expect(cas).toBe(12_150);
+  });
+
+  it('net just above CAS min base (48,601) → CAS = net * 0.25 = 12,150.25 (floor no longer binds)', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 48_601, expenses: 0, revenuesNet: 48_601, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    // CAS = max(clamp(48601, 48600, 97200) * 0.25, 12150) = max(12150.25, 12150) = 12150.25
+    const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
+    expect(cas).toBeCloseTo(12_150.25, 3);
   });
 
   // ── Boundary: CAS cap ──
 
   it('net exactly at CAS cap (97,200) → CAS = 24,300', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 97_200, expenses: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 97_200, expenses: 0, revenuesNet: 97_200, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CAS = max(clamp(97200, 48600, 97200) * 0.25, 12150) = max(24300, 12150) = 24300
@@ -173,7 +202,7 @@ describe('computeTaxEstimate', () => {
   });
 
   it('net just above CAS cap (97,201) → CAS still 24,300 (capped)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 97_201, expenses: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 97_201, expenses: 0, revenuesNet: 97_201, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CAS = max(clamp(97201, 48600, 97200) * 0.25, 12150) = max(97200*0.25, 12150) = 24300
@@ -184,7 +213,7 @@ describe('computeTaxEstimate', () => {
   // ── Boundary: CASS cap ──
 
   it('net exactly at CASS cap (291,600) → CASS = 29,160', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 291_600, expenses: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 291_600, expenses: 0, revenuesNet: 291_600, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CASS = max(min(291600, 291600) * 0.10, 2430) = max(29160, 2430) = 29160
@@ -193,7 +222,7 @@ describe('computeTaxEstimate', () => {
   });
 
   it('net just above CASS cap (291,601) → CASS still 29,160 (capped)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 291_601, expenses: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 291_601, expenses: 0, revenuesNet: 291_601, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CASS = max(min(291601, 291600) * 0.10, 2430) = max(29160, 2430) = 29160
@@ -204,7 +233,7 @@ describe('computeTaxEstimate', () => {
   // ── Rounding: no rounding, raw floats ──
 
   it('net = 71,281 → total = 29581.615 (no rounding, raw float)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 71_281, expenses: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 71_281, expenses: 0, revenuesNet: 71_281, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CAS = 71281 * 0.25 = 17820.25
@@ -214,7 +243,7 @@ describe('computeTaxEstimate', () => {
     // total = 17820.25 + 7128.1 + 4633.265 = 29581.615
     const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
     const cass = res.lines.find(l => l.label === 'CASS (10%)')?.value;
-    const incomeTax = res.lines.find(l => l.label === 'Income tax (10% base rate)')?.value;
+    const incomeTax = res.lines.find(l => l.label === 'Impozit pe venit (rată de bază 10%)')?.value;
     expect(cas).toBeCloseTo(17_820.25, 3);
     expect(cass).toBeCloseTo(7_128.1, 3);
     expect(incomeTax).toBeCloseTo(4_633.265, 3);
@@ -236,8 +265,8 @@ describe('computeTaxEstimate', () => {
       return rule;
     });
 
-    const original = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 97_201, expenses: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
-    const modified = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 97_201, expenses: 0, ruleRelease: PFA_2026_RELEASE, rules: modifiedRules });
+    const original = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 97_201, expenses: 0, revenuesNet: 97_201, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const modified = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 97_201, expenses: 0, revenuesNet: 97_201, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: modifiedRules });
 
     expect(original.status).toBe('computed');
     expect(modified.status).toBe('computed');
@@ -254,7 +283,27 @@ describe('computeTaxEstimate', () => {
   // ── Effective-date awareness ──
 
   it('fiscalYear 2025 (asOfDate 2025-01-01) → review_required (rules effectiveFrom 2026-01-01)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ fiscalYear: 2025 }), profile: makeProfile(), revenues: 100_000, expenses: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs({ fiscalYear: 2025 }), profile: makeProfile(), revenues: 100_000, expenses: 0, revenuesNet: 100_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
+  });
+
+  // ── Area 6: VAT not becoming taxable income ──
+
+  it('excludes VAT from the taxable base for non-exempt profiles (Area 6)', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 55_000, expenses: 11_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    // Non-exempt: base is the net figure (VAT excluded), gross 55000 → net 50000.
+    const gross = res.lines.find((l) => l.label === 'Venit brut')?.value;
+    expect(gross).toBe(50_000);
+  });
+
+  it('keeps the gross base for vatExempt profiles (Area 6)', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs({ vatExempt: true }), profile: makeProfile(), revenues: 55_000, expenses: 11_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    // Exempt: base stays gross (VAT kept in), 55000.
+    const gross = res.lines.find((l) => l.label === 'Venit brut')?.value;
+    expect(gross).toBe(55_000);
   });
 });

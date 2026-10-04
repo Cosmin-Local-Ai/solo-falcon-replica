@@ -2,6 +2,12 @@ import type { LegislationItem, LegislationState } from '../../data/dashboard';
 import { fmtDate } from '../../data/types';
 import { Card, CardDescription, CardHeader, CardTitle } from '../ui/card';
 
+/** Status → Romanian badge text (raw enum values are never rendered). */
+const STATUS_LABEL: Record<LegislationItem['status'], string> = {
+  CURRENT: 'În vigoare',
+  UPCOMING: 'Viitoare',
+};
+
 interface LegislationSectionProps {
   state: LegislationState;
 }
@@ -11,8 +17,8 @@ export default function LegislationSection({ state }: LegislationSectionProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Legislation</CardTitle>
-          <CardDescription>No verified upcoming changes.</CardDescription>
+          <CardTitle>Legislație</CardTitle>
+          <CardDescription>Nicio modificare viitoare verificată.</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -33,23 +39,23 @@ function LegislationCard({ item }: { item: LegislationItem }) {
     <Card>
       <CardHeader>
         <div className="row">
-          <CardTitle>{isCurrent ? 'Legislation Change Affecting You' : 'Upcoming Change'}</CardTitle>
+          <CardTitle>{isCurrent ? 'Modificare legislativă care te afectează' : 'Modificare viitoare'}</CardTitle>
           <span className={isCurrent ? 'badge badge-danger' : 'badge badge-warning'}>
-            {item.status}
+            {STATUS_LABEL[item.status] ?? item.status}
           </span>
         </div>
       </CardHeader>
       <h4>{item.summary}</h4>
       <dl className="kv">
-        <dt>Source</dt>
+        <dt>Sursă</dt>
         <dd>{item.source}</dd>
-        <dt>Published</dt>
+        <dt>Publicat</dt>
         <dd>{fmtDate(item.publishedDate)}</dd>
-        <dt>Effective</dt>
+        <dt>În vigoare de la</dt>
         <dd>{fmtDate(item.effectiveDate)}</dd>
-        <dt>Status</dt>
-        <dd>{item.status}</dd>
-        <dt>Affected Area</dt>
+        <dt>Stare</dt>
+        <dd>{STATUS_LABEL[item.status] ?? item.status}</dd>
+        <dt>Zonă afectată</dt>
         <dd>{item.affectedArea}</dd>
       </dl>
     </Card>

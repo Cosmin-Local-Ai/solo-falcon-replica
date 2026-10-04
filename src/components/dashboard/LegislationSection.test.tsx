@@ -23,25 +23,30 @@ function makeState(items: LegislationItem[]): LegislationState {
 describe('LegislationSection', () => {
   it('renders the honest empty state when there are no items', () => {
     render(<LegislationSection state={makeState([])} />);
-    expect(screen.getByText('Legislation')).toBeInTheDocument();
-    expect(screen.getByText('No verified upcoming changes.')).toBeInTheDocument();
-    expect(screen.queryByText('Upcoming Change')).not.toBeInTheDocument();
-    expect(screen.queryByText('Legislation Change Affecting You')).not.toBeInTheDocument();
+    expect(screen.getByText('Legislație')).toBeInTheDocument();
+    expect(screen.getByText('Nicio modificare viitoare verificată.')).toBeInTheDocument();
+    expect(screen.queryByText('Modificare viitoare')).not.toBeInTheDocument();
+    expect(screen.queryByText('Modificare legislativă care te afectează')).not.toBeInTheDocument();
   });
 
   it('renders an UPCOMING item with the correct header, badge, and all metadata', () => {
     render(<LegislationSection state={makeState([makeItem()])} />);
-    expect(screen.getByText('Upcoming Change')).toBeInTheDocument();
-    expect(screen.getByText('UPCOMING', { selector: '.badge' })).toBeInTheDocument();
+    expect(screen.getByText('Modificare viitoare')).toBeInTheDocument();
+    expect(screen.getByText('Viitoare', { selector: '.badge' })).toBeInTheDocument();
     // Never mislabeled as "Current" / "Active"
     expect(screen.queryByText(/active/i)).not.toBeInTheDocument();
-    expect(screen.queryByText('Legislation Change Affecting You')).not.toBeInTheDocument();
+    expect(screen.queryByText('Modificare legislativă care te afectează')).not.toBeInTheDocument();
     // All five metadata fields: source, published, effective, status, affected area
+    expect(screen.getByText('Sursă')).toBeInTheDocument();
     expect(screen.getByText('ANAF / Official Gazette')).toBeInTheDocument();
+    expect(screen.getByText('Publicat')).toBeInTheDocument();
     expect(screen.getByText('05.01.2026')).toBeInTheDocument();
+    expect(screen.getByText('În vigoare de la')).toBeInTheDocument();
     expect(screen.getByText('01.03.2026')).toBeInTheDocument();
-    // "UPCOMING" appears twice: the badge and the Status row
-    expect(screen.getAllByText('UPCOMING')).toHaveLength(2);
+    expect(screen.getByText('Stare')).toBeInTheDocument();
+    // "Viitoare" appears twice: the badge and the Status row
+    expect(screen.getAllByText('Viitoare')).toHaveLength(2);
+    expect(screen.getByText('Zonă afectată')).toBeInTheDocument();
     expect(screen.getByText('VAT filing deadlines')).toBeInTheDocument();
     expect(screen.getByText('VAT filing deadlines move to the 25th')).toBeInTheDocument();
   });
@@ -62,16 +67,16 @@ describe('LegislationSection', () => {
         ])}
       />,
     );
-    expect(screen.getByText('Legislation Change Affecting You')).toBeInTheDocument();
-    expect(screen.getByText('CURRENT', { selector: '.badge' })).toBeInTheDocument();
+    expect(screen.getByText('Modificare legislativă care te afectează')).toBeInTheDocument();
+    expect(screen.getByText('În vigoare', { selector: '.badge' })).toBeInTheDocument();
     // Never mislabeled as "Upcoming"
-    expect(screen.queryByText('Upcoming Change')).not.toBeInTheDocument();
+    expect(screen.queryByText('Modificare viitoare')).not.toBeInTheDocument();
     // All five metadata fields: source, published, effective, status, affected area
     expect(screen.getByText('Law 296/2023 amendment')).toBeInTheDocument();
     expect(screen.getByText('10.01.2026')).toBeInTheDocument();
     expect(screen.getByText('01.02.2026')).toBeInTheDocument();
-    // "CURRENT" appears twice: the badge and the Status row
-    expect(screen.getAllByText('CURRENT')).toHaveLength(2);
+    // "În vigoare" appears twice: the badge and the Status row
+    expect(screen.getAllByText('În vigoare')).toHaveLength(2);
     expect(screen.getByText('Social contributions (CS)')).toBeInTheDocument();
     expect(screen.getByText('CS contribution rate change now in force')).toBeInTheDocument();
   });
@@ -95,10 +100,10 @@ describe('LegislationSection', () => {
         ])}
       />,
     );
-    expect(screen.getByText('Legislation Change Affecting You')).toBeInTheDocument();
-    expect(screen.getByText('Upcoming Change')).toBeInTheDocument();
-    expect(screen.getByText('CURRENT', { selector: '.badge' })).toBeInTheDocument();
-    expect(screen.getByText('UPCOMING', { selector: '.badge' })).toBeInTheDocument();
+    expect(screen.getByText('Modificare legislativă care te afectează')).toBeInTheDocument();
+    expect(screen.getByText('Modificare viitoare')).toBeInTheDocument();
+    expect(screen.getByText('În vigoare', { selector: '.badge' })).toBeInTheDocument();
+    expect(screen.getByText('Viitoare', { selector: '.badge' })).toBeInTheDocument();
     expect(screen.getByText('New e-factura obligation now in force')).toBeInTheDocument();
     expect(screen.getByText('New VAT threshold coming into force')).toBeInTheDocument();
   });

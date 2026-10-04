@@ -3,11 +3,15 @@ import { formatLei } from '../../lib/format';
 import { Card, CardHeader, CardTitle, CardDescription } from '../ui/card';
 
 /**
- * ThresholdSection (Step 22) — presentational only.
+ * ThresholdSection (Step 22, verified Step 31) — presentational only.
  *
  * Formats and presents `FiscalThreshold` items: no threshold calculation,
  * no data fetching, no persistence. The only derived value is the progress
- * bar width from currentValue/thresholdValue (allowed presentation math).
+ * bar width from currentValue/thresholdValue (allowed presentation math,
+ * kept as a visual convenience). The threshold's meaning comes from the
+ * domain fields — `type` + `affectedTax` (label), `status`,
+ * `breachMeaning`, `affectedDomain`, and `source` — never from the
+ * percentage.
  */
 
 /** Status → badge class (green / amber / red). */
@@ -17,11 +21,16 @@ const STATUS_BADGE: Record<FiscalThreshold['status'], string> = {
   breached: 'badge-danger',
 };
 
-/** Status → bar color (green / amber / red). */
-const STATUS_COLOR: Record<FiscalThreshold['status'], string> = {
-  ok: 'var(--success-text)',
-  warning: 'var(--warning-text)',
-  breached: 'var(--danger-text)',
+/** Status → Romanian badge text (raw enum values are never rendered). */
+const STATUS_LABEL: Record<FiscalThreshold['status'], string> = {
+  ok: 'În limite',
+  warning: 'Atenție',
+  breached: 'Depășit',
+};
+
+/** Romanian labels for raw affected-domain keys (never render raw keys). */
+const DOMAIN_LABEL: Record<string, string> = {
+  'pfa-revenue': 'Venit PFA',
 };
 
 /** Human-readable label derived from type + affected tax (presentation only). */
@@ -29,11 +38,13 @@ function labelFor(t: FiscalThreshold): string {
   const tax = t.affectedTax.toUpperCase();
   switch (t.type) {
     case 'min-base':
-      return `${tax} minimum base`;
+      return `Prag minim ${tax}`;
     case 'max-base':
-      return `${tax} maximum base`;
+      return `Prag maxim ${tax}`;
     case 'registration':
-      return `${tax} registration threshold`;
+      return `Prag de înregistrare ${tax}`;
+    case 'income':
+      return `Prag de venit ${tax}`;
   }
 }
 
@@ -56,58 +67,40 @@ export default function ThresholdSection({ thresholds }: ThresholdSectionProps) 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Thresholds</CardTitle>
-        <CardDescription>Fiscal thresholds vs. current values</CardDescription>
+        <CardTitle>Praguri</CardTitle>
+        <CardDescription>Praguri fiscale față de valorile curente</CardDescription>
       </CardHeader>
       {thresholds.length === 0 ? (
-        <p className="hint">No thresholds</p>
+        <p className="hint">Niciun prag</p>
       ) : (
         thresholds.map((t) => (
           <div key={t.thresholdId}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'baseline',
-                gap: 12,
-              }}
-            >
+            <div className="item-row">
               <div>
-                <strong style={{ fontSize: 13 }}>{labelFor(t)}</strong>
-                <div className="hint">{t.affectedDomain}</div>
+                <strong className="item-title">{labelFor(t)}</strong>
+                <div className="hint">{DOMAIN_LABEL[t.affectedDomain] ?? t.affectedDomain}</div>
               </div>
-              <span className={`badge ${STATUS_BADGE[t.status]}`}>{t.status}</span>
+              <span className={`badge ${STATUS_BADGE[t.status]}`}>{STATUS_LABEL[t.status] ?? t.status}</span>
             </div>
-            <div style={{ display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap' }}>
+            <div className="kv-row">
               <span>
-                Current: <strong>{formatLei(t.currentValue)}</strong>
+                Curent: <strong>{formatLei(t.currentValue)}</strong>
               </span>
               <span>
-                Threshold: <strong>{formatLei(t.thresholdValue)}</strong>
+                Prag: <strong>{formatLei(t.thresholdValue)}</strong>
               </span>
               <span>
-                Distance: <strong>{formatLei(t.distance)}</strong>
+                Distanță: <strong>{formatLei(t.distance)}</strong>
               </span>
             </div>
-            <div
-              style={{
-                height: 6,
-                borderRadius: 3,
-                background: 'var(--border)',
-                overflow: 'hidden',
-              }}
-            >
+            <p className="hint">La depășire: {t.breachMeaning}</p>
+            <div className="bar-track">
               <div
-                style={{
-                  width: `${progressPercent(t.currentValue, t.thresholdValue)}%`,
-                  height: '100%',
-                  background: STATUS_COLOR[t.status],
-                }}
+                className={`bar-fill ${t.status}`}
+                style={{ width: `${progressPercent(t.currentValue, t.thresholdValue)}%` }}
               />
             </div>
-            <p className="hint" style={{ margin: 0 }}>
-              {t.source}
-            </p>
+            <p className="hint">{t.source}</p>
           </div>
         ))
       )}

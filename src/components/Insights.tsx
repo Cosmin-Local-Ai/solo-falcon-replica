@@ -14,7 +14,7 @@ export default function Insights({ insights }: InsightsProps) {
   return (
     <section className="card">
       <div className="card-head">
-        <h2 className="card-title">Insights</h2>
+        <h2 className="card-title">Observații</h2>
       </div>
       <div className="card-body">
         {insights.length === 0 ? (

@@ -6,13 +6,10 @@ import type { Insight } from '../domain/insights';
 function makeInsight(overrides: Partial<Insight> = {}): Insight {
   return {
     id: 'insight-1',
-    eventType: 'DEADLINE_APPROACHING',
     severity: 'warning',
-    priority: 'medium',
     title: 'Tax deadline approaching: CASS',
     description: 'The "CASS" deadline is in 12 days (2026-07-15).',
     action: 'Plan to complete this filing within the next 30 days.',
-    conditions: { daysUntil: 12, date: '2026-07-15' },
     ...overrides,
   };
 }

@@ -29,7 +29,7 @@ const RANGES: ReadonlyArray<{ value: Range; label: string }> = [
   { value: 'year', label: 'An' },
 ];
 
-const MONTH_LABELS = ['Ian', 'Feb', 'Mar', 'Apr', 'Mai', 'Iun', 'Iul', 'Aug', 'Sep', 'Oct', 'Noe', 'Dec'];
+const MONTH_LABELS = ['Ian', 'Feb', 'Mar', 'Apr', 'Mai', 'Iun', 'Iul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
 
 const plain = new Intl.NumberFormat('ro-RO', { maximumFractionDigits: 0 });
 
@@ -227,7 +227,7 @@ export default function FinancialChart() {
             </span>
           ))}
           <span className="chart-legend-item">
-            <span className="chart-legend-swatch dashed" style={{ borderTopColor: '#667085' }} />
+            <span className="chart-legend-swatch dashed projection" />
             Proiecție (linia punctată)
           </span>
         </div>
@@ -241,8 +241,8 @@ export default function FinancialChart() {
         )}
 
         <div className="visually-hidden">
-          {/* Clipping wrapper: the wide SR table must not widen the document. */}
-          <div style={{ width: 1, height: 1, overflow: 'hidden' }}>
+          {/* The .visually-hidden wrapper already clips the wide SR table. */}
+          <div>
             <table>
             <caption>
             Grafic financiar — interval {rangeLabel}. Perioadă, venituri, cheltuieli, profit net (lei) și
