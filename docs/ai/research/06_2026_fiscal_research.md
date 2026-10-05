@@ -1,3 +1,18 @@
+> **SUPERSEDED — do not cite this file as fiscal authority (2026-10-05).**
+> `docs/ai/phases/02_fiscal_baseline.md` is now the authoritative 2026 fiscal baseline. This file is
+> kept as a research record only. It was **wrong on four points**: (1) the CAS minimum base — it is
+> **12 SM = 48,600 lei** (CF art. 148 alin. (2) lit. a), OUG 128/2024 Art. I pct. 20, MO 1125/11.11.2024),
+> not 6 SM; (2) the VAT threshold — **395,000 lei IS the 2026 value** (CF art. 310 alin. (1)), the
+> "2025 ONLY / use 300,000" claim at `:190` is false; (3) a **30% deductible-expense cap does not exist**
+> anywhere in Titlul IV — the only 30% hits are art. 68^3 alin. (2), art. 85 alin. (2) and art. 106;
+> (4) there is **no 16% component for PFA sistem real** — 16% covers only CF art. 114 alin. (2)
+> lit. h)/i) per art. 115 alin. (1) lit. b), and art. 114 alin. (1) excludes art. 61 lit. a)-h) income.
+> The "11-field rule schema" at `:226` is also superseded: the code's 17-field `FiscalRule`
+> (`src/domain/fiscal/rules.ts:19-37`) is authoritative.
+> **Citation correction:** the VAT-threshold act is **Ordonanța nr. 22 din 28.08.2025 — an OG, not an
+> OUG** (MO 806 din 29.08.2025, in force 01.09.2025). The "OUG 22/2025" label used throughout this file
+> is wrong; a separately numbered OUG 22/2025 is unrelated to tax.
+
 # 2026 Fiscal Research — PFA Dashboard
 
 Research document for a 2026 tax dashboard covering Romanian PFA (persoană fiză autorizată) taxation.

@@ -176,7 +176,7 @@ interface RuleRelease {
 | CASS | 10%, base 6–72 SM = 24,300–291,600 lei | Legea 239/2025 |
 | CAS | 25%, base 6–24 SM = 24,300–97,200 lei | ANAF 2026 doc |
 | Income tax | 10% base; 16% on portion above 6× avg gross salary | Art. 64, Law 227/2015; Law 296/2023 |
-| VAT exemption | 395,000 lei | OUG 22/2025 (2026 value) |
+| VAT exemption | 395,000 lei | **[corrected 2026-10-05]** CF art. 310 alin. (1), amended by **Ordonanța nr. 22 din 28.08.2025 — an OG, not an OUG** (MO 806/29.08.2025, in force 01.09.2025). The "OUG 22/2025" attribution in the original ADR text was wrong. See `docs/ai/phases/02_fiscal_baseline.md` §0.1, §7.1 |
 | D212 | annual filing + payment by 25 May 2027 for 2026 income | Art. 122(3) |
 | Tax-reference wage | 4,050 lei (1 Jan 2026) | 2026 reference |
 | Advances | 4 equal installments by 25th of last month of each quarter | Art. 81 |

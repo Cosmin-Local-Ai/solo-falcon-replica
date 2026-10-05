@@ -1,76 +1,143 @@
 # STATE
 
-Last sync: 2026-10-02 (step 27 — state sync). This document reflects the repository as
-verified on that date, not what earlier documents claimed.
+Last sync: **2026-10-05 (phase 2 — verified 2026 fiscal baseline)**. HEAD
+`82073bff72934d1db7a854e5a693554174249785` on `master` (2026-10-04 07:13:22 +0300, "Steps 27-34: …").
 
-## Verification summary
+**The fiscal source of truth is now `docs/ai/phases/02_fiscal_baseline.md`.** It supersedes
+`docs/ai/research/06_2026_fiscal_research.md`, which was wrong on four points (CAS minimum base, VAT
+threshold, the phantom 30% expense cap, the 16% component) and misattributed the VAT act. Phase 2
+changed **provenance metadata only** — no formula, calculator, rule-engine, parameter-value or
+rule-count change.
 
-- `npx vitest run`: **28 test files, 102 tests, all passing**.
-- Test files by area: 1 app, 6 components, 4 data, 13 domain, 4 pages.
-- Latest commit: `952ac07` — "Dashboard: financial intelligence, domain tax engine, and full docs"
-  (109 files).
-- No application code was modified during the state sync.
+**This STATE.md supersedes the 2026-10-02 STATE.md.** The previous version's claims
+"**28 test files, 102 tests**" (`:8`, `:37`), "1 app / 6 components / 4 data / 13 domain / 4 pages"
+(`:9`), "15 public functions" in `data/dashboard.ts` (`:26`), "`markExpenseAsPaid` …
+`completeDeclaration` in `src/store.ts`" (`:36`) and "**no e2e/Playwright specs exist**" (`:41-42`,
+`:48`) were **false**. The measured figures are below. The full claim→verdict table is in
+`docs/ai/steps/01_real_baseline.md` §6.1. No application code was modified during this sync.
 
-## Implemented (verified in repository)
+## Verification summary (measured 2026-10-05, all exit 0)
 
-- **Domain foundation** — `src/domain/`: aggregation, completeness, deadlines, derived,
-  profile, projection, snapshots, taxReserve, thresholds, tax, insights.
-- **Profile domain** — `src/domain/profile.ts`.
-- **Fiscal rule package** — `src/domain/fiscal/` (rules, calculators, package2026).
-- **Calculation snapshots** — `src/domain/snapshots/` (serialize + hash).
-- **Aggregation** — `src/domain/aggregation.ts`.
-- **Derived state** — `src/domain/derived.ts`.
-- **Tax engine** — `src/domain/tax.ts` (with `review_required` handling).
-- **Thresholds/deadlines** — `src/domain/thresholds.ts`, `src/domain/deadlines.ts`.
-- **Dashboard intelligence / data layer** — `src/data/dashboard.ts`
-  (15 public functions: summary, monthly series, projection, completeness, pending counts,
-  tax estimate, thresholds, deadlines, tax reserve, insights, action items, legislation,
-  snapshot builder).
-- **Dashboard shell** — `src/pages/Dashboard.tsx`.
-- **Recharts financial graph** — `src/components/FinancialChart.tsx`.
-- **Financial summary / insights / tax reserve panels** — `FinancialSummary.tsx`,
-  `Insights.tsx`, `TaxReserve.tsx`.
-- **Additional dashboard sections** — Threshold, Deadline, Completeness, Action,
-  Legislation sections (`src/components/dashboard/`).
-- **Store methods** — `markExpenseAsPaid`, `addDeclaration`, `completeDeclaration` in
-  `src/store.ts`.
-- **Unit tests** — 102 passing tests across domain, data, components, pages.
+Re-measured after the Phase 2 provenance edits (`package2026.ts`, `release2026.ts`):
 
-## Partially implemented
+| Command | Result |
+|---|---|
+| `npx tsc --noEmit` | **0 errors** |
+| `npm run build` (`tsc && vite build`) | **exit 0** |
+| `npm run test` (vitest) | **36 test files, 450 unit tests, all passing** |
+| `npm run test:e2e` (playwright) | **23 e2e tests, all passing** (`e2e/dashboard.spec.ts`) |
 
-- **e2e coverage (step 19)** — unit tests exist and pass; **no e2e/Playwright specs exist**.
-  `playwright.config.ts` is present but no spec files are written.
-- **Regression fixes (step 25)** — store methods exist and are unit-tested, but no e2e
-  regression tests exist.
+- Unit test files by area: 1 `src/`, 9 `src/components/`, 8 `src/data/`, 13 `src/domain/`
+  (incl. 2 `fiscal/`, 1 `snapshots/`), 5 `src/pages/`.
+- **Untested pages: `Documents.tsx`, `EFactura.tsx`, `Expenses.tsx`.**
+- e2e runs Chromium only — `playwright.config.ts` declares no `projects`;
+  `playwright.firefox.config.ts` is supplementary and must be run with `--config`.
+- Resolved versions: react 18.3.1, vite 5.4.21, typescript 5.9.3, vitest 3.2.7,
+  @playwright/test 1.63.0. `docs/ai/steps/02_repo_scout.md:24` ("React 19.2.4 … Vite 7.3.1",
+  `build` = `tsc -b && vite build`) is false; `docs/ai/README.md:13` is correct.
+- Hygiene, not defects: `test-results/` and `playwright-report/` untracked and not in `.gitignore`;
+  no `*.d.ts` / `src/vite-env.d.ts` despite CSS side-effect imports at `src/main.tsx:4-5`; the
+  `playwright.config.ts:9` "No overload matches this call" diagnostic is LSP-only
+  (`tsconfig` `include: ["src"]` excludes root configs) and all 23 specs pass; `react-router-dom` is
+  declared but never imported (`src/App.tsx:1` uses `useSyncExternalStore`).
 
-## Scaffolded
+## Phase status
 
-- **Playwright** — config present (`playwright.config.ts`), zero specs.
+| Phase | Scope | Status | Blocking prerequisites |
+|---|---|---|---|
+| 1 | Real baseline | **complete** (2026-10-05, docs only) | — |
+| 2 | Verified 2026 fiscal baseline + rule provenance (17-field `FiscalRule`, `rules.ts:19-37`) | **complete** (2026-10-05, `docs/ai/phases/02_fiscal_baseline.md`) | — |
+| 3 | CAS: flat clamp → SMBT **tier ladder** (not a clamp — `max_cas` is not a statutory cap) | not started | Phase 2 **done**; Q-CAS-EXEMPTION (U-5) |
+| 4 | CASS: min-base behaviour + `max_cass` enforcement | not started | Phase 2 **done**; Q-CASS-MINBASE (U-2) |
+| 5 | Income tax: **delete** the phantom 30% cap (`tax.ts:52-54`); 16% surcharge is not applicable | not started | Q-NONDEDUCT-VAT (U-1); art. 68 alin. (4) gate now captured |
+| 6 | Profile-driven fiscal inputs; NORMA_VENIT | not started | Phase 3/4; Q-30PCT-CAP, Q-NETGROSS |
+| 7 | Identity source of truth + persisted-state migration (version field, migration chain, non-destructive corrupt recovery) | not started | Q-IDENTITY-SOURCE, Q-PERSISTENCE-VERSION |
+| 8 | Financial amount semantics: cash vs VAT vs tax-relevant income; VAT turnover basis | not started | Phase 5; Q-NETGROSS **resolved** — the base is net of VAT, so only the turnover basis is open |
+| 9 | Date semantics (issued / received / paid) | not started | Q-NETGROSS; Phase 6 |
+| 10 | Money representation (float lei → bani or decimal) | not started | Q-MONEY-UNIT; after Phases 3–5 |
 
-## Known broken / requires correction
+Phase scope, entry criteria and per-phase evidence: `docs/ai/PLAN.md` "Forward roadmap".
 
-- **The fiscal implementation currently requires correction before being treated as
-  trustworthy**:
-  - 16% surcharge (suplimentar) is not implemented — impozit pe venit returns
-    `review_required` from the engine.
-  - CASS minimum-base handling halts the engine.
-  - Fiscal-loss (prior-year loss deduction) handling is absent.
-  - Fiscal package values must be re-verified against
-    `docs/ai/research/06_2026_fiscal_research.md` before engine outputs are trusted.
-- Stale doc references in the thresholds/deadlines documentation (noted in step 26).
+## Defect register
 
-## Not implemented
+| ID | Defect | Evidence | Fixed in |
+|---|---|---|---|
+| B-1 | Default regime `impozit_pe_venit` short-circuits the tax engine to `review_required` — the default user gets no tax estimate | `src/domain/tax.ts:52-54`; `src/domain/profile.ts:41`; `src/data/seed.ts:7` | Phase 5 |
+| B-2 | CAS is a flat clamp; ignores the SMBT tier semantics its own parameter labels claim; no salary/pension exemption branch | `src/domain/fiscal/calculators.ts:39-58` vs `package2026.ts:71-72` | Phase 3 |
+| B-3 | CASS returns `reviewRequired` below `min_base` instead of applying the minimum base | `src/domain/fiscal/calculators.ts:67-69` | Phase 4 |
+| B-4 | `progressive_rate: 16` is dead data while the result is still reported `status: 'computed'` — the engine under-reports tax and claims success | `src/domain/fiscal/calculators.ts:90,96`; `package2026.ts:109` | **Phase 2 — parameter removed** (16% is legally inapplicable to PFA sistem real, not merely unread). The stale "16% progressive surcharge" NOTE string in `calcIncomeTax` remains a Phase 5 cleanup. |
+| B-5 | 5 of 8 ACTIVE rules carry non-resolvable provenance placeholders (`'ANAF 2026'`, anaf.ro homepage, self-referential article) | `package2026.ts:77-79,96-98,112-114,127-129,142-144` | **Phase 2 — fixed** (verified citations; `VAT_THRESHOLD_2026` also corrected from art. 338 → art. 310 alin. (1)) |
+| B-6 | `max_cas`, `max_cass`, `multiple_6x/12x/24x/72x` declared but never read — declared caps silently unenforced | `package2026.ts:22-25,74,93,109` | Phases 3, 4, 5 |
+| B-7 | `docs/ai/STATE.md` and `docs/ai/PLAN.md` contained materially false claims | `01_real_baseline.md` §6.1, §6.2 | Phase 1 (this sync) |
+| B-8 | Two unreconciled identity stores: topbar reads `profile.identity`, Settings writes `settings.company` / `settings.personal` | `src/App.tsx:221-222` vs `src/pages/Settings.tsx:34-37,50-53`; reconciled only at `src/data/store.tsx:118` | Phase 7 |
+| B-9 | No UI path writes the profile — every fiscal input is fixed at seed values | `src/data/store.tsx:52,213` (`updateProfile` uncalled outside `derived.test.tsx:61`); `src/pages/Settings.tsx:369,373,377` (`disabled`) | Phases 6, 7 |
+| B-10 | Every Settings write is inert downstream — no module outside `Settings.tsx` reads `settings.*` | grep over `src/`; `settings.cotaTva` seeded at `src/data/seed.ts:83`, read nowhere | Phase 7 |
+| B-11 | Corrupt payload silently resets the whole dataset to seed data; `dataOrigin` never surfaced | `src/data/store.tsx:109-114,132`; `:26-27,139,172` | Phase 7 |
+| B-12 | No persisted-schema `version`, therefore no migration path | `src/data/schema.ts:196-207`; only backfill is `store.tsx:118` | Phase 7 |
 
-- e2e/Playwright test specs.
-- 16% surcharge calculation.
-- Fiscal-loss carry-forward.
-- CASS minimum-base handling.
+B-11 and B-12 are assigned to **Phase 7** rather than Phase 8: they are persistence/migration defects,
+and Phase 7 (identity unification) is the only phase in the plan that changes persisted-state shape —
+so the `version` field and migration chain belong there, not in amount semantics (Phase 8).
+
+Also open, not defects: fiscal loss carry-forward absent (`tax.ts:82-88`); NORMA_VENIT absent
+(zero matches repo-wide); VAT regime is a boolean only (`models.ts:83`); single `date` field per
+document (`aggregation.ts:85-87,96,102`); no release/year-resolution layer
+(`data/dashboard.ts:85-93`, `data/derived.ts:66-74`); `decimal.js-light` declared
+(`package.json:16`) and never imported.
+
+## Open questions register
+
+### Resolved by Phase 2 (2026-10-05) — no longer blocking
+
+| ID | Answer | Source |
+|---|---|---|
+| Q-CAS-MINBASE | **12 SM = 48,600 lei.** The 6-SM tier does not exist for art. 68 income; it survives only in art. 170 alin. (2)-(3) (CASS). | CF art. 148 alin. (2) lit. a); OUG 128/2024 Art. I pct. 20, MO 1125/11.11.2024 |
+| Q-CAS-MAXBASE-CONFIDENCE | **24 SM = 97,200 lei is the tier boundary, not a cap** — above it the base is the actual venitul ales, so `max_cas` must not be enforced as a statutory cap. | CF art. 148 alin. (2) |
+| Q-VAT-THRESHOLD | **395,000 lei for 2026.** The research doc's "2025 ONLY / use 300,000" was wrong. | CF art. 310 alin. (1); **Ordonanța** nr. 22/2025 (an OG), MO 806/29.08.2025 |
+| Q-VAT-BASIS | The 395,000-lei plafon is VAT-exclusive — no provision measures it TVA-inclusiv (with the alin. (2) caveat recorded). | CF art. 310 alin. (1)-(2) |
+| Q-16PCT | **No 16% component for PFA sistem real.** 16% covers only art. 114 alin. (2) lit. h)/i); art. 114 alin. (1) excludes art. 61 lit. a)-h) income. Rate is 10% flat. | CF art. 115 alin. (1) lit. b); art. 123 alin. (1) + art. 118 |
+| Q-30PCT-CAP | **Phantom — no such provision exists.** The only 30% hits in Titlul IV are art. 68^3 alin. (2) (cazare forfetar), art. 85 alin. (2) (închiriere) and art. 106 (calamity). `tax.ts:52-54` is a **deletion**, not an implementation. | Full Titlul IV scan, consolidated CF doc 312601 |
+| Q-NETGROSS | **NET of VAT, both venituri and cheltuieli.** | OMFP 3254/2017 art. 4 alin. (3) + art. 5 alin. (6); CF art. 68 alin. (2)-(3) |
+| Q-PROVENANCE-SCHEMA | **The code's 17-field `FiscalRule` is authoritative.** The archived "10-field" schema (`decisions/09:60,168`, `research/06:226`) is superseded — do not align the code to it. | `src/domain/fiscal/rules.ts:19-37` |
+| Q-SM-VALUES (U-6) | **The code's wage values are correct.** SM on 1 ianuarie 2026 = **4,050 lei**; from **1 iulie 2026** = **4,325 lei**. 2026 bases: 6 SM 24,300 · 12 SM 48,600 · 24 SM 97,200 · 72 SM 291,600. The "8,100 / 8,600 lei, 1 August 2026" figures were a **hallucination and are void**. Mid-year rise does not re-anchor 2026 — ANAF states "291.600 lei (72 x 4.050 lei)" for 2026. | HG 1.506/2024, MO I 1185/28.11.2024; HG 146/2026, MO 196/13.03.2026; CF art. 135^1 alin. (3); ANAF Brașov `web_ian_2026.pdf` |
+
+### Still blocking — UNVERIFIED, do not guess
+
+| ID | Question | Blocks |
+|---|---|---|
+| Q-NONDEDUCT-VAT (U-1) | Does non-deductible TVA enter the deductible expense for a neplătitor de TVA? No affirmative operative rule found; inference only, Medium. **Must stay `REVIEW_REQUIRED`, never a computed rule.** | Phases 5, 8 |
+| Q-CASS-MINBASE (U-2) | What is the 2026 CASS minimum base for art. 68 sistem-real income? The art. 170 alin. (2)-(3) 6-SM rungs cover art. 155 alin. (1) lit. c)-h) income, not art. 68. The code's `min_base` label is unsourced. | Phase 4 |
+| Q-122-ATTRIBUTION (U-3) | Which act last amended CF art. 122 alin. (3)'s 25 May term? Text is HIGH, attribution MEDIUM. | Phase 9 (attribution only) |
+| Q-QUARTERLY-DATES (U-4) | 2026 quarterly instalment **payment** due dates — need CF art. 123 alin. (2)-(4), 147/151 (CAS), 174 alin. (1)-(3) (CASS). | Phase 9 |
+| Q-CAS-EXEMPTION (U-5) | The CAS salary/pension exemption branch — CF art. 147 alin. (1) referenced but not read; no rule reads `salaryStatus`/`pensionStatus`. | Phase 3 |
+| Q-OMFP3254-HISTORY (U-7) | OMFP 3254/2017 amendment history — portal "Acțiuni suferite" returned 0 refs. In force is established via OMF 808/2026 art. 8's express scope (abrogates OMFP 870/2005 only). The net-of-VAT base rests on this act. | Phases 5, 8 |
+| Q-IDENTITY-SOURCE | Is `profile.identity` canonical, or `settings.company` / `settings.personal`? | Phase 7 |
+| Q-PERSISTENCE-VERSION | Add a `version` field + migration chain? Keep all-or-nothing corrupt recovery? | Phase 7 |
+| Q-MONEY-UNIT | Integer bani or `decimal.js-light`? | Phase 10 |
+
+Evidence for each resolved answer and each U-item: `docs/ai/phases/02_fiscal_baseline.md`.
+Evidence for the original question framing: `docs/ai/steps/01_real_baseline.md` §7 (frozen archive).
 
 ## Documentation status
 
-- `docs/ai/steps/` — steps 02–27 present (step 27 is this state sync; steps 02–26 are
-  recorded in PLAN.md).
-- `docs/ai/PLAN.md` — updated 2026-10-02 to match the actual completed-step history.
-- `docs/ai/research/` — 2026 fiscal research present (doc 06); fiscal code has not yet
-  been corrected to match it.
-- `docs/ai/decisions/` — ADRs pending for the fiscal corrections listed above.
+- `docs/ai/steps/01_real_baseline.md` — **new**; the authoritative baseline: inventory, five-bucket
+  classification of 68 capabilities with `file:line` evidence, defect register B-1…B-12, identity and
+  persistence findings, documentation-vs-reality tables, open questions.
+- `docs/ai/PLAN.md` — resynced to this baseline; 8 previously unlisted step files (27_date_projection
+  … 34) added; the "no e2e specs" claim removed; a "Forward roadmap (Phases 1–10)" section added.
+- `docs/ai/steps/` — 32 step files now (01, 02–34; no 05, 06, 09) plus `_TEMPLATE.md`. Historical
+  step files were **not** edited; where they conflict with step 01, step 01 supersedes them.
+- `docs/ai/phases/02_fiscal_baseline.md` — **new (Phase 2)**; the authoritative 2026 fiscal baseline:
+  verified values with act + article + MO/OPANAF reference + URL + confidence, the supersession of
+  `research/06`, the citation corrections, the Q-PROVENANCE-SCHEMA ruling, the UNVERIFIED register
+  (U-1…U-7) and the consolidated-text-lag caveat. `docs/ai/phases/` is a separate namespace from the
+  frozen `docs/ai/steps/` archive.
+- `docs/ai/research/06_2026_fiscal_research.md` — **SUPERSEDED** by `phases/02_fiscal_baseline.md`.
+  A banner was added at the top; the body is left intact as a research record. It was wrong on the CAS
+  minimum base, the VAT threshold, the phantom 30% expense cap and the 16% component, and it
+  misattributed the VAT act to "OUG 22/2025" (correct: **Ordonanța** nr. 22/2025, an OG).
+- `docs/ai/decisions/09_IMPLEMENTATION_ARCHITECTURE.md` — `:179` carries an inline correction of the
+  "OUG 22/2025" attribution. Its "10-field provenance schema" (`:60`, `:168`) is **superseded** by the
+  code's 17-field `FiscalRule`; the ADR body was not rewritten.
+- `docs/ai/decisions/` — only 07 and 09 exist; ADRs for the fiscal corrections are still pending.
+- `docs/audit-expenses.md:4` records a stale sandbox project root (`/c/AI/projects/pi-test`).
