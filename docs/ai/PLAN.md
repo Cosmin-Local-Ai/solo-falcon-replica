@@ -314,6 +314,9 @@ numbering stays readable.
   `breakdown` as text; if they become rendered amounts they need this phase's semantics pass, and
   `CAS_MIN_BASE`'s shared "dezcalificare din regim" wording needs a tax-specific map (for CAS, being under
   12 SM means no CAS is owed, not disqualification).
+- **Follow-up from Phase 5 (B-17):** this phase owns **which amount is rounded where**. The seed's
+  `Rezervă lunară` is a second live half-cent (`3.104,505 / 3 = 1.034,835` → rendered `1.034,84`),
+  produced at presentation level rather than in the fiscal domain. Same root cause as B-17.
 
 - **Objective:** prevent financial/tax calculations from confusing cash amounts, VAT and
   tax-relevant income. Separate the six concepts — transaction/cash amount, VAT amount, amount
@@ -376,6 +379,15 @@ numbering stays readable.
   `inputsHash`, `derived.ts:107,145`).
 - **Entry criteria:** Q-MONEY-UNIT answered. Must come **after** the fiscal corrections, or every
   corrected test will be rewritten twice.
+- **B-17 (found in Phase 5) is the strongest evidence for this phase, and it is not cosmetic.** Exact
+  decimal arithmetic on the seed gives an income tax of **674.505 — a half-cent** — and the fiscal
+  domain has **no rounding policy at all**. The cent that ships comes from IEEE-754, not a rule:
+  `0.10 × 6745.05` lands on `674.5050000000001`, while two algebraically identical arrangements
+  (`0.09 × 7494.5`, `6745.05 / 10`) land on `674.505`. On that same double the codebase's two rounding
+  paths **disagree**: `Intl.NumberFormat` (`src/lib/format.ts:6-9`) renders `674,51`, `toFixed(2)`
+  gives `674.50`. So the fix is not just "use decimals" — a **tie-break must be chosen**, and that
+  tie-break is a **legal** question (how Declarația 120 rounds) which is **unresearched**. Open it as a
+  research question before Phase 10 starts, not during it.
 
 ## Next
 
