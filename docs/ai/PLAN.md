@@ -332,6 +332,28 @@ numbering stays readable.
   `data/schema.ts:196-207`; the only migration logic is the profile backfill at `store.tsx:118`; a
   corrupt payload resets everything to seed at `store.tsx:109-114`), so the `version` field and
   migration chain must land with it rather than in Phase 8.
+- **Re-measured 2026-10-06, after Phase 6 — several citations above are now stale or falsified. Do not
+  re-derive them from `steps/01`:**
+  - `updateProfile` **now has a real UI caller** — `Settings.tsx:36` (destructure) and `Settings.tsx:135`
+    (write), the new "Regim fiscal" tab. The claim above that it has *no UI caller* was true until
+    Phase 6 and is **no longer true**; B-9 is closed **for the fiscal profile**. Identity fields still
+    have no write path, so the defect that remains is narrower than originally stated.
+  - Settings personal fields are `disabled` at **`Settings.tsx:458, 462, 466`** (name, email, phone),
+    not `:369,373,377` — the file grew ~265 lines in Phase 6. Company address is disabled at `:268`.
+  - Identity renders at **`App.tsx:237-238`** (`profile.identity.nume` + initials), not `:221-222`.
+    The hardcoded sidebar brand is the `sidebar-logo` block at **`App.tsx:187`**, not `:183-184`.
+  - Persistence: load `store.tsx:105-133`, save effect `store.tsx:143-152`, corrupt-payload whole-dataset
+    reset `store.tsx:109-114`, profile backfill `store.tsx:118`. Key is still `pfa-app-data-v2`
+    (`store.tsx:14`) and there is still **no `version` field and no migration chain** — Phase 6 added
+    `pfaStartDate` and `salaryIncomeLei` as `.optional()` precisely to avoid tripping that reset, so the
+    chain Phase 7 must build now has to cover those two fields too.
+  - `settings.cotaTva` is still seeded `9` (`seed.ts:83`) and read by **nothing** — confirmed by grep:
+    the only non-test occurrences are the type (`types.ts:110`) and the schema (`schema.ts:188`).
+- **One archived "known defect" is false and must not be "fixed":** the claim that the seed encodes a
+  **22% VAT ratio matching no statutory rate** is wrong. Measured across all seven seeded money rows
+  (945/4500, 252/1200, 168/800, 672/3200, 25.2/120, 17.96/85.5, 71.4/340) the implied rate is
+  **21.00–21.01%** — 21% is a real statutory Romanian rate, and the 0.01 is just `85.5 × 21%` rounded to
+  `17.96`. Changing the seed to "fix" this would corrupt correct data.
 - **Entry criteria:** Q-IDENTITY-SOURCE and Q-PERSISTENCE-VERSION answered.
 - **Blocked by:** Q-IDENTITY-SOURCE, Q-PERSISTENCE-VERSION.
 

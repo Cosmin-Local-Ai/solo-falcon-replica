@@ -152,6 +152,17 @@ document (`aggregation.ts:85-87,96,102`); no release/year-resolution layer
 Evidence for each resolved answer and each U-item: `docs/ai/phases/02_fiscal_baseline.md`.
 Evidence for the original question framing: `docs/ai/steps/01_real_baseline.md` §7 (frozen archive).
 
+## Archive corrections (verified 2026-10-06) — claims repeated in the standing prompt that are NOT true
+
+These are re-sent with every phase brief. They were checked against the tree; do not "fix" them.
+
+| Claim in the standing prompt | Reality (measured) |
+|---|---|
+| "Seed data encodes a **22%** VAT ratio, which matches no statutory Romanian rate (19%/21%)" | **False.** The implied rate across all seven seeded money rows (945/4500, 252/1200, 168/800, 672/3200, 25.2/120, 17.96/85.5, 71.4/340) is **21.00–21.01%**. 21% **is** a statutory rate; the 0.01 is `85.5 × 21%` rounded to `17.96`. Editing the seed here would corrupt correct data. |
+| "`settings.cotaTva` is seeded as 9 and read nowhere" | **Still true** (confirmed 2026-10-06): the only non-test occurrences are the type (`data/types.ts:110`) and the schema (`data/schema.ts:188`). No reader exists. |
+| "`updateProfile` (`store.tsx:213`) has no UI caller" | **No longer true after Phase 6.** It is called from `Settings.tsx:36,135` (the "Regim fiscal" tab). B-9 is closed for the fiscal profile; identity fields still lack a write path. |
+| "`playwright.config.ts:9` reports 'No overload matches this call'" | Not a defect — LSP-only. `tsconfig.json` `include: ["src"]` excludes root configs and all 29 e2e specs pass. |
+
 ## Documentation status
 
 - `docs/ai/steps/01_real_baseline.md` — **new**; the authoritative baseline: inventory, five-bucket
