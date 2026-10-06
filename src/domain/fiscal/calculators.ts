@@ -40,10 +40,15 @@ export type CalculatorInput = {
   pensionStatus?: 'da' | 'nu';
   /**
    * CASS only — CF art. 174 alin. (7) lit. a): the art. 174 alin. (6) top-up is not
-   * owed where salary and assimilated income in that fiscal year is "cel puțin egal cu
-   * 6 salarii minime brute". The profile carries only a yes/no flag, NOT the salary
-   * amount, so the condition cannot be evaluated — `calcCass` returns
-   * `reviewRequired` rather than guessing either way.
+   * owed where salary and assimilated income realised in that fiscal year is "cel puțin
+   * egal cu 6 salarii minime brute".
+   *
+   * Phase 6 supplies the amount through `salaryIncomeLei`, so both branches now
+   * COMPUTE: amount >= 6 SM -> the top-up is not owed (CASS stays 10% x VNA, fully
+   * deductible); amount < 6 SM -> the top-up is owed and stays non-deductible per
+   * art. 118 alin. (2) lit. b). When the flag is 'da' but the amount is absent (a
+   * payload written before Phase 6), `calcCass` still returns `reviewRequired` rather
+   * than guessing in either direction.
    *
    * MUST NEVER REACH CAS: CF art. 150 alin. (2) exempts salary earners only for
    * art. 137 alin. (1) lit. b^1) (drepturi de proprietate intelectuală), NOT lit. b).
@@ -51,6 +56,13 @@ export type CalculatorInput = {
    * income, so `salaryStatus` must never map into `calcCas`.
    */
   salaryStatus?: 'da' | 'nu';
+  /**
+   * CASS only — salary and assimilated income (CF art. 155 alin. (1) lit. a)) actually
+   * realised in the fiscal year, in lei. This is the figure CF art. 174 alin. (7) lit. a)
+   * compares against the 6 SM floor. Absent means "not known", which is reported, not
+   * assumed. Never an input to CAS (art. 150 alin. (2) covers only lit. b^1)).
+   */
+  salaryIncomeLei?: number;
   /**
    * CF art. 148 alin. (2): the CAS base is "venitul ales de contribuabil". An
    * explicitly chosen base is honoured, but never below the applicable statutory
@@ -209,15 +221,37 @@ function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
         ],
       };
     }
-    // CF art. 174 alin. (7) lit. a): the top-up is not owed if salary income in that
-    // year is at least 6 SM. The profile carries no salary amount, so this cannot be
-    // decided — surface it instead of guessing in either direction.
+    // CF art. 174 alin. (7) lit. a): the top-up is not owed if salary and assimilated
+    // income REALISED in that fiscal year is at least 6 SM. Phase 6 supplies the amount
+    // (`salaryIncomeLei`), so the branch now computes instead of halting.
+    // Note what the relief does and does not do: alin. (7) removes only the alin. (6)
+    // DIFFERENCE. The art. 174 alin. (1) / art. 170 alin. (1) contribution of 10% x VNA
+    // is still owed, and unlike the top-up it IS deductible under art. 118 alin. (2) lit. b)
+    // (which carves out only „diferența … prevăzută la art. 174 alin. (6)”).
     if (input?.salaryStatus === 'da') {
-      return {
-        reviewRequired: true,
-        reason:
-          `VNA ${vna} lei este sub pragul de 6 SM (${floorBase} lei), dar diferenta de contributie din CF art. 174 alin. (6) nu se datoreaza daca veniturile din salarii si asimilate ale anului fiscal sunt cel putin egale cu 6 salarii minime brute (art. 174 alin. (7) lit. a)). Profilul nu contine cuantumul salarial — nu se poate stabili.`,
-      };
+      const salary = input.salaryIncomeLei;
+      if (salary === undefined) {
+        return {
+          reviewRequired: true,
+          reason:
+            `VNA ${vna} lei este sub pragul de 6 SM (${floorBase} lei), dar diferenta de contributie din CF art. 174 alin. (6) nu se datoreaza daca veniturile din salarii si asimilate ale anului fiscal sunt cel putin egale cu 6 salarii minime brute (art. 174 alin. (7) lit. a)). Profilul are salaryStatus = da dar nu contine cuantumul salarial — nu se poate stabili.`,
+        };
+      }
+      if (salary >= floorBase) {
+        const cass = vna * rate;
+        return {
+          value: cass,
+          breakdown: [
+            `venit net anual (VNA): ${vna} lei`,
+            `VNA sub pragul de 6 SM (${floorBase} lei): art. 174 alin. (6) ar cere o diferenta de contributie pana la ${floorCass} lei`,
+            `exceptie: venituri din salarii si asimilate realizate in anul fiscal = ${salary} lei, cel putin egal cu 6 salarii minime brute (${floorBase} lei) — CF art. 174 alin. (7) lit. a)`,
+            'lit. a) elimina DOAR diferenta de la art. 174 alin. (6) — contributia de 10% pe VNA ramane datorata (art. 174 alin. (1), art. 170 alin. (1))',
+            `CASS = ${vna} x ${rate} = ${cass} lei (fara diferenta de contributie; intreaga contributie este deductibila per art. 118 alin. (2) lit. b))`,
+          ],
+        };
+      }
+      // salary < 6 SM: the condition in alin. (7) lit. a) is not met, so the top-up stands.
+      // Falls through to the art. 174 alin. (6) branch below.
     }
     // B-13: the top-up is OWED but NOT DEDUCTIBLE. art. 174 alin. (6) creates a „diferență de
     // contribuție” up to a 6 SM base when the art. 68 net income is positive but smaller than 6 SM; the
@@ -238,6 +272,11 @@ function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
         `CASS = ${floorBase} x ${rate} = ${floorCass} lei — o diferenta de contributie pana la baza de 6 SM, nu inlocuirea bazei`,
         'CF art. 118 alin. (2) lit. b): diferenta de la art. 174 alin. (6) NU se scade din baza impozabila (reparație de coerență, nu de calcul)',
         `CASS deductibila din baza impozabila = ${vna} x ${rate} = ${due} lei (art. 174 alin. (1)); diferenta neimputabila = ${difference} lei (art. 174 alin. (6), exclusa expres de art. 118 alin. (2) lit. b))`,
+        ...(input?.salaryStatus === 'da'
+          ? [
+              `conditia din art. 174 alin. (7) lit. a) nu este indeplinita: venituri din salarii ${input.salaryIncomeLei} lei < 6 salarii minime brute (${floorBase} lei), deci diferenta ramane datorata`,
+            ]
+          : []),
       ],
     };
   }

@@ -9,6 +9,7 @@ import type { TaxInputsReference } from './derived';
 import type { CalculationLine, CalculationOutput, TaxCalculationSnapshot } from './snapshots/types';
 import { selectApplicableRules } from './fiscal/select';
 import { calculatorRegistry } from './fiscal/calculators';
+import { regimeRefusalReason } from './regimes';
 import { createCalculationSnapshot } from './snapshots/snapshot';
 
 export interface TaxCalculationInput {
@@ -75,9 +76,11 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // Either the recorded regime is wrong or the entity is not a PFA at all. No Titlul II rule exists in
   // the rule set and none may legally apply to a persoană fizică, so the engine must refuse and say why
   // instead of computing a number under a regime the taxpayer cannot have.
-  if (inputs.regime !== 'impozit_pe_venit') {
-    return rr(`Regimul fiscal înregistrat („${inputs.regime}") nu poate aparține unui PFA în 2026: impozitul pe profit (Titlul II) se datorează doar de persoanele juridice — CF art. 13 alin. (1), art. 14 și art. 15 — iar opțiunea de a datora impozit pe profit (fostul art. 120 CF) a fost abrogată prin OUG 128/2024 pct. 11 Art. I (MO 1125/11.11.2024), de la 01.01.2025. Verifică regimul din profil sau natura entității.`, lines);
-  }
+  const regimeRefusal = regimeRefusalReason(inputs.regime);
+  if (regimeRefusal) return rr(regimeRefusal, lines);
+  // Phase 6 moved the wording into `regimes.ts` so the profile editor and the engine refuse with the
+  // SAME text, and added `norma_venit`: a regime the app can record but cannot compute (no norm rule
+  // in the 2026 package, no norm values — none invented). Both surface as REVIEW_REQUIRED.
 
   // Area 6: VAT is not taxable income. Non-exempt profiles are taxed on the net base
   // (VAT excluded); exempt profiles keep the gross base.
@@ -94,6 +97,15 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   lines.push({ label: 'Cheltuieli deductibile', value: deductibleBase });
   const net = gross - deductibleBase;
   lines.push({ label: 'Venit net din activitate', value: net });
+
+  // CF art. 118 alin. (3) verbatim: „Veniturile din categoriile prevăzute la art. 61 lit. a), a^1), c) și
+  // f), ce se realizează într-o fracțiune de an sau în perioade diferite ce reprezintă fracțiuni ale
+  // aceluiași an, se consideră venit anual.” A PFA that started mid-year is taxed on the full-year
+  // basis — the CAS/CASS floors are NOT prorated. Surfaced from the profile's start date so the user
+  // sees the rule that applies; no figure changes. Date semantics stay Phase 9.
+  if (profile.pfaStartDate && !profile.pfaStartDate.endsWith('-01-01')) {
+    lines.push({ label: 'Fracțiune de an (art. 118 alin. (3)): venit anual', value: net });
+  }
 
   // CF art. 150 alin. (1): pensioners and persons insured in their own social insurance
   // system owe no CAS. `inputs.pensionStatus` carries it, mirroring how
@@ -131,6 +143,9 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
       base: net,
       pensionStatus: inputs.pensionStatus,
       salaryStatus: inputs.salaryStatus,
+      // Phase 6: the amount CF art. 174 alin. (7) lit. a) compares to the 6 SM floor. With it both
+      // branches compute; without it (a pre-Phase-6 payload) calcCass still refuses rather than guess.
+      salaryIncomeLei: inputs.salaryIncomeLei ?? undefined,
     });
     if ('reviewRequired' in cassRes) return rr(cassRes.reason, lines);
     cassValue = cassRes.value;

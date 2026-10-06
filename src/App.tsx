@@ -73,7 +73,8 @@ const VALID_TABS: Partial<Record<Page, string[]>> = {
   documents: ['company', 'statements', 'reports'],
   // Mirrors the live SOLO settings tabs (docs/reference/settings.md);
   // the real app's "Abonament" (subscription) tab is not replicated.
-  settings: ['company', 'einvoice', 'bankaccounts', 'account'],
+  // `fiscal` is an addition of this replica: the PfaProfile write path (Phase 6).
+  settings: ['company', 'fiscal', 'einvoice', 'bankaccounts', 'account'],
 };
 
 export function parseRoute(): Route {
@@ -175,6 +176,9 @@ function Shell() {
 
   return (
     <div className="app">
+      {/* SAFETY: `inert` is a real HTML attribute that React's HTMLAttributes typing predates.
+          The spread is applied only when the sidebar is off-screen on mobile, so the asserted
+          shape can never reach a visible, interactive element. */}
       <aside
         className={`sidebar${navOpen ? ' open' : ''}`}
         aria-hidden={isMobile && !navOpen}
@@ -204,10 +208,22 @@ function Shell() {
           ))}
         </nav>
       </aside>
-      {navOpen && <div className="nav-overlay" onClick={() => setNavOpen(false)} />}
+      {navOpen && (
+        <div
+          className="nav-overlay"
+          role="button"
+          tabIndex={-1}
+          aria-label="Închide meniul"
+          onClick={() => setNavOpen(false)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' || e.key === ' ') setNavOpen(false);
+          }}
+        />
+      )}
       <div className="main">
         <header className="topbar">
           <button
+            type="button"
             className="nav-toggle"
             aria-label="Meniu"
             aria-expanded={navOpen}

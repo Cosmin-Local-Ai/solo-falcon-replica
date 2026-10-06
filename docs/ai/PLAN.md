@@ -270,7 +270,7 @@ numbering stays readable.
 - **U-8 is CLOSED** (`research/09` §1) — neither OUG 89/2025 nor OUG 8/2026 touches CF art. 154/170/174/180,
   proven against the acts themselves. CAS/CASS from Phases 3-4 stands.
 
-### Phase 6 — Profile-driven fiscal inputs
+### Phase 6 — Profile-driven fiscal inputs — **done 2026-10-06, with 3 recorded scope items not delivered** (`docs/ai/phases/06_fiscal_profile.md`)
 
 - **Follow-up from Phase 3:** surface the 24 SM CAS boundary as a proper `tier-floor` threshold type —
   crossing 24 SM doubles the CAS floor from 12,150 to 24,300, which is real and useful, but it is not a
@@ -285,6 +285,33 @@ numbering stays readable.
   exemption rules that read salary/pension status; a VAT regime richer than the boolean `vatExempt`.
 - **Entry criteria:** Phase 3/4 exemption branches defined; Q-30PCT-CAP answered.
 - **Blocked by:** Q-30PCT-CAP, Q-NETGROSS.
+
+- **Phase 6 outcome (2026-10-06).** Entry criteria were met — Q-30PCT-CAP was closed by the Phase 2
+  full Titlul IV scan as a **phantom** (STATE.md open-question register: no such provision exists), and
+  Q-NETGROSS only gates the *net-of-CASS* convenience figures, not the profile contract. Delivered: one
+  regime source (`src/domain/regimes.ts`) for the select, the refusal gate and the refusal copy
+  (**B-18** found and fixed there: an unrecognised regime used to fall through as "no refusal");
+  `norma_venit` added as a **parseable but refused** value with **no norm values invented** (the 2026
+  package contains no norm-of-income rule — the "absent repo-wide" note above is superseded); the
+  profile write path (B-9 closed for the fiscal profile, `e2e/settings.spec.ts` proves persistence);
+  both art. 174 alin. (7) lit. a) branches now compute, closing the Phase 4 open item "the salary amount
+  behind lit. a)" (phases/04_cass.md §7) — `calcCass` no longer returns `reviewRequired` for a salaried
+  PFA once `salaryIncomeLei` is supplied. **B-17 (no rounding policy) is untouched and still open.**
+- **Phase 6 did NOT deliver these, and they are recorded rather than silently dropped:**
+  1. the 24 SM `tier-floor` threshold surface above (Phase 3 follow-up) — `thresholds.ts` is unchanged
+     (`ThresholdType = 'min-base' | 'max-base' | 'registration' | 'income'`), so the art. 148 alin. (2)
+     ladder floors still have no threshold surface → **Phase 7/9**;
+  2. **rules that key on CAEN** — CAEN is now user-writable (`Settings.tsx:529`) but the engine reads no
+     CAEN-keyed rule, because the 2026 package names no CAEN→rule mapping to cite; inventing one is out
+     of scope;
+  3. **a VAT regime richer than the boolean `vatExempt`** — the boolean is now user-writable
+     (`Settings.tsx:640`) and still drives `tax.ts:87-88`; no richer regime was invented;
+  4. `chosenBase` wiring — the art. 180 alin. (1) CASS option stays unmodelled and is surfaced only as an
+     `OPTIUNE NEMODELATA` breakdown line (`fiscal/calculators.ts:202`, the VNA ≤ 0 path);
+  5. `pensionStatus` is still a stored flag while art. 174 alin. (7) lit. c) requires pension income
+     *realised* in the fiscal year, and **B-19** (`socialInsuranceStatus` zeroes CASS on the
+     never-retrieved CF art. 154 alin. (1)) — research, not code.
+  Evidence: `docs/ai/phases/06_fiscal_profile.md` §6–§7.
 
 ### Phase 7 — Identity source of truth
 

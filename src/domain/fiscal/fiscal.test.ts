@@ -348,3 +348,77 @@ describe('calculators', () => {
     expect(result).toMatchObject({ value: 0 });
   });
 });
+
+/**
+ * Phase 6: art. 174 alin. (7) lit. a) is a NUMERIC test („la un nivel cel puțin egal cu 6
+ * salarii minime brute”), and the profile used to carry no salary amount — so every salaried
+ * PFA below the 6 SM floor halted in REVIEW_REQUIRED. With `salaryIncomeLei` supplied by the
+ * profile, both branches compute (docs/ai/phases/06_fiscal_profile.md §6).
+ */
+describe('calc-cass — salaried PFA below the 6 SM floor (art. 174 alin. (6) + alin. (7) lit. a))', () => {
+  const byId = (id: string) =>
+    PFA_2026_SYSTEM_REAL_PACKAGE.find((r) => r.ruleId === id)!;
+
+  it('salary at least 6 SM: no top-up, CASS stays 10% x VNA and is fully deductible', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
+      base: 10_000,
+      salaryStatus: 'da',
+      salaryIncomeLei: 30_000,
+    });
+    expect(result).toMatchObject({ value: 1_000 });
+    expect(result).not.toHaveProperty('nonDeductible');
+    if ('breakdown' in result) {
+      expect(result.breakdown.join(' ')).toContain('art. 174 alin. (7) lit. a)');
+      expect(result.breakdown.join(' ')).toContain('art. 118 alin. (2) lit. b)');
+    }
+  });
+
+  it('exactly 6 SM satisfies the condition („cel puțin egal”, not „mai mare”)', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
+      base: 10_000,
+      salaryStatus: 'da',
+      salaryIncomeLei: 24_300,
+    });
+    expect(result).toMatchObject({ value: 1_000 });
+  });
+
+  it('salary below 6 SM: the alin. (6) top-up stands and stays non-deductible', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
+      base: 10_000,
+      salaryStatus: 'da',
+      salaryIncomeLei: 20_000,
+    });
+    expect(result).toMatchObject({ value: 2_430, nonDeductible: 1_430 });
+    if ('breakdown' in result) {
+      expect(result.breakdown.join(' ')).toContain('nu este indeplinita');
+    }
+  });
+
+  it('a salary of zero lei does not trigger the relief', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
+      base: 10_000,
+      salaryStatus: 'da',
+      salaryIncomeLei: 0,
+    });
+    expect(result).toMatchObject({ value: 2_430, nonDeductible: 1_430 });
+  });
+
+  it('pension relief is still evaluated first, even when a salary amount exists', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
+      base: 10_000,
+      pensionStatus: 'da',
+      salaryStatus: 'da',
+      salaryIncomeLei: 10_000,
+    });
+    expect(result).toMatchObject({ value: 1_000 });
+  });
+
+  it('once VNA reaches the floor the salary amount is irrelevant', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
+      base: 40_000,
+      salaryStatus: 'da',
+      salaryIncomeLei: 100_000,
+    });
+    expect(result).toMatchObject({ value: 4_000 });
+  });
+});

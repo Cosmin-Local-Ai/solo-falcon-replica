@@ -1,12 +1,26 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../data/store';
 import { Card, Badge, Modal } from '../components/ui';
+import {
+  isSelectableRegime,
+  regimeRefusalReason,
+  selectableRegimes,
+} from '../domain/regimes';
+import type {
+  PfaPensionStatus,
+  PfaRegime,
+  PfaSalaryStatus,
+  PfaSocialInsuranceStatus,
+} from '../domain/models';
 
 // Canonical route hash keys (must match VALID_TABS.settings in App.tsx).
 // Mirrors the live SOLO settings page (docs/reference/settings.md);
 // the real app's "Abonament" tab is intentionally not replicated.
+// `fiscal` is NOT in the live SOLO page: it is where this replica edits the
+// PfaProfile contract (Phase 6) — the profile had no write path at all before.
 const TABS = [
   { key: 'company', label: 'PFA' },
+  { key: 'fiscal', label: 'Regim fiscal' },
   { key: 'einvoice', label: 'e-Factura' },
   { key: 'bankaccounts', label: 'Conturi bancare' },
   { key: 'account', label: 'Personal' },
@@ -19,7 +33,7 @@ interface SettingsProps {
 }
 
 export default function Settings({ initialTab, onTabChange }: SettingsProps) {
-  const { settings, updateSettings, toast } = useStore();
+  const { settings, updateSettings, profile, updateProfile, toast } = useStore();
   const [tab, setTab] = useState<TabKey>(
     TABS.some(t => t.key === initialTab) ? (initialTab as TabKey) : 'company'
   );
@@ -39,6 +53,25 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
 
   // --- e-Factura tab ---
   const [ef, setEf] = useState(settings.eFactura);
+
+  // --- Regim fiscal tab: the PfaProfile write path (Phase 6) ---
+  // Numbers are held as strings so an empty/invalid input can be shown as invalid
+  // instead of being coerced to 0 (the Revenues.tsx validation pattern).
+  const [fiscal, setFiscal] = useState({
+    regime: profile.regime,
+    caen: profile.caen,
+    pfaStartYear: String(profile.pfaStartYear),
+    fiscalYear: String(profile.fiscalYear),
+    pfaStartDate: profile.pfaStartDate ?? '',
+    salaryStatus: profile.salaryStatus,
+    salaryIncomeLei: profile.salaryIncomeLei === undefined ? '' : String(profile.salaryIncomeLei),
+    pensionStatus: profile.pensionStatus,
+    socialInsuranceStatus: profile.socialInsuranceStatus,
+    vatExempt: profile.vatExempt ? 'da' : 'nu',
+    cashFloorLei: String(profile.cashFloorLei),
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const regimeOptions = selectableRegimes();
 
   // --- Modals ---
   const [tvaOpen, setTvaOpen] = useState(false);
@@ -63,6 +96,57 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
   function saveEf() {
     updateSettings(s => ({ ...s, eFactura: ef }));
     toast('success', 'Setările e-Factura au fost salvate');
+  }
+
+  function saveFiscal() {
+    const e: Record<string, string> = {};
+    const year = Number(fiscal.pfaStartYear);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+      e.pfaStartYear = 'An invalid (2000–2100).';
+    }
+    const fy = Number(fiscal.fiscalYear);
+    if (!Number.isInteger(fy) || fy < 2000 || fy > 2100) {
+      e.fiscalYear = 'An invalid (2000–2100).';
+    }
+    if (fiscal.pfaStartDate && !/^\d{4}-\d{2}-\d{2}$/.test(fiscal.pfaStartDate)) {
+      e.pfaStartDate = 'Format așteptat: AAAA-LL-ZZ.';
+    }
+    // art. 174 alin. (7) lit. a) is a numeric condition, so when a salary exists the
+    // amount is mandatory — without it the engine cannot decide the 6 SM test and
+    // calcCass() must halt instead of guessing.
+    const salary = fiscal.salaryIncomeLei.trim() === '' ? undefined : Number(fiscal.salaryIncomeLei);
+    if (fiscal.salaryStatus === 'da') {
+      if (salary === undefined) {
+        e.salaryIncomeLei = 'Venitul brut anual din salarii este necesar pentru pragul de 6 salarii minime.';
+      } else if (!Number.isFinite(salary) || salary < 0) {
+        e.salaryIncomeLei = 'Valoare invalidă (lei, ≥ 0).';
+      }
+    }
+    const cash = Number(fiscal.cashFloorLei);
+    if (!Number.isFinite(cash) || cash < 0) e.cashFloorLei = 'Valoare invalidă (lei, ≥ 0).';
+    if (!isSelectableRegime(fiscal.regime)) {
+      e.regime = 'Regimul salvat nu poate fi calculat; alege un regim valabil pentru un PFA.';
+    }
+    setErrors(e);
+    if (Object.keys(e).length > 0) {
+      toast('error', 'Verifică datele din formular');
+      return;
+    }
+    updateProfile({
+      regime: fiscal.regime,
+      caen: fiscal.caen.trim(),
+      pfaStartYear: year,
+      fiscalYear: fy,
+      pfaStartDate: fiscal.pfaStartDate || undefined,
+      salaryStatus: fiscal.salaryStatus,
+      // No salary ⇒ no art. 174 alin. (7) lit. a) relief, and no stale amount left behind.
+      salaryIncomeLei: fiscal.salaryStatus === 'da' ? salary : undefined,
+      pensionStatus: fiscal.pensionStatus,
+      socialInsuranceStatus: fiscal.socialInsuranceStatus,
+      vatExempt: fiscal.vatExempt === 'da',
+      cashFloorLei: cash,
+    });
+    toast('success', 'Profilul fiscal a fost salvat');
   }
 
   function copyAdresa() {
@@ -114,11 +198,16 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       <div className="page-header">
         <div>
           <h1>Setări</h1>
-          <p className="sub">Datele PFA, e-Factura, conturi bancare și cont personal</p>
+          <p className="sub">Datele PFA, regim fiscal, e-Factura, conturi bancare și cont personal</p>
         </div>
         <div className="actions">
           {tab === 'company' && (
             <button className="btn btn-primary" onClick={saveCompany}>
+              Salvează
+            </button>
+          )}
+          {tab === 'fiscal' && (
+            <button className="btn btn-primary" onClick={saveFiscal}>
               Salvează
             </button>
           )}
@@ -393,6 +482,178 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               >
                 Gestionează cookies
               </button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {tab === 'fiscal' && (
+        <div style={{ display: 'grid', gap: 16, maxWidth: 720 }}>
+          {!isSelectableRegime(fiscal.regime) && (
+            <Card title="Regim fiscal nesusținut">
+              <p style={{ fontSize: 13, color: 'var(--danger)', margin: 0 }}>
+                {regimeRefusalReason(fiscal.regime)}
+              </p>
+            </Card>
+          )}
+
+          <Card title="Profil fiscal">
+            <div className="form-grid">
+              <div className="field">
+                <label>Regim fiscal <span className="req">*</span></label>
+                <select
+                  className="input"
+                  value={fiscal.regime}
+                  onChange={e => setFiscal({ ...fiscal, regime: e.target.value as PfaRegime })}
+                >
+                  {!isSelectableRegime(fiscal.regime) && (
+                    <option value={fiscal.regime} disabled>
+                      {fiscal.regime} — nu poate fi calculat
+                    </option>
+                  )}
+                  {regimeOptions.map(r => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+                <span className="hint">
+                  Cod fiscal art. 123 alin. (1). impozit pe profit nu este oferit: art. 13 alin. (1),
+                  art. 14 și art. 15 rezervă Titlul II persoanelor juridice, iar art. 120 a fost abrogat.
+                </span>
+                {errors.regime && <span className="error">{errors.regime}</span>}
+              </div>
+
+              <div className="field">
+                <label>Cod CAEN</label>
+                <input
+                  className="input"
+                  value={fiscal.caen}
+                  onChange={e => setFiscal({ ...fiscal, caen: e.target.value })}
+                />
+                <span className="hint">
+                  Codul CAEN nu schimbă regimul fiscal; nu susține o normă de venit (nicio regulă de
+                  normă nu a fost verificată pentru 2026).
+                </span>
+              </div>
+
+              <div className="field">
+                <label>Anul începerii activității <span className="req">*</span></label>
+                <input
+                  className="input"
+                  value={fiscal.pfaStartYear}
+                  onChange={e => setFiscal({ ...fiscal, pfaStartYear: e.target.value })}
+                />
+                {errors.pfaStartYear && <span className="error">{errors.pfaStartYear}</span>}
+              </div>
+
+              <div className="field">
+                <label>An fiscal de referință <span className="req">*</span></label>
+                <input
+                  className="input"
+                  value={fiscal.fiscalYear}
+                  onChange={e => setFiscal({ ...fiscal, fiscalYear: e.target.value })}
+                />
+                {errors.fiscalYear && <span className="error">{errors.fiscalYear}</span>}
+              </div>
+
+              <div className="field">
+                <label>Data înființării (fracțiune de an)</label>
+                <input
+                  className="input"
+                  type="date"
+                  value={fiscal.pfaStartDate}
+                  onChange={e => setFiscal({ ...fiscal, pfaStartDate: e.target.value })}
+                />
+                <span className="hint">
+                  Art. 118 alin. (3): venitul realizat într-o fracțiune de an se consideră venit anual —
+                  baza nu se proratează. Necompletat = profil fără dată de înființare.
+                </span>
+                {errors.pfaStartDate && <span className="error">{errors.pfaStartDate}</span>}
+              </div>
+
+              <div className="field">
+                <label>Venit din salarii</label>
+                <select
+                  className="input"
+                  value={fiscal.salaryStatus}
+                  onChange={e => setFiscal({ ...fiscal, salaryStatus: e.target.value as PfaSalaryStatus })}
+                >
+                  <option value="nu">nu</option>
+                  <option value="da">da</option>
+                </select>
+              </div>
+
+              <div className="field">
+                <label>Venit brut anual din salarii (lei)</label>
+                <input
+                  className="input"
+                  value={fiscal.salaryIncomeLei}
+                  disabled={fiscal.salaryStatus !== 'da'}
+                  onChange={e => setFiscal({ ...fiscal, salaryIncomeLei: e.target.value })}
+                />
+                <span className="hint">
+                  Art. 174 alin. (7) lit. a): diferența de la alin. (6) nu se datorează dacă salariul
+                  anual este cel puțin 6 salarii minime brute (24.300 lei în 2026). Sub acest prag
+                  diferența de 2.430 lei se datorează și nu se deduce (art. 118 alin. (2) lit. b)).
+                </span>
+                {errors.salaryIncomeLei && <span className="error">{errors.salaryIncomeLei}</span>}
+              </div>
+
+              <div className="field">
+                <label>Venituri din pensii</label>
+                <select
+                  className="input"
+                  value={fiscal.pensionStatus}
+                  onChange={e => setFiscal({ ...fiscal, pensionStatus: e.target.value as PfaPensionStatus })}
+                >
+                  <option value="nu">nu</option>
+                  <option value="da">da</option>
+                </select>
+                <span className="hint">
+                  Art. 174 alin. (7) lit. c): elimină doar diferența de la alin. (6); CAS se datorează
+                  doar în condițiile art. 150 alin. (1).
+                </span>
+              </div>
+
+              <div className="field">
+                <label>Asigurări sociale de sănătate</label>
+                <select
+                  className="input"
+                  value={fiscal.socialInsuranceStatus}
+                  onChange={e =>
+                    setFiscal({ ...fiscal, socialInsuranceStatus: e.target.value as PfaSocialInsuranceStatus })
+                  }
+                >
+                  <option value="obligatoriu">obligatoriu</option>
+                  <option value="exempt">scutit</option>
+                  <option value="neplata">neplata</option>
+                </select>
+                <span className="hint">
+                  Atenție: „scutit”/“neplata” zero CASS în motor, dar temeiul (art. 154 alin. (1)) nu a
+                  fost verificat — să nu fie folosit ca dovedire (docs/ai/STATE.md).
+                </span>
+              </div>
+
+              <div className="field">
+                <label>Scutire de TVA</label>
+                <select
+                  className="input"
+                  value={fiscal.vatExempt}
+                  onChange={e => setFiscal({ ...fiscal, vatExempt: e.target.value })}
+                >
+                  <option value="nu">nu</option>
+                  <option value="da">da</option>
+                </select>
+              </div>
+
+              <div className="field">
+                <label>Prag plăți în numerar (lei)</label>
+                <input
+                  className="input"
+                  value={fiscal.cashFloorLei}
+                  onChange={e => setFiscal({ ...fiscal, cashFloorLei: e.target.value })}
+                />
+                {errors.cashFloorLei && <span className="error">{errors.cashFloorLei}</span>}
+              </div>
             </div>
           </Card>
         </div>

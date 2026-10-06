@@ -8,6 +8,7 @@
  */
 import { z } from 'zod';
 import type { PfaProfile } from './models';
+import { PFA_REGIME_VALUES } from './regimes';
 
 export const pfaIdentitySchema = z.object({
   nume: z.string(),
@@ -29,10 +30,19 @@ export const pfaIdentitySchema = z.object({
 export const pfaProfileSchema: z.ZodType<PfaProfile> = z.object({
   id: z.string().min(1),
   pfaStartYear: z.number().int().min(1990).max(2100),
+  // Phase 6 additions are OPTIONAL on purpose. `pfaProfileSchema` validates the persisted
+  // profile (data/schema.ts:129 -> parsePfaProfile) and an invalid payload makes store.tsx
+  // reset the ENTIRE dataset to seed with no message — so a REQUIRED new field would
+  // destroy every existing `pfa-app-data-v2` payload. Proven by
+  // src/data/store.profileBackfill.test.tsx. Phase 7 owns the version field + migration.
+  pfaStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'pfaStartDate must be ISO YYYY-MM-DD').optional(),
   fiscalYear: z.number().int().min(1990).max(2100),
-  regime: z.enum(['impozit_pe_cit', 'impozit_pe_venit']),
+  regime: z.enum(PFA_REGIME_VALUES),
   caen: z.string(),
   salaryStatus: z.enum(['da', 'nu']),
+  // CASS only — CF art. 174 alin. (7) lit. a). Optional: absent means "unknown", which
+  // calcCass reports as REVIEW_REQUIRED rather than guessing in either direction.
+  salaryIncomeLei: z.number().min(0).finite().optional(),
   pensionStatus: z.enum(['da', 'nu']),
   otherIncome: z.array(z.enum(['imobiliare', 'autovehicule', 'dividende', 'concesiune', 'alte'])),
   socialInsuranceStatus: z.enum(['obligatoriu', 'exempt', 'neplata']),

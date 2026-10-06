@@ -1,6 +1,6 @@
 # STATE
 
-Last sync: **2026-10-06 (phase 5 — income tax: CF art. 118 sistem real corrected; B-1/B-13/B-14/B-15/B-16 closed, see `docs/ai/phases/05_income_tax.md`)**. Previous sync: **2026-10-06 (phase 3 — CAS corrected: CF art. 148 alin. (2) floor ladder + CF art. 150
+Last sync: **2026-10-06 (phase 6 — fiscal regime model + profile write path; B-9 closed for the write path, `norma_venit` added as a refused boundary, the salaried CASS 6 SM test now computes in both branches; see `docs/ai/phases/06_fiscal_profile.md`)**. Previous sync: **2026-10-06 (phase 5 — income tax: CF art. 118 sistem real corrected; B-1/B-13/B-14/B-15/B-16 closed, see `docs/ai/phases/05_income_tax.md`)**. Previous sync: **2026-10-06 (phase 3 — CAS corrected: CF art. 148 alin. (2) floor ladder + CF art. 150
 alin. (1) exemption; see `docs/ai/phases/03_cas.md`)**. Previous sync: **2026-10-05 (phase 2 — verified
 2026 fiscal baseline)**, HEAD `82073bff72934d1db7a854e5a693554174249785` on `master` (2026-10-04 07:13:22
 +0300, "Steps 27-34: …").
@@ -27,20 +27,20 @@ are untouched, and 48,600 / 97,200 / 291,600 are unchanged.
 `:48`) were **false**. The measured figures are below. The full claim→verdict table is in
 `docs/ai/steps/01_real_baseline.md` §6.1. No application code was modified during this sync.
 
-## Verification summary (counts re-measured 2026-10-06 after Phase 5; environment figures from 2026-10-05, all exit 0)
+## Verification summary (counts re-measured 2026-10-06 after Phase 6; environment figures from 2026-10-05, all exit 0)
 
-Re-measured after the Phase 5 income-tax correction (`tax.ts`, `calculators.ts`, `package2026.ts` and
-their tests + `e2e/dashboard.spec.ts`; `thresholds.ts` untouched); environment rows unchanged from the
-Phase 2 measurement:
+Re-measured after the Phase 6 regime + profile work (`domain/regimes.ts` new, `models.ts`, `schema.ts`,
+`derived.ts`, `tax.ts`, `fiscal/calculators.ts`, `pages/Settings.tsx`, `App.tsx` and their tests +
+`e2e/settings.spec.ts`); environment rows unchanged from the Phase 2 measurement:
 
 | Command | Result |
 |---|---|
 | `npx tsc --noEmit` | **0 errors** |
 | `npm run build` (`tsc && vite build`) | **exit 0** |
-| `npm run test` (vitest) | **36 test files, 489 unit tests, all passing** (450 at Phase 2, 463 after Phase 3, 482 after Phase 4; Phase 5 added 7 income-tax tests) |
-| `npm run test:e2e` (playwright) | **24 e2e tests, all passing** (`e2e/dashboard.spec.ts`; Phase 5 added the `impozit_pe_cit` data-integrity case) |
+| `npm run test` (vitest) | **38 test files, 531 unit tests, all passing** (450 at Phase 2, 463 after Phase 3, 482 after Phase 4, 489 after Phase 5; Phase 6 added 42) |
+| `npm run test:e2e` (playwright) | **29 e2e tests, all passing** (`e2e/dashboard.spec.ts` 24 + `e2e/settings.spec.ts` 5, new in Phase 6) |
 
-- Unit test files by area: 1 `src/`, 9 `src/components/`, 8 `src/data/`, 13 `src/domain/`
+- Unit test files by area: 1 `src/`, 9 `src/components/`, 9 `src/data/`, 14 `src/domain/`
   (incl. 2 `fiscal/`, 1 `snapshots/`), 5 `src/pages/`.
 - **Untested pages: `Documents.tsx`, `EFactura.tsx`, `Expenses.tsx`.**
 - e2e runs Chromium only — `playwright.config.ts` declares no `projects`;
@@ -60,13 +60,13 @@ Phase 2 measurement:
 |---|---|---|---|
 | 1 | Real baseline | **complete** (2026-10-05, docs only) | — |
 | 2 | Verified 2026 fiscal baseline + rule provenance (17-field `FiscalRule`, `rules.ts:19-37`) | **complete** (2026-10-05, `docs/ai/phases/02_fiscal_baseline.md`) | — |
-| 3 | CAS: flat clamp → SMBT **tier ladder** (not a clamp — `max_cas` is not a statutory cap) | **done 2026-10-06** (`phases/03_cas.md`) | U-5 closed; B-2 fixed; 24 SM threshold surface deferred to Phase 6 |
+| 3 | CAS: flat clamp → SMBT **tier ladder** (not a clamp — `max_cas` is not a statutory cap) | **done 2026-10-06** (`phases/03_cas.md`) | U-5 closed; B-2 fixed; 24 SM threshold surface deferred to Phase 6 → **not built there**, re-assigned to Phase 7/9 (phases/06 §7 item 5) |
 | 4 | CASS: the 6-SM floor is an art. 174 alin. (6) **top-up**, not a substitution or a review gate; `min_cass`/`max_cass` **derived**, not enforced as independent figures | **done 2026-10-06** (`phases/04_cass.md`) | ~~Q-CASS-MINBASE (U-2)~~ closed — floor is art. 174 alin. (6), conditional; B-3 fixed; B-6 CASS half fixed; **U-8 CLOSED 2026-10-06** (`research/09` §1) |
 | 5 | Income tax: the regime gate was inverted (`impozit_pe_venit` refused, `impozit_pe_cit` computed); the art. 118 alin. (2) base deducted the whole CASS, was neither prorated (alin. (2^2)/(2^3)) nor capped (alin. (2^4)), and discarded fiscal losses | **done 2026-10-06** (`phases/05_income_tax.md`) | B-1/B-13/B-14/B-15/B-16 closed; Q-30PCT-CAP confirmed phantom; loss **persistence** deferred to Phase 7; Q-NONDEDUCT-VAT (U-1) still unverified |
-| 6 | Profile-driven fiscal inputs; NORMA_VENIT | not started | Phase 3/4; Q-30PCT-CAP, Q-NETGROSS |
+| 6 | Profile-driven fiscal inputs; NORMA_VENIT | **done 2026-10-06** (`phases/06_fiscal_profile.md`) | B-9 closed for the profile write path (identity fields stay in Phase 7); regime model is single-source (`domain/regimes.ts`); `norma_venit` is a refused boundary with **no invented values**; salaried CASS computes in both art. 174 alin. (7) lit. a) branches; **not built: the 24 SM CAS tier-floor surface deferred here from Phase 3, CAEN-keyed rules, and a VAT regime richer than the boolean `vatExempt`** — all re-opened below (phases/06 §7 items 5, 8, 9) |
 | 7 | Identity source of truth + persisted-state migration (version field, migration chain, non-destructive corrupt recovery) | not started | Q-IDENTITY-SOURCE, Q-PERSISTENCE-VERSION |
 | 8 | Financial amount semantics: cash vs VAT vs tax-relevant income; VAT turnover basis | not started | Phase 5; Q-NETGROSS **resolved** — the base is net of VAT, so only the turnover basis is open; **B-17** (which amount is rounded, and where) |
-| 9 | Date semantics (issued / received / paid) | not started | Q-NETGROSS; Phase 6 |
+| 9 | Date semantics (issued / received / paid) | not started | Q-NETGROSS; Phase 6 **done** — but `pfaStartDate` still only produces the art. 118 alin. (3) line and is not fed to deadlines (phases/06 §7 item 6) |
 | 10 | Money representation (float lei → bani or decimal) | not started | Q-MONEY-UNIT; **B-17 — the seed tax is an exact half-cent (674,505 lei) and no rounding policy exists**; after Phases 3–5 |
 
 Phase scope, entry criteria and per-phase evidence: `docs/ai/PLAN.md` "Forward roadmap".
@@ -83,7 +83,7 @@ Phase scope, entry criteria and per-phase evidence: `docs/ai/PLAN.md` "Forward r
 | B-6 | **CAS part FIXED (Phase 3)**: `max_cas` (the phantom cap) removed; `tier1_cas`/`tier2_cas` are now read by `calcCas`. **CASS part FIXED (Phase 4)**: `min_cass`/`max_cass` removed — both are derived as `rate × min_base` / `rate × max_annual_base`; `max_cass` had no reader at all and `min_cass` was applied as an unconditional floor on the CASS value, which art. 174 alin. (6)-(7) do not support. **Multiples FIXED (Phase 5, 2026-10-06)**: `multiple_6x/12x/24x/72x` deleted from the `wage-reference` rule — no reader anywhere in `src/` or `e2e/`, and each equals `reference` × n | `package2026.ts:32-41`; `phases/03_cas.md` §2–3; `phases/04_cass.md` §3, §5; `phases/05_income_tax.md` §3 | closed |
 | B-7 | `docs/ai/STATE.md` and `docs/ai/PLAN.md` contained materially false claims | `01_real_baseline.md` §6.1, §6.2 | Phase 1 (this sync) |
 | B-8 | Two unreconciled identity stores: topbar reads `profile.identity`, Settings writes `settings.company` / `settings.personal` | `src/App.tsx:221-222` vs `src/pages/Settings.tsx:34-37,50-53`; reconciled only at `src/data/store.tsx:118` | Phase 7 |
-| B-9 | No UI path writes the profile — every fiscal input is fixed at seed values | `src/data/store.tsx:52,213` (`updateProfile` uncalled outside `derived.test.tsx:61`); `src/pages/Settings.tsx:369,373,377` (`disabled`) | Phases 6, 7 |
+| B-9 | **FIXED for the write path (Phase 6, 2026-10-06)** — no UI path wrote the profile: `updateProfile` existed but had **zero callers in the app**, so every fiscal input (regime, salary status, CAEN, VAT status, cash floor) was frozen at seed values. A `Regim fiscal` tab now writes it through `useStore().updateProfile`, with the regime select built from `selectableRegimes()` so `impozit_pe_cit` is never offered | `src/data/store.tsx:52,213` (was uncalled outside `derived.test.tsx:61`); now `src/pages/Settings.tsx` (`fiscal` tab) + `src/App.tsx:77` `VALID_TABS.settings`; proven by `src/pages/Settings.test.tsx` (+6) and `e2e/settings.spec.ts` (edit → reload → value comes back) | **closed for the fiscal profile (Phase 6)**; the **identity/personal** fields (still `disabled`: `Settings.tsx:268` company address, `:458`, `:462`, `:466` personal name/email/phone — line numbers re-measured after the Phase 6 edit) and the `profile.identity` ↔ `settings.*` duplication stay in **Phase 7** (B-8) |
 | B-10 | Every Settings write is inert downstream — no module outside `Settings.tsx` reads `settings.*` | grep over `src/`; `settings.cotaTva` seeded at `src/data/seed.ts:83`, read nowhere | Phase 7 |
 | B-11 | Corrupt payload silently resets the whole dataset to seed data; `dataOrigin` never surfaced | `src/data/store.tsx:109-114,132`; `:26-27,139,172` | Phase 7 |
 | B-12 | No persisted-schema `version`, therefore no migration path | `src/data/schema.ts:196-207`; only backfill is `store.tsx:118` | Phase 7 |
@@ -92,15 +92,26 @@ Phase scope, entry criteria and per-phase evidence: `docs/ai/PLAN.md` "Forward r
 | B-15 | **FIXED (Phase 5, 2026-10-06)** — the CAS/CASS deduction was neither prorated nor capped. CF art. 118 alin. (2) lit. b) deducts CAS and CASS **prorated** — alin. (2^2) by the art. 148 alin. (3) ratio, alin. (2^3) by the art. 170 alin. (1) ratio — and alin. (2^4) caps the combined deduction at „**nu poate depăși nivelul venitului net anual recalculat**". `tax.ts` subtracted both in full with no cap. **No numeric error resulted** — a single-source PFA has ratio = 1, and when `cas + cass > net` the old `taxable <= 0 → tax 0` branch happened to give the right tax — but the **lines over-reported the deduction**, and the moment a second income source exists (Phase 6) the proration would stop being a no-op and the numbers would go wrong silently | `src/domain/tax.ts:153-184`; `research/08` Q118-B; `phases/05_income_tax.md` §2, §4 | **closed (Phase 5, 2026-10-06)** — ratios and the alin. (2^4) cap are explicit and tested; single-source numbers unchanged by design |
 | B-16 | **PART FIXED (Phase 5, 2026-10-06)** — fiscal losses were silently discarded. CF art. 118 alin. (2) lit. a) takes reported losses off **before** sources are summed, and alin. (4)-(5) require report and compensation „**în limita a 70% din veniturile nete anuale, obținute din aceeași sursă de venit în următorii 5 ani fiscali consecutivi**", chronologically, personal and non-transferable, unabsorbed loss becoming definitive. `tax.ts:112-118` zeroed the tax and stored nothing. Current-year tax was right; **the loss itself was lost**, so the following year was over-taxed | `src/domain/tax.ts:87-96,189-209` (`lossCarryForward`); `src/domain/tax.test.ts:492,513`; `phases/05_income_tax.md` §3, §5 | **rule + surfacing closed (Phase 5)**; **still open:** persisting the record and reading prior-year losses back into alin. (2) lit. a) — needs Phase 7 schema work |
 | B-17 | **There is no rounding policy anywhere in the fiscal domain — the cent a user sees is decided by IEEE-754.** The seed-year income tax is exactly **674,505 lei: a half-cent** (`10% × 6.745,05`, from VNA 7.494,50). `computeTaxEstimate` stores raw float lei in every calculation line and in `totalDue`; the only rounding in the app is presentation. Measured in node: two algebraically identical arrangements of the same computation land on **different doubles** — `0.10 × 6745.05` → `674.5050000000001`, while `0.09 × 7494.5` and `6745.05 / 10` → the double whose shortest form is `674.505` (true value `674.504999999999995…`). `Intl.NumberFormat` renders **both** as `674,51`, but `toFixed(2)` renders the second group as **`674.50`**. So the shipped cent depends on the order of operations and on which formatter is used, not on any rule — and even a correct decimal policy must still choose a tie-break for a half-cent (half-up → `674,51`; half-even → `674,50`), which is a **legal** question (how the Declarația 120 is rounded) that has **not** been researched. Deliberately **not** fixed in Phase 5: inventing a rounding policy here would be inventing law | `src/domain/tax.ts:212-216` (float lei in lines + `totalDue`); `src/lib/format.ts:6-9` (`Intl.NumberFormat('ro-RO', {2,2})`, the only rounding); `src/pages/Dashboard.tsx` renders those formatted values; measured: `0.10*6745.05 = 674.5050000000001` vs `0.09*7494.5 = 674.505` → `toFixed(2)` `674.50` / `Intl` `674,51`; `phases/05_income_tax.md` §4 | **Phase 10** (`10_money_precision`: integer bani / `decimal.js-light` — declared at `package.json:16`, never imported — plus an explicit rounding policy **with its legal basis**); **Phase 8** owns making the amount semantics explicit (which figure is tax-relevant and where it is rounded) |
+| B-18 | **FIXED (Phase 6, 2026-10-06)** — the regime gate fell through for an **unrecognised** regime value: `regimeRefusalReason` returned `null` when the regime had no descriptor, i.e. "no refusal", so the engine would have computed Titlul IV amounts under a regime it has no rule for. The schema rejects unknown strings today, so this was latent — but the gate must not trust its input | `src/domain/regimes.ts` `regimeRefusalReason` (now refuses with a named provision, CF art. 123 alin. (1)); `src/domain/regimes.test.ts` "an unknown regime string is refused rather than accepted" | **closed (Phase 6, 2026-10-06)** |
+| B-19 | **`socialInsuranceStatus` `'exempt'` / `'neplata'` zero CASS with no verified legal basis.** CF art. 154 alin. (1) (the CASS exemption article) has never been retrieved in any source of record, yet the profile flag silently switches the whole contribution off. The UI now labels the values as unverified, but the engine still treats a stored flag as an exemption | `src/domain/models.ts:49` `PfaSocialInsuranceStatus` (consumed by `calcCass` via `src/domain/tax.ts`); `phases/06_fiscal_profile.md` §7 item 4 | **open — needs research (Q-CASS-EXEMPT), not a code fix.** Do not present a scutire CASS figure as lawful until art. 154 alin. (1) is retrieved |
 
 B-11 and B-12 are assigned to **Phase 7** rather than Phase 8: they are persistence/migration defects,
 and Phase 7 (identity unification) is the only phase in the plan that changes persisted-state shape —
 so the `version` field and migration chain belong there, not in amount semantics (Phase 8).
 
 Also open, not defects: fiscal loss **persistence** absent — the rule and the amount are surfaced
-(`tax.ts:192-201`), but `pierderiReportate` is still a named 0 term and no prior-year read exists
-(Phase 7); NORMA_VENIT absent
-(zero matches repo-wide); VAT regime is a boolean only (`models.ts:83`); single `date` field per
+(`tax.ts:203-217`), but `pierderiReportate` is still a named 0 term (`tax.ts:165`) and no prior-year read
+exists (Phase 7); NORMA_VENIT is now a **parseable but refused** regime value (`models.ts:32` union,
+`domain/regimes.ts` descriptor → `REVIEW_REQUIRED`, never selectable, **no norm values invented** —
+the 2026 package contains no norm-of-income rule), so the Phase 1 note "zero matches repo-wide" is
+superseded; the **24 SM CAS tier-floor surface** deferred from Phase 3 to Phase 6 was **not built**
+(`thresholds.ts` still has `ThresholdType = 'min-base' | 'max-base' | 'registration' | 'income'`;
+expressing the art. 148 alin. (2) ladder floors needs a new `ThresholdType` + UI label maps —
+re-assigned to Phase 7/9); `TaxInputsReference.chosenBase` is still **unwired** (no UI sets it, and
+the art. 180 alin. (1) CASS option stays unmodelled); `pensionStatus` is a stored **flag** while
+art. 174 alin. (7) lit. c) requires pension income *realised in that fiscal year*; there is still no
+**multi-source activity model** (`otherIncome` is a flag list, so the art. 118 alin. (2^2)/(2^3)
+ratios stay 1); VAT regime is a boolean only (`models.ts:83`); single `date` field per
 document (`aggregation.ts:85-87,96,102`); no release/year-resolution layer
 (`data/dashboard.ts:85-93`, `data/derived.ts:66-74`); `decimal.js-light` declared
 (`package.json:16`) and never imported.
@@ -133,6 +144,8 @@ document (`aggregation.ts:85-87,96,102`); no release/year-resolution layer
 | Q-CAS-EXEMPTION (U-5) | **CLOSED (Phase 3)** — the exemption is CF **art. 150 alin. (1)** (pensionari / asigurați în propriul sistem de asigurări sociale), **not art. 147** (the monthly D112 declarative duty). Implemented via `CalculatorInput.pensionStatus`; art. 150 alin. (2) covers only art. 137 alin. (1) lit. b^1), so `salaryStatus` deliberately does NOT exempt. | closed — `phases/03_cas.md` §1–2 |
 | Q-OMFP3254-HISTORY (U-7) | OMFP 3254/2017 amendment history — portal "Acțiuni suferite" returned 0 refs. In force is established via OMF 808/2026 art. 8's express scope (abrogates OMFP 870/2005 only). The net-of-VAT base rests on this act. | Phases 5, 8 |
 | Q-IDENTITY-SOURCE | Is `profile.identity` canonical, or `settings.company` / `settings.personal`? | Phase 7 |
+| Q-CASS-EXEMPT | **CF art. 154 alin. (1) has never been retrieved.** Which persons are genuinely scutiți de CASS in 2026, and does a stored profile flag ever suffice? Until then `socialInsuranceStatus: 'exempt' \| 'neplata'` zeroes the contribution on an unverified basis (**B-19**) | Phases 7+; any UI that offers a CASS exemption |
+| Q-MULTI-SOURCE | Does the app need a real multi-source activity model (art. 118 alin. (2^2)/(2^3) ratios ≠ 1)? Building one now would require inventing income categories the sources of record do not name | Phase 7+ (B-15's remaining gap) |
 | Q-PERSISTENCE-VERSION | Add a `version` field + migration chain? Keep all-or-nothing corrupt recovery? | Phase 7 |
 | Q-MONEY-UNIT | Integer bani or `decimal.js-light`? | Phase 10 |
 
@@ -153,6 +166,11 @@ Evidence for the original question framing: `docs/ai/steps/01_real_baseline.md` 
   `research/06`, the citation corrections, the Q-PROVENANCE-SCHEMA ruling, the UNVERIFIED register
   (U-1…U-7) and the consolidated-text-lag caveat. `docs/ai/phases/` is a separate namespace from the
   frozen `docs/ai/steps/` archive.
+- `docs/ai/phases/06_fiscal_profile.md` — **new (Phase 6)**; the regime model (one computable
+  regime, refusal wording, no invented norm values), the profile contract with every new field
+  `.optional()` and why (the `store.tsx:109-114` whole-dataset reset), the profile write path, both
+  art. 174 alin. (7) lit. a) branches with numbers, the open gaps (B-15 multi-source, `chosenBase`,
+  `pensionStatus`-as-flag, B-19, the unbuilt 24 SM threshold surface), and the traps for Phase 7.
 - `docs/ai/research/06_2026_fiscal_research.md` — **SUPERSEDED** by `phases/02_fiscal_baseline.md`.
   A banner was added at the top; the body is left intact as a research record. It was wrong on the CAS
   minimum base, the VAT threshold, the phantom 30% expense cap and the 16% component, and it

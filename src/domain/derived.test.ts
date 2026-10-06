@@ -333,4 +333,46 @@ describe('selectTaxDerived (Step 14, structural — no formula)', () => {
     expect(after.inputs.inputsKey).not.toBe(before.inputs.inputsKey);
     expect(after.inputs.cashFloorLei).toBe(10000);
   });
+
+  // Phase 6: the profile→engine contract gained the two fields the CASS 6 SM test and the
+  // art. 118 alin. (3) fractional-year rule need. They must be part of the cache key, or a
+  // profile edit would keep showing the previous calculation.
+  it('carries the Phase 6 profile fields into the engine inputs', () => {
+    const d = selectTaxDerived(
+      makeData({
+        profile: profile({
+          salaryStatus: 'da',
+          salaryIncomeLei: 30_000,
+          pfaStartDate: '2026-04-01',
+        }),
+      }),
+      activeRules2026(),
+    );
+    expect(d.inputs.salaryIncomeLei).toBe(30_000);
+    expect(d.inputs.pfaStartDate).toBe('2026-04-01');
+  });
+
+  it('absent Phase 6 fields become null, not undefined, so the cache key stays canonical', () => {
+    const d = selectTaxDerived(makeData(), activeRules2026());
+    expect(d.inputs.salaryIncomeLei).toBeNull();
+    expect(d.inputs.pfaStartDate).toBeNull();
+  });
+
+  it('changes inputsKey when the salary amount changes (the 6 SM test is an input, not a constant)', () => {
+    const before = selectTaxDerived(makeData(), activeRules2026());
+    const after = selectTaxDerived(
+      makeData({ profile: profile({ salaryStatus: 'da', salaryIncomeLei: 30_000 }) }),
+      activeRules2026(),
+    );
+    expect(after.inputs.inputsKey).not.toBe(before.inputs.inputsKey);
+  });
+
+  it('changes inputsKey when the start date changes', () => {
+    const before = selectTaxDerived(makeData(), activeRules2026());
+    const after = selectTaxDerived(
+      makeData({ profile: profile({ pfaStartDate: '2026-04-01' }) }),
+      activeRules2026(),
+    );
+    expect(after.inputs.inputsKey).not.toBe(before.inputs.inputsKey);
+  });
 });

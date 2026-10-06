@@ -15,7 +15,7 @@ function makeProfile(overrides: Partial<PfaProfile> = {}): PfaProfile {
 }
 
 function makeInputs(overrides: Partial<TaxInputsReference> = {}): TaxInputsReference {
-  return { regime: 'impozit_pe_venit', salaryStatus: 'da', pensionStatus: 'nu', otherIncome: [], socialInsuranceStatus: 'obligatoriu', vatExempt: false, cashFloorLei: 0, fiscalYear: 2026, inputsKey: 'p1:2026:impozit_pe_venit:obligatoriu', ...overrides };
+  return { regime: 'impozit_pe_venit', salaryStatus: 'da', pensionStatus: 'nu', otherIncome: [], socialInsuranceStatus: 'obligatoriu', vatExempt: false, cashFloorLei: 0, fiscalYear: 2026, salaryIncomeLei: null, pfaStartDate: null, inputsKey: 'p1:2026:impozit_pe_venit:obligatoriu', ...overrides };
 }
 
 describe('computeTaxEstimate', () => {
@@ -516,5 +516,163 @@ describe('computeTaxEstimate', () => {
     if (res.status !== 'computed') return;
     expect(res.lines.find((l) => l.label === 'Pierdere fiscală pe sursă (art. 118 alin. (2) lit. a))')).toBeUndefined();
     expect(res.lossCarryForward).toBeUndefined();
+  });
+});
+
+/**
+ * Phase 6 — the profile now supplies the engine the salary amount that CF art. 174 alin. (7)
+ * lit. a) actually tests („venituri din salarii și asimilate salariilor la un nivel cel puțin
+ * egal cu 6 salarii minime brute”). Before Phase 6 a salaried PFA with net income under the
+ * 6 SM floor got no CASS estimate at all (REVIEW_REQUIRED). Both branches must compute now
+ * (docs/ai/phases/06_fiscal_profile.md §6).
+ */
+describe('salaried PFA under the 6 SM floor — both art. 174 alin. (7) lit. a) branches compute', () => {
+  const money = {
+    revenues: 30_000,
+    expenses: 10_000,
+    revenuesNet: 30_000,
+    expensesNet: 10_000,
+  };
+
+  it('salary at least 6 SM (24,300 lei in 2026): CASS = 10% × net, no top-up', async () => {
+    const res = await computeTaxEstimate({
+      inputs: makeInputs({ salaryStatus: 'da', salaryIncomeLei: 30_000 }),
+      profile: makeProfile(),
+      ...money,
+      ruleRelease: PFA_2026_RELEASE,
+      rules: PFA_2026_SYSTEM_REAL_PACKAGE,
+    });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    // VNA 20,000 < 24,300, so alin. (6) would ask for a top-up; alin. (7) lit. a) removes it.
+    expect(res.lines.find((l) => l.label === 'CASS (10%)')?.value).toBe(2_000);
+    expect(
+      res.lines.find((l) => l.label === 'CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))')?.value,
+    ).toBe(2_000);
+    // CAS 0 (net < 12 SM) + CASS 2,000 + impozit 10% × (20,000 − 2,000) = 1,800.
+    expect(res.output.total).toBe(3_800);
+  });
+
+  it('salary below 6 SM: the alin. (6) difference is owed and is not deductible (B-13 shape)', async () => {
+    const res = await computeTaxEstimate({
+      inputs: makeInputs({ salaryStatus: 'da', salaryIncomeLei: 20_000 }),
+      profile: makeProfile(),
+      ...money,
+      ruleRelease: PFA_2026_RELEASE,
+      rules: PFA_2026_SYSTEM_REAL_PACKAGE,
+    });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    expect(res.lines.find((l) => l.label === 'CASS (10%)')?.value).toBe(2_430);
+    // Only 10% × VNA is deductible — art. 118 alin. (2) lit. b) excludes the alin. (6) difference.
+    expect(
+      res.lines.find((l) => l.label === 'CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))')?.value,
+    ).toBe(2_000);
+    // Same taxable base as the relieved branch, but 430 lei more payable.
+    expect(
+      res.lines.find((l) => l.label === 'Venit net anual impozabil (art. 118 alin. (2) lit. b))')?.value,
+    ).toBe(18_000);
+    expect(res.output.total).toBe(4_230);
+  });
+
+  it('with no salary amount the engine still refuses to guess the 6 SM test', async () => {
+    const res = await computeTaxEstimate({
+      inputs: makeInputs({ salaryStatus: 'da', salaryIncomeLei: null }),
+      profile: makeProfile(),
+      ...money,
+      ruleRelease: PFA_2026_RELEASE,
+      rules: PFA_2026_SYSTEM_REAL_PACKAGE,
+    });
+    expect(res.status).toBe('review_required');
+    if (res.status !== 'review_required') return;
+    expect(res.reason).toContain('art. 174 alin. (7) lit. a)');
+  });
+});
+
+/**
+ * Phase 6 regime surface: `norma_venit` parses (so an old or foreign payload is never
+ * discarded) but must never produce a number, and no norm-of-income value is invented.
+ */
+describe('uncomputable regimes surface as REVIEW_REQUIRED with a reason', () => {
+  it('norma_venit → review_required naming art. 68 alin. (1) and refusing to invent values', async () => {
+    const res = await computeTaxEstimate({
+      inputs: makeInputs({ regime: 'norma_venit' }),
+      profile: makeProfile({ regime: 'norma_venit' }),
+      revenues: 50_000,
+      expenses: 10_000,
+      revenuesNet: 50_000,
+      expensesNet: 10_000,
+      ruleRelease: PFA_2026_RELEASE,
+      rules: PFA_2026_SYSTEM_REAL_PACKAGE,
+    });
+    expect(res.status).toBe('review_required');
+    if (res.status !== 'review_required') return;
+    expect(res.reason).toContain('norma_venit');
+    expect(res.reason).toContain('art. 68 alin. (1)');
+    expect(res.reason).toContain('nu inventăm valori');
+  });
+
+  it('impozit_pe_cit keeps the data-integrity wording pinned by Phase 5 (B-14)', async () => {
+    const res = await computeTaxEstimate({
+      inputs: makeInputs({ regime: 'impozit_pe_cit' }),
+      profile: makeProfile({ regime: 'impozit_pe_cit' }),
+      revenues: 50_000,
+      expenses: 10_000,
+      revenuesNet: 50_000,
+      expensesNet: 10_000,
+      ruleRelease: PFA_2026_RELEASE,
+      rules: PFA_2026_SYSTEM_REAL_PACKAGE,
+    });
+    expect(res.status).toBe('review_required');
+    if (res.status !== 'review_required') return;
+    expect(res.reason).toContain('nu poate aparține unui PFA');
+    expect(res.reason).toContain('art. 13 alin. (1)');
+    expect(res.reason).toContain('art. 120');
+  });
+});
+
+/**
+ * CF art. 118 alin. (3): „Veniturile … ce se realizează într-o fracțiune de an … se consideră
+ * venit anual.” A mid-year start date must therefore NOT prorate the base — it is recorded so
+ * the user can see the rule was applied, not silently multiplied by a fraction.
+ */
+describe('mid-year start date (art. 118 alin. (3))', () => {
+  const money = {
+    revenues: 30_000,
+    expenses: 10_000,
+    revenuesNet: 30_000,
+    expensesNet: 10_000,
+  };
+
+  it('adds an explicit line and leaves the base unprorated', async () => {
+    const res = await computeTaxEstimate({
+      inputs: makeInputs({ pfaStartDate: '2026-04-01', salaryStatus: 'nu' }),
+      profile: makeProfile({ pfaStartDate: '2026-04-01' }),
+      ...money,
+      ruleRelease: PFA_2026_RELEASE,
+      rules: PFA_2026_SYSTEM_REAL_PACKAGE,
+    });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    const line = res.lines.find((l) => l.label === 'Fracțiune de an (art. 118 alin. (3)): venit anual');
+    expect(line?.value).toBe(20_000);
+    expect(
+      res.lines.find((l) => l.label === 'Venit net anual impozabil (art. 118 alin. (2) lit. b))')?.value,
+    ).toBe(18_000);
+  });
+
+  it('a 1 January start adds no line (nothing to explain)', async () => {
+    const res = await computeTaxEstimate({
+      inputs: makeInputs({ pfaStartDate: '2026-01-01', salaryStatus: 'nu' }),
+      profile: makeProfile({ pfaStartDate: '2026-01-01' }),
+      ...money,
+      ruleRelease: PFA_2026_RELEASE,
+      rules: PFA_2026_SYSTEM_REAL_PACKAGE,
+    });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    expect(
+      res.lines.find((l) => l.label === 'Fracțiune de an (art. 118 alin. (3)): venit anual'),
+    ).toBeUndefined();
   });
 });

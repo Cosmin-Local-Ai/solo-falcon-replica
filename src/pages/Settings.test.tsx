@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { StoreProvider } from '../data/store';
+import { seedData } from '../data/seed';
+import type { PfaProfile } from '../domain/models';
 import Settings from './Settings';
 
 // Must match STORAGE_KEY in src/data/store.tsx (module-private, not exported).
@@ -98,5 +100,191 @@ describe('Settings persistence (Defect 3 regression)', () => {
     // Seed: exactly one bank account (BCR / RON) — saving must not duplicate it.
     expect(document.querySelectorAll('tbody tr').length).toBe(1);
     expect(screen.getByText('BCR')).toBeInTheDocument();
+  });
+});
+
+/**
+ * Phase 6: the PfaProfile write path. Before this phase `updateProfile` had no UI caller
+ * at all, so every fiscal input was fixed at seed values (docs/ai/phases/06_fiscal_profile.md §5).
+ */
+function openFiscalTab(): void {
+  act(() => {
+    screen.getByRole('button', { name: 'Regim fiscal' }).click();
+  });
+}
+
+// The <label>s in this app have no htmlFor and do not wrap their control, so label text
+// is matched through the .field wrapper the pages all use (styles/components.css).
+function fieldControl(label: string): HTMLInputElement | HTMLSelectElement {
+  const fields = Array.from(document.querySelectorAll<HTMLElement>('.field'));
+  const field = fields.find(f => {
+    const l = f.querySelector('label');
+    return (l?.textContent ?? '').trim().startsWith(label);
+  });
+  const control = field?.querySelector('input, select');
+  if (!control) throw new Error(`no .field control found for label "${label}"`);
+  return control as HTMLInputElement | HTMLSelectElement;
+}
+
+function selectField(label: string, value: string): void {
+  act(() => {
+    fireEvent.change(fieldControl(label), { target: { value } });
+  });
+}
+
+function inputField(label: string, value: string): void {
+  act(() => {
+    fireEvent.change(fieldControl(label), { target: { value } });
+  });
+}
+
+function clickSave(): void {
+  const saveButtons = screen.getAllByRole('button', { name: 'Salvează' });
+  act(() => {
+    saveButtons[0].click();
+  });
+}
+
+function readStoredProfile(): PfaProfile {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  expect(raw, 'expected data to be persisted to localStorage').not.toBeNull();
+  return (JSON.parse(raw as string) as { profile: PfaProfile }).profile;
+}
+
+describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  it('offers only regimes a PFA can actually hold', () => {
+    render(
+      <StoreProvider>
+        <Settings />
+      </StoreProvider>,
+    );
+    openFiscalTab();
+
+    const regime = fieldControl('Regim fiscal') as HTMLSelectElement;
+    expect(Array.from(regime.options).map(o => o.value)).toEqual(['impozit_pe_venit']);
+    const optionText = Array.from(regime.options).map(o => o.textContent ?? '').join(' | ');
+    expect(optionText.toLowerCase()).not.toContain('impozit pe profit');
+    expect(optionText.toLowerCase()).not.toContain('norm');
+  });
+
+  it('persists profile edits to localStorage when "Salvează" is clicked', () => {
+    render(
+      <StoreProvider>
+        <Settings />
+      </StoreProvider>,
+    );
+    openFiscalTab();
+
+    inputField('Cod CAEN', '6202');
+    inputField('Data înființării', '2026-04-01');
+    selectField('Venit din salarii', 'da');
+    inputField('Venit brut anual din salarii', '30000');
+    clickSave();
+
+    const profile = readStoredProfile();
+    expect(profile.caen).toBe('6202');
+    expect(profile.pfaStartDate).toBe('2026-04-01');
+    expect(profile.salaryStatus).toBe('da');
+    expect(profile.salaryIncomeLei).toBe(30000);
+    // Untouched fields keep their seed values (shallow merge must not blank them).
+    expect(profile.regime).toBe('impozit_pe_venit');
+    expect(profile.pfaStartYear).toBe(2020);
+    expect(profile.identity.nume).toBe('Popescu Andrei');
+  });
+
+  it('restores saved profile values from localStorage on remount', () => {
+    const first = render(
+      <StoreProvider>
+        <Settings />
+      </StoreProvider>,
+    );
+    openFiscalTab();
+    inputField('Cod CAEN', '6202');
+    selectField('Venit din salarii', 'da');
+    inputField('Venit brut anual din salarii', '30000');
+    clickSave();
+
+    act(() => {
+      first.unmount();
+    });
+    render(
+      <StoreProvider>
+        <Settings />
+      </StoreProvider>,
+    );
+    openFiscalTab();
+
+    expect(screen.getByDisplayValue('6202')).toBeInTheDocument();
+    expect((fieldControl('Venit din salarii') as HTMLSelectElement).value).toBe('da');
+    expect(screen.getByDisplayValue('30000')).toBeInTheDocument();
+  });
+
+  it('refuses to save a salary without the annual amount the 6 SM test needs', () => {
+    render(
+      <StoreProvider>
+        <Settings />
+      </StoreProvider>,
+    );
+    openFiscalTab();
+
+    selectField('Venit din salarii', 'da');
+    clickSave();
+
+    expect(
+      screen.getByText(/Venitul brut anual din salarii este necesar/),
+    ).toBeInTheDocument();
+    // Nothing half-saved: the stored profile still says there is no salary.
+    expect(readStoredProfile().salaryStatus).toBe('nu');
+    expect(readStoredProfile().salaryIncomeLei).toBeUndefined();
+  });
+
+  it('drops the stale salary amount when the salary is removed', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        ...seedData,
+        profile: {
+          ...seedData.profile,
+          salaryStatus: 'da',
+          salaryIncomeLei: 30000,
+        },
+      }),
+    );
+    render(
+      <StoreProvider>
+        <Settings />
+      </StoreProvider>,
+    );
+    openFiscalTab();
+
+    selectField('Venit din salarii', 'nu');
+    clickSave();
+
+    const profile = readStoredProfile();
+    expect(profile.salaryStatus).toBe('nu');
+    expect(profile.salaryIncomeLei).toBeUndefined();
+  });
+
+  it('rejects a negative cash floor instead of persisting it', () => {
+    render(
+      <StoreProvider>
+        <Settings />
+      </StoreProvider>,
+    );
+    openFiscalTab();
+
+    inputField('Prag plăți în numerar', '-5');
+    clickSave();
+
+    expect(screen.getByText('Valoare invalidă (lei, ≥ 0).')).toBeInTheDocument();
+    expect(readStoredProfile().cashFloorLei).toBe(0);
   });
 });

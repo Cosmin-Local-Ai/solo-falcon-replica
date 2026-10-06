@@ -89,12 +89,18 @@ export function selectFinancialDerived(data: AppData, asOfDate: string): Financi
 export interface TaxInputsReference {
   regime: PfaRegime;
   salaryStatus: PfaSalaryStatus;
+  /** CF art. 174 alin. (7) lit. a) input — salary income realised in `fiscalYear`, in lei.
+   * `null` means "not recorded" (a payload written before Phase 6); `undefined` would make
+   * the canonical key unstable. CASS only — never an input to CAS (CF art. 150 alin. (2)). */
+  salaryIncomeLei: number | null;
   pensionStatus: PfaPensionStatus;
   otherIncome: PfaOtherIncomeFlag[];
   socialInsuranceStatus: PfaSocialInsuranceStatus;
   vatExempt: boolean;
   cashFloorLei: number;
   fiscalYear: number;
+  /** Exact PFA start date (ISO `YYYY-MM-DD`) or null. Read by the engine only for CF art. 118 alin. (3). */
+  pfaStartDate: string | null;
   /** Deterministic reference key (canonical JSON) for the input set — provenance, not a formula hash. */
   inputsKey: string;
 }
@@ -131,12 +137,14 @@ export function selectTaxDerived(data: AppData, activeRules: FiscalRule[]): TaxD
   const inputs: Omit<TaxInputsReference, 'inputsKey'> = {
     regime: profile.regime,
     salaryStatus: profile.salaryStatus,
+    salaryIncomeLei: profile.salaryIncomeLei ?? null,
     pensionStatus: profile.pensionStatus,
     otherIncome: [...profile.otherIncome].sort(),
     socialInsuranceStatus: profile.socialInsuranceStatus,
     vatExempt: profile.vatExempt,
     cashFloorLei: profile.cashFloorLei,
     fiscalYear: profile.fiscalYear,
+    pfaStartDate: profile.pfaStartDate ?? null,
   };
   return {
     status: 'REVIEW_REQUIRED',
