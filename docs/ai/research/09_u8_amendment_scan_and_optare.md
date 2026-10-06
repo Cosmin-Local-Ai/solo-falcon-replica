@@ -113,9 +113,32 @@ page inserts a „Notă" reproducing **art. 8 of OUG 8/2026** (the 3% bonificaț
 
 **Modelling consequence.** The elective base is a flat **6 × SMG as of 1 January of the contribution year**,
 at the **art. 156** rate. Art. 180 alin. (1) lit. a) is exactly the zero/loss-year case Phase 4 identified.
-**The rate value itself is not quoted in this pass** — see §4. It must not be assumed equal to the
-art. 174 alin. (6) top-up rate: the top-up is **10% × 24,300 = 2,430**, whereas an art. 156 rate of 16%
-would make elective CASS **3,888**. Those are different obligations and must not be blurred.
+
+### ⚠️ CORRECTION — art. 156 is **10%**, not 16%. The "3,888" figure in the first draft of this file was WRONG.
+
+An earlier pass carried an unquoted parenthetical claiming art. 156 = 16%. It is not. Verbatim:
+
+> **Articolul 156 — Cota de contribuție de asigurări sociale de sănătate:**
+> „Cota de contribuție de asigurări sociale de sănătate este de **10%** și se datorează de către persoanele
+> fizice care au calitatea de angajați sau pentru care există obligația plății contribuției de asigurări
+> sociale de sănătate, potrivit prezentei legi."
+> *(la 01-01-2018, Articolul 156, Secțiunea a 2-a, Cap. III, Titlul V — modificat de **Punctul 69, Articolul I
+> din OUG nr. 79/2017, MO nr. 885 din 10.11.2017**)*
+
+A single unnumbered paragraph — no alineate. **16% is the pre-2018 CASS rate**; OUG 79/2017 cut it to 10%
+eff. 01.01.2018. Do not confuse it with CF art. 224 alin. (4) lit. b) (Titlul VIII/IX, amended by Legea
+141/2025 clause 41), which does carry a "16%" and is not a CASS rate.
+
+**So the elective CASS and the art. 174 alin. (6) minimum are the same rate and the same base — both
+10% × 6 SM = 2,430 at SM = 4,050.** The distinction is the **route**, not the amount:
+- **art. 174 alin. (6)** — a *floor topped up to* 6 SM when the actual base is below 6 SM.
+- **art. 180 alin. (2)** — a *flat elective* 6 SM regardless of the actual base.
+
+They must not double-count, per **art. 174 alin. (9)**: „contribuția datorată potrivit art. 180 alin. (2) …
+**este luată în calcul** la stabilirea contribuției anuale calculate potrivit art. 170 alin. (1)".
+
+**Ceiling, from the same read** — art. 170 alin. (1): the base „…care nu poate fi mai mare decât cea
+corespunzătoare unei baze anuale de calcul egale cu nivelul de **72 de salarii minime brute pe țară**."
 
 ---
 
@@ -167,4 +190,79 @@ Adjacent, directly relevant to the optare (verbatim, same article):
    (Titlul V, MO 699/25.07.2025, eff. 01-08-2025).
 5. **Titlul II Cap. I art. 13–15 full read** for any „persoană fizică" hook — not done. This is the one
    upgrade that would move the regime finding in `research/08` from MEDIUM-HIGH to HIGH.
-6. **CF art. 156 — the CASS rate value** — referenced by art. 180 alin. (2) but not quoted in this pass.
+6. ~~**CF art. 156 — the CASS rate value**~~ — **RESOLVED: 10%**, quoted in §2 above. The 16% figure was an
+   unverified parenthetical and was wrong.
+
+---
+
+## 5. Legea 141/2025 — positive scan. Attribution gap **CLOSED** — HIGH
+
+`https://legislatie.just.ro/Public/FormaPrintabila/00000G2OBVHGBS2FEHE17GOK32TRSP3T` — 167,290 chars, full text.
+
+| Test | Result |
+|---|---|
+| `articolul 118` (exact) | **0 hits** |
+| `articolul 123` (exact) | **0 hits** |
+| raw substring `123` anywhere in the act | **0 hits** — the string does not occur at all |
+| raw substring `118` anywhere | 7 hits, **all false positives**: 3× „Decretul-lege nr. 118/1990" (an act this law separately amends), 3× „MONITORUL OFICIAL nr. **1182** din 19.12.2025" (substring), 1× „Legea nr. **118**/2002 pentru instituirea indemnizației de merit" |
+
+⚠️ **The „Decretul-lege nr. 118/1990" hits are the trap** — Legea 141/2025's own Art. I and Art. XXV deal with
+that decree, so a naive `118` grep on this act is guaranteed to mislead.
+
+Sanity check: 89 occurrences of „La articolul"; the CF amendment list (Art. II) enumerated cleanly as
+clauses 1–49 covering CF art. 43, 46^1, 62, 97, 97^1, 100, 110, 114, 130, 153, 154, 155, 157^4, 157^6–9, 168,
+169, 169^2, 174, 180, 182, 182^1, 183, 220^8, 224, 291, 294, 297. **Art. 118 and art. 123 are absent.**
+
+**Net attribution position** — across the four acts read inside (Legea 239/2025, OUG 89/2025, OUG 8/2026,
+Legea 141/2025): **no 2025–2026 act amends CF art. 118**, and the **only** one amending art. 123 is
+**Legea 239/2025** (Art. XII pct. 16, alin. (1^2) and (2)). The MEDIUM on attribution is retired.
+
+---
+
+## 6. Titlul II Cap. I art. 13–15 — no „persoană fizică" hook. Regime finding **HIGH**
+
+**Articolul 13 — Contribuabili** (operative personal scope; art. 14 is the coverage mirror):
+> „(1) Sunt obligate la plata impozitului pe profit, conform prezentului titlu, următoarele persoane,
+> denumite în continuare contribuabili:
+> a) **persoanele juridice române**, cu excepțiile prevăzute la alin. (2);
+> b) persoanele juridice străine care desfășoară activitate prin intermediul unui sediu permanent/mai
+> multor sedii permanente în România;
+> c) persoanele juridice străine rezidente în România potrivit locului conducerii efective;
+> d) persoanele juridice străine care realizează venituri astfel cum sunt prevăzute la art. 12 lit. h);
+> e) persoanele juridice cu sediul social în România, înființate potrivit legislației europene;
+> f) persoanele juridice străine rezidente într-un stat terț … elemente hibride … cap. III^1;
+> g) entitatea transparentă fiscal … elementelor hibride inversate … art. 40^7."
+
+Every litera is a **persoană juridică** or a fiscal-transparent entity. **alin. (2) is a list of exclusions
+that only removes *persoane juridice române*** (Trezoreria Statului, BNR, micro-enterprises at lit. h)…) —
+it never admits anyone. **Art. 14**: all three litera are persoane juridice. **Art. 15**: „persoane juridice
+române", „organizațiilor nonprofit, organizațiilor sindicale, organizațiilor patronale", „Formele asociative …
+**cu personalitate juridică**".
+
+The only string „persoanele fizice" in art. 13–15 is **art. 15 alin. (2) lit. o)**:
+> „o) sumele primite din impozitul pe venit datorat de persoanele fizice, potrivit prevederilor titlului IV;"
+
+**Not a hook** — it is a *venit neimpozabil* line for nonprofits receiving the 2% redirection of personal
+income tax. It runs the other way, treating Titlul IV tax owed by persoane fizice as external to the
+entity's own profit base.
+
+**Verdict: HIGH.** Titlul II's personal scope is closed to legal entities at three independent points
+(art. 13 alin. (1), art. 14, art. 15). A PFA cannot be a CIT taxpayer in 2026 — compounded by art. 120 CF
+(the option vehicle) being Abrogat eff. 01.01.2025.
+
+---
+
+## 7. Still unverified after this pass
+
+1. **SMG at 1 January 2026** — not retrieved by the researcher. **Closed locally instead:** `PLAN.md` and
+   `phases/02` §3 already establish SM = **4,050 lei from 01.01.2026** (HG 1.506/2024, MO I 1185/28.11.2024;
+   HG 146/2026, MO 196/13.03.2026, which abrogă HG 1.506/2024 from 01.07.2026 when SM becomes 4,325). Both
+   the art. 180 alin. (2) and art. 174 alin. (6) bases anchor to the **1 January** SM — art. 180 alin. (2)
+   says so expressly („în vigoare la data de 1 ianuarie a anului pentru care se datorează contribuția") and
+   ANAF's own ceiling statement confirms it („291.600 lei = 72 × 4.050 lei"). **So 2,430 / 291,600 are right
+   for 2026 and the 1 iulie rise to 4,325 does not move them.**
+2. **Whether any 2025–2026 act outside the four read touches art. 118/123.** Four acts were scanned inside,
+   not every act in the period.
+3. **Legea 141/2025 Art. II clauses 37–38** not captured by the header regex (list jumps 36 → 39); the index
+   indicates CF art. 182 and the new art. 182^1. Irrelevant to 118/123 — the `123` substring test returned 0
+   across the whole act.

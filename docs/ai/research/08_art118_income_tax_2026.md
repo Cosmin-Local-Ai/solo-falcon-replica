@@ -183,7 +183,7 @@ income source exists (Phase 6 profile fields), and because alin. (2^4) is **not*
 
 ---
 
-## Q-REGIME — can a PFA be a CIT taxpayer at all? **No.** — MEDIUM-HIGH
+## Q-REGIME — can a PFA be a CIT taxpayer at all? **No.** — **HIGH**
 
 **There is no exclusion article, because the exclusion runs the other way: Titlul II never reaches a PFA
 in the first place.**
@@ -216,9 +216,13 @@ combination for a PFA**. So the income-tax gate must compute for `impozit_pe_ven
 applies". It also means the `PfaRegime` union itself offers a choice that cannot exist: see **B-14** and
 the Phase 6 note in `PLAN.md`.
 
-**Confidence MEDIUM-HIGH.** Evidence: art. 14 lit. a) + art. 61 + art. 68 alin. (1) closed list +
-abrogated art. 120 + two negative scans. What would raise it to HIGH: a positive read of Titlul II
-Cap. I (art. 13–15) confirming no „persoană fizică” hook anywhere — **not done**.
+**Confidence HIGH** (upgraded from MEDIUM-HIGH). Titlul II's personal scope is closed to legal entities at
+**three independent points** — art. 13 alin. (1) (every litera a persoană juridică or a fiscal-transparent
+entity; alin. (2) only *removes* persoane juridice române, it never admits anyone), art. 14, and art. 15
+(„Formele asociative … **cu personalitate juridică**"). The only „persoanele fizice" string in art. 13–15 is
+art. 15 alin. (2) lit. o) — „sumele primite din impozitul pe venit datorat de persoanele fizice, potrivit
+prevederilor titlului IV" — which is a *venit neimpozabil* line for nonprofits receiving the 2% redirection,
+not a hook; it runs the other way. Full quotes in `research/09` §6.
 
 ---
 
@@ -230,7 +234,7 @@ Cap. I (art. 13–15) confirming no „persoană fizică” hook anywhere — **
 | CAS/CASS proration + alin. (2^4) cap | **HIGH** — new, and it is Phase 5's real work |
 | Loss carry-forward rule | **HIGH** — 5 ani / 70% / same source / automatic |
 | 10% rate, art. 123 alin. (1) | HIGH (unchanged from `phases/02`) |
-| Can a PFA be a CIT taxpayer? | **MEDIUM-HIGH — no.** art. 14 lit. a) + abrogated art. 120 (eff. 01.01.2025). Raises to HIGH on a full read of Titlul II art. 13–15 |
-| Attribution of art. 118/123 to specific amending acts | **MEDIUM** — consolidation-side only, no positive scan of the acts |
+| Can a PFA be a CIT taxpayer? | **HIGH — no.** art. 13 alin. (1) / art. 14 / art. 15 all confine Titlul II to persoane juridice; art. 120 (the option) Abrogat eff. 01.01.2025 |
+| Attribution of art. 118/123 to specific amending acts | **HIGH** — four acts scanned inside (Legea 239/2025, OUG 89/2025, OUG 8/2026, Legea 141/2025): **no 2025-2026 act amends art. 118**; only Legea 239/2025 amends art. 123. See `research/09` §5 |
 | Whether a taxpayer may *decline* the loss report (ANAF DU 212 practice) | **UNRESOLVED** — text is mandatory; administrative practice not checked |
 | Whether a PFA that opted for **impozit pe profit** is wholly outside art. 61 lit. a) / art. 68 / art. 118 | **CLOSED — the situation cannot arise for 2026** (see Q-REGIME above) |
