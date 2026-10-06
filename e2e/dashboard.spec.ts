@@ -142,18 +142,19 @@ test.describe('Dashboard — section content (seed data)', () => {
     ).toBeVisible();
   });
 
-  test('Praguri: renders all 5 thresholds with current value, threshold and status', async ({ page }) => {
+  test('Praguri: renders all 4 thresholds with current value, threshold and status', async ({ page }) => {
     await page.goto('/dashboard');
 
     const thresholds = sectionWith(page, 'Praguri');
-    await expect(thresholds.locator('.item-row')).toHaveCount(5);
+    await expect(thresholds.locator('.item-row')).toHaveCount(4);
 
-    // CAS: below the minimum base (breached), within the maximum base.
+    // CAS: below the tier-1 floor of 12 SM → breached. There is no 'Prag maxim CAS' row:
+    // CF art. 148 alin. (2) sets FLOORS ("nu poate fi mai mic decât"), never a ceiling, so a
+    // CAS maximum-base row asserted a cap that does not exist (docs/ai/phases/03_cas.md).
     // (exact: true — 'Prag minim CAS' is a substring of 'Prag minim CASS').
     await expect(thresholds.getByText('Prag minim CAS', { exact: true })).toBeVisible();
-    await expect(thresholds.getByText('Prag maxim CAS', { exact: true })).toBeVisible();
     await expect(thresholds.getByText('Prag: 48.600,00 lei')).toBeVisible();
-    await expect(thresholds.getByText('Prag: 97.200,00 lei')).toBeVisible();
+    await expect(thresholds.getByText('Prag maxim CAS', { exact: true })).toHaveCount(0);
 
     // CASS: below the minimum base (breached), within the maximum base.
     await expect(thresholds.getByText('Prag minim CASS', { exact: true })).toBeVisible();
@@ -165,12 +166,12 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(thresholds.getByText('Prag de înregistrare Vat')).toBeVisible();
     await expect(thresholds.getByText('Prag: 395.000,00 lei')).toBeVisible();
 
-    // All five rows show the same current revenue (9.317,00 lei YTD).
-    await expect(thresholds.getByText(/Curent: 9\.317,00 lei/)).toHaveCount(5);
+    // All four rows show the same current revenue (9.317,00 lei YTD).
+    await expect(thresholds.getByText(/Curent: 9\.317,00 lei/)).toHaveCount(4);
 
-    // Status badges: 2 breached (min CAS, min CASS), 3 within limits.
+    // Status badges: 2 breached (min CAS, min CASS), 2 within limits.
     await expect(thresholds.getByText('Depășit', { exact: true })).toHaveCount(2);
-    await expect(thresholds.getByText('În limite', { exact: true })).toHaveCount(3);
+    await expect(thresholds.getByText('În limite', { exact: true })).toHaveCount(2);
   });
 
   test('Termene limită: renders the 6 upcoming filing deadlines with dates and status', async ({ page }) => {

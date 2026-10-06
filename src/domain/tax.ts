@@ -63,7 +63,18 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   const net = gross - deductible;
   lines.push({ label: 'Venit net din activitate', value: net });
 
-  const casRes = calculatorRegistry['calc-cas'](casRule, { base: net });
+  // CF art. 150 alin. (1): pensioners and persons insured in their own social insurance
+  // system owe no CAS. `inputs.pensionStatus` carries it, mirroring how
+  // `inputs.socialInsuranceStatus` gates CASS below. `inputs.salaryStatus` is
+  // deliberately NOT passed: art. 150 alin. (2) exempts salary earners only for
+  // art. 137 alin. (1) lit. b^1) (drepturi de proprietate intelectuală), not lit. b),
+  // so a salaried PFA owner still owes full CAS on independent-activity income.
+  // A CAS of 0 (exemption, or income below 12 SM) flows through `taxable` and the
+  // lines unchanged.
+  const casRes = calculatorRegistry['calc-cas'](casRule, {
+    base: net,
+    pensionStatus: inputs.pensionStatus,
+  });
   if ('reviewRequired' in casRes) return rr(casRes.reason, lines);
   lines.push({ label: 'CAS (25%)', value: casRes.value });
 

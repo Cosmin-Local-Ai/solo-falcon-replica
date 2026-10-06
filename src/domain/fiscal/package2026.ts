@@ -79,23 +79,30 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     effectiveTo: null,
     parameters: [
       { id: 'rate', label: 'CAS rate', value: 25, unit: 'percent' },
-      { id: 'min_base', label: 'Minimum base (12 SM annual)', value: 48600, unit: 'lei' },
-      { id: 'max_base', label: 'Maximum base (24 SM annual)', value: 97200, unit: 'lei' },
-      { id: 'min_cas', label: 'Minimum CAS', value: 12150, unit: 'lei' },
-      { id: 'max_cas', label: 'Maximum CAS', value: 24300, unit: 'lei' },
+      { id: 'min_base', label: 'Tier-1 floor (12 SM annual)', value: 48600, unit: 'lei' },
+      { id: 'tier2_base', label: 'Tier-2 floor (24 SM annual) — not a ceiling', value: 97200, unit: 'lei' },
+      { id: 'tier1_cas', label: 'CAS at the 12 SM floor', value: 12150, unit: 'lei' },
+      { id: 'tier2_cas', label: 'CAS at the 24 SM floor — not a ceiling', value: 24300, unit: 'lei' },
     ],
     calculatorId: 'calc-cas',
     // CF art. 148 alin. (2) lit. a) — 12 SM minimum base for art. 137 alin. (1) lit. b)/b^1) income.
     // Amended by OUG nr. 128 din 07.11.2024, Punctul 20, Art. I (MO 1125/11.11.2024), applying
     // "începând cu veniturile aferente anului 2025". No 6-SM tier survives for art. 68 income — it now
     // sits only in art. 170 alin. (2)-(3) (CASS, art. 155 alin. (1) lit. c)-h)).
-    // NOTE: art. 148 alin. (2) is a TIER LADDER, not a clamp. Above 24 SM the base is the actual
-    // venitul ales, so max_base/max_cas are NOT statutory caps (phases/02 §2.1) — Phase 3 must model
-    // the tiers rather than enforce max_cas.
-    // GAP U-5 (UNVERIFIED): the CAS salary/pension exemption branch (CF art. 147 alin. (1)) is not
-    // modelled and no rule reads salaryStatus/pensionStatus.
+    // art. 148 alin. (2) is a TIER LADDER, not a clamp: the base is "venitul ales de contribuabil, care
+    // nu poate fi mai mic decât" 12 SM (income between 12 and 24 SM) or 24 SM (income at or above 24 SM).
+    // Realized income only selects which floor applies, and the article contains NO upper cap — unlike
+    // CASS art. 170 alin. (1) ("nu poate fi mai mare decât"), which genuinely is one. Below 12 SM the
+    // obligation never arises at all (art. 148 alin. (1)), so CAS is 0, not 12.150. `tier2_base` and
+    // `tier2_cas` are that floor and the CAS at it — they are NOT maximums, and calcCas reads them from
+    // these parameters instead of hardcoding them (phases/02 §2.1, phases/03_cas.md).
+    // The CAS exemption is CF art. 150 alin. (1) — pensioners and persons insured in their own social
+    // insurance system owe no CAS for art. 137 alin. (1) lit. b)/b^1) income. NOT art. 147, which is the
+    // monthly declarative duty (D112). Art. 150 alin. (2) exempts salary earners only for lit. b^1)
+    // (drepturi de proprietate intelectuală), so salaryStatus does NOT exempt. Modelled in calcCas via
+    // CalculatorInput.pensionStatus; GAP U-5 closed in Phase 3.
     sourceAct: 'Cod fiscal — OUG nr. 128/2024, Art. I pct. 20 (MO 1125/11.11.2024)',
-    sourceArticle: 'art. 148 alin. (2) lit. a); SM anchor art. 135^1 alin. (3)',
+    sourceArticle: 'art. 148 alin. (1)-(2) lit. a); exceptie art. 150 alin. (1); SM anchor art. 135^1 alin. (3)',
     sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/312601',
   },
   {

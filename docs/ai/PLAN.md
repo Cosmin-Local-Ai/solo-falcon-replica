@@ -145,7 +145,7 @@ numbering stays readable.
   without failing any test. **Do not add ACTIVE rules.**
 - **Unblocks:** Phases 3 and 4.
 
-### Phase 3 — CAS
+### Phase 3 — CAS — **COMPLETE 2026-10-06** (`docs/ai/phases/03_cas.md`)
 
 - **Correction:** this is a real correction, not a verification pass. `calcCas`
   (`calculators.ts:39-58`) is a flat clamp with no tier branching and no exemption branch.
@@ -153,14 +153,20 @@ numbering stays readable.
   (`package2026.ts:70-74`); tier semantics exist only as label strings (`:71-72`).
 - **Must be created:** explicit 12-SM / 24-SMBT branch conditions; the salary/pension exemption
   branch (currently no rule reads `salaryStatus` / `pensionStatus`); correct treatment of the 24-SM rung.
-- **Correction from Phase 2:** CF art. 148 alin. (2) is a **ladder of alternative bases, not a clamp**.
-  Between 12 and 24 SM the base is 12 SM; **above 24 SM the base is the actual venit realizat**, so the
-  existing `Math.min(effectiveBase, max_base)` clamp **under-states** CAS for high earners. Do **not**
-  "enforce `max_cas`" as if it were statutory — `max_base`/`max_cas` encode a cap the article does not
-  state (phases/02 §2.1).
+- **Correction from Phase 2 (corrected again in Phase 3):** CF art. 148 alin. (2) is a **ladder of
+  alternative bases, not a clamp**. Between 12 and 24 SM the base is 12 SM; **at or above 24 SM the base is
+  24 SM** — the taxpayer may elect a higher `venit ales`, but realized income is not automatically the base.
+  The old `Math.min(effectiveBase, max_base)` clamp therefore **over-stated** CAS: it charged 12,150 below
+  12 SM (where art. 148 alin. (1) means 0) and 25% of realized income in the 12–24 SM band (60,000 → 15,000
+  instead of 12,150). Above 24 SM it reached 24,300 only by coincidence. Do **not** "enforce `max_cas`" as
+  if it were statutory — `max_base`/`max_cas` encoded a cap the article does not state (phases/02 §2.1,
+  phases/03_cas.md §2).
 - **Entry criteria:** **met** — Phase 2 resolved the minimum base (12 SM, CF art. 148 alin. (2) lit. a),
   OUG 128/2024 Art. I pct. 20) and the 24-SM tier boundary with citations.
-- **Blocked by:** Q-CAS-EXEMPTION (U-5, CF art. 147 alin. (1) not yet read). The SM anchor is now fully
+- **Blocked by:** ~~Q-CAS-EXEMPTION (U-5)~~ — **closed in Phase 3**: the exemption is **CF art. 150 alin. (1)**
+  (pensioners and persons insured in their own social insurance system), **not art. 147**, which is the
+  monthly declarative duty (Declarația 112). Art. 150 alin. (2) exempts salary earners only for art. 137
+  alin. (1) lit. b^1), so `salaryStatus` deliberately does not exempt. The SM anchor is now fully
   settled — **rule** CF art. 135^1 alin. (3) (the SM in force on 1 January of the income year governs
   annual bases) and **numbers** 4,050 lei on 1 ianuarie 2026 / 4,325 lei from 1 iulie 2026
   (HG 1.506/2024, MO I 1185/28.11.2024; HG 146/2026, MO 196/13.03.2026). U-6 is closed; the code's
@@ -200,6 +206,11 @@ numbering stays readable.
 
 ### Phase 6 — Profile-driven fiscal inputs
 
+- **Follow-up from Phase 3:** surface the 24 SM CAS boundary as a proper `tier-floor` threshold type —
+  crossing 24 SM doubles the CAS floor from 12,150 to 24,300, which is real and useful, but it is not a
+  "schimbare de regim" cap. `CAS_MAX_BASE` was removed in Phase 3 for asserting a cap art. 148 does not
+  contain (phases/03_cas.md §4).
+
 - **Correction:** the profile fields **already exist** but are unread. `models.ts:66-89` carries 13
   fields; the engine reads 5 (`tax.ts:41,43,44,48-50,52,58,59,71,77`).
 - **Exists today:** `caen`, `salaryStatus`, `pensionStatus`, `otherIncome`, `cashFloorLei`,
@@ -232,6 +243,11 @@ numbering stays readable.
 - **Blocked by:** Q-IDENTITY-SOURCE, Q-PERSISTENCE-VERSION.
 
 ### Phase 8 — Financial amount semantics
+
+- **Follow-up from Phase 3:** the CAS floor figures and the "no upper cap" statement live in the calculator
+  `breakdown` as text; if they become rendered amounts they need this phase's semantics pass, and
+  `CAS_MIN_BASE`'s shared "dezcalificare din regim" wording needs a tax-specific map (for CAS, being under
+  12 SM means no CAS is owed, not disqualification).
 
 - **Objective:** prevent financial/tax calculations from confusing cash amounts, VAT and
   tax-relevant income. Separate the six concepts — transaction/cash amount, VAT amount, amount
@@ -297,9 +313,10 @@ numbering stays readable.
 
 ## Next
 
-1. **Phase 3 (CAS) is unblocked** — model CF art. 148 alin. (2) as a tier ladder, not a clamp. Resolve
-   U-5 (art. 147 alin. (1) exemption) first. The SM values are settled (U-6 closed): 4,050 lei on
-   1 ianuarie 2026, so 12 SM = 48,600 lei and 24 SM = 97,200 lei are correct as they stand.
+1. **Phase 3 (CAS) is DONE** (2026-10-06, `phases/03_cas.md`) — art. 148 alin. (2) is now a parameter-driven
+   tier ladder, the art. 150 alin. (1) pension exemption is wired, and `CAS_MAX_BASE` is gone. Next up is
+   **Phase 4 (CASS)**. The SM values are settled (U-6 closed): 4,050 lei on 1 ianuarie 2026, so 12 SM =
+   48,600 lei and 24 SM = 97,200 lei are correct as they stand.
 2. **Phase 4 (CASS) is unblocked except U-2** — the 72-SM ceiling is sourced; the minimum base for
    art. 68 income is not. Do not invent one.
 3. **Phase 5's scope changed** — the `tax.ts:52-54` short-circuit rests on a 30% cap that does not

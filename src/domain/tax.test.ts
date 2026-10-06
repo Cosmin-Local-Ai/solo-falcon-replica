@@ -18,8 +18,8 @@ describe('computeTaxEstimate', () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    // net=40000, CAS=12150 (min base), CASS=4000, taxable=23850, income=2385, total=18535
-    expect(res.output.total).toBe(18_535);
+    // net=40000, CAS=0 (below 12 SM — CF art. 148 alin. (1)), CASS=4000, taxable=36000, income=3600, total=7600
+    expect(res.output.total).toBe(7_600);
     expect(res.lines.length).toBeGreaterThanOrEqual(5);
     expect(res.snapshot).toBeDefined();
   });
@@ -28,7 +28,8 @@ describe('computeTaxEstimate', () => {
     const res = await computeTaxEstimate({ inputs: makeInputs({ socialInsuranceStatus: 'exempt' }), profile: makeProfile({ socialInsuranceStatus: 'exempt' }), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    expect(res.output.total).toBe(14_935);
+    // CAS=0 (below 12 SM), CASS skipped, taxable=40000, income=4000
+    expect(res.output.total).toBe(4_000);
   });
 
   it('returns REVIEW_REQUIRED when net = 0 (CASS base below minimum)', async () => {
@@ -72,7 +73,7 @@ describe('computeTaxEstimate', () => {
     expect(snap.inputsHash).toHaveLength(64);
     expect(snap.inputSnapshot.revenues).toBe(50_000);
     expect(snap.inputSnapshot.expenses).toBe(10_000);
-    expect(snap.output.total).toBe(18_535);
+    expect(snap.output.total).toBe(7_600);
   });
 
   it('returns REVIEW_REQUIRED for zero revenues (CASS base below minimum)', async () => {
@@ -84,15 +85,15 @@ describe('computeTaxEstimate', () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 60_000, expenses: 10_000, revenuesNet: 60_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    // net=50000, CAS=12500, CASS=5000, taxable=32500, income=3250, total=20750
-    expect(res.output.total).toBe(20_750);
+    // net=50000, CAS=12150 (12 SM floor, not 25% of net), CASS=5000, taxable=32850, income=3285, total=20435
+    expect(res.output.total).toBe(20_435);
   });
 
-  it('caps CAS at max_base for high income', async () => {
+  it('keeps CAS on the 24 SM floor for high income (no cap, CF art. 148 alin. (2) lit. b))', async () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 250_000, expenses: 0, revenuesNet: 250_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    // net=250000, CAS=min(250000,97200)*0.25=24300, CASS=25000, taxable=200700, income=20070, total=69370
+    // net=250000, CAS=24300 (24 SM floor), CASS=25000, taxable=200700, income=20070, total=69370
     expect(res.output.total).toBe(69_370);
   });
 
@@ -100,7 +101,7 @@ describe('computeTaxEstimate', () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 300_000, expenses: 0, revenuesNet: 300_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    // net=300000, CAS=24300 (capped), CASS=29160 (capped at 291600), taxable=246540, income=24654, total=78114
+    // net=300000, CAS=24300 (24 SM floor), CASS=29160 (capped at 291600 — CASS does have a cap), taxable=246540, income=24654, total=78114
     expect(res.output.total).toBe(78_114);
   });
 
@@ -114,12 +115,12 @@ describe('computeTaxEstimate', () => {
     expect(a.lines).toEqual(b.lines);
   });
 
-  it('computes at 71,280 net (CAS below max_base)', async () => {
+  it('computes at 71,280 net (CAS on the 12 SM floor)', async () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 71_280, expenses: 0, revenuesNet: 71_280, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    // net=71280, CAS=71280*0.25=17820, CASS=7128, taxable=46332, income=4633.2, total=29581.2
-    expect(res.output.total).toBeCloseTo(29_581.2, 1);
+    // net=71280, CAS=12150 (12 SM floor), CASS=7128, taxable=52002, income=5200.2, total=24478.2
+    expect(res.output.total).toBeCloseTo(24_478.2, 1);
   });
 
   it('computes for a high-revenue profile', async () => {
@@ -137,12 +138,12 @@ describe('computeTaxEstimate', () => {
     expect(res.status).toBe('review_required');
   });
 
-  it('computes at 72,000 net (CAS below max_base)', async () => {
+  it('computes at 72,000 net (CAS on the 12 SM floor)', async () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 72_000, expenses: 0, revenuesNet: 72_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    // net=72000, CAS=72000*0.25=18000, CASS=7200, taxable=46800, income=4680, total=29880
-    expect(res.output.total).toBe(29_880);
+    // net=72000, CAS=12150 (12 SM floor), CASS=7200, taxable=52650, income=5265, total=24615
+    expect(res.output.total).toBe(24_615);
   });
 
   // ── Boundary: CASS minimum base ──
@@ -161,51 +162,73 @@ describe('computeTaxEstimate', () => {
     expect(res.status).toBe('review_required');
   });
 
-  // ── Boundary: CAS min base ──
+  // ── Boundary: CAS tier-1 floor (12 SM) ──
 
-  it('net exactly at CAS min base (48,600) → CAS = 12,150 (floor)', async () => {
+  it('net exactly at CAS tier-1 floor (48,600) → CAS = 12,150', async () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 48_600, expenses: 0, revenuesNet: 48_600, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    // CAS = max(clamp(48600, 48600, 97200) * 0.25, 12150) = max(12150, 12150) = 12150
+    // CAS = 48600 * 0.25 = 12150 (the 12 SM floor applies from 48,600 up).
     const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
     expect(cas).toBe(12_150);
   });
 
-  it('net just below CAS min base (48,599) → CAS floored at 12,150', async () => {
+  it('net just below CAS tier-1 floor (48,599) → CAS = 0, not 12,150', async () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 48_599, expenses: 0, revenuesNet: 48_599, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    // CAS = max(clamp(48599, 48600, 97200) * 0.25, 12150) = max(48600*0.25, 12150) = 12150
+    // CF art. 148 alin. (1): below 12 SM the obligation never arises. The old clamp
+    // charged the 12 SM figure here — an over-statement of 12,150 lei.
+    const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
+    expect(cas).toBe(0);
+  });
+
+  it('net just above CAS tier-1 floor (48,601) → CAS stays 12,150 (floor, not 25% of net)', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 48_601, expenses: 0, revenuesNet: 48_601, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    // Realized income only selects the floor; the base stays 48,600 → 12,150.
     const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
     expect(cas).toBe(12_150);
   });
 
-  it('net just above CAS min base (48,601) → CAS = net * 0.25 = 12,150.25 (floor no longer binds)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 48_601, expenses: 0, revenuesNet: 48_601, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+  // ── CF art. 150 alin. (1): pension exemption. Salary is NOT an exemption. ──
+
+  it('pensionStatus da → CAS = 0 regardless of income (CF art. 150 alin. (1))', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs({ pensionStatus: 'da' }), profile: makeProfile({ pensionStatus: 'da' }), revenues: 200_000, expenses: 0, revenuesNet: 200_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    // CAS = max(clamp(48601, 48600, 97200) * 0.25, 12150) = max(12150.25, 12150) = 12150.25
     const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
-    expect(cas).toBeCloseTo(12_150.25, 3);
+    expect(cas).toBe(0);
+    // CAS = 0 flows through taxable and the total: CASS 20000, taxable 180000, income 18000.
+    expect(res.output.total).toBe(38_000);
   });
 
-  // ── Boundary: CAS cap ──
+  it('salaryStatus da does NOT exempt from CAS (CF art. 150 alin. (2) covers only lit. b^1))', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'da', pensionStatus: 'nu' }), profile: makeProfile({ salaryStatus: 'da', pensionStatus: 'nu' }), revenues: 60_000, expenses: 0, revenuesNet: 60_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
+    expect(cas).toBe(12_150);
+  });
 
-  it('net exactly at CAS cap (97,200) → CAS = 24,300', async () => {
+  // ── Boundary: CAS tier-2 floor (24 SM) — a floor, not a cap ──
+
+  it('net exactly at CAS tier-2 floor (97,200) → CAS = 24,300', async () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 97_200, expenses: 0, revenuesNet: 97_200, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    // CAS = max(clamp(97200, 48600, 97200) * 0.25, 12150) = max(24300, 12150) = 24300
+    // CAS = 97200 * 0.25 = 24300 (crossing 24 SM doubles the floor, it does not cap anything).
     const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
     expect(cas).toBe(24_300);
   });
 
-  it('net just above CAS cap (97,201) → CAS still 24,300 (capped)', async () => {
+  it('net just above CAS tier-2 floor (97,201) → CAS stays 24,300 (floor, no cap applied)', async () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 97_201, expenses: 0, revenuesNet: 97_201, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    // CAS = max(clamp(97201, 48600, 97200) * 0.25, 12150) = max(97200*0.25, 12150) = 24300
+    // Same figure as the old clamp produced, but for the right reason: art. 148 alin. (2)
+    // sets a 24 SM MINIMUM, it never caps the base.
     const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
     expect(cas).toBe(24_300);
   });
@@ -232,51 +255,52 @@ describe('computeTaxEstimate', () => {
 
   // ── Rounding: no rounding, raw floats ──
 
-  it('net = 71,281 → total = 29581.615 (no rounding, raw float)', async () => {
+  it('net = 71,281 → total = 24478.39 (no rounding, raw float)', async () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 71_281, expenses: 0, revenuesNet: 71_281, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    // CAS = 71281 * 0.25 = 17820.25
+    // CAS = 48600 * 0.25 = 12150 (12 SM floor — the old clamp charged 17820.25)
     // CASS = 71281 * 0.10 = 7128.1
-    // taxable = 71281 - 17820.25 - 7128.1 = 46332.65
-    // incomeTax = 46332.65 * 0.10 = 4633.265
-    // total = 17820.25 + 7128.1 + 4633.265 = 29581.615
+    // taxable = 71281 - 12150 - 7128.1 = 52002.9
+    // incomeTax = 52002.9 * 0.10 = 5200.29
+    // total = 12150 + 7128.1 + 5200.29 = 24478.39
     const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
     const cass = res.lines.find(l => l.label === 'CASS (10%)')?.value;
     const incomeTax = res.lines.find(l => l.label === 'Impozit pe venit (rată de bază 10%)')?.value;
-    expect(cas).toBeCloseTo(17_820.25, 3);
+    expect(cas).toBeCloseTo(12_150, 3);
     expect(cass).toBeCloseTo(7_128.1, 3);
-    expect(incomeTax).toBeCloseTo(4_633.265, 3);
-    expect(res.output.total).toBeCloseTo(29_581.615, 3);
+    expect(incomeTax).toBeCloseTo(5_200.29, 3);
+    expect(res.output.total).toBeCloseTo(24_478.39, 3);
   });
 
   // ── Rule-release awareness ──
 
-  it('modified CAS max_base (100,000) → different CAS at net = 97,201', async () => {
+  it('modified CAS tier2_base (120,000) → different CAS at net = 100,001', async () => {
     const modifiedRules = PFA_2026_SYSTEM_REAL_PACKAGE.map((rule) => {
       if (rule.ruleId === 'CAS_2026') {
         return {
           ...rule,
           parameters: rule.parameters.map((p) =>
-            p.id === 'max_base' ? { ...p, value: 100_000 } : p,
+            p.id === 'tier2_base' ? { ...p, value: 120_000 } : p,
           ),
         };
       }
       return rule;
     });
 
-    const original = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 97_201, expenses: 0, revenuesNet: 97_201, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
-    const modified = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 97_201, expenses: 0, revenuesNet: 97_201, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: modifiedRules });
+    const original = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 100_001, expenses: 0, revenuesNet: 100_001, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const modified = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 100_001, expenses: 0, revenuesNet: 100_001, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: modifiedRules });
 
     expect(original.status).toBe('computed');
     expect(modified.status).toBe('computed');
     if (original.status !== 'computed' || modified.status !== 'computed') return;
-    // Original: CAS = min(97201, 97200) * 0.25 = 24300
-    // Modified: CAS = min(97201, 100000) * 0.25 = 24300.25
+    // The 24 SM tier boundary comes from the tier2_base parameter, not a hardcoded 97200:
+    // Original: 100001 >= 97200 → tier-2 floor 97200 → CAS = 97200 * 0.25 = 24300
+    // Modified: 100001 < 120000 → tier-1 floor 48600 → CAS = 48600 * 0.25 = 12150
     const origCas = original.lines.find(l => l.label === 'CAS (25%)')?.value;
     const modCas = modified.lines.find(l => l.label === 'CAS (25%)')?.value;
     expect(origCas).toBe(24_300);
-    expect(modCas).toBeCloseTo(24_300.25, 3);
+    expect(modCas).toBe(12_150);
     expect(modCas).not.toBe(origCas);
   });
 

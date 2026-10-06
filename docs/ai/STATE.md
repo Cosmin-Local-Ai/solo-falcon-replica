@@ -1,13 +1,24 @@
 # STATE
 
-Last sync: **2026-10-05 (phase 2 — verified 2026 fiscal baseline)**. HEAD
-`82073bff72934d1db7a854e5a693554174249785` on `master` (2026-10-04 07:13:22 +0300, "Steps 27-34: …").
+Last sync: **2026-10-06 (phase 3 — CAS corrected: CF art. 148 alin. (2) floor ladder + CF art. 150
+alin. (1) exemption; see `docs/ai/phases/03_cas.md`)**. Previous sync: **2026-10-05 (phase 2 — verified
+2026 fiscal baseline)**, HEAD `82073bff72934d1db7a854e5a693554174249785` on `master` (2026-10-04 07:13:22
++0300, "Steps 27-34: …").
 
 **The fiscal source of truth is now `docs/ai/phases/02_fiscal_baseline.md`.** It supersedes
 `docs/ai/research/06_2026_fiscal_research.md`, which was wrong on four points (CAS minimum base, VAT
 threshold, the phantom 30% expense cap, the 16% component) and misattributed the VAT act. Phase 2
 changed **provenance metadata only** — no formula, calculator, rule-engine, parameter-value or
 rule-count change.
+
+**Phase 3 (2026-10-06) changed fiscal behaviour on purpose.** `calcCas` is now the CF art. 148 alin. (2)
+ladder of floors — below 12 SM (48,600 lei) CAS is **0**, 12–24 SM is 12,150, at or above 24 SM (97,200 lei)
+it is 24,300, and there is **no upper cap** — plus the CF art. 150 alin. (1) pension exemption, driven by
+`pensionStatus` (`salaryStatus` does not exempt: art. 150 alin. (2) covers only art. 137 alin. (1)
+lit. b^1)). CAS parameters were renamed to floor language (`tier2_base`, `tier1_cas`, `tier2_cas`) and
+`max_cas` was deleted. The `CAS_MAX_BASE` threshold row was removed because it asserted a statutory cap
+that art. 148 does not contain. The package is still **8 rules at `version: 1`**; CASS, income tax and UI
+are untouched, and 48,600 / 97,200 / 291,600 are unchanged.
 
 **This STATE.md supersedes the 2026-10-02 STATE.md.** The previous version's claims
 "**28 test files, 102 tests**" (`:8`, `:37`), "1 app / 6 components / 4 data / 13 domain / 4 pages"
@@ -16,15 +27,16 @@ rule-count change.
 `:48`) were **false**. The measured figures are below. The full claim→verdict table is in
 `docs/ai/steps/01_real_baseline.md` §6.1. No application code was modified during this sync.
 
-## Verification summary (measured 2026-10-05, all exit 0)
+## Verification summary (counts re-measured 2026-10-06 after Phase 3; environment figures from 2026-10-05, all exit 0)
 
-Re-measured after the Phase 2 provenance edits (`package2026.ts`, `release2026.ts`):
+Re-measured after the Phase 3 CAS correction (`calculators.ts`, `package2026.ts`, `tax.ts`,
+`thresholds.ts` and their tests); environment rows unchanged from the Phase 2 measurement:
 
 | Command | Result |
 |---|---|
 | `npx tsc --noEmit` | **0 errors** |
 | `npm run build` (`tsc && vite build`) | **exit 0** |
-| `npm run test` (vitest) | **36 test files, 450 unit tests, all passing** |
+| `npm run test` (vitest) | **36 test files, 463 unit tests, all passing** (450 at Phase 2; Phase 3 added 13 CAS tests) |
 | `npm run test:e2e` (playwright) | **23 e2e tests, all passing** (`e2e/dashboard.spec.ts`) |
 
 - Unit test files by area: 1 `src/`, 9 `src/components/`, 8 `src/data/`, 13 `src/domain/`
@@ -47,7 +59,7 @@ Re-measured after the Phase 2 provenance edits (`package2026.ts`, `release2026.t
 |---|---|---|---|
 | 1 | Real baseline | **complete** (2026-10-05, docs only) | — |
 | 2 | Verified 2026 fiscal baseline + rule provenance (17-field `FiscalRule`, `rules.ts:19-37`) | **complete** (2026-10-05, `docs/ai/phases/02_fiscal_baseline.md`) | — |
-| 3 | CAS: flat clamp → SMBT **tier ladder** (not a clamp — `max_cas` is not a statutory cap) | not started | Phase 2 **done**; Q-CAS-EXEMPTION (U-5) |
+| 3 | CAS: flat clamp → SMBT **tier ladder** (not a clamp — `max_cas` is not a statutory cap) | **done 2026-10-06** (`phases/03_cas.md`) | U-5 closed; B-2 fixed; 24 SM threshold surface deferred to Phase 6 |
 | 4 | CASS: min-base behaviour + `max_cass` enforcement | not started | Phase 2 **done**; Q-CASS-MINBASE (U-2) |
 | 5 | Income tax: **delete** the phantom 30% cap (`tax.ts:52-54`); 16% surcharge is not applicable | not started | Q-NONDEDUCT-VAT (U-1); art. 68 alin. (4) gate now captured |
 | 6 | Profile-driven fiscal inputs; NORMA_VENIT | not started | Phase 3/4; Q-30PCT-CAP, Q-NETGROSS |
@@ -63,11 +75,11 @@ Phase scope, entry criteria and per-phase evidence: `docs/ai/PLAN.md` "Forward r
 | ID | Defect | Evidence | Fixed in |
 |---|---|---|---|
 | B-1 | Default regime `impozit_pe_venit` short-circuits the tax engine to `review_required` — the default user gets no tax estimate | `src/domain/tax.ts:52-54`; `src/domain/profile.ts:41`; `src/data/seed.ts:7` | Phase 5 |
-| B-2 | CAS is a flat clamp; ignores the SMBT tier semantics its own parameter labels claim; no salary/pension exemption branch | `src/domain/fiscal/calculators.ts:39-58` vs `package2026.ts:71-72` | Phase 3 |
+| B-2 | **FIXED (Phase 3, 2026-10-06)** — CAS was a flat clamp; `calcCas` is now a parameter-driven floor ladder (below 12 SM → 0; 12–24 SM → 12,150; ≥ 24 SM → 24,300; no cap) with the CF art. 150 alin. (1) pension exemption wired through `CalculatorInput.pensionStatus` | `src/domain/fiscal/calculators.ts` `calcCas`; `phases/03_cas.md` | closed |
 | B-3 | CASS returns `reviewRequired` below `min_base` instead of applying the minimum base | `src/domain/fiscal/calculators.ts:67-69` | Phase 4 |
 | B-4 | `progressive_rate: 16` is dead data while the result is still reported `status: 'computed'` — the engine under-reports tax and claims success | `src/domain/fiscal/calculators.ts:90,96`; `package2026.ts:109` | **Phase 2 — parameter removed** (16% is legally inapplicable to PFA sistem real, not merely unread). The stale "16% progressive surcharge" NOTE string in `calcIncomeTax` remains a Phase 5 cleanup. |
 | B-5 | 5 of 8 ACTIVE rules carry non-resolvable provenance placeholders (`'ANAF 2026'`, anaf.ro homepage, self-referential article) | `package2026.ts:77-79,96-98,112-114,127-129,142-144` | **Phase 2 — fixed** (verified citations; `VAT_THRESHOLD_2026` also corrected from art. 338 → art. 310 alin. (1)) |
-| B-6 | `max_cas`, `max_cass`, `multiple_6x/12x/24x/72x` declared but never read — declared caps silently unenforced | `package2026.ts:22-25,74,93,109` | Phases 3, 4, 5 |
+| B-6 | **CAS part FIXED (Phase 3)**: `max_cas` (the phantom cap) removed; `tier1_cas`/`tier2_cas` are now read by `calcCas`. Still open: `max_cass`, `multiple_6x/12x/24x/72x` declared but never read — declared caps silently unenforced | `package2026.ts`; `phases/03_cas.md` §2–3 | Phases 4, 5 |
 | B-7 | `docs/ai/STATE.md` and `docs/ai/PLAN.md` contained materially false claims | `01_real_baseline.md` §6.1, §6.2 | Phase 1 (this sync) |
 | B-8 | Two unreconciled identity stores: topbar reads `profile.identity`, Settings writes `settings.company` / `settings.personal` | `src/App.tsx:221-222` vs `src/pages/Settings.tsx:34-37,50-53`; reconciled only at `src/data/store.tsx:118` | Phase 7 |
 | B-9 | No UI path writes the profile — every fiscal input is fixed at seed values | `src/data/store.tsx:52,213` (`updateProfile` uncalled outside `derived.test.tsx:61`); `src/pages/Settings.tsx:369,373,377` (`disabled`) | Phases 6, 7 |
@@ -109,7 +121,7 @@ document (`aggregation.ts:85-87,96,102`); no release/year-resolution layer
 | Q-CASS-MINBASE (U-2) | What is the 2026 CASS minimum base for art. 68 sistem-real income? The art. 170 alin. (2)-(3) 6-SM rungs cover art. 155 alin. (1) lit. c)-h) income, not art. 68. The code's `min_base` label is unsourced. | Phase 4 |
 | Q-122-ATTRIBUTION (U-3) | Which act last amended CF art. 122 alin. (3)'s 25 May term? Text is HIGH, attribution MEDIUM. | Phase 9 (attribution only) |
 | Q-QUARTERLY-DATES (U-4) | 2026 quarterly instalment **payment** due dates — need CF art. 123 alin. (2)-(4), 147/151 (CAS), 174 alin. (1)-(3) (CASS). | Phase 9 |
-| Q-CAS-EXEMPTION (U-5) | The CAS salary/pension exemption branch — CF art. 147 alin. (1) referenced but not read; no rule reads `salaryStatus`/`pensionStatus`. | Phase 3 |
+| Q-CAS-EXEMPTION (U-5) | **CLOSED (Phase 3)** — the exemption is CF **art. 150 alin. (1)** (pensionari / asigurați în propriul sistem de asigurări sociale), **not art. 147** (the monthly D112 declarative duty). Implemented via `CalculatorInput.pensionStatus`; art. 150 alin. (2) covers only art. 137 alin. (1) lit. b^1), so `salaryStatus` deliberately does NOT exempt. | closed — `phases/03_cas.md` §1–2 |
 | Q-OMFP3254-HISTORY (U-7) | OMFP 3254/2017 amendment history — portal "Acțiuni suferite" returned 0 refs. In force is established via OMF 808/2026 art. 8's express scope (abrogates OMFP 870/2005 only). The net-of-VAT base rests on this act. | Phases 5, 8 |
 | Q-IDENTITY-SOURCE | Is `profile.identity` canonical, or `settings.company` / `settings.personal`? | Phase 7 |
 | Q-PERSISTENCE-VERSION | Add a `version` field + migration chain? Keep all-or-nothing corrupt recovery? | Phase 7 |

@@ -90,14 +90,95 @@ describe('calculators', () => {
     expect(result).toMatchObject({ value: 4050 });
   });
 
-  it('CAS at the minimum base is 12150', () => {
+  // CF art. 148 alin. (1)-(2): the CAS base is "venitul ales de contribuabil", floored at
+  // 12 SM when realized income is 12–24 SM and at 24 SM once it reaches 24 SM. It is a
+  // ladder of floors with NO upper cap; below 12 SM the obligation never arises.
+  // These assertions replaced the old clamp (base capped at 97,200, minimum 12,150 even
+  // with no income) — see docs/ai/phases/03_cas.md.
+  it('CAS is 0 when no income is provided', () => {
     const result = calculatorRegistry['calc-cas'](byId('CAS_2026'));
+    expect(result).toMatchObject({ value: 0 });
+  });
+
+  it('CAS is 0 for a loss-making base', () => {
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: -5000 });
+    expect(result).toMatchObject({ value: 0 });
+  });
+
+  it('CAS is 0 just below 12 SM (48,599), not 12,150', () => {
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: 48599 });
+    expect(result).toMatchObject({ value: 0 });
+  });
+
+  it('CAS at exactly 12 SM (48,600) is 12,150', () => {
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: 48600 });
     expect(result).toMatchObject({ value: 12150 });
   });
 
-  it('CAS caps at max_base (97200) → 24300', () => {
+  it('CAS in the 12–24 SM band stays on the 12 SM floor: 60,000 → 12,150', () => {
+    // The old clamp charged 25% × 60,000 = 15,000, over-stating CAS by 2,850 lei.
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: 60000 });
+    expect(result).toMatchObject({ value: 12150 });
+  });
+
+  it('CAS at exactly 24 SM (97,200) is 24,300', () => {
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: 97200 });
+    expect(result).toMatchObject({ value: 24300 });
+  });
+
+  it('CAS above 24 SM stays on the 24 SM floor: 200,000 → 24,300', () => {
     const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: 200000 });
     expect(result).toMatchObject({ value: 24300 });
+  });
+
+  it('CAS is not capped: a voluntarily chosen base above the floor is charged in full', () => {
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), {
+      base: 200000,
+      chosenBase: 150000,
+    });
+    expect(result).toMatchObject({ value: 37500 });
+  });
+
+  it('a chosen base below the applicable floor is clamped up to that floor', () => {
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), {
+      base: 200000,
+      chosenBase: 50000,
+    });
+    expect(result).toMatchObject({ value: 24300 });
+  });
+
+  it('pensioners owe no CAS (CF art. 150 alin. (1))', () => {
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), {
+      base: 200000,
+      pensionStatus: 'da',
+    });
+    expect(result).toMatchObject({ value: 0 });
+  });
+
+  it('the CAS exemption does not depend on the income amount', () => {
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), {
+      base: 60000,
+      pensionStatus: 'da',
+    });
+    expect(result).toMatchObject({ value: 0 });
+  });
+
+  it('pensionStatus nu is not exempt — only the art. 150 alin. (1) categories are', () => {
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), {
+      base: 60000,
+      pensionStatus: 'nu',
+    });
+    expect(result).toMatchObject({ value: 12150 });
+  });
+
+  it('the CAS breakdown states the applicable floor and that there is no upper cap', () => {
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: 200000 });
+    expect(result).toMatchObject({ value: 24300 });
+    if ('breakdown' in result) {
+      const text = result.breakdown.join('\n');
+      expect(text).toContain('97200');
+      expect(text).toContain('nu prevede nicio plafonare superioara');
+    }
   });
 
   it('CASS at the minimum base is 2430', () => {

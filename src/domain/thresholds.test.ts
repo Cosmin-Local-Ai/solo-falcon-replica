@@ -24,9 +24,12 @@ const byId = (thresholds: FiscalThreshold[], id: string) =>
   thresholds.find((t) => t.thresholdId === id)!;
 
 describe('computeThresholds', () => {
-  it('returns 5 thresholds for 2026', () => {
+  it('returns 4 thresholds for 2026', () => {
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, QUERY);
-    expect(result).toHaveLength(5);
+    expect(result).toHaveLength(4);
+    // CAS_MIN_BASE survives the CAS correction: crossing 12 SM is what triggers the
+    // contribution obligation at all (CF art. 148 alin. (1)).
+    expect(byId(result, 'CAS_MIN_BASE').thresholdValue).toBe(48600);
   });
 
   it('CAS min base: thresholdValue 48600, distance = currentValue - 48600', () => {
@@ -38,12 +41,16 @@ describe('computeThresholds', () => {
     expect(casMin.distance).toBe(100000 - 48600);
   });
 
-  it('CAS max base: thresholdValue 97200', () => {
+  it('has no CAS max-base row — CF art. 148 alin. (2) sets floors, not a ceiling', () => {
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, QUERY);
-    const casMax = byId(result, 'CAS_MAX_BASE');
-    expect(casMax.type).toBe('max-base');
-    expect(casMax.affectedTax).toBe('cas');
-    expect(casMax.thresholdValue).toBe(97200);
+    expect(result.find((t) => t.thresholdId === 'CAS_MAX_BASE')).toBeUndefined();
+    expect(result.filter((t) => t.affectedTax === 'cas').map((t) => t.thresholdId)).toEqual([
+      'CAS_MIN_BASE',
+    ]);
+    // CASS really does have a ceiling (CF art. 170 alin. (1), "nu poate fi mai mare decât"
+    // 72 SM), so the max-base row survives where the law provides one.
+    expect(byId(result, 'CASS_MAX_BASE').type).toBe('max-base');
+    expect(byId(result, 'CASS_MAX_BASE').thresholdValue).toBe(291600);
   });
 
   it('CASS min base: thresholdValue 24300', () => {
@@ -127,18 +134,18 @@ describe('computeThresholds', () => {
     expect(casMin.distance).toBeGreaterThan(0);
   });
 
-  it('max-base breach: currentValue above 97200 → status breached', () => {
+  it('max-base breach: CASS currentValue above 291600 → status breached', () => {
     const q: ThresholdQuery = {
       taxYear: 2026,
       asOfDate: '2026-03-15',
-      currentValue: 100000,
+      currentValue: 300000,
       fiscalBase: 'gross-revenue',
       ruleRelease: 'PFA_2026_RELEASE',
     };
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q);
-    const casMax = byId(result, 'CAS_MAX_BASE');
-    expect(casMax.distance).toBe(100000 - 97200);
-    expect(casMax.status).toBe('breached');
+    const cassMax = byId(result, 'CASS_MAX_BASE');
+    expect(cassMax.distance).toBe(300000 - 291600);
+    expect(cassMax.status).toBe('breached');
   });
 
   it('registration breach: currentValue at/above 395000 → status breached', () => {
@@ -158,7 +165,6 @@ describe('computeThresholds', () => {
   it('warningDistance is exactly 10% of the threshold value', () => {
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, QUERY);
     expect(byId(result, 'CAS_MIN_BASE').warningDistance).toBe(4860); // 48600 * 0.1
-    expect(byId(result, 'CAS_MAX_BASE').warningDistance).toBe(9720); // 97200 * 0.1
     expect(byId(result, 'CASS_MIN_BASE').warningDistance).toBe(2430); // 24300 * 0.1
     expect(byId(result, 'CASS_MAX_BASE').warningDistance).toBe(29160); // 291600 * 0.1
     expect(byId(result, 'VAT_REGISTRATION').warningDistance).toBe(39500); // 395000 * 0.1
@@ -188,20 +194,20 @@ describe('computeThresholds', () => {
     const q: ThresholdQuery = {
       taxYear: 2026,
       asOfDate: '2026-03-15',
-      currentValue: 87480, // 97200 - 9720 → distance exactly -warningDistance
+      currentValue: 262440, // 291600 - 29160 → distance exactly -warningDistance
       fiscalBase: 'gross-revenue',
       ruleRelease: 'PFA_2026_RELEASE',
     };
-    const casMax = byId(computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q), 'CAS_MAX_BASE');
-    expect(casMax.distance).toBe(-9720);
-    expect(casMax.status).toBe('warning');
+    const cassMax = byId(computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q), 'CASS_MAX_BASE');
+    expect(cassMax.distance).toBe(-29160);
+    expect(cassMax.status).toBe('warning');
 
-    const casMax2 = byId(
-      computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...q, currentValue: 87479 }),
-      'CAS_MAX_BASE',
+    const cassMax2 = byId(
+      computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...q, currentValue: 262439 }),
+      'CASS_MAX_BASE',
     );
-    expect(casMax2.distance).toBe(-9721);
-    expect(casMax2.status).toBe('ok'); // just outside the band
+    expect(cassMax2.distance).toBe(-29161);
+    expect(cassMax2.status).toBe('ok'); // just outside the band
   });
 
   it('registration warning band end-to-end: negative distance within the band → warning, beyond → ok', () => {
@@ -248,9 +254,11 @@ describe('computeThresholds', () => {
   });
 
   it('max-base breachMeaning mentions regime change', () => {
+    // Re-pointed from CAS_MAX_BASE to CASS_MAX_BASE in Phase 3: only CASS has a statutory
+    // ceiling (CF art. 170 alin. (1)); CF art. 148 alin. (2) has no cap for CAS.
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, QUERY);
-    const casMax = byId(result, 'CAS_MAX_BASE');
-    expect(casMax.breachMeaning).toContain('schimbare de regim');
+    const cassMax = byId(result, 'CASS_MAX_BASE');
+    expect(cassMax.breachMeaning).toContain('schimbare de regim');
   });
 
   it('registration breachMeaning mentions registration obligation', () => {

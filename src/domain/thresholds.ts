@@ -70,20 +70,22 @@ const THRESHOLD_SPECS: ThresholdSpec[] = [
     thresholdId: 'CAS_MIN_BASE',
     type: 'min-base',
     ruleId: 'CAS_2026',
+    // `min_base` is the tier-1 floor (12 SM). CAS_MIN_BASE stays valid: crossing it is
+    // what triggers the CAS obligation at all (CF art. 148 alin. (1)).
     paramId: 'min_base',
     affectedDomain: 'pfa-revenue',
     affectedTax: 'cas',
     requiredFiscalBase: 'gross-revenue',
   },
-  {
-    thresholdId: 'CAS_MAX_BASE',
-    type: 'max-base',
-    ruleId: 'CAS_2026',
-    paramId: 'max_base',
-    affectedDomain: 'pfa-revenue',
-    affectedTax: 'cas',
-    requiredFiscalBase: 'gross-revenue',
-  },
+  // CAS_MAX_BASE was removed in Phase 3. CF art. 148 alin. (2) sets FLOORS — "venitul ales
+  // de contribuabil, care nu poate fi mai mic decât" 12 SM / 24 SM — and contains no ceiling
+  // for CAS, so a `max-base` row on 97.200 lei asserted a statutory cap that does not exist
+  // (docs/ai/phases/02_fiscal_baseline.md §2.1). A correct replacement needs a new
+  // ThresholdType plus a UI `labelFor`/`breachMeaningFor` case: crossing 24 SM doubles the CAS
+  // floor from 12.150 to 24.300, which is real and useful but is not a "schimbare de regim".
+  // Tracked in docs/ai/PLAN.md; the 24 SM floor stays visible in the calculator breakdown.
+  // `max-base` itself remains in ThresholdType — CASS_MAX_BASE legitimately has a cap
+  // (CF art. 170 alin. (1), "nu poate fi mai mare decât" 72 SM).
   {
     thresholdId: 'CASS_MIN_BASE',
     type: 'min-base',
