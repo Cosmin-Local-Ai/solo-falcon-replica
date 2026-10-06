@@ -354,8 +354,19 @@ numbering stays readable.
   (945/4500, 252/1200, 168/800, 672/3200, 25.2/120, 17.96/85.5, 71.4/340) the implied rate is
   **21.00–21.01%** — 21% is a real statutory Romanian rate, and the 0.01 is just `85.5 × 21%` rounded to
   `17.96`. Changing the seed to "fix" this would corrupt correct data.
-- **Entry criteria:** Q-IDENTITY-SOURCE and Q-PERSISTENCE-VERSION answered.
-- **Blocked by:** Q-IDENTITY-SOURCE, Q-PERSISTENCE-VERSION.
+- **Entry criteria: ANSWERED 2026-10-06.** Q-IDENTITY-SOURCE and Q-PERSISTENCE-VERSION are closed by
+  orchestrator decisions, recorded in `STATE.md`'s open-question register:
+  - **D-1** `profile.identity` is canonical and absorbs `numarRegComert`, `codTvaIntra`, `caen[]`,
+    `mentiuniFactura`; `settings.company`/`settings.personal` retire from UI and writes but stay parseable.
+  - **D-2** `version` field + explicit migration chain under the **same** key `pfa-app-data-v2`; a
+    payload with no `version` is the chain's base.
+  - **D-3** corrupt payloads are **quarantined** under a separate key and surfaced via `dataOrigin`, not
+    silently reset to seed.
+  Two implementation facts the decisions depend on: new identity fields must be `.optional()` because
+  `pfaProfileSchema` gates BOTH the live profile and every stored snapshot's embedded profile
+  (`data/schema.ts:131-145`), and identity is deliberately absent from `inputsKey` (`derived.ts:137-148`)
+  so widening it is hash-safe — keep it that way.
+- **Blocked by:** nothing. Phase 7 is unblocked and in progress.
 
 ### Phase 8 — Financial amount semantics
 
