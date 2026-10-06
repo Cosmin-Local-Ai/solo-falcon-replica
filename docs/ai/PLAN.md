@@ -230,6 +230,14 @@ numbering stays readable.
   currently gets an over-deducted base and an **understated tax**. Phase 4 fixed the CASS *amount*;
   splitting the non-deductible difference out of the taxable base is Phase 5's job. It is named in the
   `calcCass` breakdown so it cannot be missed.
+- **New from Phase 5 recon — B-14, the regime gate is inverted.** `tax.ts:52-54` blocks
+  `impozit_pe_venit`, which is the **default** regime (`profile.ts:41`) and the only regime this
+  package exists for. So the numeric income-tax suite runs entirely under `impozit_pe_cit` — a regime
+  for which **no rule exists in the store**, and to which the 10% Titlul IV rate in `INCOME_TAX_2026`
+  does not apply. Deleting the short-circuit is therefore not enough: the gate must be **inverted**
+  (`impozit_pe_venit` computes; `impozit_pe_cit` returns `REVIEW_REQUIRED` because Titlul II / impozit
+  pe profit is not modelled), and the numeric tests must be re-pointed to the default regime. Until
+  that is done, every green income-tax assertion is testing a path no user takes.
 - **Blocked by:** Q-NONDEDUCT-VAT (U-1) — must stay `REVIEW_REQUIRED`, never a computed rule.
 
 ### Phase 6 — Profile-driven fiscal inputs
