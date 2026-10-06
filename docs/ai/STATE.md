@@ -27,16 +27,16 @@ are untouched, and 48,600 / 97,200 / 291,600 are unchanged.
 `:48`) were **false**. The measured figures are below. The full claim→verdict table is in
 `docs/ai/steps/01_real_baseline.md` §6.1. No application code was modified during this sync.
 
-## Verification summary (counts re-measured 2026-10-06 after Phase 3; environment figures from 2026-10-05, all exit 0)
+## Verification summary (counts re-measured 2026-10-06 after Phase 4; environment figures from 2026-10-05, all exit 0)
 
-Re-measured after the Phase 3 CAS correction (`calculators.ts`, `package2026.ts`, `tax.ts`,
-`thresholds.ts` and their tests); environment rows unchanged from the Phase 2 measurement:
+Re-measured after the Phase 4 CASS correction (`calculators.ts`, `package2026.ts`, `tax.ts` and their
+tests — `thresholds.ts` untouched); environment rows unchanged from the Phase 2 measurement:
 
 | Command | Result |
 |---|---|
 | `npx tsc --noEmit` | **0 errors** |
 | `npm run build` (`tsc && vite build`) | **exit 0** |
-| `npm run test` (vitest) | **36 test files, 463 unit tests, all passing** (450 at Phase 2; Phase 3 added 13 CAS tests) |
+| `npm run test` (vitest) | **36 test files, 482 unit tests, all passing** (450 at Phase 2, 463 after Phase 3; Phase 4 added 19 CASS tests) |
 | `npm run test:e2e` (playwright) | **23 e2e tests, all passing** (`e2e/dashboard.spec.ts`) |
 
 - Unit test files by area: 1 `src/`, 9 `src/components/`, 8 `src/data/`, 13 `src/domain/`
@@ -60,7 +60,7 @@ Re-measured after the Phase 3 CAS correction (`calculators.ts`, `package2026.ts`
 | 1 | Real baseline | **complete** (2026-10-05, docs only) | — |
 | 2 | Verified 2026 fiscal baseline + rule provenance (17-field `FiscalRule`, `rules.ts:19-37`) | **complete** (2026-10-05, `docs/ai/phases/02_fiscal_baseline.md`) | — |
 | 3 | CAS: flat clamp → SMBT **tier ladder** (not a clamp — `max_cas` is not a statutory cap) | **done 2026-10-06** (`phases/03_cas.md`) | U-5 closed; B-2 fixed; 24 SM threshold surface deferred to Phase 6 |
-| 4 | CASS: min-base behaviour + `max_cass` enforcement | not started | Phase 2 **done**; ~~Q-CASS-MINBASE (U-2)~~ **closed** — floor is art. 174 alin. (6), conditional; U-8 open as risk |
+| 4 | CASS: the 6-SM floor is an art. 174 alin. (6) **top-up**, not a substitution or a review gate; `min_cass`/`max_cass` **derived**, not enforced as independent figures | **done 2026-10-06** (`phases/04_cass.md`) | ~~Q-CASS-MINBASE (U-2)~~ closed — floor is art. 174 alin. (6), conditional; B-3 fixed; B-6 CASS half fixed; **U-8 open as risk** |
 | 5 | Income tax: **delete** the phantom 30% cap (`tax.ts:52-54`); 16% surcharge is not applicable | not started | Q-NONDEDUCT-VAT (U-1); art. 68 alin. (4) gate now captured |
 | 6 | Profile-driven fiscal inputs; NORMA_VENIT | not started | Phase 3/4; Q-30PCT-CAP, Q-NETGROSS |
 | 7 | Identity source of truth + persisted-state migration (version field, migration chain, non-destructive corrupt recovery) | not started | Q-IDENTITY-SOURCE, Q-PERSISTENCE-VERSION |
@@ -76,10 +76,10 @@ Phase scope, entry criteria and per-phase evidence: `docs/ai/PLAN.md` "Forward r
 |---|---|---|---|
 | B-1 | Default regime `impozit_pe_venit` short-circuits the tax engine to `review_required` — the default user gets no tax estimate | `src/domain/tax.ts:52-54`; `src/domain/profile.ts:41`; `src/data/seed.ts:7` | Phase 5 |
 | B-2 | **FIXED (Phase 3, 2026-10-06)** — CAS was a flat clamp; `calcCas` is now a parameter-driven floor ladder (below 12 SM → 0; 12–24 SM → 12,150; ≥ 24 SM → 24,300; no cap) with the CF art. 150 alin. (1) pension exemption wired through `CalculatorInput.pensionStatus` | `src/domain/fiscal/calculators.ts` `calcCas`; `phases/03_cas.md` | closed |
-| B-3 | CASS returns `reviewRequired` below `min_base` instead of applying the minimum base | `src/domain/fiscal/calculators.ts:67-69` | Phase 4 |
+| B-3 | **FIXED (Phase 4, 2026-10-06)** — CASS returned `reviewRequired` below `min_base`. The law owes a **contribution top-up** to the 6-SM figure (art. 174 alin. (6)), not a review halt and not a substituted base; a zero/loss year owes **no CASS at all** (art. 174 alin. (2)); art. 174 alin. (7) lit. a)/c) waive only the top-up. The `min_base` **value** (24,300) was always right — its **citation** (art. 170 alin. (2)-(3)) was wrong | `src/domain/fiscal/calculators.ts` `calcCass`; `phases/04_cass.md` | closed |
 | B-4 | `progressive_rate: 16` is dead data while the result is still reported `status: 'computed'` — the engine under-reports tax and claims success | `src/domain/fiscal/calculators.ts:90,96`; `package2026.ts:109` | **Phase 2 — parameter removed** (16% is legally inapplicable to PFA sistem real, not merely unread). The stale "16% progressive surcharge" NOTE string in `calcIncomeTax` remains a Phase 5 cleanup. |
 | B-5 | 5 of 8 ACTIVE rules carry non-resolvable provenance placeholders (`'ANAF 2026'`, anaf.ro homepage, self-referential article) | `package2026.ts:77-79,96-98,112-114,127-129,142-144` | **Phase 2 — fixed** (verified citations; `VAT_THRESHOLD_2026` also corrected from art. 338 → art. 310 alin. (1)) |
-| B-6 | **CAS part FIXED (Phase 3)**: `max_cas` (the phantom cap) removed; `tier1_cas`/`tier2_cas` are now read by `calcCas`. Still open: `max_cass`, `multiple_6x/12x/24x/72x` declared but never read — declared caps silently unenforced | `package2026.ts`; `phases/03_cas.md` §2–3 | Phases 4, 5 |
+| B-6 | **CAS part FIXED (Phase 3)**: `max_cas` (the phantom cap) removed; `tier1_cas`/`tier2_cas` are now read by `calcCas`. **CASS part FIXED (Phase 4)**: `min_cass`/`max_cass` removed — both are derived as `rate × min_base` / `rate × max_annual_base`; `max_cass` had no reader at all and `min_cass` was applied as an unconditional floor on the CASS value, which art. 174 alin. (6)-(7) do not support. Still open: `multiple_6x/12x/24x/72x` declared but never read | `package2026.ts`; `phases/03_cas.md` §2–3; `phases/04_cass.md` §3, §5 | Phase 5 (multiples) |
 | B-7 | `docs/ai/STATE.md` and `docs/ai/PLAN.md` contained materially false claims | `01_real_baseline.md` §6.1, §6.2 | Phase 1 (this sync) |
 | B-8 | Two unreconciled identity stores: topbar reads `profile.identity`, Settings writes `settings.company` / `settings.personal` | `src/App.tsx:221-222` vs `src/pages/Settings.tsx:34-37,50-53`; reconciled only at `src/data/store.tsx:118` | Phase 7 |
 | B-9 | No UI path writes the profile — every fiscal input is fixed at seed values | `src/data/store.tsx:52,213` (`updateProfile` uncalled outside `derived.test.tsx:61`); `src/pages/Settings.tsx:369,373,377` (`disabled`) | Phases 6, 7 |
@@ -119,7 +119,7 @@ document (`aggregation.ts:85-87,96,102`); no release/year-resolution layer
 |---|---|---|
 | Q-NONDEDUCT-VAT (U-1) | Does non-deductible TVA enter the deductible expense for a neplătitor de TVA? No affirmative operative rule found; inference only, Medium. **Must stay `REVIEW_REQUIRED`, never a computed rule.** | Phases 5, 8 |
 | ~~Q-CASS-MINBASE (U-2)~~ | **CLOSED (Phase 4 research).** A 6-SM floor **does** exist for art. 68 sistem-real income, but it is imposed by **CF art. 174 alin. (6)**, not art. 170 alin. (2)-(3) — those reach only art. 155 alin. (1) lit. c)-h), and art. 68 is lit. b). The code's `min_base = 24,300` was **numerically right, mis-sourced**. It is a **top-up** ("o diferență de contribuție … până la nivelul … 6 salarii"), proven genuine by art. 118 alin. (2) lit. b)'s carve-out. Gated by **alin. (2)** (pierdere fiscală / VNA = 0 → **no CASS at all**, optare apart) and **alin. (7)-(8)**. Full text in `phases/02` §4. | closed — `phases/02` §4 |
-| Q-CASS-NEGATIVE (U-8) | **OPEN RISK — not established.** That OUG 89/2025 (MO 1203/24.12.2025) and OUG 8/2026 (MO 147/25.02.2026) leave CF art. 170 / 174 / 154 / 180 untouched. Only evidence is that the 2026 consolidated text already absorbs Legea 239/2025 and Legea 141/2025 and shows no further note — and this same evidence class silently omitted an art. 68 amendment once. **Absence of a note is not proof.** Closing it needs both OUGs' Art. I clause lists read directly. | Phase 4 (risk, not blocker) |
+| Q-CASS-NEGATIVE (U-8) | **OPEN RISK — not established.** That OUG 89/2025 (MO 1203/24.12.2025) and OUG 8/2026 (MO 147/25.02.2026) leave CF art. 170 / 174 / 154 / 180 untouched. Only evidence is that the 2026 consolidated text already absorbs Legea 239/2025 and Legea 141/2025 and shows no further note — and this same evidence class silently omitted an art. 68 amendment once. **Absence of a note is not proof.** Closing it needs both OUGs' Art. I clause lists read directly. | Phase 4 recorded it as an open risk in `phases/04_cass.md` §9 — **still open**, not a blocker for the 2026 consolidated text as retrieved |
 | Q-122-ATTRIBUTION (U-3) | Which act last amended CF art. 122 alin. (3)'s 25 May term? Text is HIGH, attribution MEDIUM. | Phase 9 (attribution only) |
 | Q-QUARTERLY-DATES (U-4) | 2026 quarterly instalment **payment** due dates — need CF art. 123 alin. (2)-(4), 147/151 (CAS), 174 alin. (1)-(3) (CASS). | Phase 9 |
 | Q-CAS-EXEMPTION (U-5) | **CLOSED (Phase 3)** — the exemption is CF **art. 150 alin. (1)** (pensionari / asigurați în propriul sistem de asigurări sociale), **not art. 147** (the monthly D112 declarative duty). Implemented via `CalculatorInput.pensionStatus`; art. 150 alin. (2) covers only art. 137 alin. (1) lit. b^1), so `salaryStatus` deliberately does NOT exempt. | closed — `phases/03_cas.md` §1–2 |

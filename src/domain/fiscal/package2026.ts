@@ -114,22 +114,46 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     effectiveTo: null,
     parameters: [
       { id: 'rate', label: 'CASS rate', value: 10, unit: 'percent' },
-      { id: 'min_base', label: 'Minimum base (6 SM annual)', value: 24300, unit: 'lei' },
+      { id: 'min_base', label: 'Top-up floor (6 SM annual) — CF art. 174 alin. (6); conditional, not an unconditional minimum', value: 24300, unit: 'lei' },
       { id: 'max_annual_base', label: 'Max annual base (72 SM)', value: 291600, unit: 'lei' },
-      { id: 'min_cass', label: 'Minimum CASS', value: 2430, unit: 'lei' },
-      { id: 'max_cass', label: 'Maximum CASS', value: 29160, unit: 'lei' },
+      // REMOVED in Phase 4: `min_cass` (2,430) and `max_cass` (29,160) were independent parameters
+      // encoding figures that are fully DERIVABLE as rate × min_base and rate × max_annual_base.
+      // Two sources of truth for one legal number is the defect — `max_cass` was in fact read by
+      // nothing at all (dead parameter), while `min_cass` was applied as an unconditional floor on
+      // the CASS *value*, which is wrong: the 6-SM amount is a contribution TOP-UP under art. 174
+      // alin. (6), disapplied by art. 174 alin. (7) lit. a)/c), and absent entirely under art. 174
+      // alin. (2). calcCass now derives both amounts from the two bases. `min_base` and
+      // `max_annual_base` keep their ids — thresholds.ts CASS_MIN_BASE / CASS_MAX_BASE read them
+      // by string.
     ],
     calculatorId: 'calc-cass',
-    // CF art. 170 alin. (1) — 72 SM annual ceiling (raised 60→72 SM by Legea 239/2025, Art. XII pct. 19,
-    // MO 1160/15.12.2025). Portal note: "prevederile art. XII pct. 19 se aplică începând cu veniturile
-    // aferente anului 2026" — 72 SM governs the 2026 income year, not 2027.
-    // Pensioner relief: CF art. 174 alin. (7) lit. c) (introduced by Legea 141/2025) disapplies the
-    // art. 174 alin. (6) top-up to 6 SM.
-    // GAP U-2 (UNVERIFIED): no statutory MINIMUM base is sourced for art. 68 sistem-real income. The
-    // 6-SM rungs of art. 170 alin. (2)-(3) cover art. 155 alin. (1) lit. c)-h) income, not art. 68.
-    // The min_base label "6 SM annual" below is therefore UNSOURCED — do not treat it as verified.
-    sourceAct: 'Cod fiscal — Legea 239/2025, Art. XII pct. 19 (MO 1160/15.12.2025)',
-    sourceArticle: 'art. 170 alin. (1); relief art. 174 alin. (7) lit. c)',
+    // CF art. 170 alin. (1) — rate 10% and the 72 SM annual ceiling (raised 60→72 SM by Legea
+    // 239/2025, Art. XII pct. 19, MO 1160/15.12.2025; portal note: "prevederile art. XII pct. 19 se
+    // aplică începând cu veniturile aferente anului 2026" — 72 SM governs the 2026 income year, not
+    // 2027). The same alin. (1) keeps art. 118 fiscal losses OUT of the base.
+    // The 6-SM floor is CF art. 174 alin. (6), NOT art. 170 alin. (2)-(3): those rungs reach only
+    // art. 155 alin. (1) lit. c)-h), while art. 68 sistem-real income is lit. b). Art. 174 alin. (6)
+    // was introduced by OUG 128/2024 pct. 23 and is untouched by Legea 239/2025 (whose pct. 20 moves
+    // alin. (4), (5), (11) only). It is a "diferență de contribuție" TOP-UP, not a substitution —
+    // art. 118 alin. (2) lit. b) makes CASS deductible from the income-tax base "cu excepția
+    // diferenței de contribuție … prevăzută la art. 174 alin. (6)".
+    // Zero net income / fiscal loss: CF art. 174 alin. (2) — such persons "nu datorează contribuția"
+    // at all; the 6-SM floor is not self-executing there (they may opt in under art. 180 alin. (1),
+    // elective and not modelled).
+    // Pension relief: CF art. 174 alin. (7) lit. c) (introduced by Legea 141/2025, Art. I pct. 34,
+    // MO 699/25.07.2025; income year 2025 onward, so in force for 2026) disapplies ONLY the art. 174
+    // alin. (6) top-up — 10% × net still stands. A pensioner with art. 68 net income is NOT CASS-free,
+    // unlike CAS where art. 150 alin. (1) exempts entirely. Do not route pension through art. 154 or
+    // art. 174 alin. (8): Legea 141/2025 pct. 35 narrowed alin. (8) to art. 154 alin. (1) lit. a), b),
+    // e) și f), and pensioners sit at lit. h)/h²) — not in that list.
+    // GAP U-2 IS CLOSED (2026-10-06): the 6-SM floor for art. 68 income IS sourced — at art. 174
+    // alin. (6). The value 24,300 was always numerically correct for 2026 (6 × 4,050 lei, the SM in
+    // force on 1 ianuarie 2026 per CF art. 135^1 alin. (3)); only its citation was wrong. For 2027 the
+    // same anchor gives 6 × 4,325 = 25,950 lei; HG 146/2026's mid-year rise does not re-anchor 2026.
+    // OPEN RISK U-8: it is NOT established that OUG 89/2025 (MO 1203/24.12.2025) and OUG 8/2026
+    // (MO 147/25.02.2026) leave art. 170 / 174 / 154 / 180 untouched — see docs/ai/phases/04_cass.md.
+    sourceAct: 'Cod fiscal — OUG nr. 128/2024, Art. I pct. 22-23 (MO 1125/11.11.2024); Legea 239/2025, Art. XII pct. 19 (MO 1160/15.12.2025); Legea 141/2025, Art. I pct. 34 (MO 699/25.07.2025)',
+    sourceArticle: 'art. 170 alin. (1) (cotă 10%, plafon 72 SM); art. 174 alin. (6) (prag de 6 SM prin diferență de contribuție); art. 174 alin. (2) (VNA zero / pierdere fiscală); excepție art. 174 alin. (7) lit. c); ancoră SM art. 135^1 alin. (3)',
     sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/305208',
   },
   {

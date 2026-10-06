@@ -8,20 +8,35 @@ export type CalculatorResult =
 
 export type CalculatorInput = {
   /** Realized net income for the tax year. For CAS it only SELECTS the applicable
-   * statutory floor — it is never itself the CAS base (see `calcCas`). */
+   * statutory floor — it is never itself the CAS base (see `calcCas`). For CASS it
+   * IS the base (venitul net anual, art. 68 sistem real), before deducting CAS —
+   * see `calcCass`. */
   base?: number;
   /**
-   * CF art. 150 alin. (1): a natural person earning independent-activity income who
-   * is a pensioner or is insured in their own social insurance system owes NO CAS
+   * CAS — CF art. 150 alin. (1): a natural person earning independent-activity income
+   * who is a pensioner or is insured in their own social insurance system owes NO CAS
    * for art. 137 alin. (1) lit. b) and b^1) income. Automatic, independent of the
    * income amount, not optional.
    *
-   * DELIBERATELY NO SALARY HOOK: CF art. 150 alin. (2) exempts persons with salary
-   * income only for art. 137 alin. (1) lit. b^1) (drepturi de proprietate
-   * intelectuală), NOT lit. b). A PFA owner who is also an employee still owes full
-   * CAS on independent-activity income, so `salaryStatus` must never map here.
+   * CASS — CF art. 174 alin. (7) lit. c): the SAME flag does NOT exempt. Pension
+   * income realised in that fiscal year removes ONLY the art. 174 alin. (6) top-up to
+   * 6 SM; 10% × net still stands whenever net > 0. CAS and CASS treat pensioners
+   * DIFFERENTLY — do not mirror one branch in the other. See `calcCas` vs `calcCass`.
    */
   pensionStatus?: 'da' | 'nu';
+  /**
+   * CASS only — CF art. 174 alin. (7) lit. a): the art. 174 alin. (6) top-up is not
+   * owed where salary and assimilated income in that fiscal year is "cel puțin egal cu
+   * 6 salarii minime brute". The profile carries only a yes/no flag, NOT the salary
+   * amount, so the condition cannot be evaluated — `calcCass` returns
+   * `reviewRequired` rather than guessing either way.
+   *
+   * MUST NEVER REACH CAS: CF art. 150 alin. (2) exempts salary earners only for
+   * art. 137 alin. (1) lit. b^1) (drepturi de proprietate intelectuală), NOT lit. b).
+   * A PFA owner who is also an employee still owes full CAS on independent-activity
+   * income, so `salaryStatus` must never map into `calcCas`.
+   */
+  salaryStatus?: 'da' | 'nu';
   /**
    * CF art. 148 alin. (2): the CAS base is "venitul ales de contribuabil". An
    * explicitly chosen base is honoured, but never below the applicable statutory
@@ -120,28 +135,101 @@ function calcCas(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
   return { value: cas, breakdown };
 }
 
+// CASS — CF Titlul V Cap. III. The base is the annual NET income (art. 68 sistem real,
+// before deducting CAS). The floor and the ceiling come from DIFFERENT articles:
+//   CF art. 170 alin. (1)  ceiling — the base "nu poate fi mai mare decât" 72 SM. This
+//                          article also excludes art. 118 fiscal losses from the base.
+//   CF art. 174 alin. (6)  the 6-SM floor for art. 155 alin. (1) lit. b) income, owed as
+//                          "o diferență de contribuție … până la nivelul celei corespunzătoare
+//                          bazei de calcul egale cu 6 salarii minime brute". It is a TOP-UP, not
+//                          a substitution — proven by CF art. 118 alin. (2) lit. b), which makes
+//                          CASS deductible from the income-tax base "cu excepția diferenței de
+//                          contribuție … prevăzută la art. 174 alin. (6)". NOT art. 170 alin.
+//                          (2)-(3): those rungs reach only art. 155 alin. (1) lit. c)-h), and
+//                          art. 68 income is lit. b) — a different door.
+//   CF art. 174 alin. (2)  zero net income / fiscal loss → "nu datorează contribuția" at all.
+//                          The 6-SM floor is NOT self-executing there; they may opt in under
+//                          art. 180 alin. (1) (elective, deadline-bound — not modelled).
+//   CF art. 174 alin. (7)  the top-up is not owed where the person REALISED, in that fiscal
+//     lit. a)/c)             year, (a) salary ≥ 6 SM or (c) pension income per art. 99.
+//                          lit. c) has no monetary threshold and removes ONLY the top-up:
+//                          10% × net still stands. A pensioner with art. 68 net income is NOT
+//                          CASS-free — unlike CAS art. 150 alin. (1), which exempts entirely.
+// Every figure below is read from parameters; the CASS amounts at the floor and the ceiling
+// are DERIVED as rate × base, never declared as separate parameters (one legal figure, one
+// source of truth).
 function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
   const rate = paramNumber(rule, 'rate') / 100;
-  const minBase = paramNumber(rule, 'min_base');
-  const maxBase = paramNumber(rule, 'max_annual_base');
-  const minCass = paramNumber(rule, 'min_cass');
-  const base = input?.base ?? minBase;
-  if (base < minBase) {
+  const floorBase = paramNumber(rule, 'min_base'); // 6 SM — CF art. 174 alin. (6) top-up floor
+  const maxBase = paramNumber(rule, 'max_annual_base'); // 72 SM — CF art. 170 alin. (1) ceiling
+  const vna = input?.base ?? 0;
+  const floorCass = floorBase * rate; // derived: 2,430 lei for 2026
+  const ceilingCass = maxBase * rate; // derived: 29,160 lei for 2026
+
+  // CF art. 174 alin. (2): a fiscal loss or a net income equal to zero owes NO CASS.
+  if (vna <= 0) {
     return {
-      reviewRequired: true,
-      reason: `Base ${base} lei is below the minimum base ${minBase} lei`,
+      value: 0,
+      breakdown: [
+        `venit net anual (VNA): ${vna} lei`,
+        'VNA egal cu zero sau pierdere fiscala — nu se datoreaza CASS: CF art. 174 alin. (2); pierderile fiscale nu intra nici in baza de calcul (art. 170 alin. (1))',
+        `OPTIUNE NEMODELATA: aceeasi persoana poate opta pentru plata CASS potrivit CF art. 180 alin. (1) — optiune cu termen, iar baza din art. 180 alin. (2) nu este verificata`,
+        'CASS = 0 lei (pragul de 6 SM din art. 174 alin. (6) NU se aplica automat aici)',
+      ],
     };
   }
-  const cappedBase = Math.min(base, maxBase);
-  const cass = Math.max(cappedBase * rate, minCass);
-  return {
-    value: cass,
-    breakdown: [
-      `base: ${base} lei`,
-      `capped base: ${cappedBase} lei (maximum ${maxBase} lei)`,
-      `CASS = ${cappedBase} x ${rate} = ${cass} lei (minimum ${minCass} lei)`,
-    ],
-  };
+
+  if (vna < floorBase) {
+    // Checked BEFORE the salary relief: art. 174 alin. (7) lit. c) has no monetary
+    // threshold, so it is certain in exactly the case where lit. a) cannot be evaluated.
+    if (input?.pensionStatus === 'da') {
+      const cass = vna * rate;
+      return {
+        value: cass,
+        breakdown: [
+          `venit net anual (VNA): ${vna} lei`,
+          `VNA sub pragul de 6 SM (${floorBase} lei): art. 174 alin. (6) ar cere o diferenta de contributie pana la ${floorCass} lei`,
+          'exceptie: venituri din pensii (art. 99) REALIZATE in anul fiscal — CF art. 174 alin. (7) lit. c); fara prag valoric, nu e un simplu statut',
+          'lit. c) elimina DOAR diferenta de la art. 174 alin. (6) — contributia de 10% pe VNA ramane datorata (art. 170 alin. (1)); pensia NU scuteste de CASS, spre deosebire de CAS unde art. 150 alin. (1) scuteste integral',
+          `CASS = ${vna} x ${rate} = ${cass} lei`,
+        ],
+      };
+    }
+    // CF art. 174 alin. (7) lit. a): the top-up is not owed if salary income in that
+    // year is at least 6 SM. The profile carries no salary amount, so this cannot be
+    // decided — surface it instead of guessing in either direction.
+    if (input?.salaryStatus === 'da') {
+      return {
+        reviewRequired: true,
+        reason:
+          `VNA ${vna} lei este sub pragul de 6 SM (${floorBase} lei), dar diferenta de contributie din CF art. 174 alin. (6) nu se datoreaza daca veniturile din salarii si asimilate ale anului fiscal sunt cel putin egale cu 6 salarii minime brute (art. 174 alin. (7) lit. a)). Profilul nu contine cuantumul salarial — nu se poate stabili.`,
+      };
+    }
+    return {
+      value: floorCass,
+      breakdown: [
+        `venit net anual (VNA): ${vna} lei`,
+        `baza de calcul = pragul de 6 SM: ${floorBase} lei — CF art. 174 alin. (6) (NU art. 170 alin. (2)-(3), care vizeaza doar art. 155 alin. (1) lit. c)-h))`,
+        `CASS = ${floorBase} x ${rate} = ${floorCass} lei — o diferenta de contributie pana la baza de 6 SM, nu inlocuirea bazei`,
+        'CF art. 118 alin. (2) lit. b): diferenta de la art. 174 alin. (6) NU se scade din baza impozabila (reparație de coerență, nu de calcul)',
+      ],
+    };
+  }
+
+  const base = Math.min(vna, maxBase);
+  const cass = base * rate;
+  const breakdown = [
+    `venit net anual (VNA): ${vna} lei`,
+    `baza de calcul: ${base} lei`,
+    `CASS = ${base} x ${rate} = ${cass} lei`,
+  ];
+  if (vna > maxBase) {
+    breakdown.push(
+      `VNA depaseste plafonul de 72 SM (${maxBase} lei) — baza se plafoneaza: CF art. 170 alin. (1) "nu poate fi mai mare decât"`,
+      `CASS la plafon = ${ceilingCass} lei, derivata din ${maxBase} x ${rate} (nu exista un parametru separat pentru acest numar)`,
+    );
+  }
+  return { value: cass, breakdown };
 }
 
 function calcIncomeTax(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {

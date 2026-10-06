@@ -70,7 +70,8 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // art. 137 alin. (1) lit. b^1) (drepturi de proprietate intelectuală), not lit. b),
   // so a salaried PFA owner still owes full CAS on independent-activity income.
   // A CAS of 0 (exemption, or income below 12 SM) flows through `taxable` and the
-  // lines unchanged.
+  // lines unchanged. NOTE the asymmetry: the same `pensionStatus` flag does NOT exempt
+  // from CASS — see the CASS block below (CAS art. 150 alin. (1) vs CASS art. 174 alin. (7) lit. c)).
   const casRes = calculatorRegistry['calc-cas'](casRule, {
     base: net,
     pensionStatus: inputs.pensionStatus,
@@ -79,8 +80,25 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   lines.push({ label: 'CAS (25%)', value: casRes.value });
 
   let cassValue = 0;
+  // CASS AND CAS TREAT PENSIONERS DIFFERENTLY — never mirror one branch into the other.
+  //   CAS:  CF art. 150 alin. (1) — a pensioner owes NO CAS at all on art. 137 alin. (1)
+  //         lit. b)/b^1) income (the call above).
+  //   CASS: CF art. 174 alin. (7) lit. c) — pension income realised in that fiscal year
+  //         removes ONLY the art. 174 alin. (6) top-up to 6 SM. 10% × net is still owed
+  //         whenever net > 0, so `pensionStatus` must never zero CASS here.
+  // `salaryStatus` is passed for CASS only: art. 174 alin. (7) lit. a) makes the top-up
+  // conditional on salary income of at least 6 SM, an amount the profile does not carry, so
+  // calcCass returns reviewRequired instead of guessing. It is deliberately NOT passed to
+  // calcCas (art. 150 alin. (2) covers only lit. b^1)).
+  // A CASS of 0 — art. 174 alin. (2) zero/loss year, or a relief — flows through `taxable`
+  // and the lines unchanged; the reviewRequired case aborts with the reason and the partial
+  // lines rather than reporting a wrong number.
   if (inputs.socialInsuranceStatus === 'obligatoriu') {
-    const cassRes = calculatorRegistry['calc-cass'](cassRule, { base: net });
+    const cassRes = calculatorRegistry['calc-cass'](cassRule, {
+      base: net,
+      pensionStatus: inputs.pensionStatus,
+      salaryStatus: inputs.salaryStatus,
+    });
     if ('reviewRequired' in cassRes) return rr(cassRes.reason, lines);
     cassValue = cassRes.value;
     lines.push({ label: 'CASS (10%)', value: cassValue });

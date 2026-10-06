@@ -32,9 +32,16 @@ describe('computeTaxEstimate', () => {
     expect(res.output.total).toBe(4_000);
   });
 
-  it('returns REVIEW_REQUIRED when net = 0 (CASS base below minimum)', async () => {
+  it('net = 0 → CASS 0, NOT review_required (CF art. 174 alin. (2): zero net income owes no CASS)', async () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 10_000, expenses: 10_000, revenuesNet: 10_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
-    expect(res.status).toBe('review_required');
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    // Re-pointed from the old "review_required" expectation, which encoded defect B-3: the
+    // 6-SM floor of art. 174 alin. (6) is NOT self-executing when net is zero.
+    const cass = res.lines.find(l => l.label === 'CASS (10%)')?.value;
+    expect(cass).toBe(0);
+    // CAS 0 (below 12 SM), CASS 0, taxable 0 → no tax at all.
+    expect(res.output.total).toBe(0);
   });
 
   it('returns REVIEW_REQUIRED for impozit_pe_venit regime', async () => {
@@ -76,9 +83,12 @@ describe('computeTaxEstimate', () => {
     expect(snap.output.total).toBe(7_600);
   });
 
-  it('returns REVIEW_REQUIRED for zero revenues (CASS base below minimum)', async () => {
+  it('zero revenues → computed with CASS 0 (CF art. 174 alin. (2)), not review_required', async () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 0, expenses: 0, revenuesNet: 0, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
-    expect(res.status).toBe('review_required');
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    expect(res.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(0);
+    expect(res.output.total).toBe(0);
   });
 
   it('applies 10% flat income tax at 50,000 net', async () => {
@@ -128,14 +138,26 @@ describe('computeTaxEstimate', () => {
     expect(res).toBeDefined();
   });
 
-  it('returns review_required for zero revenues', async () => {
+  it('zero revenues → computed with CASS 0 (CF art. 174 alin. (2))', async () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 0, expenses: 0, revenuesNet: 0, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
-    expect(res.status).toBe('review_required');
+    // Re-pointed from review_required: that expectation was defect B-3 wearing a test's
+    // clothes. A zero net income year owes no CASS at all (art. 174 alin. (2)); the 6-SM
+    // top-up of art. 174 alin. (6) is not self-executing there.
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    expect(res.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(0);
+    expect(res.output.total).toBe(0);
   });
 
-  it('returns review_required when expenses exceed revenues', async () => {
+  it('expenses exceed revenues → computed with CASS 0 (net is not positive, art. 174 alin. (2))', async () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 10_000, expenses: 20_000, revenuesNet: 10_000, expensesNet: 20_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
-    expect(res.status).toBe('review_required');
+    // Re-pointed with the same reasoning: no positive net, so no CASS base and no CASS.
+    // (The deductible clamp at tax.ts keeps net at 0 rather than negative; the fiscal-loss
+    // income-tax treatment is Phase 5's scope, not Phase 4's.)
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    expect(res.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(0);
+    expect(res.output.total).toBe(0);
   });
 
   it('computes at 72,000 net (CAS on the 12 SM floor)', async () => {
@@ -160,6 +182,58 @@ describe('computeTaxEstimate', () => {
   it('net just below CASS min base (24,299) → review_required', async () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 24_299, expenses: 0, revenuesNet: 24_299, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
+  });
+
+  // makeInputs defaults to salaryStatus 'da', so the test above is the art. 174 alin. (7)
+  // lit. a) case: the top-up is waived only if salary income reaches 6 SM, and the profile
+  // carries no salary amount — so it must surface as review_required, never as a number.
+  it('net 24,299 with salaryStatus da → review_required names art. 174 alin. (7) lit. a)', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'da', pensionStatus: 'nu' }), profile: makeProfile(), revenues: 24_299, expenses: 0, revenuesNet: 24_299, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('review_required');
+    if (res.status !== 'review_required') return;
+    expect(res.reason).toContain('art. 174 alin. (7) lit. a)');
+  });
+
+  it('net 24,299 with no salary and no pension → CASS 2,430 (art. 174 alin. (6) top-up)', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'nu', pensionStatus: 'nu' }), profile: makeProfile({ salaryStatus: 'nu', pensionStatus: 'nu' }), revenues: 24_299, expenses: 0, revenuesNet: 24_299, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    expect(res.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(2_430);
+  });
+
+  it('pensioner with net below 6 SM → CASS = 10% x net, NOT 0 (art. 174 alin. (7) lit. c) waives only the top-up)', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs({ pensionStatus: 'da' }), profile: makeProfile({ pensionStatus: 'da' }), revenues: 10_000, expenses: 0, revenuesNet: 10_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    // CAS = 0 (art. 150 alin. (1)) but CASS = 1000 (art. 170 alin. (1)) — the asymmetry.
+    expect(res.lines.find(l => l.label === 'CAS (25%)')?.value).toBe(0);
+    const cass = res.lines.find(l => l.label === 'CASS (10%)')?.value;
+    expect(cass).toBe(1_000);
+    // taxable = 10000 - 0 - 1000 = 9000 → income 900 → total 1900.
+    expect(res.output.total).toBe(1_900);
+  });
+
+  it('CASS ceiling is parameter-driven: max_annual_base 100,000 → CASS 10,000 at net 150,000', async () => {
+    const modifiedRules = PFA_2026_SYSTEM_REAL_PACKAGE.map((rule) => {
+      if (rule.ruleId === 'CASS_2026') {
+        return {
+          ...rule,
+          parameters: rule.parameters.map((p) =>
+            p.id === 'max_annual_base' ? { ...p, value: 100_000 } : p,
+          ),
+        };
+      }
+      return rule;
+    });
+    const original = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 150_000, expenses: 0, revenuesNet: 150_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const modified = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 150_000, expenses: 0, revenuesNet: 150_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: modifiedRules });
+    expect(original.status).toBe('computed');
+    expect(modified.status).toBe('computed');
+    if (original.status !== 'computed' || modified.status !== 'computed') return;
+    // 29,160 is not a hardcoded figure and there is no max_cass parameter: it is rate x
+    // max_annual_base, so moving the base parameter moves the ceiling.
+    expect(original.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(15_000);
+    expect(modified.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(10_000);
   });
 
   // ── Boundary: CAS tier-1 floor (12 SM) ──

@@ -181,19 +181,140 @@ describe('calculators', () => {
     }
   });
 
-  it('CASS at the minimum base is 2430', () => {
+  // ── CASS 2026 — CF art. 170 alin. (1) ceiling, art. 174 alin. (6) top-up floor,
+  // art. 174 alin. (2) zero/loss, art. 174 alin. (7) lit. a)/c) relief. See phases/04_cass.md.
+
+  it('CASS: VNA = 0 → 0, no CASS at all (CF art. 174 alin. (2))', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 0 });
+    expect(result).toMatchObject({ value: 0 });
+    if ('breakdown' in result) {
+      const text = result.breakdown.join('\n');
+      expect(text).toContain('art. 174 alin. (2)');
+      // The art. 180 alin. (1) optare exists but is deliberately not modelled.
+      expect(text).toContain('art. 180 alin. (1)');
+      expect(text).toContain('NEMODELATA');
+    }
+  });
+
+  it('CASS: VNA < 0 (fiscal loss) → 0 (CF art. 174 alin. (2))', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: -50000 });
+    expect(result).toMatchObject({ value: 0 });
+  });
+
+  it('CASS: VNA just above 0 → 2430, the 6 SM top-up applies (CF art. 174 alin. (6))', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 1 });
+    expect(result).toMatchObject({ value: 2430 });
+  });
+
+  it('CASS: VNA just below 6 SM (24299) → 2430 (top-up, not 10% of VNA)', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 24299 });
+    expect(result).toMatchObject({ value: 2430 });
+  });
+
+  it('CASS: VNA exactly 6 SM (24300) → 2430', () => {
     const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 24300 });
     expect(result).toMatchObject({ value: 2430 });
   });
 
-  it('CASS caps at max_annual_base (291600) → 29160', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 500000 });
+  it('CASS: the 6 SM floor is attributed to art. 174 alin. (6), NOT art. 170 alin. (2)-(3)', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 10000 });
+    if (!('breakdown' in result)) throw new Error('expected a computed result');
+    const text = result.breakdown.join('\n');
+    expect(text).toContain('CF art. 174 alin. (6)');
+    expect(text).toContain('NU art. 170 alin. (2)-(3)');
+    expect(text).toContain('diferenta de contributie');
+    // A re-attribution to art. 170 alin. (2)-(3) must fail here.
+    expect(text).toContain('art. 155 alin. (1) lit. c)-h)');
+  });
+
+  it('CASS: VNA between 6 SM and 72 SM → 10% x VNA', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 100000 });
+    expect(result).toMatchObject({ value: 10000 });
+  });
+
+  it('CASS: VNA exactly 72 SM (291600) → 29160', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 291600 });
     expect(result).toMatchObject({ value: 29160 });
   });
 
-  it('CASS returns review_required when base is below min_base', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 10000 });
+  it('CASS: VNA above 72 SM → 29160, capped by max_annual_base (CF art. 170 alin. (1))', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 500000 });
+    expect(result).toMatchObject({ value: 29160 });
+    if ('breakdown' in result) {
+      const text = result.breakdown.join('\n');
+      expect(text).toContain('CF art. 170 alin. (1)');
+      // 29160 is DERIVED from rate x max_annual_base — there is no max_cass parameter.
+      expect(text).toContain('derivata din 291600 x 0.1');
+    }
+  });
+
+  it('CASS: the ceiling is parameter-driven — mutating max_annual_base moves it', () => {
+    const rule = byId('CASS_2026');
+    const mutated = {
+      ...rule,
+      parameters: rule.parameters.map((p) =>
+        p.id === 'max_annual_base' ? { ...p, value: 100000 } : p,
+      ),
+    };
+    // No hardcoded 291600: with a 100000 ceiling, VNA 150000 caps at 100000 → 10000.
+    expect(calculatorRegistry['calc-cass'](mutated, { base: 150000 })).toMatchObject({ value: 10000 });
+    // and the unmutated rule still caps at 291600 → 29160.
+    expect(calculatorRegistry['calc-cass'](rule, { base: 150000 })).toMatchObject({ value: 15000 });
+  });
+
+  it('CASS: min_cass / max_cass are NOT independent parameters (derived from rate x base)', () => {
+    const params = byId('CASS_2026').parameters.map((p) => p.id);
+    expect(params).toContain('min_base');
+    expect(params).toContain('max_annual_base');
+    expect(params).not.toContain('min_cass');
+    expect(params).not.toContain('max_cass');
+  });
+
+  it('CASS: pensioner below 6 SM → 10% x VNA, NOT 0 and NOT 2430 (art. 174 alin. (7) lit. c))', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 10000, pensionStatus: 'da' });
+    expect(result).toMatchObject({ value: 1000 });
+    if ('breakdown' in result) {
+      const text = result.breakdown.join('\n');
+      expect(text).toContain('art. 174 alin. (7) lit. c)');
+      expect(text).toContain('elimina DOAR diferenta');
+      // The asymmetry against CAS must stay documented where the branch lives.
+      expect(text).toContain('art. 150 alin. (1)');
+    }
+  });
+
+  it('CASS: pensioner above 6 SM → 10% x VNA, unchanged (relief is irrelevant there)', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 100000, pensionStatus: 'da' });
+    expect(result).toMatchObject({ value: 10000 });
+  });
+
+  it('CASS: pensioner with VNA = 0 → still 0 (art. 174 alin. (2) is upstream of any relief)', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 0, pensionStatus: 'da' });
+    expect(result).toMatchObject({ value: 0 });
+  });
+
+  it('CASS: salaryStatus da below 6 SM → review_required, the profile has no salary amount', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 10000, salaryStatus: 'da' });
     expect(result).toMatchObject({ reviewRequired: true });
+    if ('reason' in result) expect(result.reason).toContain('art. 174 alin. (7) lit. a)');
+  });
+
+  it('CASS: pension relief is checked before salary relief (lit. c) has no threshold)', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
+      base: 10000,
+      salaryStatus: 'da',
+      pensionStatus: 'da',
+    });
+    expect(result).toMatchObject({ value: 1000 });
+  });
+
+  it('CASS: salaryStatus da above 6 SM → normal 10% (lit. a) relief is irrelevant there)', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 100000, salaryStatus: 'da' });
+    expect(result).toMatchObject({ value: 10000 });
+  });
+
+  it('CASS: no base supplied → 0, treated as a zero/loss year rather than a floor', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {});
+    expect(result).toMatchObject({ value: 0 });
   });
 
   it('income tax applies 10% flat at 48600', () => {

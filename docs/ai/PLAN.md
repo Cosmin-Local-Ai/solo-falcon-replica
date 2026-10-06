@@ -111,7 +111,7 @@ numbering stays readable.
 | 1 | Real baseline (done) | — | B-7 |
 | 2 | Verified 2026 fiscal baseline + replace placeholder provenance on 5 rules (**done** — `docs/ai/phases/02_fiscal_baseline.md`) | — | B-4, B-5 |
 | 3 | CAS: flat clamp → SMBT **tier ladder** (`max_cas` is not a statutory cap) | Q-CAS-EXEMPTION (U-5) | B-2, B-6 (CAS half) |
-| 4 | CASS: decide min-base behaviour; enforce `max_cass` | Q-CASS-MINBASE (U-2) | B-3, B-6 (CASS half) |
+| 4 | CASS: the 6-SM floor is an art. 174 alin. (6) **top-up** (not a review gate, not a substituted base); `min_cass`/`max_cass` **derived** from `rate × base`, not enforced as independent figures | ~~Q-CASS-MINBASE (U-2)~~ closed | B-3, B-6 (CASS half) |
 | 5 | Income tax: **delete** the phantom 30% cap; 16% surcharge is not applicable | Q-NONDEDUCT-VAT (U-1) | B-1, B-4 (partly fixed in Phase 2) |
 | 6 | Profile-driven fiscal inputs (incl. NORMA_VENIT) | Q-NONDEDUCT-VAT (U-1) | B-9 (partly) |
 | 7 | Identity source of truth + persisted-state migration | Q-IDENTITY-SOURCE, Q-PERSISTENCE-VERSION | B-8, B-9, B-10, B-11, B-12 |
@@ -172,19 +172,40 @@ numbering stays readable.
   (HG 1.506/2024, MO I 1185/28.11.2024; HG 146/2026, MO 196/13.03.2026). U-6 is closed; the code's
   existing 48,600 / 97,200 / 291,600 values are correct and must not be "fixed".
 
-### Phase 4 — CASS
+### Phase 4 — CASS — **COMPLETE 2026-10-06** (`docs/ai/phases/04_cass.md`)
 
-- **Exists today:** rate 10% and `max_annual_base` applied (`calculators.ts:60-82`); CASS computed
-  only when `socialInsuranceStatus === 'obligatoriu'` (`tax.ts:71-78`).
-- **Must be created:** a decision on min-base behaviour — apply the statutory minimum base, or keep
-  `REVIEW_REQUIRED` and document why (`calculators.ts:67-69` currently halts instead of applying
-  `min_base`); enforcement of `max_cass` (`package2026.ts:93`, never read).
-- **Entry criteria:** **partly met** — Phase 2 sourced the 72-SM ceiling: CF art. 170 alin. (1) as
-  amended by **Legea 239/2025 Art. XII pct. 19** (MO 1160/15.12.2025), applying "începând cu veniturile
-  aferente anului **2026**". Pensioner relief is CF art. 174 alin. (7) lit. c) (Legea 141/2025).
-- **Blocked by:** Q-CASS-MINBASE (U-2) — **no statutory minimum base is sourced for art. 68 sistem-real
-  income.** The 6-SM rungs of art. 170 alin. (2)-(3) cover art. 155 alin. (1) lit. c)-h) income, not
-  art. 68, so the code's `min_base` label "6 SM annual" is unsourced. Do not invent one.
+- **Scope corrected against the research.** The original scope line — "decide min-base behaviour;
+  enforce `max_cass`" — was wrong on both halves and is replaced:
+  - **Not "apply the minimum".** Below 6 SM the law owes "o diferență de contribuție … până la nivelul
+    celei corespunzătoare bazei de calcul egale cu 6 salarii minime brute" (CF art. 174 alin. (6)) — a
+    **contribution top-up**, not a substituted base and not a `REVIEW_REQUIRED` halt. It is provably a
+    top-up because CF art. 118 alin. (2) lit. b) makes CASS deductible from the income-tax base "cu
+    excepția diferenței de contribuție … prevăzută la art. 174 alin. (6)". It is also **conditional**:
+    waived by art. 174 alin. (7) lit. a)/b)/c), and absent altogether when VNA ≤ 0 (art. 174 alin. (2)).
+  - **`max_cass` must be DERIVED, not enforced.** 29,160 is `10% × 291,600`; keeping it as a parameter
+    creates a second source of truth for one legal figure. `max_cass` was in fact read by nothing, and
+    `min_cass` was applied as an unconditional floor on the CASS *value* — a shape the articles do not
+    support. Both parameters are removed; `calcCass` derives both amounts from `min_base` /
+    `max_annual_base`, which keep their ids because `thresholds.ts` reads them by string.
+- **Citation fixed, value untouched:** `min_base = 24,300` was **numerically correct for 2026 and
+  mis-sourced**. Art. 170 alin. (2)-(3) reach only art. 155 alin. (1) lit. **c)-h)**; art. 68 sistem-real
+  income is lit. **b)**. The floor is **art. 174 alin. (6)** (OUG 128/2024 pct. 23). 24,300 / 291,600 /
+  4,050 were not changed.
+- **The asymmetry that had to be avoided:** CF art. 174 alin. (7) lit. c) (Legea 141/2025 Art. I pct. 34,
+  MO 699/25.07.2025) removes **only the top-up** — a pensioner with art. 68 net income is **not**
+  CASS-free, unlike CAS where art. 150 alin. (1) exempts entirely. CAS and CASS treat pensioners
+  differently; Phase 3's shape must not be mirrored here.
+- **Not modelled, deliberately:** the art. 180 alin. (1) optare (elective, deadline-bound, and its
+  alin. (2) base was never retrieved verbatim — inventing it would be inventing a citation); art. 174
+  alin. (8) prior-year relief (no prior-year data, and Legea 141/2025 pct. 35 narrowed it to art. 154
+  alin. (1) lit. a), b), e) și f), which excludes pensioners at lit. h)/h²)); art. 174 alin. (7) lit. b)
+  (the profile has `otherIncome` but not the CASS paid on it).
+- **Blocked by:** ~~Q-CASS-MINBASE (U-2)~~ — **closed**: the floor exists and is sourced at art. 174
+  alin. (6). **U-8 remains open as a risk, not a blocker**: it is not established that OUG 89/2025 and
+  OUG 8/2026 leave art. 170 / 174 / 154 / 180 untouched (`phases/04_cass.md` §9).
+- **Follow-up for Phase 6:** the `salaryStatus === 'da'` + `VNA < 6 SM` case returns `review_required`
+  because art. 174 alin. (7) lit. a) depends on a **salary amount** the profile does not carry. Wiring
+  that amount is a profile change, not a CASS change.
 
 ### Phase 5 — Income tax
 
@@ -313,12 +334,14 @@ numbering stays readable.
 
 ## Next
 
-1. **Phase 3 (CAS) is DONE** (2026-10-06, `phases/03_cas.md`) — art. 148 alin. (2) is now a parameter-driven
-   tier ladder, the art. 150 alin. (1) pension exemption is wired, and `CAS_MAX_BASE` is gone. Next up is
-   **Phase 4 (CASS)**. The SM values are settled (U-6 closed): 4,050 lei on 1 ianuarie 2026, so 12 SM =
-   48,600 lei and 24 SM = 97,200 lei are correct as they stand.
-2. **Phase 4 (CASS) is unblocked except U-2** — the 72-SM ceiling is sourced; the minimum base for
-   art. 68 income is not. Do not invent one.
+1. **Phase 4 (CASS) is DONE** (2026-10-06, `phases/04_cass.md`) — the 6-SM floor is now applied as the
+   art. 174 alin. (6) contribution top-up it actually is (2,430 lei, conditional), a zero/loss year owes
+   no CASS at all (art. 174 alin. (2)), art. 174 alin. (7) lit. c) waives only the top-up, and
+   `min_cass`/`max_cass` are gone in favour of `rate × base`. The `min_base` value 24,300 was already
+   right; only its citation was wrong. Next up is **Phase 5 (income tax)**.
+2. **U-8 stays open as a risk, not a blocker** — it is not established that OUG 89/2025 and OUG 8/2026
+   leave art. 170 / 174 / 154 / 180 untouched (`phases/04_cass.md` §9). Closing it means reading both
+   OUGs' Art. I clause lists directly, per item 7 below.
 3. **Phase 5's scope changed** — the `tax.ts:52-54` short-circuit rests on a 30% cap that does not
    exist, so it is a **deletion**, not an implementation. The art. 68 alin. (4) gate is now captured.
 4. Open ADRs in `docs/ai/decisions/` for the fiscal corrections (only 07 and 09 exist today).
