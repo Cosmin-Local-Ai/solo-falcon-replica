@@ -223,6 +223,13 @@ numbering stays readable.
 - **Do not re-import the phantom cap via a CAEN-aware rule:** art. 68 alin. (1) excludes art. 68^1 /
   **68^3** / 69, and art. 68^3 alin. (2) is a real 30% forfetar **regime switch** for cazare
   (>7 camere, art. 67 alin. (1^1)) — a PFA doing that activity is outside sistem real entirely.
+- **New from Phase 4 — B-13, the taxable base over-deducts CASS.** `tax.ts` subtracts the whole
+  `cassValue`, but CF art. 118 alin. (2) lit. b) makes CASS deductible from the income-tax base
+  "**cu excepția diferenței de contribuție** de asigurări sociale de sănătate **prevăzută la art. 174
+  alin. (6)**". The top-up is therefore **not** deductible, so anyone in the `0 < VNA < 6 SM` band
+  currently gets an over-deducted base and an **understated tax**. Phase 4 fixed the CASS *amount*;
+  splitting the non-deductible difference out of the taxable base is Phase 5's job. It is named in the
+  `calcCass` breakdown so it cannot be missed.
 - **Blocked by:** Q-NONDEDUCT-VAT (U-1) — must stay `REVIEW_REQUIRED`, never a computed rule.
 
 ### Phase 6 — Profile-driven fiscal inputs

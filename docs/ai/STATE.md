@@ -86,6 +86,7 @@ Phase scope, entry criteria and per-phase evidence: `docs/ai/PLAN.md` "Forward r
 | B-10 | Every Settings write is inert downstream — no module outside `Settings.tsx` reads `settings.*` | grep over `src/`; `settings.cotaTva` seeded at `src/data/seed.ts:83`, read nowhere | Phase 7 |
 | B-11 | Corrupt payload silently resets the whole dataset to seed data; `dataOrigin` never surfaced | `src/data/store.tsx:109-114,132`; `:26-27,139,172` | Phase 7 |
 | B-12 | No persisted-schema `version`, therefore no migration path | `src/data/schema.ts:196-207`; only backfill is `store.tsx:118` | Phase 7 |
+| B-13 | **Taxable base deducts the whole CASS, including the art. 174 alin. (6) top-up, which the law expressly excludes.** `tax.ts` subtracts `cassValue` in full, but CF art. 118 alin. (2) lit. b) makes CASS deductible "**cu excepția diferenței de contribuție de asigurări sociale de sănătate prevăzută la art. 174 alin. (6)**". Anyone in the `0 < VNA < 6 SM` band therefore gets an **over-deducted base and an understated income tax**. Found while proving the top-up is a top-up (Phase 4); the CASS *headline* number is correct, only the taxable-base treatment is wrong | `src/domain/tax.ts` (`taxable = net - cas - cass`); named in the `calcCass` breakdown; `phases/04_cass.md` | **Phase 5** |
 
 B-11 and B-12 are assigned to **Phase 7** rather than Phase 8: they are persistence/migration defects,
 and Phase 7 (identity unification) is the only phase in the plan that changes persisted-state shape —
