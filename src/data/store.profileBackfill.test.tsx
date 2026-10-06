@@ -206,7 +206,9 @@ describe('Phase 6 profile fields are accepted when present', () => {
       }),
     );
     load();
-    expect(storeRef!.dataOrigin).toBe('seed');
+    // D-3: an invalid payload is preserved under the quarantine key instead of
+    // being dropped on the floor, and the store says which recovery happened.
+    expect(storeRef!.dataOrigin).toBe('quarantined');
     expect(storeRef!.revenues).toEqual(seedData.revenues);
   });
 
@@ -222,7 +224,7 @@ describe('Phase 6 profile fields are accepted when present', () => {
       }),
     );
     load();
-    expect(storeRef!.dataOrigin).toBe('seed');
+    expect(storeRef!.dataOrigin).toBe('quarantined');
   });
 
   it('accepts the regimes the union allows, so an old payload is never discarded', () => {

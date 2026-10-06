@@ -7,31 +7,76 @@ import type {
 import type { PfaProfile } from '../domain/models';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import { todayISO } from './types';
+import { epochMs, toInstantISO } from '../domain/date';
 import { seedData } from './seed';
-import { parseAppData } from './schema';
-import { epochMs, localYear, now, toInstantISO } from '../domain/date';
+import { parseAppDataResult, type PersistedAppData } from './schema';
+import {
+  CURRENT_DATA_VERSION,
+  UnsupportedDataVersionError,
+  migratePersistedData,
+} from './migration';
+import {
+  quarantineKey,
+  quarantinePayload,
+  readQuarantine,
+  type QuarantineReason,
+  type QuarantineRecord,
+} from './quarantine';
 
-const STORAGE_KEY = 'pfa-app-data-v2';
+/**
+ * The one storage key for the dataset. It does NOT change across versions —
+ * D-2 versions the payload inside this key rather than moving to a new key, so
+ * an existing install is upgraded in place instead of orphaned.
+ * Exported so tests and the recovery UI read the same constant the store writes.
+ */
+export const STORAGE_KEY = 'pfa-app-data-v2';
+/** Where rejected payloads are preserved (D-3). Never written by the save path. */
+export const QUARANTINE_STORAGE_KEY = quarantineKey(STORAGE_KEY);
 
 /**
  * Where the initial dataset came from.
- * - 'seed': storage was empty OR the stored payload failed validation and
- *   the app recovered to seed data.
- * - 'persisted': a valid stored dataset was loaded.
+ * - 'seed': storage was empty, so the app started from seed data.
+ * - 'persisted': a valid stored dataset was loaded — at the current version, or
+ *   upgraded in place by the migration chain. Either way it is the user's own
+ *   data, so it stays one value (decision D-3b): the Phase 6 safety net asserts
+ *   that a legacy payload yields 'persisted', and splitting that into
+ *   'persisted'/'migrated' would weaken the very check that proves the app did
+ *   not fall back to seed. Whether a migration ran is reported separately, on
+ *   `StoreValue.migration`.
+ * - 'quarantined': the stored payload was rejected. It was copied to
+ *   `QUARANTINE_STORAGE_KEY` first, and the app fell back to seed data. This is
+ *   the state the banner must show — B-11 was exactly this case being silent.
  * Store-level only — never part of the persisted `AppData` shape.
  */
-export type DataOrigin = 'seed' | 'persisted';
+export type DataOrigin = 'seed' | 'persisted' | 'quarantined';
+
+export interface MigrationInfo {
+  fromVersion: number;
+  toVersion: number;
+  stepsApplied: string[];
+}
 
 interface LoadedData {
   data: AppData;
   dataOrigin: DataOrigin;
+  migration: MigrationInfo | null;
+  quarantine: QuarantineRecord | null;
 }
 
 interface StoreValue extends AppData {
   toasts: Toast[];
-  /** 'seed' when the app started from/recovered to seed data, 'persisted'
-   *  when a valid stored dataset was loaded. */
+  /** 'seed' when the app started from seed data, 'persisted' for a stored
+   *  payload (current-version or migrated), 'quarantined' when the stored
+   *  payload was rejected and preserved. */
   dataOrigin: DataOrigin;
+  /** The version the loaded dataset carries after the migration chain ran. */
+  dataVersion: number;
+  /** Set when the migration chain actually changed something. */
+  migration: MigrationInfo | null;
+  /** Set when a payload was rejected; carries the preserved copy (D-3). */
+  quarantine: QuarantineRecord | null;
+  /** Re-read the preserved copy (it survives saves and reloads). */
+  getQuarantinedPayload: () => string | null;
   addRevenue: (r: Omit<Revenue, 'id'>) => void;
   updateRevenue: (r: Revenue) => void;
   deleteRevenue: (id: string) => void;
@@ -60,76 +105,75 @@ const StoreContext = createContext<StoreValue | null>(null);
 let counter = 0;
 const uid = () => `${epochMs().toString(36)}-${(counter++).toString(36)}`;
 
-/**
- * Backfill a profile for data saved before the profile collection existed.
- * Identity/contact fields are carried over from the legacy settings so the
- * profile becomes the source of truth without losing user data.
- */
-export function legacyProfileFromSettings(s: SettingsState, instant: Date = now()): PfaProfile {
-  const c = s.company;
-  const p = s.personal;
+/** Turn a validated (and migrated) persisted payload into the runtime `AppData`. */
+function toAppData(parsed: PersistedAppData): AppData {
   return {
-    id: 'profile-1',
-    pfaStartYear: localYear(instant),
-    fiscalYear: localYear(instant),
-    regime: 'impozit_pe_venit',
-    caen: c.caen?.[0]?.cod ?? c.codCAEN ?? '',
-    salaryStatus: 'nu',
-    pensionStatus: 'nu',
-    otherIncome: [],
-    socialInsuranceStatus: 'neplata',
-    vatExempt: false,
-    cashFloorLei: 0,
-    identity: {
-      nume: p.nume,
-      cnp: p.cnp,
-      adresa: p.adresa,
-      telefon: p.telefon,
-      email: p.email,
-      denumire: c.denumire,
-      cui: c.cui,
-      formaJuridica: c.formaJuridica ?? '',
-      numarRegComert: c.numarRegComert,
-      adresaSocietate: c.adresa,
-      telefonSocietate: c.telefon ?? '',
-      emailSocietate: c.email ?? '',
-      contBancar: c.contBancar ?? '',
-      banca: c.banca ?? '',
-    },
-    updatedAt: toInstantISO(instant),
+    profile: parsed.profile as PfaProfile,
+    revenues: parsed.revenues,
+    expenses: parsed.expenses ?? [],
+    clients: parsed.clients ?? [],
+    declarations: parsed.declarations ?? [],
+    documents: parsed.documents ?? [],
+    companyDocs: parsed.companyDocs ?? { im: [], cs: [], tva: [], facturi: [] },
+    statements: parsed.statements ?? [],
+    snapshots: parsed.snapshots ?? [],
+    settings: parsed.settings,
+  };
+}
+
+function rejected(
+  raw: string | null,
+  reason: QuarantineReason,
+  detail: string,
+): LoadedData {
+  // Preserve first, recover second: the bytes must be in the quarantine key
+  // before anything can overwrite the data key.
+  const { record } = quarantinePayload(QUARANTINE_STORAGE_KEY, raw, reason, detail);
+  return {
+    data: seedData,
+    // If the quarantine copy itself could not be written there is nothing to
+    // tell the user they can recover — report the honest state instead.
+    dataOrigin: record ? 'quarantined' : 'seed',
+    migration: null,
+    quarantine: record,
   };
 }
 
 function loadInitial(): LoadedData {
+  let raw: string | null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return { data: seedData, dataOrigin: 'seed' };
-    }
-    const parsed = parseAppData(raw);
-    if (!parsed) {
-      // Corrupt stored dataset (bad JSON, wrong types, invalid numbers,
-      // missing required collections, invalid profile/settings/snapshots):
-      // recover to seed data and let the save effect persist the clean state.
-      return { data: seedData, dataOrigin: 'seed' };
-    }
+    raw = localStorage.getItem(STORAGE_KEY);
+  } catch (err) {
+    // Reading threw (storage blocked): there is no payload to preserve, so the
+    // quarantine record will usually be null and the app just starts from seed.
+    return rejected(null, 'storage-read-error', err instanceof Error ? err.message : String(err));
+  }
+  if (!raw) {
+    return { data: seedData, dataOrigin: 'seed', migration: null, quarantine: null };
+  }
+
+  const parsed = parseAppDataResult(raw);
+  if (!parsed.ok) {
+    return rejected(raw, parsed.reason, parsed.detail);
+  }
+
+  try {
+    const outcome = migratePersistedData(parsed.data);
     return {
-      data: {
-        profile: parsed.profile ?? legacyProfileFromSettings(parsed.settings),
-        revenues: parsed.revenues,
-        expenses: parsed.expenses ?? [],
-        clients: parsed.clients ?? [],
-        declarations: parsed.declarations ?? [],
-        documents: parsed.documents ?? [],
-        companyDocs: parsed.companyDocs ?? { im: [], cs: [], tva: [], facturi: [] },
-        statements: parsed.statements ?? [],
-        snapshots: parsed.snapshots ?? [],
-        settings: parsed.settings,
-      },
+      data: toAppData(outcome.data),
       dataOrigin: 'persisted',
+      migration: outcome.migrated
+        ? { fromVersion: outcome.fromVersion, toVersion: outcome.toVersion, stepsApplied: outcome.stepsApplied }
+        : null,
+      quarantine: null,
     };
-  } catch {
-    return { data: seedData, dataOrigin: 'seed' };
+  } catch (err) {
+    if (err instanceof UnsupportedDataVersionError) {
+      return rejected(raw, 'unsupported-version', err.message);
+    }
+    // A migration step threw: never load a half-migrated dataset and never
+    // silently reset. Preserve the payload and start from seed, visibly.
+    return rejected(raw, 'schema-invalid', `migration failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
@@ -142,7 +186,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      // The version is stamped at write time, not carried in `AppData`: that is
+      // what guarantees a payload always declares the version this build
+      // understands, even after a mutation, so the chain never has to guess.
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, version: CURRENT_DATA_VERSION }));
     } catch (err) {
       // Controlled write failure (e.g. storage quota exceeded, setItem
       // throwing): log and continue. The in-memory state stays usable and
@@ -170,6 +217,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     ...data,
     toasts,
     dataOrigin,
+    dataVersion: CURRENT_DATA_VERSION,
+    migration: initial.migration,
+    quarantine: initial.quarantine,
+    getQuarantinedPayload: () => readQuarantine(QUARANTINE_STORAGE_KEY)?.raw ?? null,
     toast,
     dismissToast,
 

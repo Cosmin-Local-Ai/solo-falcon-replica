@@ -58,7 +58,25 @@ function TaxProbe() {
       <span data-testid="tax-status">{view.status}</span>
       <span data-testid="tax-inputs-key">{view.inputs.inputsKey}</span>
       <span data-testid="tax-rule-count">{view.activeRelease.ruleCount}</span>
+      <span data-testid="identity-nume">{store.profile.identity.nume}</span>
       <button onClick={() => store.updateProfile({ vatExempt: true, cashFloorLei: 7500 })}>change-tax-inputs</button>
+      {/* Phase 7 (F-2): every identity field, including the three absorbed in D-1. */}
+      <button
+        onClick={() =>
+          store.updateProfile({
+            identity: {
+              ...store.profile.identity,
+              nume: 'Popescu Andrei Schimbat',
+              email: 'nou@example.test',
+              codTvaIntra: 'RO9999999999999',
+              caen: [{ cod: '6202', descriere: 'Alta activitate' }],
+              mentiuniFactura: 'De plata la 30 de zile.',
+            },
+          })
+        }
+      >
+        change-identity
+      </button>
     </div>
   );
 }
@@ -113,5 +131,29 @@ describe('useTaxDerived (Step 14)', () => {
     expect(screen.getByTestId('tax-inputs-key').textContent).not.toBe(beforeKey);
     // Release provenance is unaffected by a profile change.
     expect(screen.getByTestId('tax-rule-count').textContent).toBe(ruleCount);
+  });
+
+  it('leaves inputsKey untouched when identity changes (F-2)', () => {
+    // Identity is deliberately NOT part of the tax inputs key. If it were, every
+    // name / email / CAEN edit would invalidate the fiscal cache and — once
+    // snapshots are persisted — look like a change in the fiscal inputs themselves.
+    render(
+      <StoreProvider>
+        <TaxProbe />
+      </StoreProvider>,
+    );
+    const beforeKey = screen.getByTestId('tax-inputs-key').textContent;
+    const beforeStatus = screen.getByTestId('tax-status').textContent;
+    expect(screen.getByTestId('identity-nume').textContent).toBe('Popescu Andrei');
+
+    act(() => {
+      screen.getByText('change-identity').click();
+    });
+
+    // The identity really did change…
+    expect(screen.getByTestId('identity-nume').textContent).toBe('Popescu Andrei Schimbat');
+    // …and the fiscal inputs key and status did not.
+    expect(screen.getByTestId('tax-inputs-key').textContent).toBe(beforeKey);
+    expect(screen.getByTestId('tax-status').textContent).toBe(beforeStatus);
   });
 });

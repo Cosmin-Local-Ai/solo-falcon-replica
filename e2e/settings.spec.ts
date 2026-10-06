@@ -138,7 +138,11 @@ test.describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () =
     await expect(page.getByText('Profilul fiscal a fost salvat')).toBeVisible();
 
     const saved = await storedProfile(page);
-    expect(saved.caen).toBe('6202');
+    // Phase 7: CAEN lives in profile.identity.caen[] (one store, decision D-1); the
+    // profile.caen scalar is retired and must not be written back.
+    const identity = saved.identity as { caen?: { cod: string }[] };
+    expect(identity.caen?.[0]?.cod).toBe('6202');
+    expect(saved.caen).toBeUndefined();
     expect(saved.pfaStartDate).toBe('2026-04-01');
     expect(saved.salaryStatus).toBe('da');
     expect(saved.salaryIncomeLei).toBe(30000);
@@ -228,5 +232,98 @@ test.describe('salaried PFA below the 6 SM floor — CF art. 174 alin. (6) + ali
     // so the taxable base is unchanged at 18.000 and the total is 430 lei higher.
     await expect(card.getByText(/4\.230/)).toBeVisible();
     await expect(card.locator('.value')).not.toHaveText('—');
+  });
+});
+
+/**
+ * Phase 7, acceptance criterion 5 — identity has ONE store and it round-trips.
+ *
+ * Before Phase 7 the sidebar brand was hardcoded, the topbar read `profile.identity`, and the
+ * Settings personal inputs were `disabled` because the data had no owner. All three now read
+ * `profile.identity`, so an edit made in Settings has to come back out of storage after a real
+ * navigation — and the retired `settings.personal` / `settings.company` blocks must prove they are
+ * frozen (still parseable, no longer written).
+ *
+ * Deliberately NOT seeded with `addInitScript`: that script re-runs on every document, including
+ * reload, and would re-apply the seed over whatever the UI just saved (Phase 6 §10 trap 2).
+ */
+test.describe('Phase 7 — identity round-trips through the one store', () => {
+  async function stored(page: Page): Promise<Record<string, any>> {
+    return page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}'), STORAGE_KEY);
+  }
+
+  test('a personal name edit reaches the topbar and the greeting after a reload', async ({ page }) => {
+    await page.goto('/settings#!/account');
+    await field(page, 'Nume').locator('input').fill('Georgescu Maria');
+    await page.getByRole('button', { name: 'Salvează' }).click();
+    await expect(page.getByText('Datele personale au fost salvate')).toBeVisible();
+
+    const saved = await stored(page);
+    expect(saved.profile.identity.nume).toBe('Georgescu Maria');
+    // settings.personal is retired from writes but stays parseable (decision D-1): the seeded
+    // value is still on disk, untouched, and still validates.
+    expect(saved.settings.personal.nume).toBe('Popescu Andrei');
+
+    await page.goto('/');
+    await expect(page.locator('.topbar-user')).toContainText('Georgescu Maria');
+    // The greeting is derived from the same store (last token — the dataset stores surname first).
+    await expect(page.locator('.greeting')).toHaveText('Bună, Maria');
+  });
+
+  test('the sidebar renders the company name from the store, not a hardcoded brand', async ({ page }) => {
+    await page.goto('/settings#!/company');
+    await field(page, 'Denumire').locator('input').fill('Georgescu Maria SRL');
+    // The PFA tab has two "Salvează" buttons (page header + mențiuni card); the header one saves
+    // the identity fields.
+    await page.getByRole('button', { name: 'Salvează' }).first().click();
+    await expect(page.getByText('Datele PFA au fost salvate')).toBeVisible();
+
+    const saved = await stored(page);
+    expect(saved.profile.identity.denumire).toBe('Georgescu Maria SRL');
+    // The retired block keeps the value the app seeded and is never written again.
+    expect(saved.settings.company.denumire).toBe('Popescu Consulting SRL');
+
+    await page.goto('/');
+    await expect(page.locator('.sidebar-identity')).toHaveText('Georgescu Maria SRL');
+  });
+});
+
+/**
+ * Phase 7, acceptance criterion 4 — a payload that cannot be read is quarantined and the user is
+ * told. Before Phase 7 the store answered every parse failure by replacing the whole dataset with
+ * seed and saying nothing (`store.tsx:109-114` at the start of this phase).
+ */
+test.describe('Phase 7 — a corrupt payload is quarantined, not silently replaced', () => {
+  test('shows a recovery banner, keeps the rejected copy, and loads working data', async ({ page }) => {
+    await page.addInitScript((key) => {
+      localStorage.setItem(key, '{"profile":');
+    }, STORAGE_KEY);
+
+    await page.goto('/dashboard');
+
+    const banner = page.getByRole('alert');
+    await expect(banner).toContainText('Datele salvate nu au putut fi citite.');
+    await expect(banner).toContainText('unparseable-json');
+
+    // The app is usable again: the dashboard renders the recovered dataset.
+    await expect(page.locator('.stat-card').first()).toBeVisible();
+
+    const quarantined = await page.evaluate(
+      (key) => JSON.parse(localStorage.getItem(`${key}:quarantine`) ?? '{}'),
+      STORAGE_KEY,
+    );
+    expect(quarantined.reason).toBe('unparseable-json');
+    expect(quarantined.raw).toBe('{"profile":');
+
+    // The save effect re-persists the recovered data to the MAIN key only — the rejected copy
+    // survives the save that follows it (decision D-3).
+    const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}'), STORAGE_KEY);
+    expect(saved.version).toBeGreaterThan(0);
+    expect(saved.revenues.length).toBeGreaterThan(0);
+    const afterSave = await page.evaluate(
+      (key) => JSON.parse(localStorage.getItem(`${key}:quarantine`) ?? '{}'),
+      STORAGE_KEY,
+    );
+    expect(afterSave.raw).toBe('{"profile":');
   });
 });

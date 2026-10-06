@@ -1,12 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { StoreProvider } from '../data/store';
+import { StoreProvider, STORAGE_KEY } from '../data/store';
 import { seedData } from '../data/seed';
 import type { PfaProfile } from '../domain/models';
 import Settings from './Settings';
 
-// Must match STORAGE_KEY in src/data/store.tsx (module-private, not exported).
-const STORAGE_KEY = 'pfa-app-data-v2';
 // Must match seedData.settings.company.denumire in src/data/seed.ts.
 const SEED_DENUMIRE = 'Popescu Consulting SRL';
 const NEW_DENUMIRE = 'Popescu Consulting SRL (regres)';
@@ -14,10 +12,12 @@ const NEW_DENUMIRE = 'Popescu Consulting SRL (regres)';
 function readStoredDenumire(): string {
   const raw = localStorage.getItem(STORAGE_KEY);
   expect(raw, 'expected data to be persisted to localStorage').not.toBeNull();
+  // Phase 7 (D-1): the PFA tab is an identity editor and writes the one canonical
+  // identity store, `profile.identity` — not `settings.company`.
   const parsed = JSON.parse(raw as string) as {
-    settings: { company: { denumire: string } };
+    profile: { identity: { denumire: string } };
   };
-  return parsed.settings.company.denumire;
+  return parsed.profile.identity.denumire;
 }
 
 function saveDenumire(denumire: string) {
@@ -45,7 +45,7 @@ describe('Settings persistence (Defect 3 regression)', () => {
     localStorage.clear();
   });
 
-  it('persists company data to localStorage when "Salvează" is clicked', () => {
+  it('persists company identity to localStorage when "Salvează" is clicked', () => {
     render(
       <StoreProvider>
         <Settings />
@@ -57,7 +57,7 @@ describe('Settings persistence (Defect 3 regression)', () => {
     expect(readStoredDenumire()).toBe(NEW_DENUMIRE);
   });
 
-  it('restores saved company data from localStorage on remount', () => {
+  it('restores saved company identity from localStorage on remount', () => {
     const first = render(
       <StoreProvider>
         <Settings />
@@ -151,6 +151,89 @@ function readStoredProfile(): PfaProfile {
   return (JSON.parse(raw as string) as { profile: PfaProfile }).profile;
 }
 
+/**
+ * Phase 7, acceptance criterion 5 — identity round-trips through the one store.
+ * The Personal tab's inputs used to be `disabled` because the data had no owner;
+ * `profile.identity` is that owner, so an edit must survive a remount.
+ */
+describe('Settings — identity round-trip (Phase 7)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  function readStored(): {
+    profile: PfaProfile;
+    settings: { personal: { nume: string }; company: { mentiuniFactura?: string } };
+  } {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    expect(raw, 'expected data to be persisted to localStorage').not.toBeNull();
+    return JSON.parse(raw as string);
+  }
+
+  it('persists a personal name edit and restores it on remount', () => {
+    const first = render(
+      <StoreProvider>
+        <Settings />
+      </StoreProvider>,
+    );
+    act(() => {
+      screen.getByRole('button', { name: 'Personal' }).click();
+    });
+    act(() => {
+      fireEvent.change(screen.getByDisplayValue('Popescu Andrei'), {
+        target: { value: 'Popescu Andrei Nou' },
+      });
+    });
+    act(() => {
+      screen.getByRole('button', { name: 'Salvează' }).click();
+    });
+
+    expect(readStored().profile.identity.nume).toBe('Popescu Andrei Nou');
+    // The legacy block is FROZEN: still written by the seed and still parseable,
+    // but no longer a write target (decision D-1, acceptance criterion 6).
+    expect(readStored().settings.personal.nume).toBe('Popescu Andrei');
+
+    act(() => {
+      first.unmount();
+    });
+    render(
+      <StoreProvider>
+        <Settings />
+      </StoreProvider>,
+    );
+    act(() => {
+      screen.getByRole('button', { name: 'Personal' }).click();
+    });
+    expect(screen.getByDisplayValue('Popescu Andrei Nou')).toBeInTheDocument();
+  });
+
+  it('persists invoice notes into identity.mentiuniFactura', () => {
+    render(
+      <StoreProvider>
+        <Settings />
+      </StoreProvider>,
+    );
+    // The PFA tab is the default tab; its mențiuni card is the second "Salvează".
+    act(() => {
+      fireEvent.change(screen.getByPlaceholderText('Text afișat pe factura (opțional)'), {
+        target: { value: 'De plată la 15 zile.' },
+      });
+    });
+    const saveButtons = screen.getAllByRole('button', { name: 'Salvează' });
+    act(() => {
+      saveButtons[1].click();
+    });
+
+    expect(readStored().profile.identity.mentiuniFactura).toBe('De plată la 15 zile.');
+    // Not written to the retired settings.company block.
+    expect(readStored().settings.company.mentiuniFactura).toBeUndefined();
+  });
+});
+
 describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -190,7 +273,10 @@ describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () => {
     clickSave();
 
     const profile = readStoredProfile();
-    expect(profile.caen).toBe('6202');
+    // Phase 7 (D-1b): CAEN is written to the one canonical model,
+    // `identity.caen[]`. The deprecated `profile.caen` scalar is no longer written.
+    expect(profile.identity.caen?.[0]?.cod).toBe('6202');
+    expect(profile.caen).toBeUndefined();
     expect(profile.pfaStartDate).toBe('2026-04-01');
     expect(profile.salaryStatus).toBe('da');
     expect(profile.salaryIncomeLei).toBe(30000);

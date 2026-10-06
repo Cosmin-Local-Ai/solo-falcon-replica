@@ -1,11 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render } from '@testing-library/react';
-import { StoreProvider, useStore } from './store';
+import { StoreProvider, useStore, STORAGE_KEY, QUARANTINE_STORAGE_KEY } from './store';
+import { CURRENT_DATA_VERSION } from './migration';
 import { seedData } from './seed';
 import type { Revenue } from './types';
-
-// Must match STORAGE_KEY in src/data/store.tsx (module-private, not exported).
-const STORAGE_KEY = 'pfa-app-data-v2';
 
 let storeRef: ReturnType<typeof useStore> | null = null;
 function Probe() {
@@ -82,7 +80,25 @@ describe('save effect — serialization contract', () => {
       'settings',
       'snapshots',
       'statements',
+      // Phase 7 (D-2): the payload declares its schema version so the migration
+      // chain can tell a pre-Phase-7 write from a current one.
+      'version',
     ]);
+    expect(persisted.version).toBe(CURRENT_DATA_VERSION);
+  });
+
+  it('never writes the quarantine key (D-3: the rejected copy survives a save)', () => {
+    localStorage.setItem(STORAGE_KEY, '{corrupt');
+    render(
+      <StoreProvider>
+        <Probe />
+      </StoreProvider>,
+    );
+    // The save effect fires on first mount, so seed data is re-persisted to the
+    // MAIN key immediately after a quarantine. That must not touch the quarantine.
+    expect(storeRef!.dataOrigin).toBe('quarantined');
+    expect(localStorage.getItem(QUARANTINE_STORAGE_KEY)).toContain('{corrupt');
+    expect(localStorage.getItem(STORAGE_KEY)).not.toContain('{corrupt');
   });
 });
 

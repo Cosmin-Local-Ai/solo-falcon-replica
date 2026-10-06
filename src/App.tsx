@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState, useSyncExternalStore, type HTMLAttributes } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type HTMLAttributes } from 'react';
 import { StoreProvider, useStore } from './data/store';
+import { quarantineSummary } from './data/quarantine';
 import { useDashboardData } from './data/dashboardAdapter';
 import Dashboard from './pages/Dashboard';
 import Revenues from './pages/Revenues';
@@ -125,7 +126,22 @@ function Shell() {
   const [route, setRoute] = useState<Route>(parseRoute);
   const [navOpen, setNavOpen] = useState(false);
   const isMobile = useIsMobile();
-  const { profile } = useStore();
+  const { profile, dataOrigin, migration, quarantine, toast } = useStore();
+
+  // D-3: a rejected payload must be VISIBLE, not silent (B-11 was the silent
+  // reset). The banner below covers the recoverable case; a migration is worth
+  // one sentence too, because the user's stored data was rewritten on load.
+  // It is keyed on `migration`, not on `dataOrigin` — per D-3b a migrated
+  // payload is still 'persisted', and `migration` is the separate signal.
+  const migrationAnnounced = useRef(false);
+  useEffect(() => {
+    if (!migration || migrationAnnounced.current) return;
+    migrationAnnounced.current = true;
+    toast(
+      'info',
+      `Datele salvate au fost aduse la zi (${migration.stepsApplied.join(', ') || 'format nou'})`,
+    );
+  }, [migration, toast]);
   const { pendingCounts } = useDashboardData();
   const pendingCount =
     pendingCounts.revenuesInAsteptare +
@@ -182,10 +198,19 @@ function Shell() {
       <aside
         className={`sidebar${navOpen ? ' open' : ''}`}
         aria-hidden={isMobile && !navOpen}
+        /* SAFETY: `inert` is a real HTML attribute the installed React types predate.
+           The spread object is empty unless the drawer is closed on mobile, and the
+           value is always the empty string the DOM expects. */
         {...(isMobile && !navOpen ? ({ inert: '' } as unknown as HTMLAttributes<HTMLElement>) : {})}
       >
         <div className="sidebar-logo">
           <span className="mark">S</span> SOLO
+        </div>
+        {/* Phase 7: the sidebar shows WHOSE data this is, read from the one
+            identity store. It deliberately shows the trade name, not the person
+            name/initials the topbar already renders. */}
+        <div className="sidebar-identity" title={profile.identity.denumire || profile.identity.nume}>
+          {profile.identity.denumire || profile.identity.nume}
         </div>
         <nav>
           {NAV.map(n => (
@@ -239,6 +264,16 @@ function Shell() {
           </div>
         </header>
         <div className="main-content">
+          {dataOrigin === 'quarantined' && quarantine && (
+            <div className="banner banner-warn" role="alert">
+              <strong>Datele salvate nu au putut fi citite.</strong> {quarantineSummary(quarantine)}
+              <details className="banner-details">
+                <summary>Detalii tehnice</summary>
+                <p>{quarantine.reason} — {quarantine.detail}</p>
+                <p>Copia salvată: {quarantine.quarantinedAt}</p>
+              </details>
+            </div>
+          )}
           {route.page === 'dashboard' && <Dashboard />}
           {route.page === 'revenues' && (
             <Revenues

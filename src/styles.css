@@ -176,6 +176,18 @@ a:hover { text-decoration: underline; }
 .hint { font-size: 12px; color: var(--text-4); margin: 0; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .empty-state { padding: 48px 16px; text-align: center; }
+
+/* Phase 7 — identity in the shell, and the D-3 recovery banner. */
+.sidebar-identity {
+  padding: 10px 18px; font-size: 12px; color: var(--text-2);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.banner { margin: 0 0 16px; padding: 12px 14px; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; }
+.banner-warn { background: #fff7ed; border-color: #fdba74; color: #7c2d12; }
+.banner-details { margin-top: 8px; font-size: 12px; }
+.banner-details summary { cursor: pointer; color: var(--text-2); }
+.greeting { margin: 0 0 16px; font-size: 14px; color: var(--text-2); }
 .card-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
 .card-title { margin: 0; font-size: 15px; font-weight: 600; }
 .tax-hero-value { font-size: 28px; font-weight: 700; }

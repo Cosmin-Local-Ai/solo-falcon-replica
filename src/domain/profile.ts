@@ -23,6 +23,9 @@ const EMPTY_IDENTITY: PfaIdentity = {
   emailSocietate: '',
   contBancar: '',
   banca: '',
+  codTvaIntra: '',
+  caen: [],
+  mentiuniFactura: '',
 };
 
 /**
@@ -38,7 +41,8 @@ export function createDefaultProfile(
     pfaStartYear: localYear(instant),
     fiscalYear: localYear(instant),
     regime: 'impozit_pe_venit',
-    caen: '',
+    // Phase 7 (D-1): CAEN lives in `identity.caen`; the deprecated `caen` string
+    // is not written for new profiles.
     salaryStatus: 'nu',
     pensionStatus: 'nu',
     otherIncome: [],
@@ -69,4 +73,22 @@ export function getActiveProfile(profile: PfaProfile | null, fiscalYear: number)
  */
 export function profileIdentity(profile: PfaProfile): PfaIdentity {
   return profile.identity;
+}
+
+/**
+ * The name to greet the person by, derived from `identity.nume`.
+ *
+ * `nume` is free text and this dataset stores it surname-first ('Popescu Andrei'),
+ * so the given name is taken as the LAST token rather than assuming a Western
+ * first-name-first order. A single token is used as-is; an empty name yields ''
+ * so the caller can drop the greeting instead of rendering "Bună,".
+ *
+ * Deliberately NOT the full name: the topbar already renders `identity.nume`,
+ * and duplicating it in the page body makes the name ambiguous for text-based
+ * queries (testing-library and Playwright strict mode both fail on two matches).
+ */
+export function identityGreeting(identity: PfaIdentity): string {
+  const parts = identity.nume.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '';
+  return parts[parts.length - 1];
 }

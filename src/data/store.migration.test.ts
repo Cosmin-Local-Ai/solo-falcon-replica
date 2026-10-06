@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { legacyProfileFromSettings } from './store';
+import { legacyProfileFromSettings } from './migration';
 import type { SettingsState } from './types';
 
 const settings: SettingsState = {
@@ -51,13 +51,21 @@ describe('legacyProfileFromSettings (profile migration)', () => {
     expect(p.identity.banca).toBe('BCR');
   });
 
-  it('takes the main CAEN from the first company CAEN entry', () => {
-    expect(legacyProfileFromSettings(settings).caen).toBe('6201');
+  it('carries the CAEN list into identity.caen (D-1: identity owns CAEN)', () => {
+    const p = legacyProfileFromSettings(settings);
+    expect(p.identity.caen).toEqual([
+      { cod: '6201', descriere: 'Activități de programare computerizate' },
+    ]);
   });
 
-  it('falls back to codCAEN when the caen list is empty', () => {
+  it('falls back to the legacy codCAEN when the caen list is empty', () => {
     const p = legacyProfileFromSettings({ ...settings, company: { ...settings.company, caen: [] } });
-    expect(p.caen).toBe('6201');
+    expect(p.identity.caen).toEqual([{ cod: '6201', descriere: '' }]);
+  });
+
+  it('does not mint a deprecated profile.caen string', () => {
+    const p = legacyProfileFromSettings(settings);
+    expect('caen' in p).toBe(false);
   });
 
   it('applies safe defaults for missing optional fields', () => {
@@ -75,7 +83,9 @@ describe('legacyProfileFromSettings (profile migration)', () => {
     expect(p.otherIncome).toEqual([]);
     expect(p.vatExempt).toBe(false);
     expect(p.cashFloorLei).toBe(0);
-    expect(p.caen).toBe('');
+    // No CAEN source at all in this payload ⇒ the field stays absent. The chain
+    // never invents a code the user never entered.
+    expect(p.identity.caen).toBeUndefined();
     expect(p.identity.formaJuridica).toBe('');
     expect(p.identity.contBancar).toBe('');
     expect(p.fiscalYear).toBe(new Date().getFullYear());

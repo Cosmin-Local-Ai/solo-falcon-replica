@@ -6,7 +6,8 @@ export const seedData: AppData = {
     pfaStartYear: 2020,
     fiscalYear: 2026,
     regime: 'impozit_pe_venit',
-    caen: '6201',
+    // Phase 7 (D-1): CAEN lives in `identity.caen`; the deprecated `profile.caen`
+    // string is not seeded any more.
     salaryStatus: 'nu',
     pensionStatus: 'nu',
     otherIncome: [],
@@ -28,6 +29,10 @@ export const seedData: AppData = {
       emailSocietate: 'contact@popescuconsulting.ro',
       contBancar: 'RO44 BACX 0000 0000 1234 5678 9000',
       banca: 'BCR',
+      // Phase 7 (D-1): the fields that used to live only in settings.company.
+      codTvaIntra: 'RO4455667788990',
+      caen: [{ cod: '6201', descriere: 'Activități de programare computerizate' }],
+      mentiuniFactura: 'Mulțumesc pentru colaborare.',
     },
     updatedAt: '2026-09-28T10:00:00.000Z',
   },

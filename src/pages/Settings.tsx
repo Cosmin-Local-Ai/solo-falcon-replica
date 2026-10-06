@@ -33,7 +33,13 @@ interface SettingsProps {
 }
 
 export default function Settings({ initialTab, onTabChange }: SettingsProps) {
+  // Identity/contact fields come from ONE store: `profile.identity` (D-1). The
+  // legacy `settings.company` / `settings.personal` blocks are not read here at
+  // all — they are frozen legacy data, read only by the migration chain.
+  // `settings` itself stays live for what is genuinely settings: e-Factura
+  // behaviour and the bank-account list.
   const { settings, updateSettings, profile, updateProfile, toast } = useStore();
+  const identity = profile.identity;
   const [tab, setTab] = useState<TabKey>(
     TABS.some(t => t.key === initialTab) ? (initialTab as TabKey) : 'company'
   );
@@ -45,11 +51,21 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
 
   // --- PFA tab: editable registration data ---
   const [company, setCompany] = useState({
-    denumire: settings.company.denumire,
-    cui: settings.company.cui,
-    numarRegComert: settings.company.numarRegComert,
+    denumire: identity.denumire,
+    cui: identity.cui,
+    numarRegComert: identity.numarRegComert,
+    adresaSocietate: identity.adresaSocietate,
   });
-  const [mentiuni, setMentiuni] = useState(settings.company.mentiuniFactura ?? '');
+  const [mentiuni, setMentiuni] = useState(identity.mentiuniFactura ?? '');
+
+  // --- Personal tab: now a real write path (Phase 7 scope item 2). These inputs
+  // were `disabled` in the mock because the data had no owner; `profile.identity`
+  // is that owner.
+  const [personal, setPersonal] = useState({
+    nume: identity.nume,
+    email: identity.email,
+    telefon: identity.telefon,
+  });
 
   // --- e-Factura tab ---
   const [ef, setEf] = useState(settings.eFactura);
@@ -59,7 +75,10 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
   // instead of being coerced to 0 (the Revenues.tsx validation pattern).
   const [fiscal, setFiscal] = useState({
     regime: profile.regime,
-    caen: profile.caen,
+    // CAEN is identity data now (D-1); the field stays on this tab because that
+    // is where its "does not change the regime" caveat belongs, but it reads and
+    // writes `identity.caen`, not the deprecated `profile.caen` string.
+    caen: identity.caen?.[0]?.cod ?? '',
     pfaStartYear: String(profile.pfaStartYear),
     fiscalYear: String(profile.fiscalYear),
     pfaStartDate: profile.pfaStartDate ?? '',
@@ -80,16 +99,28 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
   const [bankOpen, setBankOpen] = useState(false);
   const [newBank, setNewBank] = useState({ banca: '', moneda: 'RON' });
 
+  /** Write identity fields through the profile — the one canonical store. */
+  function updateIdentity(patch: Partial<typeof identity>) {
+    updateProfile({ identity: { ...identity, ...patch } });
+  }
+
   function saveCompany() {
-    updateSettings(s => ({ ...s, company: { ...s.company, ...company } }));
+    updateIdentity(company);
     toast('success', 'Datele PFA au fost salvate');
   }
 
+  function savePersonal() {
+    const nume = personal.nume.trim();
+    if (!nume) {
+      toast('error', 'Numele nu poate fi gol');
+      return;
+    }
+    updateIdentity({ ...personal, nume });
+    toast('success', 'Datele personale au fost salvate');
+  }
+
   function saveMentiuni() {
-    updateSettings(s => ({
-      ...s,
-      company: { ...s.company, mentiuniFactura: mentiuni.trim() },
-    }));
+    updateIdentity({ mentiuniFactura: mentiuni.trim() });
     toast('success', 'Mențiuni pe factură salvate');
   }
 
@@ -134,7 +165,6 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     }
     updateProfile({
       regime: fiscal.regime,
-      caen: fiscal.caen.trim(),
       pfaStartYear: year,
       fiscalYear: fy,
       pfaStartDate: fiscal.pfaStartDate || undefined,
@@ -145,19 +175,30 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       socialInsuranceStatus: fiscal.socialInsuranceStatus,
       vatExempt: fiscal.vatExempt === 'da',
       cashFloorLei: cash,
+      // CAEN is written into the single CAEN model (D-1), keeping any description
+      // the entry already had. The deprecated `profile.caen` string is not written.
+      identity: {
+        ...identity,
+        caen: [
+          ...(fiscal.caen.trim()
+            ? [{ cod: fiscal.caen.trim(), descriere: identity.caen?.[0]?.descriere ?? '' }]
+            : []),
+          ...(identity.caen?.slice(1) ?? []),
+        ],
+      },
     });
     toast('success', 'Profilul fiscal a fost salvat');
   }
 
   function copyAdresa() {
     navigator.clipboard
-      ?.writeText(settings.company.adresa)
+      ?.writeText(identity.adresaSocietate)
       .then(() => toast('success', 'Adresă copiată în clipboard'))
       .catch(() => toast('error', 'Nu am putut copia adresa'));
   }
 
   function openTva() {
-    setTvaCode(settings.company.codTvaIntra ?? '');
+    setTvaCode(identity.codTvaIntra ?? '');
     setTvaFound(false);
     setTvaOpen(true);
   }
@@ -168,10 +209,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
   }
 
   function addTva() {
-    updateSettings(s => ({
-      ...s,
-      company: { ...s.company, codTvaIntra: tvaCode.trim() },
-    }));
+    updateIdentity({ codTvaIntra: tvaCode.trim() });
     setTvaOpen(false);
     toast('success', 'Cod TVA intracomunitar adăugat');
   }
@@ -213,6 +251,11 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
           )}
           {tab === 'einvoice' && (
             <button className="btn btn-primary" onClick={saveEf}>
+              Salvează
+            </button>
+          )}
+          {tab === 'account' && (
+            <button className="btn btn-primary" onClick={savePersonal}>
               Salvează
             </button>
           )}
@@ -265,7 +308,11 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               <div className="field">
                 <label>Adresa</label>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <input className="input" value={settings.company.adresa} disabled />
+                  <input
+                    className="input"
+                    value={company.adresaSocietate}
+                    onChange={e => setCompany({ ...company, adresaSocietate: e.target.value })}
+                  />
                   <button className="btn btn-outline" onClick={copyAdresa}>
                     Copiază
                   </button>
@@ -286,9 +333,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               }}
             >
               <Badge kind="info">Principal</Badge>
-              <span style={{ fontWeight: 600 }}>{settings.company.caen[0]?.cod}</span>
+              <span style={{ fontWeight: 600 }}>{identity.caen?.[0]?.cod}</span>
               <span style={{ color: 'var(--text-2)', fontSize: 13 }}>
-                {settings.company.caen[0]?.descriere}
+                {identity.caen?.[0]?.descriere}
               </span>
             </div>
           </Card>
@@ -315,7 +362,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               nevoie de acest cod special. Dacă ai deja un cod de TVA intracomunitar, te rugăm să
               îl introduci aici.
             </p>
-            {settings.company.codTvaIntra ? (
+            {identity.codTvaIntra ? (
               <div
                 style={{
                   display: 'flex',
@@ -327,7 +374,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                 }}
               >
                 <Badge kind="success">Adăugat</Badge>
-                <span style={{ fontWeight: 600 }}>{settings.company.codTvaIntra}</span>
+                <span style={{ fontWeight: 600 }}>{identity.codTvaIntra}</span>
               </div>
             ) : (
               <button className="btn btn-outline" onClick={openTva}>
@@ -455,15 +502,27 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
             <div className="form-grid">
               <div className="field">
                 <label>Nume</label>
-                <input className="input" value={settings.personal.nume} disabled />
+                <input
+                  className="input"
+                  value={personal.nume}
+                  onChange={e => setPersonal({ ...personal, nume: e.target.value })}
+                />
               </div>
               <div className="field">
                 <label>Email</label>
-                <input className="input" value={settings.personal.email} disabled />
+                <input
+                  className="input"
+                  value={personal.email}
+                  onChange={e => setPersonal({ ...personal, email: e.target.value })}
+                />
               </div>
               <div className="field">
                 <label>Telefon</label>
-                <input className="input" value={settings.personal.telefon} disabled />
+                <input
+                  className="input"
+                  value={personal.telefon}
+                  onChange={e => setPersonal({ ...personal, telefon: e.target.value })}
+                />
               </div>
             </div>
           </Card>

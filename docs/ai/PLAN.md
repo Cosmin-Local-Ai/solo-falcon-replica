@@ -257,7 +257,9 @@ numbering stays readable.
   chronologically by age of loss, personal and non-transferable, unabsorbed loss becoming a definitive
   loss. `tax.ts:112-118` zeroes the tax and stores nothing — current-year tax is right, **the loss is lost**,
   so the following year is over-taxed. Phase 5 owns the **rule and its surfacing**; persisting prior-year
-  loss balances needs the Phase 7 schema/version work. Do not invent a persistence layer here, and do not
+  loss balances needs the Phase 7 schema/version work (**available since Phase 7** — `version` + the
+  migration chain shipped, and a `pierderiReportate` field would be a `.optional()` v3 step; the loss
+  field itself was deliberately not added, phases/07 §7 item 3). Do not invent a persistence layer here, and do not
   pretend the rule is implemented — state precisely which half is done.
 - **B-6 remainder — `multiple_6x/12x/24x/72x` are declared and read by nothing.** They sit on the
   `wage-reference` rule (`package2026.ts:33-36`) and duplicate `reference × 6/12/24/72`, the same
@@ -366,7 +368,41 @@ numbering stays readable.
   `pfaProfileSchema` gates BOTH the live profile and every stored snapshot's embedded profile
   (`data/schema.ts:131-145`), and identity is deliberately absent from `inputsKey` (`derived.ts:137-148`)
   so widening it is hash-safe — keep it that way.
-- **Blocked by:** nothing. Phase 7 is unblocked and in progress.
+- **Delivered 2026-10-06 — see `docs/ai/phases/07_identity.md`.** Everything in the "Must be created"
+  list above shipped, and the citations in the two blocks above are now historical:
+  - **D-1 done.** `PfaIdentity` gained `codTvaIntra?`, `caen?: CaenCode[]` and `mentiuniFactura?` (all
+    `.optional()`; `numarRegComert` already existed). The `caen` duplication is resolved in favour of the
+    structured entry — `profile.caen: string` is `@deprecated`, still parseable, and read by nothing but
+    the migration. `settings.company` / `settings.personal` were **not** deleted: they stay required in
+    `settingsSchema` (so the schema still accepts exactly what it used to) and are now frozen legacy data
+    read only by the migration — enforced by `src/data/identity.source.test.ts`, not by review.
+  - **Write path done.** `Settings.tsx:103` `updateIdentity(patch)` feeds `updateProfile`; the personal
+    inputs and the company address are no longer `disabled`; the PFA tab, the mențiuni card and the cod
+    TVA intracomunitar card all write `profile.identity`.
+  - **Render sites:** sidebar `App.tsx:212-213` (`identity.denumire \|\| identity.nume`, replacing the
+    hardcoded brand), topbar `App.tsx:262-263`, Dashboard greeting `Dashboard.tsx:62` via
+    `identityGreeting` (last token — the dataset is surname-first).
+  - **D-2 done.** `version` (`data/schema.ts:231`, optional so versionless payloads still parse) +
+    `src/data/migration.ts`: `0 → 1 profile-materialization` (the old `store.tsx:118` backfill, now a named
+    step) and `1 → 2 identity-absorption` (live profile **and** stored snapshots' embedded profiles). Same
+    key `pfa-app-data-v2`; the version is stamped at write time (`store.tsx:192`). A payload from a newer
+    build is refused (`UnsupportedDataVersionError`) rather than guessed at.
+  - **D-3 done.** `src/data/quarantine.ts` preserves the rejected bytes verbatim under
+    `pfa-app-data-v2:quarantine` with a named reason; the first copy is never overwritten and the save
+    path never touches that key. `dataOrigin` gained exactly one value (`'quarantined'`) and `App.tsx`
+    renders a `role="alert"` banner; migration is reported separately on `migration`/`dataVersion`, because
+    splitting `dataOrigin` into `persisted`/`migrated` would have weakened the Phase 6 safety net.
+  - **F-1 vs F-2 collision resolved (phases/07 §6):** backfilling a stored snapshot's embedded profile
+    changes the bytes its `inputsHash` was computed over, so the migration re-derives the digest
+    (`domain/snapshots/hashSync.ts`) and keeps the original in the new optional
+    `preMigrationInputsHash`. The load path still never re-hashes, and identity is still absent from
+    `inputsKey` — both are now tested.
+  - **Numbers:** tsc 0 · build 0 · **41 files / 578 unit tests** (was 38 / 531) · **32 e2e** (was 29).
+  - **Not taken up, recorded rather than hidden (phases/07 §7):** `addSnapshot` still has no production
+    caller, so the app still does not persist snapshots; no restore flow for quarantined data; fiscal-loss
+    persistence (B-16's tail) still open; the 24 SM tier-floor threshold surface reassigned to Phase 7/9
+    was not built; `settings.cotaTva` is still read by nothing.
+- **Blocked by:** nothing — **complete**. Phase 8 (financial amount semantics) is the next phase.
 
 ### Phase 8 — Financial amount semantics
 

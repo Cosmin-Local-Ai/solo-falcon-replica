@@ -50,6 +50,18 @@ export interface TaxCalculationSnapshot {
   inputSnapshot: CalculationInput;
   /** SHA-256 hex digest of the canonical serialization of inputSnapshot. */
   inputsHash: string;
+  /**
+   * The digest this snapshot carried BEFORE a persisted-data migration rewrote
+   * its embedded `inputSnapshot` (Phase 7 step v0→v1 backfills identity fields
+   * into stored snapshots, and `canonicalize` serializes every key, so the
+   * digest necessarily changes — see `docs/ai/phases/07_identity.md`).
+   *
+   * Kept so a migration never silently destroys the digest that was recorded at
+   * calculation time. Optional: snapshots created after the migration, and
+   * snapshots the migration did not touch, have no such history. Absent means
+   * "this digest has never been rewritten".
+   */
+  preMigrationInputsHash?: string;
   /** Per-line breakdown of the calculation. */
   calculationLines: CalculationLine[];
   /** Final result. */

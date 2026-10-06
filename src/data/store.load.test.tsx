@@ -1,13 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
-import { StoreProvider, useStore } from './store';
+import { StoreProvider, useStore, STORAGE_KEY, QUARANTINE_STORAGE_KEY } from './store';
+import { CURRENT_DATA_VERSION } from './migration';
 import { seedData } from './seed';
 import type { AppData, Revenue } from './types';
 import type { RuleRelease } from '../domain/fiscal/rules';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
-
-// Must match STORAGE_KEY in src/data/store.tsx (module-private, not exported).
-const STORAGE_KEY = 'pfa-app-data-v2';
 
 let storeRef: ReturnType<typeof useStore> | null = null;
 function Probe() {
@@ -223,8 +221,14 @@ describe('loadInitial — dataOrigin flag', () => {
         <Probe />
       </StoreProvider>,
     );
-    expect(storeRef!.dataOrigin).toBe('seed');
+    // D-3: the payload is no longer silently discarded. The app still recovers to
+    // seed data, but it says so and keeps the rejected copy retrievable (B-11).
+    expect(storeRef!.dataOrigin).toBe('quarantined');
     expect(storeRef!.revenues).toEqual(seedData.revenues);
+    expect(storeRef!.quarantine).not.toBeNull();
+    expect(storeRef!.quarantine!.reason).toBe('unparseable-json');
+    expect(storeRef!.quarantine!.raw).toBe('{corrupt');
+    expect(localStorage.getItem(QUARANTINE_STORAGE_KEY)).toContain('{corrupt');
   });
 
   it("is 'seed' after recovery from a missing required collection", () => {
@@ -236,7 +240,36 @@ describe('loadInitial — dataOrigin flag', () => {
         <Probe />
       </StoreProvider>,
     );
-    expect(storeRef!.dataOrigin).toBe('seed');
+    expect(storeRef!.dataOrigin).toBe('quarantined');
+    expect(storeRef!.quarantine!.reason).toBe('schema-invalid');
+  });
+
+  it("keeps 'persisted' for a migrated payload and reports the migration separately (D-3b)", () => {
+    // writePayload() writes no `version`, so this is a pre-Phase-7 payload: the
+    // chain runs, but the origin stays 'persisted' — it is still the user's data.
+    writePayload();
+    render(
+      <StoreProvider>
+        <Probe />
+      </StoreProvider>,
+    );
+    expect(storeRef!.dataOrigin).toBe('persisted');
+    expect(storeRef!.migration).not.toBeNull();
+    expect(storeRef!.migration!.fromVersion).toBe(0);
+    expect(storeRef!.migration!.toVersion).toBe(CURRENT_DATA_VERSION);
+    expect(storeRef!.dataVersion).toBe(CURRENT_DATA_VERSION);
+  });
+
+  it("is 'persisted' with no migration when the payload is already current", () => {
+    writePayload({ version: CURRENT_DATA_VERSION });
+    render(
+      <StoreProvider>
+        <Probe />
+      </StoreProvider>,
+    );
+    expect(storeRef!.dataOrigin).toBe('persisted');
+    expect(storeRef!.migration).toBeNull();
+    expect(storeRef!.quarantine).toBeNull();
   });
 });
 

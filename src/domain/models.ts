@@ -49,11 +49,36 @@ export type PfaOtherIncomeFlag =
 export type PfaSocialInsuranceStatus = 'obligatoriu' | 'exempt' | 'neplata';
 
 /**
+ * One CAEN classification code with its description.
+ *
+ * Phase 7 (D-1) makes this the single CAEN model. It replaces the two older
+ * shapes: `PfaProfile.caen: string` (code only, no description) and
+ * `SettingsState.company.caen: CompanyCaen[]` (a duplicate store no UI wrote).
+ * The domain owns the type so `data/types.ts` does not become a source of
+ * domain models.
+ */
+export interface CaenCode {
+  /** CAEN code, e.g. '6201'. */
+  cod: string;
+  /** Human-readable classification, e.g. 'Activități de programare computerizate'. */
+  descriere: string;
+}
+
+/**
  * Identity/contact data owned by the profile.
  *
- * Mirrors the fields currently held in SettingsState.company/personal so the
- * profile can become the canonical identity source; the Settings page keeps
- * its existing behavior (additive change only, no redesign).
+ * Phase 7 (D-1) makes this the ONE canonical identity store: the fields that
+ * previously lived only in `SettingsState.company` / `SettingsState.personal`
+ * are absorbed here, and those settings blocks retire from the UI and from all
+ * writes while staying parseable (frozen legacy data, read only by the
+ * migration chain).
+ *
+ * The Phase 7 additions are OPTIONAL on purpose. `pfaIdentitySchema` gates the
+ * live profile *and* the embedded profile of every stored calculation snapshot
+ * (`data/schema.ts` `taxCalculationSnapshotSchema.inputSnapshot.profile`), so a
+ * REQUIRED new identity field would invalidate every payload written before
+ * Phase 7 — see the data-loss note on `pfaProfileSchema` and
+ * `docs/ai/phases/07_identity.md`.
  */
 export interface PfaIdentity {
   // personal
@@ -72,6 +97,21 @@ export interface PfaIdentity {
   emailSocietate: string;
   contBancar: string;
   banca: string;
+  /**
+   * VAT registration code in intra-community trade (cod TVA intracomunitar).
+   * Absorbed from `settings.company.codTvaIntra` by migration step v0→v1.
+   */
+  codTvaIntra?: string;
+  /**
+   * Activity classifications (CAEN). Absorbed from `settings.company.caen` by
+   * migration step v0→v1, which also folds the old `PfaProfile.caen` string in.
+   * The engine reads CAEN nowhere today — no CAEN-keyed rule is citable, so this
+   * is descriptive data, not a fiscal input (and it is deliberately NOT part of
+   * `inputsKey`, see `docs/ai/phases/07_identity.md`).
+   */
+  caen?: CaenCode[];
+  /** Free text printed on invoices (menițiuni pe factură). Absorbed from `settings.company.mentiuniFactura`. */
+  mentiuniFactura?: string;
 }
 
 /**
@@ -95,8 +135,15 @@ export interface PfaProfile {
   fiscalYear: number;
   /** Tax regime. */
   regime: PfaRegime;
-  /** Main activity code (CAEN). */
-  caen: string;
+  /**
+   * @deprecated Phase 7 (D-1): the CAEN model is `identity.caen: CaenCode[]`.
+   * This field is kept OPTIONAL so payloads written before Phase 7 keep
+   * validating (a required-or-removed field would invalidate every stored
+   * snapshot's embedded profile too); migration step v0→v1 folds its value into
+   * `identity.caen`. No application code reads or writes it any more — the only
+   * remaining readers are the migration and its tests.
+   */
+  caen?: string;
   /** Concurrent salary status. */
   salaryStatus: PfaSalaryStatus;
   /**

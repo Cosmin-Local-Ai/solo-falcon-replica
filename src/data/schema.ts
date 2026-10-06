@@ -139,6 +139,9 @@ export const taxCalculationSnapshotSchema = z.object({
     expenses: z.number(),
   }),
   inputsHash: z.string(),
+  // Phase 7: the digest carried before a data migration rewrote the embedded
+  // profile. Optional, so snapshots written before AND after Phase 7 both parse.
+  preMigrationInputsHash: z.string().optional(),
   calculationLines: z.array(z.object({ label: z.string(), value: z.number() })),
   output: z.object({ total: z.number() }),
   status: z.enum(['computed', 'superseded', 'void']),
@@ -200,8 +203,15 @@ export const settingsSchema = z.object({
  * Optional: `profile` (pre-profile-collection payloads), `snapshots`
  * (pre-snapshot-feature payloads), and the secondary collections, which the
  * load path backfills to empty values.
+ *
+ * `version` is optional and its ABSENCE is meaningful: a payload with no
+ * `version` key is the base of the migration chain (version 0), i.e. a payload
+ * written before Phase 7 introduced versioning. It is deliberately not given a
+ * zod `.default()`, so the migration can tell "absent" from "explicitly 0" —
+ * both map to the same chain entry, and neither is a guess.
  */
 export interface PersistedAppData {
+  version?: number;
   profile?: PfaProfile;
   revenues: Revenue[];
   expenses?: Expense[];
@@ -215,6 +225,10 @@ export interface PersistedAppData {
 }
 
 export const persistedAppDataSchema = z.object({
+  // Absent === DATA_VERSION_BASE (see PersistedAppData above). A version higher
+  // than the chain's current version is rejected by the load path, not guessed
+  // at — see `readStoredVersion` in data/migration.ts.
+  version: z.number().int().min(0).optional(),
   profile: profileSchema.optional(),
   revenues: z.array(revenueSchema),
   expenses: z.array(expenseSchema).optional(),
@@ -234,16 +248,41 @@ export const persistedAppDataSchema = z.object({
  * Returns `null` for anything that is not a valid dataset: unparseable
  * JSON, non-object JSON, missing required collections, wrong types,
  * invalid numbers, invalid profile / settings / snapshot entries.
+ *
+ * `parseAppDataResult` is the form the load path uses — it keeps WHY the payload
+ * was rejected so the quarantine record (D-3) can carry a real reason instead of
+ * "something was wrong". This wrapper stays because it is the shape the schema
+ * tests and callers already use.
  */
-export function parseAppData(raw: string): PersistedAppData | null {
+export type ParseAppDataResult =
+  | { ok: true; data: PersistedAppData }
+  | { ok: false; reason: 'unparseable-json' | 'schema-invalid'; detail: string };
+
+export function parseAppDataResult(raw: string): ParseAppDataResult {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch {
-    return null;
+  } catch (err) {
+    return {
+      ok: false,
+      reason: 'unparseable-json',
+      detail: err instanceof Error ? err.message : String(err),
+    };
   }
   const result = persistedAppDataSchema.safeParse(parsed);
-  return result.success ? result.data : null;
+  if (result.success) return { ok: true, data: result.data };
+  // Bounded on purpose: a payload that fails everywhere would otherwise produce
+  // an unreadable wall of text in the banner and in localStorage.
+  const detail = result.error.issues
+    .slice(0, 12)
+    .map(issue => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
+    .join('; ');
+  return { ok: false, reason: 'schema-invalid', detail };
+}
+
+export function parseAppData(raw: string): PersistedAppData | null {
+  const result = parseAppDataResult(raw);
+  return result.ok ? result.data : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +292,9 @@ export function parseAppData(raw: string): PersistedAppData | null {
 type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;
 type Expect<T extends true> = T;
 
-type _checks = [
+// Exported so the assertion is a live part of the module (an unexported type
+// alias is reported as unused); it still exists only to fail the build on drift.
+export type _checks = [
   Expect<Equal<z.output<typeof revenueSchema>, Revenue>>,
   Expect<Equal<z.output<typeof expenseSchema>, Expense>>,
   Expect<Equal<z.output<typeof clientSchema>, Client>>,

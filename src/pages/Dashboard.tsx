@@ -1,6 +1,7 @@
 import { useDashboardData } from '../data/dashboardAdapter';
 import { useStore } from '../data/store';
 import { getFinancialSummary } from '../data/dashboard';
+import { identityGreeting } from '../domain/profile';
 import { fmtRON, fmtDate } from '../data/types';
 import FinancialChart from '../components/FinancialChart';
 import FinancialSummary from '../components/FinancialSummary';
@@ -37,6 +38,7 @@ export default function DashboardPage() {
   const data = useDashboardData();
   const { snapshot, tax, completeness, reserve, pendingCounts } = data;
   const appData = useStore();
+  const greeting = identityGreeting(appData.profile.identity);
   const summary = getFinancialSummary(appData, snapshot.asOf);
 
   const hasData =
@@ -55,6 +57,9 @@ export default function DashboardPage() {
           An fiscal {snapshot.taxYear} · actualizat la {fmtDate(snapshot.asOf)}
         </span>
       </div>
+      {/* Phase 7: the greeting reads the same identity store as the sidebar and
+          the topbar. It uses the given name, not the full name the topbar shows. */}
+      {greeting && <p className="greeting">Bună, {greeting}</p>}
 
       {!hasData ? (
         <div className="empty-state">
