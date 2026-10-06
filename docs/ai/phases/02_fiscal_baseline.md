@@ -46,21 +46,40 @@ entry **08.08.2026**, i.e. it post-dates every 2026 OUG screened) plus the amend
 
 ## 2. CAS (CF Titlul V Cap. II)
 
+> **Amended by the Phase 3 research pass (2026-10-05).** Three rows of the original table below were
+> wrong or under-sourced: the exemption article, the 6-SM tier, and the "not a cap" claim, which had
+> only lit. a) behind it. Corrected in place here; full verbatim text and sources in
+> `docs/ai/research/07_cas_2026_research.md`.
+
 | Item | Verified 2026 value | Act + article | Amendment / publication | Confidence |
 |---|---|---|---|---|
 | Rate | 25% | CF art. 138 alin. (1) | — | HIGH |
 | **Minimum base** | **12 SM = 48,600 lei** (at 4,050 lei/month) | **CF art. 148 alin. (2) lit. a)**: "Baza anuală de calcul al contribuției de asigurări sociale, în cazul persoanelor care realizează veniturile prevăzute la art. 137 alin. (1) lit. b) și b^1), o reprezintă venitul ales de contribuabil, care nu poate fi mai mic decât: a) nivelul de 12 salarii minime brute pe țară, în cazul veniturilor realizate cuprinse între 12 salarii minime brute pe țară inclusiv și 24 de salarii minime brute pe țară." | **OUG nr. 128/2024, Punctul 20, Art. I, MO 1125 din 11.11.2024**; applies "începând cu veniturile aferente anului 2025" | HIGH |
-| **Maximum base** | **24 SM = 97,200 lei** is the tier boundary, **not a cap** — above it the base is the actual venit ales | CF art. 148 alin. (2) | same | HIGH (text) / see §2.1 on the code's clamp |
-| 6-SM tier | **Does not exist for persoane fizice with art. 68 income.** It now sits only in art. 170 alin. (2)-(3) (CASS, art. 155 alin. (1) lit. c)-h)) | CF art. 170 alin. (2)-(3) | OUG 128/2024 removed it from the PF CAS ladder | HIGH |
-| Salary/pension exemption | Not verified — no rule reads `salaryStatus`/`pensionStatus`. CF art. 147 alin. (1) is the exemption hook (referenced, **not read**) | CF art. 147 alin. (1) | — | **UNVERIFIED — Phase 3 dependency** |
+| **Base above 24 SM** | **24 SM = 97,200 lei is a MINIMUM FLOOR, not a cap.** Art. 148 alin. (2) chapeau: "venitul ales de contribuabil, care **nu poate fi mai mic decât**"; **lit. b)**: "nivelul de 24 de salarii minime brute pe țară, în cazul veniturilor realizate cel puțin egale cu 24 de salarii minime brute pe țară". **There is no CAS cap.** | CF art. 148 alin. (2) lit. b) | OUG 128/2024 pct. 20; alin. (2) unchanged for 2026 | **HIGH — lit. b) now quoted verbatim** (was under-sourced in the original table) |
+| **Below 12 SM** | **No CAS is owed.** The obligation is conditional: art. 148 alin. (1) arises only where cumulated annual income is "cel puțin egală cu 12 salarii minime brute pe țară". Below that, CAS is **optional** under alin. (4) at a chosen base still ≥ 12 SM | CF art. 148 alin. (1) and alin. (4) | — | HIGH |
+| 6-SM tier | **There was never a 6-SM rung in CAS.** The 6/12/24 ladder is CASS, art. 170 alin. (4), for art. 155 alin. (1) lit. c)-h) income. OUG 128/2024 pct. 20 **renumbered** art. 148 and moved the test from estimated to realized income — it did not delete a CAS tranche | CF art. 170 alin. (4) (CASS) | ANAF Brașov before/after table, OUG 128/2024 pct. 20 | HIGH |
+| **Exemption** | **CF art. 150, not art. 147.** Art. 150 alin. (1): pensioners and persons insured in own social insurance systems owe **no CAS** for art. 137 alin. (1) lit. b) **and** b^1) income — automatic, no minimum amount. **Art. 150 alin. (2): persons with salary income are exempt only for lit. b^1)**, so **a salaried PFA owner is NOT exempt** from CAS on independent-activity income. `salaryStatus` must not suppress CAS | CF art. 150 alin. (1)-(2) | alin. (2) last amended OUG 18/2018, MO 260/23.03.2018; unchanged for 2026 | HIGH |
+| ~~Art. 147 alin. (1)~~ | **VOID — the original row named the wrong article.** Art. 147 is the monthly **Declarația 112** filing obligation for employers/payers. It contains no exemption and no minimum salary/pension condition | CF art. 147 alin. (1) | — | corrected by Phase 3 |
 
 ### 2.1 Gap Phase 3 must not paper over
 
-Art. 148 alin. (2) is a **ladder of alternative bases**, not a clamp. Between 12 and 24 SM the base is
-12 SM; **above 24 SM the base is the actual venit realizat** ("venitul ales de contribuabil"), so a hard
-`Math.min(effectiveBase, max_base)` clamp at 24 SM **under-states** CAS for high earners. The code's
-`max_base` / `max_cas` parameters encode a cap the article does not state. **This corrects the Phase 2
-planning note that told Phase 3 to "enforce `max_cas`"** — Phase 3 must model the tiers instead.
+Art. 148 alin. (2) is a **ladder of alternative floors**, not a clamp. The base is **`venitul ales de
+contribuabil`** — a chosen base — and realized income only selects which floor applies: **12 SM** where
+income is between 12 and 24 SM, **24 SM** where income is at least 24 SM. There is **no upper cap**.
+
+The code's `Math.max(base, min_base)` + `Math.min(effectiveBase, max_base)` is a **continuous ramp with a
+cap**, which is wrong in both directions:
+
+| net income | code today | art. 148 alin. (2) | error |
+|---|---|---|---|
+| 0 / loss | base 48,600 → **12,150** | **0** — alin. (1) condition not met | **over-states by 12,150** |
+| 60,000 (between 12 and 24 SM) | base 60,000 → **15,000** | floor 48,600 → **12,150** | **over-states by 2,850** |
+| 200,000 (≥ 24 SM) | base 97,200 → 24,300 | floor 97,200 → 24,300 | 0, but only by coincidence |
+
+**This corrects the Phase 2 planning note**, which said the clamp "under-states CAS for high earners".
+At the statutory minimum it does not — the material defect is **over-statement in the 12-24 SM band and
+below 12 SM**, which is where most PFAs sit. `max_base` / `max_cas` encode a cap the article does not
+state and must not be enforced as statutory.
 
 Register mechanics (OMFP 3254/2017 art. 5 alin. (5), verbatim): CAS "nu se înregistrează în Registrul
 de evidență fiscală … Deducerea acestor cheltuieli se efectuează la **recalcularea** venitului net
@@ -396,7 +415,7 @@ for art. 135^1 / 148 / 170 / 310 was re-established by direct read and stands.
 | **U-2** | **CASS minimum base for art. 68 sistem-real income in 2026** | The 6-SM rungs of art. 170 alin. (2)-(3) cover art. 155 alin. (1) lit. c)-h) income, not art. 68. No rung located for a PFA. The code's `min_base` "6 SM annual" label is unsourced. | Phase 4 |
 | **U-3** | **Which act last amended art. 122 alin. (3)'s 25 May term** | Text is HIGH; attribution is MEDIUM (ANAF consolidation is annotative). | Phase 9 (attribution only; the date value is settled) |
 | **U-4** | **Quarterly instalment payment due dates for 2026** | Need CF art. 123 alin. (2)-(4), art. 147/151 (CAS), art. 174 alin. (1)-(3) (CASS). Not read in Phase 2. | Phase 9 |
-| **U-5** | **CAS salary/pension exemption branch** | CF art. 147 alin. (1) referenced but not read; no rule reads `salaryStatus`/`pensionStatus`. | Phase 3 |
+| ~~U-5~~ | **CLOSED by the Phase 3 research pass — CAS exemption branch.** | The hook is **CF art. 150**, not art. 147. Art. 150 alin. (1) exempts pensioners and persons in own social insurance systems (both lit. b) and b^1)); art. 150 alin. (2) exempts salaried persons **only** for lit. b^1), so salary does **not** exempt PFA income. Verbatim text in `research/07` §3. | — |
 | ~~U-6~~ | **CLOSED — numeric minimum-wage values.** | **4,050 lei** on 1 ianuarie 2026 (HG 1.506/2024, MO I 1185/28.11.2024) and **4,325 lei** from 1 iulie 2026 (HG 146/2026, MO 196/13.03.2026) are both verified HIGH. The "8,100 / 8,600 lei" figures were a **hallucination and are void**. The code's values are correct. See §3. | — |
 | **U-7** | **OMFP 3254/2017 amendment history** | Portal "Acțiuni suferite" for doc 196396 returned 0 refs; no explicit "abrogări: niciuna" line. In force is established via OMF 808/2026 art. 8's express scope (abrogates **OMFP 870/2005** only — MO 556 din 07.07.2026, scope = plătitori de impozit pe profit) and the absence of any "(modificat de)" note on the MO 10/05.01.2018 text. | Phase 5, 8 (the net-of-VAT base rests on this act) |
 
@@ -405,12 +424,18 @@ Q-CASS-MINBASE-analogue → **re-opened as U-2** (the research closed the *CAS* 
 CASS one), Q-VAT-THRESHOLD, Q-VAT-BASIS, Q-16PCT, Q-30PCT-CAP, Q-NETGROSS, Q-PROVENANCE-SCHEMA,
 **Q-SM-VALUES (U-6)**.
 
+**Closed by the Phase 3 research pass:** **Q-CAS-EXEMPTION (U-5)** — and with it the correction that
+**art. 147 is not an exemption article at all**. U-4's CAS half is also narrowed: the CAS payment
+obligation articles are art. 148/150/151, not art. 147.
+
 ---
 
 ## 13. Forward dependencies recorded by Phase 2 (no code changed for these)
 
-1. **Phase 3 (CAS):** model art. 148 alin. (2) as a **tier ladder**, not a clamp; `max_base`/`max_cas`
-   are not statutory caps (§2.1). Needs U-5 (U-6 closed — the SM values are verified).
+1. **Phase 3 (CAS):** model art. 148 alin. (2) as a **ladder of floors**, not a clamp; `max_base`/`max_cas`
+   are not statutory caps (§2.1). **U-5 and U-6 are both closed** — the exemption is art. 150 (pension
+   only; salary does not exempt), and the SM values are verified. Below 12 SM the answer is **0**, not
+   12,150.
 2. **Phase 4 (CASS):** the 72-SM ceiling is sourced (art. 170 alin. (1), Legea 239/2025 Art. XII pct. 19,
    applies to the **2026** year). The **minimum base is not** (U-2) — do not invent one. Art. 174 alin. (7)
    lit. c) gives the pensioner relief.

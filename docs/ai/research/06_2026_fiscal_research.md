@@ -7,6 +7,24 @@
 > anywhere in Titlul IV — the only 30% hits are art. 68^3 alin. (2), art. 85 alin. (2) and art. 106;
 > (4) there is **no 16% component for PFA sistem real** — 16% covers only CF art. 114 alin. (2)
 > lit. h)/i) per art. 115 alin. (1) lit. b), and art. 114 alin. (1) excludes art. 61 lit. a)-h) income.
+> **CAS errors found in the Phase 3 pass (2026-10-05), on top of the four above:**
+> (5) **The 24-SM CAS figure is NOT a maximum.** `:164` "CAS maximum base 2026 = 24 SM = 97,200 lei →
+> max CAS = 24,300 lei" and the "CAS max" row at `:178` are wrong. CF **art. 148 alin. (2)** chapeau reads
+> "venitul ales de contribuabil, care **nu poate fi mai mic decât**", and **lit. b)** sets 24 SM as the
+> **minimum permitted base** once realized income reaches 24 SM. **There is no CAS cap.** The textual
+> contrast is decisive: CASS art. 170 alin. (1) uses the opposite formula, "care nu poate fi mai mare
+> decât", and that one IS a real cap. This file's own `:164` self-rated the claim **Medium** — "full text
+> of art. 160 not directly verified" — and that hedge was warranted.
+> (6) **CAS is not owed below 12 SM.** The "CAS min 24,300 lei (6 SM) → 6,075 lei" row at `:177` is wrong
+> twice over. CF art. 148 alin. (1) creates the obligation only where cumulated annual income is "cel
+> puțin egală cu 12 salarii minime brute pe țară"; below that the taxable event never arises and CAS is
+> **optional** under alin. (4), at a chosen base that still cannot be below 12 SM.
+> (7) **CAS article numbering is wrong throughout.** `:157`, `:162`, `:163` and `:164` cite **art. 158**
+> and **art. 160** for the CAS rate and base. The articles in force are **art. 138** (rate) and
+> **art. 148** (base). Relatedly, **there was never a 6-SM rung in CAS** — the 6/12/24-SM ladder is
+> CASS, art. 170 alin. (4), for art. 155 alin. (1) lit. c)-h) income. OUG 128/2024 pct. 20 renumbered
+> art. 148 and moved the test from estimated to realized income; it did not delete a CAS tranche.
+>
 > The "11-field rule schema" at `:226` is also superseded: the code's 17-field `FiscalRule`
 > (`src/domain/fiscal/rules.ts:19-37`) is authoritative.
 > **Citation correction:** the VAT-threshold act is **Ordonanța nr. 22 din 28.08.2025 — an OG, not an
