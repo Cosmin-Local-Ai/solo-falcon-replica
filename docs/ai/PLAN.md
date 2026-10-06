@@ -215,11 +215,14 @@ numbering stays readable.
   art. 85 alin. (2) (închiriere 1–7 camere) and art. 106 (calamity) — none conditions sistem-real
   deductibility. **There is no rule to author; delete the short-circuit.**
 - **The 16% surcharge is not applicable to this entity type** (CF art. 114 alin. (1), art. 115 alin. (1)
-  lit. b)). `progressive_rate: 16` was removed in Phase 2; what remains here is the stale NOTE string in
-  `calcIncomeTax` (`calculators.ts:96`) and the `status: 'computed'` over-claim.
+  lit. b)). `progressive_rate: 16` was already removed in Phase 2 — the prompt's claim that it still sits
+  at `package2026.ts:109` is **stale**; the only remaining traces of "16" in `src/` are CSS `gap` and
+  `fontSize`. What is left to do here is delete the stale NOTE string in `calcIncomeTax`'s breakdown
+  (`calculators.ts:96`), which still tells the reader a 16% surcharge portion exists.
 - **The real gate is CF art. 68 alin. (4)** — the general deductibility test imported by OMFP 3254/2017
   art. 5 alin. (2). Its verbatim text is now captured in phases/02 §6, **closing the Phase 5 blocker**.
-  Note also the four new alin. (5) capped items from OUG 8/2026 Art. 6 pct. 26-28.
+  Note also the four new alin. (5) capped items from OUG 8/2026 Art. 6 pct. 26-28 — **now positively
+  confirmed against the act itself** (`research/09` §1).
 - **Do not re-import the phantom cap via a CAEN-aware rule:** art. 68 alin. (1) excludes art. 68^1 /
   **68^3** / 69, and art. 68^3 alin. (2) is a real 30% forfetar **regime switch** for cazare
   (>7 camere, art. 67 alin. (1^1)) — a PFA doing that activity is outside sistem real entirely.
@@ -230,15 +233,42 @@ numbering stays readable.
   currently gets an over-deducted base and an **understated tax**. Phase 4 fixed the CASS *amount*;
   splitting the non-deductible difference out of the taxable base is Phase 5's job. It is named in the
   `calcCass` breakdown so it cannot be missed.
-- **New from Phase 5 recon — B-14, the regime gate is inverted.** `tax.ts:52-54` blocks
-  `impozit_pe_venit`, which is the **default** regime (`profile.ts:41`) and the only regime this
-  package exists for. So the numeric income-tax suite runs entirely under `impozit_pe_cit` — a regime
-  for which **no rule exists in the store**, and to which the 10% Titlul IV rate in `INCOME_TAX_2026`
-  does not apply. Deleting the short-circuit is therefore not enough: the gate must be **inverted**
-  (`impozit_pe_venit` computes; `impozit_pe_cit` returns `REVIEW_REQUIRED` because Titlul II / impozit
-  pe profit is not modelled), and the numeric tests must be re-pointed to the default regime. Until
-  that is done, every green income-tax assertion is testing a path no user takes.
+- **B-14, the regime gate is inverted — and `impozit_pe_cit` cannot legally exist for a PFA.**
+  `tax.ts:52-54` blocks `impozit_pe_venit`, which is the **default** regime (`profile.ts:41`) and the only
+  regime this package exists for, so the entire numeric income-tax suite runs under `impozit_pe_cit`
+  (12 occurrences vs 2, and those 2 are the short-circuit assertion). Research settled the direction:
+  **a PFA cannot be a CIT taxpayer at all in 2026** — CF art. 14 lit. a) confines profit tax to
+  **persoane juridice**, art. 68 alin. (1)'s exception list is closed (art. 68^1, 68^3, 69 — not Titlul II),
+  and the old option vehicle **art. 120 CF is Abrogat** (OUG 128/2024 pct. 11 Art. I, MO 1125/11.11.2024,
+  eff. 01.01.2025). So the gate must be **inverted**: `impozit_pe_venit` computes; `impozit_pe_cit` returns
+  `REVIEW_REQUIRED` framed as a **data-integrity failure** (wrong regime recorded / entity is actually a
+  persoană juridică) — **not** as "a different base applies". The numeric tests must be re-pointed to the
+  default regime. `research/08` Q-REGIME, confidence MEDIUM-HIGH.
+- **B-15, the CAS/CASS deduction is neither prorated nor capped.** Art. 118 alin. (2) lit. b) deducts CAS
+  and CASS **prorated** — alin. (2^2) by the art. 148 alin. (3) ratio, alin. (2^3) by the art. 170 alin. (1)
+  ratio — and alin. (2^4) caps the combined deduction at „**nu poate depăși nivelul venitului net anual
+  recalculat**". Today's single-source PFA makes the proration a **no-op** (ratio = 1) and the
+  `taxable <= 0 → tax 0` branch happens to give the right tax, so there is **no numeric error yet** — but
+  the calculation **lines over-report the deduction**, and the proration stops being a no-op the moment a
+  second income source exists (Phase 6). Model the mechanism now; do not leave a latent trap.
+- **B-16, fiscal losses are silently discarded.** Art. 118 alin. (2) lit. a) takes reported losses off
+  **before** sources are summed; alin. (4)-(5) require report and compensation „**în limita a 70% din
+  veniturile nete anuale, obținute din aceeași sursă de venit în următorii 5 ani fiscali consecutivi**",
+  chronologically by age of loss, personal and non-transferable, unabsorbed loss becoming a definitive
+  loss. `tax.ts:112-118` zeroes the tax and stores nothing — current-year tax is right, **the loss is lost**,
+  so the following year is over-taxed. Phase 5 owns the **rule and its surfacing**; persisting prior-year
+  loss balances needs the Phase 7 schema/version work. Do not invent a persistence layer here, and do not
+  pretend the rule is implemented — state precisely which half is done.
+- **B-6 remainder — `multiple_6x/12x/24x/72x` are declared and read by nothing.** They sit on the
+  `wage-reference` rule (`package2026.ts:33-36`) and duplicate `reference × 6/12/24/72`, the same
+  second-source-of-truth problem Phase 4 removed for `min_cass`/`max_cass`. Verified unreferenced: the only
+  parameter of that rule any code reads is `reference` (`calculators.ts:69`). **Resolve it — remove them or
+  derive them — do not leave the item open.**
+- **Not optional.** Every item above is a Phase 5 acceptance criterion. Items previously parked as
+  low priority (the NOTE string, the `multiple_*` parameters) are in scope, not best-effort.
 - **Blocked by:** Q-NONDEDUCT-VAT (U-1) — must stay `REVIEW_REQUIRED`, never a computed rule.
+- **U-8 is CLOSED** (`research/09` §1) — neither OUG 89/2025 nor OUG 8/2026 touches CF art. 154/170/174/180,
+  proven against the acts themselves. CAS/CASS from Phases 3-4 stands.
 
 ### Phase 6 — Profile-driven fiscal inputs
 
