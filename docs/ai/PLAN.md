@@ -410,16 +410,20 @@ numbering stays readable.
   `breakdown` as text; if they become rendered amounts they need this phase's semantics pass, and
   `CAS_MIN_BASE`'s shared "dezcalificare din regim" wording needs a tax-specific map (for CAS, being under
   12 SM means no CAS is owed, not disqualification).
-- **Follow-up from Phase 5 (B-17):** this phase owns **which amount is rounded where**. The seed's
+- **Follow-up from Phase 5 (B-17): ownership is Phase 10, not here.** The seed's
   `Rezervă lunară` is a second live half-cent (`3.104,505 / 3 = 1.034,835` → rendered `1.034,84`),
-  produced at presentation level rather than in the fiscal domain. Same root cause as B-17.
+  produced at presentation level rather than in the fiscal domain. Same root cause as B-17, which
+  **Phase 10 owns** (money representation + a central rounding policy). Phase 8 must not centralise
+  rounding or invent a legal rounding rule; if a basis change makes a rounding artefact visible, record
+  it for Phase 10.
 
 - **Objective:** prevent financial/tax calculations from confusing cash amounts, VAT and
   tax-relevant income. Separate the six concepts — transaction/cash amount, VAT amount, amount
   excluding VAT, gross amount, deductible expense, tax-relevant income. Ensure VAT does not silently
   become PFA taxable income, and that VAT threshold bases use the appropriate turnover basis. Where
   the treatment cannot be determined safely: `REVIEW_REQUIRED`. **Do not build a full VAT accounting
-  system.** Deliverable: `docs/ai/steps/08_amount_semantics.md`.
+  system.** Deliverable: `docs/ai/phases/08_amount_semantics.md` (the `steps/` path in the archived
+  prompt collides with the frozen archive and is superseded by the namespace rule).
 - **Exists today (measured in step 01):** `Revenue` (`src/data/types.ts:9-21`) and `Expense`
   (`:26-37`) carry `valoareFaraTva` + `tva` and one ambiguous `date` (`:13`, `:30`). There is **no
   stored total field** — `total()` is a helper (`src/data/types.ts:176`) and `aggregation.ts:11`
@@ -446,11 +450,44 @@ numbering stays readable.
   distinguished from cash expense. `settings.cotaTva` is seeded as 9 (`src/data/types.ts:110`,
   `seed.ts:83`) and read by no consumer, so no amount derives a VAT rate from settings today.
   Anything the phase cannot pin to a primary source returns `REVIEW_REQUIRED`.
-- **Entry criteria:** Phase 5 has settled what tax-relevant income is, and Phase 2 has resolved
-  Q-VAT-THRESHOLD (300,000 vs 395,000) — a turnover basis is meaningless until the threshold value is
-  settled.
-- **Blocked by:** Q-VAT-THRESHOLD (which value), Q-NETGROSS (are `Declaration.venituri` /
-  `cheltuieli` net or gross?), and Q-MONEY-UNIT if the amount types are re-cut in Phase 10.
+- **Entry criteria: MET.** Phase 5 settled what tax-relevant income is, and Phase 2 resolved all three
+  questions the archived prompt called blocking — see `STATE.md:127-131`:
+  - **Q-VAT-THRESHOLD = 395,000 lei for 2026** (CF art. 310 alin. (1); OG 22/2025, MO 806/29.08.2025).
+    The discredited research doc's "2025 only / use 300,000" was wrong.
+  - **Q-VAT-BASIS = VAT-exclusive.** Caveat recorded honestly in `phases/02_fiscal_baseline.md:255-258`:
+    "exclusiv taxa" attaches grammatically to the *ieșire din evidență* case, and alin. (2) also excludes
+    fixed-asset deliveries; the reading holds because **no provision measures the plafon TVA-inclusiv**.
+  - **Q-NETGROSS = net of VAT**, both venituri and cheltuieli (OMFP 3254/2017 art. 4 alin. (3) +
+    art. 5 alin. (6); CF art. 68 alin. (2)-(3)). Provenance caveat **U-7 / Q-OMFP3254-HISTORY** carries
+    forward: that order's amendment history is unverifiable (portal returned 0 refs); in force via OMF
+    808/2026 art. 8.
+- **Blocked by:** nothing. **No Researcher is needed to enter Phase 8.**
+
+- **Re-measured 2026-10-06, after Phase 7 — the defect is wider than this section says.**
+  `computeThresholds` (`thresholds.ts:161-198`) takes **one** `currentValue` for every spec whose
+  `requiredFiscalBase` matches, and **all four** specs declare `'gross-revenue'`, fed the same
+  VAT-inclusive `ytd.revenue` at **two** call sites (`dashboard.ts:99-105` and `dashboard.ts:195-201`).
+  So the errors are not one but two kinds:
+  - **Wrong VAT basis** — `VAT_REGISTRATION` (395,000, `thresholds.ts:108-114`) measures a
+    VAT-exclusive plafon against a VAT-inclusive number. `revenueNet` (`aggregation.ts:101`) already
+    exists and is used only for display (`dashboard.ts:90`, `derived.ts:71`), never fed to a threshold.
+  - **Wrong quantity entirely** — `CAS_MIN_BASE` (48,600), `CASS_MIN_BASE` (24,300) and `CASS_MAX_BASE`
+    (291,600) compare **contribution bases** to **gross revenue**. `net-income` is declared in the
+    `FiscalBase` union (`thresholds.ts:17`) but **no production spec uses it** — only
+    `thresholds.test.ts:275`. Phases 3–5 already define the real bases.
+  - **Design constraint:** one call cannot serve two bases. `buildDashboardSnapshotView` receives
+    `tax: TaxEstimateResult` (`dashboard.ts:188-195`) so a real contribution base is reachable there,
+    but `getThresholdStatuses(data, asOfDate)` (`dashboard.ts:97`) has **no access to the estimate**.
+  - **Trap:** `thresholds.ts:173` `if (spec.requiredFiscalBase !== query.fiscalBase) continue;` silently
+    **drops** a mismatched spec — no error, no `REVIEW_REQUIRED`, the card vanishes. Fixing a basis
+    without mirroring the caller deletes a threshold. `e2e/dashboard.spec.ts:165` asserts four cards.
+  - **Precedent:** `CAS_MAX_BASE` was removed in Phase 3 because CF art. 148 alin. (2) sets floors and
+    **no CAS ceiling** (`thresholds.ts:79-87`). Do not manufacture a threshold that has no citation.
+  - Phase 7 also changed the ground: `profile.identity` is the only identity store, `profile.caen` is
+    deprecated, and `addSnapshot` still has **no production caller** — the app does not persist
+    snapshots yet, so do not assume stored snapshots exist at runtime.
+- **Full brief for the Worker: `docs/ai/briefs/08_amount_semantics.md`** (kept in the repo, not `/tmp`,
+  so it survives a restart).
 
 ### Phase 9 — Date semantics
 
