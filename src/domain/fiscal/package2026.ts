@@ -30,10 +30,17 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     effectiveTo: null,
     parameters: [
       { id: 'reference', label: 'Reference value', value: 4050, unit: 'lei' },
-      { id: 'multiple_6x', label: '6x reference', value: 24300, unit: 'lei' },
-      { id: 'multiple_12x', label: '12x reference', value: 48600, unit: 'lei' },
-      { id: 'multiple_24x', label: '24x reference', value: 97200, unit: 'lei' },
-      { id: 'multiple_72x', label: '72x reference', value: 291600, unit: 'lei' },
+      // DELETED in Phase 5 (defect B-6, the part left open by Phases 3-4): `multiple_6x` / `multiple_12x` /
+      // `multiple_24x` / `multiple_72x` were duplicate data with no reader anywhere in src/ or e2e/ (verified
+      // by grep). Each equals
+      // `reference` x n, and every consumer that needs a multiple derives it at the point of use —
+      // calcCas and calcCass both compute their floors/ceilings as base x rate from their own
+      // `min_base` / `tier2_base` / `max_annual_base` parameters. Keeping five copies of one legal
+      // figure (HG 1506/2024 art. 1: salariul de bază 4.050 lei) is exactly the drift risk the
+      // one-figure-one-source rule exists to prevent. The SM multiples that ARE law (6/12/24/72 SM in
+      // CF art. 151 alin. (1), art. 170 alin. (1), art. 174 alin. (6)) live as `min_base` / `tier2_base`
+      // / `max_annual_base` on the CAS and CASS rules, where they are read. `verifiedAt` is unchanged:
+      // the 4.050 lei figure was not re-verified here, only unreferenced duplicates were removed.
     ],
     calculatorId: 'calc-wage-reference',
     sourceAct: 'HG 1506/2024',
@@ -170,18 +177,41 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
       // and art. 114 alin. (1) confines that category to incomes NOT under art. 61 lit. a)-h). PFA
       // sistem real income is art. 61 lit. a) / art. 68, so it is outside art. 114 entirely and takes
       // 10%. The parameter was dead data — calcIncomeTax reads `base_rate` only (calculators.ts).
-      // The stale "16% progressive surcharge" NOTE string inside calcIncomeTax is a Phase 5 cleanup.
+      // The stale "16% progressive surcharge" NOTE string inside calcIncomeTax was removed in Phase 5
+      // (the cleanup named in defect B-4's "Fixed in" cell): there is no second rate for art. 61 lit. a) / art. 68 income, so there was
+      // nothing to review and the note implied a REVIEW_REQUIRED that no rule or parameter supports.
     ],
     calculatorId: 'calc-income-tax',
     // CF art. 123 alin. (1): "…prin aplicarea cotei de 10% asupra venitului net anual impozabil
     // determinat potrivit art. 118."
+    // Regime gate (defect B-14): a PFA cannot be a Titlul II (impozit pe profit) taxpayer — CF art. 13
+    // alin. (1), art. 14 and art. 15 confine impozitul pe profit to persoane juridice, and the former
+    // option vehicle CF art. 120 is Abrogat (OUG 128/2024 pct. 11 Art. I, MO 1125/11.11.2024, 01.01.2025).
+    // Phase 5 (defects B-13/B-15) re-verified the BASE that the 10% applies to, i.e. art. 118 alin. (2):
+    //   lit. b)        venit net anual impozabil = însumarea veniturilor nete anuale recalculate, din
+    //                  care se deduc CAS și CASS „datorate potrivit prevederilor titlului V, cu excepția
+    //                  diferenței de contribuție de asigurări sociale de sănătate prevăzută la art. 174
+    //                  alin. (6)” (OUG 128/2024 pct. 10 Art. I), so the art. 174 alin. (6) difference is
+    //                  owed but never deducted;
+    //   alin. (2^2)    CAS deductibilă prorata: (venit net anual în sistem real ÷ total venituri cumulate
+    //                  art. 148 alin. (3)) × contribuția calculată potrivit art. 151 alin. (1);
+    //   alin. (2^3)    CASS deductibilă prorata: (venit net anual în sistem real ÷ total venituri cumulate
+    //                  art. 170 alin. (1)) × contribuția calculată potrivit art. 174 alin. (1);
+    //   alin. (2^4)    „nu poate depăși nivelul venitului net anual recalculat”;
+    //   lit. a) + alin. (4)-(5)  pierderea netă recalculată pe fiecare sursă, reportată 5 ani fiscali în
+    //                  limita a 70% din veniturile nete anuale din aceeași sursă.
     // GAP U-1 (UNVERIFIED — must stay REVIEW_REQUIRED, never a computed rule): the treatment of
     // non-deductible TVA for a neplătitor de TVA is not established by any operative provision.
     // OMFP 3254/2017 art. 5 alin. (6) carves out only "TVA dedusă"; art. 5 alin. (4) does not list
     // non-deductible TVA among the exclusions; nothing affirmatively makes it deductibilă.
     sourceAct: 'Cod fiscal (consolidat)',
-    sourceArticle: 'art. 123 alin. (1) + art. 118; 16% inapplicable per art. 114 alin. (1), art. 115 alin. (1) lit. b)',
+    sourceArticle: 'art. 123 alin. (1) + art. 118 alin. (2) lit. b), alin. (2^2)-(2^4), alin. (2) lit. a) si alin. (4)-(5); 16% inaplicabil per art. 114 alin. (1), art. 115 alin. (1) lit. b); regim PFA per art. 13 alin. (1), art. 14, art. 15 si art. 120 Abrogat',
     sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/312601',
+    // Provenance override (Phase 5): the legal reading of the taxable base was re-verified against the
+    // consolidated CF text on 2026-10-06 (docs/ai/research/08_art118_income_tax_2026.md). `version` stays
+    // 1 — the numeric parameter (base_rate 10%) did not change; only the citation and the composition
+    // order of the base moved.
+    verifiedAt: '2026-10-06',
   },
   {
     ...PROVENANCE_2026,

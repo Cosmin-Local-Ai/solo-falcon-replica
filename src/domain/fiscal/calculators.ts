@@ -3,7 +3,21 @@ import type { FiscalRule } from './rules';
 export type ReviewRequired = { reviewRequired: true; reason: string };
 
 export type CalculatorResult =
-  | { value: number; breakdown: string[] }
+  | {
+      value: number;
+      breakdown: string[];
+      /** Part of `value` that CF art. 118 alin. (2) lit. b) does NOT allow into the income-tax base.
+       * Today exactly one contribution has such a part: the CF art. 174 alin. (6) CASS difference
+       * (defect B-13). Art. 118 alin. (2) lit. b) verbatim: „venitul net anual impozabil care se
+       * determină prin însumarea tuturor veniturilor nete anuale, recalculate, prevăzute la lit. a),
+       * din care se deduc contribuția de asigurări sociale și contribuția de asigurări sociale de
+       * sănătate datorate potrivit prevederilor titlului V, cu excepția diferenței de contribuție de
+       * asigurări sociale de sănătate prevăzută la art. 174 alin. (6).” (modified by OUG 128/2024 pct.
+       * 10 Art. I, MO 1125/11.11.2024, eff. 01-01-2025). Art. 118 alin. (2^3) then prorates the
+       * deductible CASS over „contribuția … calculată potrivit art. 174 alin. (1)”, which is the 10% on
+       * the art. 68 net income — not the top-up to the 6 SM floor. Absent or 0 = fully deductible. */
+      nonDeductible?: number;
+    }
   | ReviewRequired;
 
 export type CalculatorInput = {
@@ -205,13 +219,25 @@ function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
           `VNA ${vna} lei este sub pragul de 6 SM (${floorBase} lei), dar diferenta de contributie din CF art. 174 alin. (6) nu se datoreaza daca veniturile din salarii si asimilate ale anului fiscal sunt cel putin egale cu 6 salarii minime brute (art. 174 alin. (7) lit. a)). Profilul nu contine cuantumul salarial — nu se poate stabili.`,
       };
     }
+    // B-13: the top-up is OWED but NOT DEDUCTIBLE. art. 174 alin. (6) creates a „diferență de
+    // contribuție” up to a 6 SM base when the art. 68 net income is positive but smaller than 6 SM; the
+    // art. 174 alin. (1) / art. 170 alin. (1) contribution itself stays 10% × net income. Art. 118 alin.
+    // (2) lit. b) deducts the contributions „datorate potrivit prevederilor titlului V” but expressly
+    // „cu excepția diferenței de contribuție de asigurări sociale de sănătate prevăzută la art. 174 alin.
+    // (6)”, and alin. (2^3) prorates over the contribution „calculată potrivit art. 174 alin. (1)”.
+    // So the deductible part is `due`, while the whole `floorCass` stays payable. Reported as
+    // `nonDeductible` so the income-tax base composes correctly instead of absorbing the difference.
+    const due = vna * rate; // art. 174 alin. (1) / art. 170 alin. (1): 10% x venitul net anual
+    const difference = floorCass - due; // art. 174 alin. (6): differenta de contributie — neimputabila
     return {
       value: floorCass,
+      nonDeductible: difference,
       breakdown: [
         `venit net anual (VNA): ${vna} lei`,
         `baza de calcul = pragul de 6 SM: ${floorBase} lei — CF art. 174 alin. (6) (NU art. 170 alin. (2)-(3), care vizeaza doar art. 155 alin. (1) lit. c)-h))`,
         `CASS = ${floorBase} x ${rate} = ${floorCass} lei — o diferenta de contributie pana la baza de 6 SM, nu inlocuirea bazei`,
         'CF art. 118 alin. (2) lit. b): diferenta de la art. 174 alin. (6) NU se scade din baza impozabila (reparație de coerență, nu de calcul)',
+        `CASS deductibila din baza impozabila = ${vna} x ${rate} = ${due} lei (art. 174 alin. (1)); diferenta neimputabila = ${difference} lei (art. 174 alin. (6), exclusa expres de art. 118 alin. (2) lit. b))`,
       ],
     };
   }
@@ -244,7 +270,13 @@ function calcIncomeTax(rule: FiscalRule, input?: CalculatorInput): CalculatorRes
     breakdown: [
       `base: ${base} lei`,
       `income tax = ${base} x ${baseRate} = ${tax} lei (10% base rate)`,
-      `NOTE: 16% progressive surcharge threshold (6x national avg gross salary) is not a fixed number — REVIEW_REQUIRED for the surcharge portion`,
+      // The 16% "surcharge" note was removed (Phase 5 — the cleanup named in defect B-4's "Fixed in"
+      // cell): CF art. 115 alin. (1) lit. b)
+      // applies 16% only to art. 114 alin. (2) lit. h)/i) "alte venituri", and art. 114 alin. (1)
+      // confines that category to incomes NOT under art. 61 lit. a)-h). PFA sistem real income is
+      // art. 61 lit. a) / art. 68, so it is outside art. 114 entirely and takes the flat 10% of
+      // art. 123 alin. (1). There is no second rate for this entity type and nothing to review.
+      'CF art. 123 alin. (1): cota de 10% se aplica asupra venitului net anual impozabil determinat potrivit art. 118; nu exista cota progresiva pentru venitul din art. 68 (art. 114 alin. (1), art. 115 alin. (1) lit. b))',
     ],
   };
 }

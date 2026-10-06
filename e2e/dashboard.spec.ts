@@ -65,22 +65,30 @@ test.describe('Dashboard — cockpit cards (seed data)', () => {
     await expect(venituri).toBeVisible();
     await expect(venituri.locator('.value')).toHaveText('9.317,00 RON');
 
-    // Tax estimate is review_required for the seed data → card shows '—'.
+    // Tax estimate is COMPUTED for the seed data (B-14): the seed profile is on impozit_pe_venit, the
+    // only regime a PFA can have in 2026, so the default user gets a number instead of an em dash.
+    // Seed net income is 7.494,50 lei (revenues 4.500 + 3.200 − expenses 120 + 85,50, all 'inregistrata')
+    // — inside the 0 < VNA < 6 SM band, so this dataset also exercises B-13: CASS owed = 2.430 lei
+    // (art. 174 alin. (6) difference to the 6 SM floor) but only 749,45 lei (10% × VNA, art. 174 alin.
+    // (1)) is deductible, so the tax is 10% × 6.745,05 = 674,505 lei — an exact HALF-CENT, shown as
+    // 674,51 only because Intl.NumberFormat rounds the double it happens to be handed (defect B-17).
+    // Total = 2.430 + 674,505 = 3.104,505 lei → "3.104,51". Before B-13 the seed produced 2.936,45 lei.
     const impozit = statCard(page, 'Impozit estimat');
     await expect(impozit).toBeVisible();
-    await expect(impozit.locator('.value')).toHaveText('—');
+    await expect(impozit.locator('.value')).toHaveText('3.104,51 RON');
     await expect(impozit.locator('.hint')).toHaveText('de pus deoparte');
 
-    // No computed tax → no recommended reserve and nothing left to set aside.
+    // A computed tax → a recommended monthly reserve (total / 3 months) and a remaining amount.
     const rezerva = statCard(page, 'Rezervă lunară');
     await expect(rezerva).toBeVisible();
-    await expect(rezerva.locator('.value')).toHaveText('0,00 RON');
+    await expect(rezerva.locator('.value')).toHaveText('1.034,84 RON');
 
     const ramane = statCard(page, 'Rămâne de pus deoparte');
     await expect(ramane).toBeVisible();
-    await expect(ramane.locator('.value')).toHaveText('0,00 RON');
+    await expect(ramane.locator('.value')).toHaveText('3.104,51 RON');
 
-    // Completeness: 8 of 9 checks satisfied (tax estimate snapshot missing).
+    // Completeness: still 8 of 9 — the check looks for a PERSISTED tax snapshot, and the live estimate
+    // is not written to storage (persisting it is Phase 7, not Phase 5).
     const dateComplete = statCard(page, 'Date complete');
     await expect(dateComplete).toBeVisible();
     await expect(dateComplete.locator('.value')).toHaveText('8/9');
@@ -114,8 +122,14 @@ test.describe('Dashboard — cockpit cards (seed data)', () => {
       await expect(page.locator('h3', { hasText: title })).toBeVisible();
     }
 
-    // Tax hero mirrors the cockpit: review_required → '—'.
-    await expect(page.locator('.tax-hero-value')).toHaveText('—');
+    // Tax hero mirrors the cockpit: the seed estimate is computed, so the hero shows the number.
+    // There are two .tax-hero-value nodes once the reserve section renders its own hero (tax estimate
+    // and monthly reserve), so the assertion is scoped to the 'Estimare impozit' card.
+    const heroCard = page
+      .locator('section.card')
+      .filter({ has: page.locator('h2.card-title', { hasText: 'Estimare impozit' }) })
+      .first();
+    await expect(heroCard.locator('.tax-hero-value')).toHaveText('3.104,51 RON');
   });
 });
 
@@ -132,14 +146,20 @@ test.describe('Dashboard — section content (seed data)', () => {
   const sectionWith = (page: Page, title: string, level: 'h2' | 'h3' = 'h3') =>
     page.locator('section.card').filter({ has: page.locator(level, { hasText: title }) });
 
-  test('Rezervă fiscală: shows the no-estimate message when tax is review_required', async ({ page }) => {
+  test('Rezervă fiscală: shows the recommended reserve built from the computed seed estimate', async ({ page }) => {
     await page.goto('/dashboard');
 
     const reserve = sectionWith(page, 'Rezervă fiscală', 'h2');
     await expect(reserve).toBeVisible();
+    // 3.104,51 lei over the 3 remaining months of the quarter → 1.034,84 lei/month.
+    await expect(reserve.getByText('1.034,84 RON').first()).toBeVisible();
+    await expect(
+      reserve.getByText('Rămâne de pus deoparte 3.104,51 RON în următoarele 3 luni.'),
+    ).toBeVisible();
+    // The no-estimate empty state is gone: the default regime computes (B-14).
     await expect(
       reserve.getByText('Nu există o estimare fiscală disponibilă — rezerva recomandată nu poate fi calculată.'),
-    ).toBeVisible();
+    ).toHaveCount(0);
   });
 
   test('Praguri: renders all 4 thresholds with current value, threshold and status', async ({ page }) => {
@@ -242,7 +262,7 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(legislation.getByText('Nicio modificare viitoare verificată.')).toBeVisible();
   });
 
-  test('Observații: renders all 11 insights with severity badges', async ({ page }) => {
+  test('Observații: renders all 12 insights with severity badges', async ({ page }) => {
     await page.goto('/dashboard');
 
     const insights = sectionWith(page, 'Observații', 'h2');
@@ -251,14 +271,20 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(insights.getByText('Termen depășit: PFA')).toHaveCount(7);
     await expect(insights.getByText('Termen apropiat: PFA')).toHaveCount(2);
 
-    // Completeness + tax insights.
+    // Completeness + tax insights. The tax insight is now the COMPUTED variant, not the
+    // review_required one, because the seed regime computes (B-14).
     await expect(insights.getByText('Date incomplete')).toBeVisible();
     await expect(insights.getByText('Lipsă: Estimare impozit.')).toBeVisible();
-    await expect(insights.getByText('Estimarea impozitului necesită verificare')).toBeVisible();
+    await expect(insights.getByText('Estimare impozit', { exact: true })).toBeVisible();
+    await expect(insights.getByText('Estimarea totală a impozitului:')).toBeVisible();
+    await expect(insights.getByText('Estimarea impozitului necesită verificare')).toHaveCount(0);
+    // A recommended reserve with nothing reserved yet is its own warning — it only exists because the
+    // estimate is computed.
+    await expect(insights.getByText('Rezervă fiscală sub țintă')).toBeVisible();
 
-    // Severity badges: 7 Urgent, 3 Atenție (2 deadlines + completeness), 1 Info.
+    // Severity badges: 7 Urgent, 4 Atenție (2 deadlines + completeness + reserve), 1 Info (tax).
     await expect(insights.getByText('Urgent', { exact: true })).toHaveCount(7);
-    await expect(insights.getByText('Atenție', { exact: true })).toHaveCount(3);
+    await expect(insights.getByText('Atenție', { exact: true })).toHaveCount(4);
     await expect(insights.getByText('Info', { exact: true })).toHaveCount(1);
   });
 });
@@ -523,18 +549,23 @@ test.describe('Dashboard — Grafic financiar & KPI table (seeded FY2025)', () =
 });
 
 /**
- * A CIT-regime profile (SRL) with two registered revenues in Q1 2026.
- * The tax engine returns a *computed* estimate of exactly 46.570 lei
- * (verified against src/domain/tax for this dataset), so the cockpit,
- * the tax hero and the Rezervă fiscală section show real values instead
- * of the review_required em dash.
+ * A PFA profile on CF art. 123 alin. (1) / art. 118 sistem real (the only regime a PFA can have in
+ * 2026 — see the regime gate in src/domain/tax.ts) with two registered revenues in Q1 2026. The tax
+ * engine returns a *computed* estimate of exactly 46.570 lei for this dataset (CAS 24.300 = 24 SM x
+ * 25%, CASS 13.000 = 10% x 130.000, tax 9.270 = 10% x 92.700), so the cockpit, the tax hero and the
+ * Rezervă fiscală section show real values instead of the review_required em dash.
+ *
+ * Before Phase 5 this fixture used regime `impozit_pe_cit` — a regime a persoană fizică cannot have
+ * (CF art. 13 alin. (1), art. 14, art. 15; the art. 120 option is Abrogat from 01.01.2025). The
+ * computed figure is unchanged by that correction: the Titlul IV arithmetic is identical, only the
+ * gate moved.
  */
-const citDataset = () => ({
+const computedDataset = () => ({
   profile: {
     id: 'profile-1',
     pfaStartYear: 2026,
     fiscalYear: 2026,
-    regime: 'impozit_pe_cit',
+    regime: 'impozit_pe_venit',
     caen: '6201',
     salaryStatus: 'nu',
     pensionStatus: 'nu',
@@ -548,9 +579,9 @@ const citDataset = () => ({
       adresa: 'Str. Libertății 12, Cluj-Napoca',
       telefon: '0750 123 456',
       email: 'andrei@popescuconsulting.ro',
-      denumire: 'Popescu Consulting SRL',
+      denumire: 'Popescu Andrei PFA',
       cui: 'RO4455667788990',
-      formaJuridica: 'SRL',
+      formaJuridica: 'PFA',
       numarRegComert: 'J40/1234/2020',
       adresaSocietate: 'Str. Libertății 12, Cluj-Napoca',
       telefonSocietate: '0750 123 456',
@@ -568,15 +599,10 @@ const citDataset = () => ({
   settings: SEED_SETTINGS,
 });
 
-test.describe('Dashboard — computed tax state (CIT seed)', () => {
-  const CIT_ESTIMATE = 46_570;
-
+test.describe('Dashboard — computed tax state (PFA sistem real seed)', () => {
   /** Local copies — the helpers in the first describe are block-scoped there. */
   const sectionWith = (page: Page, title: string) =>
     page.locator('section').filter({ has: page.getByRole('heading', { name: title, exact: true }) }).first();
-
-  const fmtRON = (n: number) =>
-    `${new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)} RON`;
 
   test.beforeEach(async ({ page }) => {
     // addInitScript so the store loads the dataset on first load (a
@@ -585,7 +611,7 @@ test.describe('Dashboard — computed tax state (CIT seed)', () => {
       ([key, dataset]: [string, unknown]) => {
         localStorage.setItem(key, JSON.stringify(dataset));
       },
-      [STORAGE_KEY, citDataset()],
+      [STORAGE_KEY, computedDataset()],
     );
   });
 
@@ -610,5 +636,30 @@ test.describe('Dashboard — computed tax state (CIT seed)', () => {
 
     const cell = page.locator('.stat-card').filter({ hasText: 'Impozit estimat' });
     await expect(cell.getByText(/46\.570/)).toBeVisible();
+  });
+});
+
+test.describe('Dashboard — impozit_pe_cit on a PFA is a data-integrity failure (B-14)', () => {
+  test('refuses to compute and names the provisions that make the regime impossible', async ({ page }) => {
+    await page.addInitScript(
+      ([key, dataset]: [string, unknown]) => {
+        localStorage.setItem(key, JSON.stringify({ ...dataset, profile: { ...dataset.profile, regime: 'impozit_pe_cit' } }));
+      },
+      [STORAGE_KEY, computedDataset()],
+    );
+    await page.goto('/dashboard');
+
+    // No number is shown for a regime the taxpayer cannot have — the engine refuses rather than
+    // computing Titlul IV amounts under a Titlul II label.
+    const cell = page.locator('.stat-card').filter({ hasText: 'Impozit estimat' });
+    await expect(cell.locator('.value')).toHaveText('—');
+
+    // The reason is rendered verbatim by FinancialChart and must cite the operative provisions, so the
+    // user can see WHICH record is wrong instead of being told a rule is missing.
+    const reason = page.locator('.chart-tax-note');
+    await expect(reason).toContainText('nu poate aparține unui PFA');
+    await expect(reason).toContainText('art. 13 alin. (1)');
+    await expect(reason).toContainText('art. 120');
+    await expect(reason).toContainText('abrogată');
   });
 });

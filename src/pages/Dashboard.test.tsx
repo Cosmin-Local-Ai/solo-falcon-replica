@@ -94,22 +94,25 @@ describe('Dashboard page', () => {
     }
   });
 
-  test('shows em dash for the tax estimate when the PFA income regime requires review', async () => {
+  test('computes the tax estimate for the default PFA regime impozit_pe_venit instead of refusing it (B-14)', async () => {
     writePayload({ revenues: [validRevenue] });
     renderDashboard();
 
     const card = (await screen.findByText('Impozit estimat', { exact: true })).closest('.stat-card');
     expect(card).not.toBeNull();
-    await expect(card).toHaveTextContent(/—/);
+    // The seed profile is on the only regime a PFA can have in 2026, so the default user gets a number,
+    // not an em dash. Verified against the engine for this dataset (revenue 50,000 net, no expenses):
+    // CAS 12,150 (12 SM x 25%) + CASS 5,000 (10% x 50,000) + 10% x (50,000 - 17,150) = 20,435 lei.
+    await expect(card).toHaveTextContent(/20\.435/);
   });
 
-  test('shows the computed CIT estimate in the cockpit for a CIT profile', async () => {
+  test('shows the computed estimate in the cockpit for a PFA profile on the lawful regime', async () => {
     writePayload({
       profile: {
         ...seedData.profile,
         pfaStartYear: 2026,
         fiscalYear: 2026,
-        regime: 'impozit_pe_cit',
+        regime: 'impozit_pe_venit',
         pensionStatus: 'nu',
         otherIncome: [],
         socialInsuranceStatus: 'obligatoriu',
@@ -143,7 +146,26 @@ describe('Dashboard page', () => {
 
     const card = (await screen.findByText('Impozit estimat', { exact: true })).closest('.stat-card');
     expect(card).not.toBeNull();
-    // Verified against the tax engine for this dataset: computed 46.570 lei.
+    // Verified against the tax engine for this dataset: computed 46.570 lei (CAS 24,300 = 24 SM x 25%,
+    // CASS 13,000 = 10% x 130,000, tax 9,270 = 10% x 92,700). The figure is IDENTICAL to the one this
+    // dataset produced under the old impozit_pe_cit gate — B-14 moved which regime the engine accepts,
+    // it did not move the Titlul IV arithmetic (art. 118 alin. (2^2)/(2^3) are a no-op for one source).
     await expect(card).toHaveTextContent(/46\.570/);
+  });
+
+  test('a profile recorded as impozit_pe_cit is a data-integrity failure, not a different base (B-14)', async () => {
+    writePayload({
+      profile: { ...seedData.profile, pfaStartYear: 2026, fiscalYear: 2026, regime: 'impozit_pe_cit' },
+      revenues: [validRevenue],
+    });
+    renderDashboard();
+
+    const card = (await screen.findByText('Impozit estimat', { exact: true })).closest('.stat-card');
+    expect(card).not.toBeNull();
+    await expect(card).toHaveTextContent(/—/);
+    // The reason must name the provisions that make the regime impossible for a persoană fizică, so the
+    // user can see which record is wrong (rendered verbatim by FinancialChart).
+    expect(await screen.findByText(/nu poate aparține unui PFA/)).toBeTruthy();
+    expect(screen.getByText(/art\. 13 alin\. \(1\)/).textContent).toContain('art. 120');
   });
 });

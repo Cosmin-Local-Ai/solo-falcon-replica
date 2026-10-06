@@ -207,7 +207,7 @@ numbering stays readable.
   because art. 174 alin. (7) lit. a) depends on a **salary amount** the profile does not carry. Wiring
   that amount is a profile change, not a CASS change.
 
-### Phase 5 — Income tax
+### Phase 5 — Income tax — **COMPLETE 2026-10-06** (`docs/ai/phases/05_income_tax.md`)
 
 - **Premise changed by Phase 2 — this is now a deletion, not an implementation.** The 30%
   deductible-expense cap the short-circuit at `tax.ts:52-54` waits on **does not exist in law**. A full
@@ -383,15 +383,19 @@ numbering stays readable.
    art. 174 alin. (6) contribution top-up it actually is (2,430 lei, conditional), a zero/loss year owes
    no CASS at all (art. 174 alin. (2)), art. 174 alin. (7) lit. c) waives only the top-up, and
    `min_cass`/`max_cass` are gone in favour of `rate × base`. The `min_base` value 24,300 was already
-   right; only its citation was wrong. Next up is **Phase 5 (income tax)**.
-2. **U-8 stays open as a risk, not a blocker** — it is not established that OUG 89/2025 and OUG 8/2026
-   leave art. 170 / 174 / 154 / 180 untouched (`phases/04_cass.md` §9). Closing it means reading both
-   OUGs' Art. I clause lists directly, per item 7 below.
-3. **Phase 5's scope changed** — the `tax.ts:52-54` short-circuit rests on a 30% cap that does not
-   exist, so it is a **deletion**, not an implementation. The art. 68 alin. (4) gate is now captured.
+   right; only its citation was wrong. **Phase 5 (income tax) is now done** — see item 3 and
+   `phases/05_income_tax.md`.
+2. **U-8 is CLOSED** (2026-10-06, `research/09_u8_amendment_scan_and_optare.md` §1) — OUG 89/2025 and
+   OUG 8/2026 were read clause by clause and touch none of CF art. 154 / 170 / 174 / 180. The CAS/CASS
+   results from Phases 3–4 stand; do not re-open.
+3. **Phase 5's scope changed, and it was NOT only a deletion** — the `tax.ts:52-54` short-circuit rested
+   on a 30% cap that does not exist, so that part was a deletion; but inverting the regime gate (B-1/B-14)
+   exposed three real arithmetic defects in the art. 118 alin. (2) base (B-13 whole-CASS deduction, B-15
+   missing proration + alin. (2^4) cap, B-16 discarded fiscal losses), all now fixed and tested.
+   The art. 68 alin. (4) gate is captured as an input gap, not faked into a rule.
 4. Open ADRs in `docs/ai/decisions/` for the fiscal corrections (only 07 and 09 exist today).
 5. Add e2e coverage for `Documents.tsx`, `EFactura.tsx`, `Expenses.tsx` and the Clients edit path
-   when the pages they exercise are next touched — the existing 23 e2e tests are dashboard-only.
+   when the pages they exercise are next touched — the existing 24 e2e tests are dashboard-only.
 6. Fix the miscited articles in `steps/16:50-54,84` **only** in new documents; the step file itself
    stays as historical record (01 §6.4).
 7. **Verification method for any future fiscal re-check: read amending acts directly.** The Portal

@@ -24,8 +24,24 @@ export interface TaxCalculationInput {
   rules: FiscalRule[];
 }
 
+/** CF art. 118 alin. (2) lit. a) + alin. (4)-(5): a fiscal loss on this source, surfaced for
+ * display. Phase 5 does NOT persist it — there is no prior-year store yet (Phase 7). */
+export interface FiscalLossCarryForward {
+  amount: number;
+  years: number;
+  capPercent: number;
+  sameSourceOnly: true;
+  rule: string;
+}
+
 export type TaxEstimateResult =
-  | { status: 'computed'; lines: CalculationLine[]; output: CalculationOutput; snapshot: TaxCalculationSnapshot }
+  | {
+      status: 'computed';
+      lines: CalculationLine[];
+      output: CalculationOutput;
+      snapshot: TaxCalculationSnapshot;
+      lossCarryForward?: FiscalLossCarryForward;
+    }
   | { status: 'review_required'; reason: string; lines: CalculationLine[] };
 
 function rr(reason: string, lines: CalculationLine[] = []): TaxEstimateResult {
@@ -49,8 +65,18 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   if (!cassRule) return rr(`Regula CASS nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}`, lines);
   if (!incomeTaxRule) return rr(`Regula de impozit pe venit nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}`, lines);
 
-  if (inputs.regime === 'impozit_pe_venit') {
-    return rr('Plafonul cheltuielilor deductibile pentru impozit pe venit (30% din brut) nu este în stocul de reguli.', lines);
+  // B-14: THE REGIME GATE WAS INVERTED. A PFA cannot be a CIT taxpayer in 2026: CF art. 13 alin. (1)
+  // makes impozitul pe profit owed "de persoanele juridice", and art. 14 and art. 15 each define the
+  // Titlul II taxpayer as a persoană juridică. The vehicle that once let an individual opt into it —
+  // CF art. 120 — is Abrogat (OUG 128/2024 pct. 11 Art. I, MO 1125/11.11.2024, de la 01.01.2025).
+  // So `impozit_pe_venit` (CF art. 123 alin. (1) + art. 118, Titlul IV sistem real) is the ONLY regime
+  // this package can compute — and it is also the default regime of every profile (profile.ts:38).
+  // `impozit_pe_cit` is therefore NOT "a different base applies": it is a data-integrity failure.
+  // Either the recorded regime is wrong or the entity is not a PFA at all. No Titlul II rule exists in
+  // the rule set and none may legally apply to a persoană fizică, so the engine must refuse and say why
+  // instead of computing a number under a regime the taxpayer cannot have.
+  if (inputs.regime !== 'impozit_pe_venit') {
+    return rr(`Regimul fiscal înregistrat („${inputs.regime}") nu poate aparține unui PFA în 2026: impozitul pe profit (Titlul II) se datorează doar de persoanele juridice — CF art. 13 alin. (1), art. 14 și art. 15 — iar opțiunea de a datora impozit pe profit (fostul art. 120 CF) a fost abrogată prin OUG 128/2024 pct. 11 Art. I (MO 1125/11.11.2024), de la 01.01.2025. Verifică regimul din profil sau natura entității.`, lines);
   }
 
   // Area 6: VAT is not taxable income. Non-exempt profiles are taxed on the net base
@@ -58,9 +84,15 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   const gross = inputs.vatExempt ? revenues : revenuesNet;
   const deductibleBase = inputs.vatExempt ? expenses : expensesNet;
   lines.push({ label: 'Venit brut', value: gross });
-  const deductible = Math.min(deductibleBase, gross);
-  lines.push({ label: 'Cheltuieli deductibile', value: deductible });
-  const net = gross - deductible;
+  // B-16: this used to be `Math.min(deductibleBase, gross)`. That clamp forced the net to stay >= 0, so
+  // a fiscal loss was UNREPRESENTABLE — an expense-heavy year came out as "no tax, no loss" and the
+  // loss was silently thrown away. CF art. 118 alin. (2) lit. a) names „pierderea netă recalculată pe
+  // fiecare sursă” as a figure the taxpayer must determine, so a negative sistem-real difference is a
+  // legal number the engine has to carry, not clamp to zero.
+  // Still out of scope (recorded as an input gap, not faked into a rule): whether each individual
+  // expense is deductibilă under CF art. 68 alin. (4) — the app holds no per-expense nature data.
+  lines.push({ label: 'Cheltuieli deductibile', value: deductibleBase });
+  const net = gross - deductibleBase;
   lines.push({ label: 'Venit net din activitate', value: net });
 
   // CF art. 150 alin. (1): pensioners and persons insured in their own social insurance
@@ -80,6 +112,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   lines.push({ label: 'CAS (25%)', value: casRes.value });
 
   let cassValue = 0;
+  let cassNonDeductibila = 0;
   // CASS AND CAS TREAT PENSIONERS DIFFERENTLY — never mirror one branch into the other.
   //   CAS:  CF art. 150 alin. (1) — a pensioner owes NO CAS at all on art. 137 alin. (1)
   //         lit. b)/b^1) income (the call above).
@@ -101,20 +134,79 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     });
     if ('reviewRequired' in cassRes) return rr(cassRes.reason, lines);
     cassValue = cassRes.value;
+    // CF art. 118 alin. (2) lit. b): only the part of CASS that art. 170 alin. (1) provides enters
+    // the taxable base; calcCass reports the art. 174 alin. (6) difference as `nonDeductible`.
+    cassNonDeductibila = cassRes.nonDeductible ?? 0;
     lines.push({ label: 'CASS (10%)', value: cassValue });
   } else {
     lines.push({ label: `CASS (${inputs.socialInsuranceStatus})`, value: 0 });
   }
 
-  const taxable = net - casRes.value - cassValue;
-  lines.push({ label: 'Venit impozabil (net - CAS - CASS)', value: taxable });
+  // ---- CF art. 118 alin. (2): the taxable base, composed in the order the law states it ----
+  // alin. (2) lit. a): „venit net anual recalculat = venit net anual (sistem real) − pierderi fiscale
+  // reportate”, PE SURSĂ, before incomes are summed. The app models one sistem-real source and has no
+  // prior-year loss store (Phase 7 owns persistence), so the reported-loss term is 0 here and the
+  // current-year loss is surfaced below rather than silently dropped.
+  const pierderiReportate = 0;
+  const vnaRecalculat = net - pierderiReportate;
+
+  // alin. (2^2): CAS deductibilă = (venit net anual determinat în sistem real ÷ total venituri cumulate
+  // potrivit art. 148 alin. (3)) × contribuția de asigurări sociale calculată potrivit art. 151 alin. (1).
+  // alin. (2^3): CASS deductibilă = (venit net anual determinat în sistem real ÷ total venituri cumulate
+  // potrivit art. 170 alin. (1)) × contribuția de asigurări sociale de sănătate calculată potrivit
+  // art. 174 alin. (1).
+  // While there is a single source, each denominator IS the sistem-real net, so both ratios are exactly
+  // 1 and the proration is a no-op — the numbers do not move. It is written out anyway so that a second
+  // income source (Phase 6) cannot silently inherit a full deduction it is not entitled to.
+  const vnaSistemReal = Math.max(net, 0);
+  const totalCumulatCass = vnaSistemReal; // art. 170 alin. (1)
+  const totalCumulatCas = vnaSistemReal; // art. 148 alin. (3)
+  const ratioCas = totalCumulatCas > 0 ? vnaSistemReal / totalCumulatCas : 1;
+  const ratioCass = totalCumulatCass > 0 ? vnaSistemReal / totalCumulatCass : 1;
+  const casDeductibila = ratioCas * casRes.value;
+  // B-13: the art. 174 alin. (6) difference up to the 6 SM floor is OWED but never deductible — art. 118
+  // alin. (2) lit. b) deducts the contributions „datorate potrivit prevederilor titlului V” „cu
+  // excepția diferenței de contribuție de asigurări sociale de sănătate prevăzută la art. 174 alin. (6)”,
+  // and alin. (2^3) prorates over the contribution „calculată potrivit art. 174 alin. (1)”. Deducting
+  // the whole floor overstates the deduction in the 0 < VNA < 6 SM band and understates the tax.
+  const cassDeductibila = Math.max(0, ratioCass * (cassValue - cassNonDeductibila));
+  lines.push({ label: 'CAS deductibilă (art. 118 alin. (2^2))', value: casDeductibila });
+  lines.push({ label: 'CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))', value: cassDeductibila });
+
+  // alin. (2^4): „Nivelul contribuției de asigurări sociale și al contribuției de asigurări sociale de
+  // sănătate deductibile … nu poate depăși nivelul venitului net anual recalculat.” Without this cap a
+  // low-net year could drive the base negative and hide a loss behind a negative tax.
+  const deduceriCalculat = casDeductibila + cassDeductibila;
+  const plafonDeduceri = Math.max(0, vnaRecalculat);
+  const deduceriRetinute = Math.min(deduceriCalculat, plafonDeduceri);
+  if (deduceriRetinute < deduceriCalculat) {
+    lines.push({ label: 'Deduceri blocate de plafonul art. 118 alin. (2^4)', value: deduceriCalculat - deduceriRetinute });
+  }
+
+  const taxable = vnaRecalculat - deduceriRetinute;
+  lines.push({ label: 'Venit net anual impozabil (art. 118 alin. (2) lit. b))', value: taxable });
 
   if (taxable <= 0) {
+    // B-16: a zero or negative base is a FACT, not a review item. The status stays 'computed' and the
+    // total stays the contributions actually owed — but a loss year must not be reported as a plain 0.
+    let lossCarryForward: FiscalLossCarryForward | undefined;
+    if (vnaRecalculat < 0) {
+      lines.push({ label: 'Pierdere fiscală pe sursă (art. 118 alin. (2) lit. a))', value: -vnaRecalculat });
+      lossCarryForward = {
+        amount: -vnaRecalculat,
+        years: 5,
+        capPercent: 70,
+        sameSourceOnly: true,
+        rule: 'CF art. 118 alin. (4): „Pierderea fiscală anuală înregistrată pe fiecare sursă din activități independente … determinată în sistem real, se reportează și se compensează de către contribuabil în limita a 70% din veniturile nete anuale, obținute din aceeași sursă de venit în următorii 5 ani fiscali consecutivi.” Alin. (5): reportul se face cronologic pe 5 ani consecutivi, dreptul este personal și netransmisibil, iar pierderea necompensată la expirarea perioadei este pierdere definitivă.',
+      };
+    }
     const total = casRes.value + cassValue;
     lines.push({ label: 'Impozit pe venit (fără bază impozabilă)', value: 0 });
     lines.push({ label: 'Total taxe', value: total });
     const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, calculationLines: lines, output: { total } });
-    return { status: 'computed', lines, output: { total }, snapshot: snap };
+    const computed: TaxEstimateResult = { status: 'computed', lines, output: { total }, snapshot: snap };
+    if (lossCarryForward) computed.lossCarryForward = lossCarryForward;
+    return computed;
   }
 
   const incomeTaxRes = calculatorRegistry['calc-income-tax'](incomeTaxRule, { base: taxable });

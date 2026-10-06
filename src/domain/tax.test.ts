@@ -5,12 +5,17 @@ import { computeTaxEstimate } from './tax';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal/package2026';
 import { PFA_2026_RELEASE } from './fiscal/release2026';
 
+// B-14: the fixtures used to default to `impozit_pe_cit`, which is the regime a PFA can NEVER have in
+// 2026 (CF art. 13 alin. (1), art. 14, art. 15 — Titlul II is for persoane juridice only; the art. 120
+// option is Abrogat from 01.01.2025). The engine rejected that regime, so 38 of the 39 cases were
+// exercising a path no user can reach while the real default (`impozit_pe_venit`, profile.ts:38) was
+// untested. The defaults are now the only lawful PFA regime; the CIT case is tested explicitly below.
 function makeProfile(overrides: Partial<PfaProfile> = {}): PfaProfile {
-  return { id: 'p1', regime: 'impozit_pe_cit', fiscalYear: 2026, socialInsuranceStatus: 'obligatoriu', ...overrides } as PfaProfile;
+  return { id: 'p1', regime: 'impozit_pe_venit', fiscalYear: 2026, socialInsuranceStatus: 'obligatoriu', ...overrides } as PfaProfile;
 }
 
 function makeInputs(overrides: Partial<TaxInputsReference> = {}): TaxInputsReference {
-  return { regime: 'impozit_pe_cit', salaryStatus: 'da', pensionStatus: 'nu', otherIncome: [], socialInsuranceStatus: 'obligatoriu', vatExempt: false, cashFloorLei: 0, fiscalYear: 2026, inputsKey: 'p1:2026:impozit_pe_cit:obligatoriu', ...overrides };
+  return { regime: 'impozit_pe_venit', salaryStatus: 'da', pensionStatus: 'nu', otherIncome: [], socialInsuranceStatus: 'obligatoriu', vatExempt: false, cashFloorLei: 0, fiscalYear: 2026, inputsKey: 'p1:2026:impozit_pe_venit:obligatoriu', ...overrides };
 }
 
 describe('computeTaxEstimate', () => {
@@ -44,9 +49,23 @@ describe('computeTaxEstimate', () => {
     expect(res.output.total).toBe(0);
   });
 
-  it('returns REVIEW_REQUIRED for impozit_pe_venit regime', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ regime: 'impozit_pe_venit' }), profile: makeProfile({ regime: 'impozit_pe_venit' }), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+  it('computes the default PFA regime impozit_pe_venit — the gate must never reject the default path (B-14)', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+  });
+
+  it('impozit_pe_cit on a PFA is a DATA-INTEGRITY failure, not "a different base applies" (B-14)', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs({ regime: 'impozit_pe_cit' }), profile: makeProfile({ regime: 'impozit_pe_cit' }), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
+    if (res.status !== 'review_required') return;
+    // The reason has to name the provisions that make the regime impossible, and quote the bad value,
+    // so the user can see WHICH record is wrong instead of being told a ceiling is missing.
+    expect(res.reason).toContain('impozit_pe_cit');
+    expect(res.reason).toContain('art. 13 alin. (1)');
+    expect(res.reason).toContain('art. 14');
+    expect(res.reason).toContain('art. 15');
+    expect(res.reason).toContain('art. 120');
+    expect(res.reason).toContain('abrogată');
   });
 
   it('returns REVIEW_REQUIRED for negative revenues', async () => {
@@ -152,8 +171,8 @@ describe('computeTaxEstimate', () => {
   it('expenses exceed revenues → computed with CASS 0 (net is not positive, art. 174 alin. (2))', async () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 10_000, expenses: 20_000, revenuesNet: 10_000, expensesNet: 20_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     // Re-pointed with the same reasoning: no positive net, so no CASS base and no CASS.
-    // (The deductible clamp at tax.ts keeps net at 0 rather than negative; the fiscal-loss
-    // income-tax treatment is Phase 5's scope, not Phase 4's.)
+    // (The old deductible clamp in tax.ts is gone — Phase 5/B-16 lets net go negative so the fiscal
+    // loss is representable; the loss itself is surfaced, not stored. Persistence is Phase 7.)
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     expect(res.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(0);
@@ -403,5 +422,99 @@ describe('computeTaxEstimate', () => {
     // Exempt: base stays gross (VAT kept in), 55000.
     const gross = res.lines.find((l) => l.label === 'Venit brut')?.value;
     expect(gross).toBe(55_000);
+  });
+
+  // ── Phase 5 / B-13: the CF art. 174 alin. (6) difference is OWED but never DEDUCTIBLE ──
+
+  it('net 20,000 (0 < VNA < 6 SM): CASS 2,430 owed, only 2,000 deductible, tax on 18,000 (B-13)', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'nu' }), profile: makeProfile({ salaryStatus: 'nu' }), revenues: 20_000, expenses: 0, revenuesNet: 20_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    // CAS 0 — net is under the 12 SM floor of art. 151 alin. (1).
+    expect(res.lines.find((l) => l.label === 'CAS (25%)')?.value).toBe(0);
+    // CASS owed = the 6 SM floor: art. 174 alin. (6).
+    expect(res.lines.find((l) => l.label === 'CASS (10%)')?.value).toBeCloseTo(2_430, 6);
+    // Deductible CASS = 10% x VNA only: art. 118 alin. (2) lit. b) deducts the contributions
+    // „datorate potrivit prevederilor titlului V” „cu excepția diferenței de contribuție … prevăzută la
+    // art. 174 alin. (6)”, and alin. (2^3) prorates over the contribution „calculată potrivit art. 174
+    // alin. (1)”. The 6 SM floor comes from art. 174 alin. (6), so the difference never enters the base.
+    expect(res.lines.find((l) => l.label === 'CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))')?.value).toBeCloseTo(2_000, 6);
+    // taxable = 20,000 − 2,000 = 18,000 (was 17,570 while the difference was wrongly deducted).
+    expect(res.lines.find((l) => l.label === 'Venit net anual impozabil (art. 118 alin. (2) lit. b))')?.value).toBeCloseTo(18_000, 6);
+    expect(res.lines.find((l) => l.label === 'Impozit pe venit (rată de bază 10%)')?.value).toBeCloseTo(1_800, 6);
+    // total = 2,430 owed CASS + 1,800 tax = 4,230 (was 4,187: the bug understated the bill by 43 lei).
+    expect(res.output.total).toBeCloseTo(4_230, 6);
+  });
+
+  // ── Phase 5 / B-15: art. 118 alin. (2^2)/(2^3) proration and the alin. (2^4) cap are explicit ──
+
+  it('single source: both art. 118 alin. (2^2)/(2^3) ratios are exactly 1, so the deduction lines equal the contributions', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 71_281, expenses: 0, revenuesNet: 71_281, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    // One sursă ⇒ each denominator (total venituri cumulate, art. 148 alin. (3) / art. 170 alin. (1))
+    // IS the sistem-real net. The proration must be a no-op today — it is written out so a second
+    // income source (Phase 6) cannot inherit a full deduction it is not entitled to.
+    expect(res.lines.find((l) => l.label === 'CAS deductibilă (art. 118 alin. (2^2))')?.value).toBeCloseTo(12_150, 6);
+    expect(res.lines.find((l) => l.label === 'CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))')?.value).toBeCloseTo(7_128.1, 6);
+    expect(res.lines.find((l) => l.label === 'Venit net anual impozabil (art. 118 alin. (2) lit. b))')?.value).toBeCloseTo(52_002.9, 6);
+    // No cap line when the deductions stay under the recalculated net income.
+    expect(res.lines.find((l) => l.label.startsWith('Deduceri blocate'))).toBeUndefined();
+    expect(res.output.total).toBeCloseTo(24_478.39, 6);
+  });
+
+  it('art. 118 alin. (2^4): the deductions are capped at the recalculated net income of the same source', async () => {
+    // Synthetic rate so the cap is reachable: with the real 2026 ladder (CAS 25% over a 12 SM floor,
+    // CASS 10%) the sum of the two deductions can never exceed the net income, so the cap is a
+    // structural guard here — proven by moving one parameter, exactly like the ceiling tests above.
+    const modifiedRules = PFA_2026_SYSTEM_REAL_PACKAGE.map((rule) =>
+      rule.ruleId === 'CAS_2026'
+        ? { ...rule, parameters: rule.parameters.map((p) => (p.id === 'rate' ? { ...p, value: 100 } : p)) }
+        : rule,
+    );
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 50_000, expenses: 0, revenuesNet: 50_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: modifiedRules });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    // CAS 48,600 (100% x the 12 SM base) + CASS 5,000 = 53,600 of deductions against a net of 50,000.
+    expect(res.lines.find((l) => l.label === 'CAS (25%)')?.value).toBe(48_600);
+    expect(res.lines.find((l) => l.label === 'CASS (10%)')?.value).toBeCloseTo(5_000, 6);
+    expect(res.lines.find((l) => l.label === 'Deduceri blocate de plafonul art. 118 alin. (2^4)')?.value).toBeCloseTo(3_600, 6);
+    // The base stops at 0 — it never goes negative, so no phantom negative tax.
+    expect(res.lines.find((l) => l.label === 'Venit net anual impozabil (art. 118 alin. (2) lit. b))')?.value).toBeCloseTo(0, 6);
+    expect(res.lines.find((l) => l.label === 'Impozit pe venit (rată de bază 10%)')).toBeUndefined();
+    expect(res.lines.find((l) => l.label === 'Impozit pe venit (fără bază impozabilă)')?.value).toBe(0);
+    // The contributions are still owed in full: the cap limits the DEDUCTION, not the liability.
+    expect(res.output.total).toBeCloseTo(53_600, 6);
+  });
+
+  // ── Phase 5 / B-16: a loss year is computed, and the loss is surfaced ──
+
+  it('loss year: status stays computed, total = the contributions owed, and the art. 118 alin. (4)-(5) carry-forward is surfaced', async () => {
+    // Reachable only because the old Math.min(expenses, gross) clamp is gone: art. 118 alin. (2) lit. a)
+    // requires the taxpayer to determine „pierderea netă recalculată pe fiecare sursă”, so expenses above
+    // revenues must produce a negative net, not a silent zero.
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 10_000, expenses: 20_000, revenuesNet: 10_000, expensesNet: 20_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    // A loss is a fact, not a review item: no CASS (art. 174 alin. (2)), no CAS (below 12 SM), no tax.
+    expect(res.output.total).toBe(0);
+    expect(res.lines.find((l) => l.label === 'Impozit pe venit (rată de bază 10%)')).toBeUndefined();
+    // But the loss itself must be visible, not hidden behind a bare 0.
+    expect(res.lines.find((l) => l.label === 'Pierdere fiscală pe sursă (art. 118 alin. (2) lit. a))')?.value).toBe(10_000);
+    expect(res.lossCarryForward?.amount).toBe(10_000);
+    expect(res.lossCarryForward?.years).toBe(5);
+    expect(res.lossCarryForward?.capPercent).toBe(70);
+    expect(res.lossCarryForward?.sameSourceOnly).toBe(true);
+    expect(res.lossCarryForward?.rule).toContain('5 ani fiscali consecutivi');
+    expect(res.lossCarryForward?.rule).toContain('70%');
+    expect(res.lossCarryForward?.rule).toContain('aceeași sursă');
+  });
+
+  it('a zero net income is NOT a loss: no carry-forward is reported (art. 118 alin. (2) lit. a))', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 10_000, expenses: 10_000, revenuesNet: 10_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    expect(res.lines.find((l) => l.label === 'Pierdere fiscală pe sursă (art. 118 alin. (2) lit. a))')).toBeUndefined();
+    expect(res.lossCarryForward).toBeUndefined();
   });
 });
