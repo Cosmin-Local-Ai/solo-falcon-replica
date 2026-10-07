@@ -168,6 +168,22 @@ export interface PfaProfile {
   socialInsuranceStatus: PfaSocialInsuranceStatus;
   /** VAT-exempt (scutire de TVA). */
   vatExempt: boolean;
+  /**
+   * The date the VAT turnover ceiling (CF art. 310 alin. (1)) was actually exceeded, ISO
+   * `YYYY-MM-DD`. Optional on purpose — see the data-loss note on `pfaProfileSchema`: a
+   * required field here would invalidate every payload written before this phase.
+   *
+   * This is the missing input for `VAT_REGISTRATION_DEADLINE_2026`. The rule has been correct,
+   * cited and rule-driven since Phase 9b (`domain/deadlines.ts` `EVENT_DATE.vat_exceedance`,
+   * `offset_days = 0`), but nothing in the app ever recorded the exceedance date, so the rule
+   * resolved to `date: null, status: 'not_applicable'` and the deadline never appeared. The
+   * silence when this field is absent is CORRECT — the engine has no source for the date and
+   * must not invent one — so this field is what turns a structural silence into an answer.
+   *
+   * It is the exceedance date, not the registration date and not the month: Phase 9b split
+   * `pfaStartDate` / `vatExceedanceMonth` deliberately and that split stands.
+   */
+  vatExceedanceDate?: string;
   /** Cash payment floor threshold in lei (limitele de casă). Default 0. */
   cashFloorLei: number;
   /** Identity/contact data used by the application. */

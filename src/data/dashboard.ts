@@ -148,11 +148,13 @@ export function getUpcomingDeadlines(data: AppData, asOfDate: string): Deadline[
       // 30-day fiscal-registration term does not reach a PFA (OUG 44/2008 art. 13 alin. (3) is itself
       // the act of fiscal taking-into-evidence). A PFA start date therefore resolves ZERO deadlines:
       // silence is the correct outcome, asserted in src/domain/deadlines.test.ts.
-      // `vatExceedanceDate` is deliberately not passed: no profile field in this app records the date
-      // on which the TVA ceiling was exceeded, so `VAT_REGISTRATION_DEADLINE_2026` resolves to
-      // `date: null, status: 'not_applicable'` here. Surfacing it in the UI requires a new profile
-      // field — a data-model change, not a deadline fix, so Phase 9b did not invent one.
+      // `vatExceedanceDate` is the input `VAT_REGISTRATION_DEADLINE_2026` had been missing since
+      // Phase 9b: the rule was correct, cited and rule-driven, but nothing recorded the date, so it
+      // could only ever resolve `date: null, status: 'not_applicable'`. It is still optional, and an
+      // absent value still produces NO deadline — the engine has no source for the exceedance date
+      // and must not invent one. Passing it is a data-model fix, not a rule change.
       pfaStartDate: data.profile.pfaStartDate,
+      vatExceedanceDate: data.profile.vatExceedanceDate,
     }),
     asOfDate,
   );
@@ -238,6 +240,9 @@ function buildSnapshot(
     taxYear,
     asOfDate,
     pfaStartDate: data.profile.pfaStartDate,
+    // Same query as `getUpcomingDeadlines`: the snapshot and the deadline section must not be able
+    // to disagree about whether a VAT registration deadline exists.
+    vatExceedanceDate: data.profile.vatExceedanceDate,
   });
   const ytd = selectYtd(data, asOfDate);
   // Single source for both the snapshot rows and `DashboardData.thresholds` — the inline

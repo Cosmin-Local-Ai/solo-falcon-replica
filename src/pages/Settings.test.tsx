@@ -373,4 +373,54 @@ describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () => {
     expect(screen.getByText('Valoare invalidă (lei, ≥ 0).')).toBeInTheDocument();
     expect(readStoredProfile().cashFloorLei).toBe(0);
   });
+
+  // P-PROFILE-VAT-DATE: the profile is the only place the TVA exceedance date can enter the app,
+  // so the write path has to exist and the value has to survive a reload.
+  it('persists the VAT exceedance date and restores it on remount', () => {
+    const first = render(
+      <StoreProvider>
+        <Settings />
+      </StoreProvider>,
+    );
+    openFiscalTab();
+    inputField('Data depășirii pragului de TVA', '2026-09-15');
+    clickSave();
+    expect(readStoredProfile().vatExceedanceDate).toBe('2026-09-15');
+
+    act(() => {
+      first.unmount();
+    });
+    render(
+      <StoreProvider>
+        <Settings />
+      </StoreProvider>,
+    );
+    openFiscalTab();
+    expect((fieldControl('Data depășirii pragului de TVA') as HTMLInputElement).value).toBe('2026-09-15');
+  });
+
+  it('an empty exceedance date is stored as absent, never as an empty string', () => {
+    // '' would pass through the form but fail the schema's date rule, and a stored '' is exactly
+    // the malformed value B-21 was about. Absent is the honest answer to "the user never said".
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        ...seedData,
+        profile: { ...seedData.profile, vatExceedanceDate: '2026-09-15' },
+      }),
+    );
+    render(
+      <StoreProvider>
+        <Settings />
+      </StoreProvider>,
+    );
+    openFiscalTab();
+
+    expect((fieldControl('Data depășirii pragului de TVA') as HTMLInputElement).value).toBe('2026-09-15');
+    inputField('Data depășirii pragului de TVA', '');
+    clickSave();
+
+    const profile = readStoredProfile();
+    expect(profile.vatExceedanceDate).toBeUndefined();
+  });
 });

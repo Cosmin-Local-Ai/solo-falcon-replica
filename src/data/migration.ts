@@ -41,8 +41,15 @@ export const DATA_VERSION_IDENTITY = 2;
  * căruia au fost plătite". See `migratePaymentDatesV3` and `docs/ai/phases/09_payment_dates.md`.
  */
 export const DATA_VERSION_DATES = 3;
+/**
+ * Pre-Phase-10 step 4: the profile may carry the date the VAT turnover ceiling was exceeded
+ * (`PfaProfile.vatExceedanceDate`). That is the input `VAT_REGISTRATION_DEADLINE_2026` has been
+ * missing since Phase 9b — the rule was correct, cited and rule-driven, but no field existed to
+ * feed it, so it could only ever resolve `not_applicable`. See `migrateVatExceedanceDateV4`.
+ */
+export const DATA_VERSION_VAT_DATE = 4;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_DATES;
+export const CURRENT_DATA_VERSION = DATA_VERSION_VAT_DATE;
 
 export interface MigrationStep {
   readonly from: number;
@@ -273,6 +280,27 @@ export function migratePaymentDatesV3(data: PersistedAppData): PersistedAppData 
   return { ...data, version: DATA_VERSION_DATES };
 }
 
+/**
+ * Pre-Phase-10 step 4 (`3 → 4`): the profile may now carry `vatExceedanceDate`, the date the VAT
+ * turnover ceiling (CF art. 310 alin. (1)) was exceeded — the input the VAT registration deadline
+ * rule (art. 316 alin. (1) lit. b), already wired and cited since Phase 9b) was still missing.
+ *
+ * **It backfills nothing, on purpose, for the same reason `migratePaymentDatesV3` backfills
+ * nothing.** There is no legacy field to read the exceedance date from: `vatExempt` is a boolean
+ * regime flag, not an event, and `pfaStartDate` is the registration start, not a ceiling crossing.
+ * Deriving a date from any of them would manufacture a fiscal event the user never recorded — and
+ * this one has teeth: `VAT_REGISTRATION_DEADLINE_2026` puts a filing obligation on the exact
+ * exceedance date (`offset_days = 0`), so an invented date would invent a deadline. Absence stays
+ * absence, and the rule keeps emitting nothing until the user supplies the date.
+ *
+ * The step touches no bytes and cannot change any `inputSnapshot` digest: `buildInputSnapshot`
+ * hashes `profile` plus two aggregate numbers — so a profile that gains this field later does
+ * change the digest, which is correct: it is a different input to the engine.
+ */
+export function migrateVatExceedanceDateV4(data: PersistedAppData): PersistedAppData {
+  return { ...data, version: DATA_VERSION_VAT_DATE };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -297,6 +325,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Records may now carry a collected (revenue) / paid (expense) date. Nothing was backfilled: a legacy payload keeps a single date, which is read as the fiscal date.',
     apply: migratePaymentDatesV3,
+  },
+  {
+    from: DATA_VERSION_DATES,
+    to: DATA_VERSION_VAT_DATE,
+    name: 'vat-exceedance-date',
+    summary:
+      'Profile may now carry the date the TVA ceiling was exceeded. Nothing was backfilled: no legacy field records that event, and an invented date would invent a filing deadline.',
+    apply: migrateVatExceedanceDateV4,
   },
 ];
 

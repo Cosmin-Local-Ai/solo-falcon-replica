@@ -6,6 +6,7 @@ import {
   regimeRefusalReason,
   selectableRegimes,
 } from '../domain/regimes';
+import { isoCalendarDateProblem, isoCalendarDateProblemText } from '../domain/date';
 import type {
   PfaPensionStatus,
   PfaRegime,
@@ -87,6 +88,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     pensionStatus: profile.pensionStatus,
     socialInsuranceStatus: profile.socialInsuranceStatus,
     vatExempt: profile.vatExempt ? 'da' : 'nu',
+    // Optional: an empty field means "the app does not know the date", which is not
+    // the same as "there is no VAT deadline" — see VAT_REGISTRATION_DEADLINE_2026.
+    vatExceedanceDate: profile.vatExceedanceDate ?? '',
     cashFloorLei: String(profile.cashFloorLei),
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -139,8 +143,15 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     if (!Number.isInteger(fy) || fy < 2000 || fy > 2100) {
       e.fiscalYear = 'An invalid (2000–2100).';
     }
-    if (fiscal.pfaStartDate && !/^\d{4}-\d{2}-\d{2}$/.test(fiscal.pfaStartDate)) {
-      e.pfaStartDate = 'Format așteptat: AAAA-LL-ZZ.';
+    if (fiscal.pfaStartDate) {
+      const problem = isoCalendarDateProblem(fiscal.pfaStartDate);
+      if (problem) e.pfaStartDate = isoCalendarDateProblemText(problem);
+    }
+    // Same rule as the write path: a date the engine cannot order is refused here rather
+    // than stored and dropped later. Empty is legal and means "unknown".
+    if (fiscal.vatExceedanceDate) {
+      const problem = isoCalendarDateProblem(fiscal.vatExceedanceDate);
+      if (problem) e.vatExceedanceDate = isoCalendarDateProblemText(problem);
     }
     // art. 174 alin. (7) lit. a) is a numeric condition, so when a salary exists the
     // amount is mandatory — without it the engine cannot decide the 6 SM test and
@@ -174,6 +185,8 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       pensionStatus: fiscal.pensionStatus,
       socialInsuranceStatus: fiscal.socialInsuranceStatus,
       vatExempt: fiscal.vatExempt === 'da',
+      // '' ⇒ undefined, never '': a stored empty string would be a malformed date.
+      vatExceedanceDate: fiscal.vatExceedanceDate || undefined,
       cashFloorLei: cash,
       // CAEN is written into the single CAEN model (D-1), keeping any description
       // the entry already had. The deprecated `profile.caen` string is not written.
@@ -702,6 +715,23 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                   <option value="nu">nu</option>
                   <option value="da">da</option>
                 </select>
+              </div>
+
+              <div className="field">
+                <label>Data depășirii pragului de TVA</label>
+                <input
+                  className="input"
+                  type="date"
+                  value={fiscal.vatExceedanceDate}
+                  onChange={e => setFiscal({ ...fiscal, vatExceedanceDate: e.target.value })}
+                />
+                <span className="hint">
+                  Data la care cifra de afaceri a depășit pragul de TVA (art. 310 alin. (1));
+                  obligația de înregistrare intervine cel târziu la această dată (art. 316 alin. (1)
+                  lit. b)). Necompletat = aplicația nu cunoaște data și nu afișează niciun termen de
+                  înregistrare — nu inventează unul.
+                </span>
+                {errors.vatExceedanceDate && <span className="error">{errors.vatExceedanceDate}</span>}
               </div>
 
               <div className="field">

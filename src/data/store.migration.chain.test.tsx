@@ -19,6 +19,7 @@ import {
   CURRENT_DATA_VERSION,
   DATA_VERSION_BASE,
   DATA_VERSION_DATES,
+  DATA_VERSION_VAT_DATE,
   DATA_VERSION_IDENTITY,
   DATA_VERSION_PROFILE,
   MIGRATION_CHAIN,
@@ -172,13 +173,14 @@ beforeEach(() => {
 });
 
 describe('migration chain (pure)', () => {
-  it('covers the Phase 6 profile backfill, the Phase 7 identity absorption and the Phase 9 payment dates as separate steps', () => {
+  it('covers the Phase 6 profile backfill, the Phase 7 identity absorption, the Phase 9 payment dates and the VAT exceedance date as separate steps', () => {
     expect(MIGRATION_CHAIN.map((s) => [s.from, s.to])).toEqual([
       [DATA_VERSION_BASE, DATA_VERSION_PROFILE],
       [DATA_VERSION_PROFILE, DATA_VERSION_IDENTITY],
       [DATA_VERSION_IDENTITY, DATA_VERSION_DATES],
+      [DATA_VERSION_DATES, DATA_VERSION_VAT_DATE],
     ]);
-    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_DATES);
+    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_VAT_DATE);
   });
 
   // Phase 9 acceptance criterion 4: a payload written by a newer build is refused loudly rather
@@ -195,8 +197,8 @@ describe('migration chain (pure)', () => {
   it('the payment-dates step backfills nothing: collected/paid stay absent', () => {
     const payload = prePhase7Payload({ version: DATA_VERSION_IDENTITY });
     const outcome = migratePersistedData(payload as never);
-    expect(outcome.stepsApplied).toEqual(['payment-dates']);
-    expect(outcome.toVersion).toBe(DATA_VERSION_DATES);
+    expect(outcome.stepsApplied).toEqual(['payment-dates', 'vat-exceedance-date']);
+    expect(outcome.toVersion).toBe(DATA_VERSION_VAT_DATE);
     for (const r of outcome.data.revenues) {
       expect('collected' in r).toBe(false);
     }
@@ -209,13 +211,27 @@ describe('migration chain (pure)', () => {
     expect(expenses.map((e) => e.id)).toEqual(['e-legacy-1']);
   });
 
+  // P-PROFILE-VAT-DATE: same discipline one version later. The v3→v4 step widens the profile
+  // schema and invents nothing — no legacy field records when the plafon was crossed, and a
+  // manufactured exceedance date would manufacture a filing deadline.
+  it('the VAT exceedance-date step backfills nothing: the field stays absent', () => {
+    const payload = prePhase7Payload({ version: DATA_VERSION_DATES });
+    const outcome = migratePersistedData(payload as never);
+    expect(outcome.fromVersion).toBe(DATA_VERSION_DATES);
+    expect(outcome.stepsApplied).toEqual(['vat-exceedance-date']);
+    expect(outcome.toVersion).toBe(DATA_VERSION_VAT_DATE);
+    expect('vatExceedanceDate' in outcome.data.profile!).toBe(false);
+    // And nothing else about the profile moved.
+    expect(outcome.data.profile).toEqual(seedData.profile);
+  });
+
   it('treats a payload with no version key as the base of the chain', () => {
     const payload = prePhase7Payload({ version: undefined });
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_BASE);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     expect(outcome.migrated).toBe(true);
-    expect(outcome.stepsApplied).toEqual(['profile-materialization', 'identity-absorption', 'payment-dates']);
+    expect(outcome.stepsApplied).toEqual(['profile-materialization', 'identity-absorption', 'payment-dates', 'vat-exceedance-date']);
     expect(outcome.data.version).toBe(CURRENT_DATA_VERSION);
   });
 
@@ -374,7 +390,7 @@ describe('load path runs the chain (acceptance criteria 2 and 3)', () => {
     expect(storeRef!.migration).toEqual({
       fromVersion: DATA_VERSION_BASE,
       toVersion: CURRENT_DATA_VERSION,
-      stepsApplied: ['profile-materialization', 'identity-absorption', 'payment-dates'],
+      stepsApplied: ['profile-materialization', 'identity-absorption', 'payment-dates', 'vat-exceedance-date'],
     });
     // Not the seed: the seed's ids are different.
     expect(storeRef!.revenues).not.toEqual(seedData.revenues);

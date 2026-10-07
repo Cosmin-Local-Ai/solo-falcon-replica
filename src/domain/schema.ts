@@ -9,6 +9,7 @@
 import { z } from 'zod';
 import type { PfaProfile } from './models';
 import { PFA_REGIME_VALUES } from './regimes';
+import { ISO_CALENDAR_DATE } from './date';
 
 /**
  * One CAEN code + description. `cod` is required non-empty because an entry
@@ -57,7 +58,7 @@ export const pfaProfileSchema: z.ZodType<PfaProfile> = z.object({
   // reset the ENTIRE dataset to seed with no message — so a REQUIRED new field would
   // destroy every existing `pfa-app-data-v2` payload. Proven by
   // src/data/store.profileBackfill.test.tsx. Phase 7 owns the version field + migration.
-  pfaStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'pfaStartDate must be ISO YYYY-MM-DD').optional(),
+  pfaStartDate: z.string().regex(ISO_CALENDAR_DATE, 'pfaStartDate must be ISO YYYY-MM-DD').optional(),
   fiscalYear: z.number().int().min(1990).max(2100),
   regime: z.enum(PFA_REGIME_VALUES),
   // Deprecated (Phase 7 / D-1): the CAEN model is `identity.caen`. Kept optional
@@ -72,6 +73,12 @@ export const pfaProfileSchema: z.ZodType<PfaProfile> = z.object({
   otherIncome: z.array(z.enum(['imobiliare', 'autovehicule', 'dividende', 'concesiune', 'alte'])),
   socialInsuranceStatus: z.enum(['obligatoriu', 'exempt', 'neplata']),
   vatExempt: z.boolean(),
+  // The one input `VAT_REGISTRATION_DEADLINE_2026` was still missing (P-PROFILE-VAT-DATE).
+  // OPTIONAL for the same data-loss reason as every addition above: this is the persisted gate,
+  // and a required field here would reset every pre-existing payload to seed. The shape check is
+  // safe because no legacy payload can contain the field at all — there is nothing legacy to
+  // reject, unlike the CUI/CNP shape checks deliberately left out of `pfaIdentitySchema` above.
+  vatExceedanceDate: z.string().regex(ISO_CALENDAR_DATE, 'vatExceedanceDate must be ISO YYYY-MM-DD').optional(),
   cashFloorLei: z.number().min(0),
   identity: pfaIdentitySchema,
   updatedAt: z.string().min(1),

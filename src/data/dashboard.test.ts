@@ -437,3 +437,63 @@ describe('a PFA start date resolves no deadline', () => {
     expect(upcoming.some((d) => d.eventType === 'vat_registration')).toBe(false);
   });
 });
+
+// --- P-PROFILE-VAT-DATE: the rule was wired, the input was missing ---------------------------
+// Since Phase 9b `VAT_REGISTRATION_DEADLINE_2026` has been correct, cited and rule-driven: the
+// deadline is the exceedance date itself (`offset_days = 0`, CF art. 316 alin. (1) lit. b)
+// „cel târziu la data depășirii plafonului” + alin. (1^1) lit. b), OG 22/2025 Art. I pct. 18-19,
+// MO 806/29.08.2025; ceiling art. 310 alin. (1)). It still never fired, because no profile field
+// recorded the date and `DeadlineQuery.vatExceedanceDate` was populated nowhere in production.
+// The fix is the field, not the rule: nothing in `deadlines.ts` or `package2026.ts` changed here.
+describe('the VAT exceedance date reaches the deadline engine (P-PROFILE-VAT-DATE)', () => {
+  it('produces a vat_registration deadline dated on the exceedance date itself', () => {
+    const upcoming = getUpcomingDeadlines(
+      makeData({ profile: profile({ vatExceedanceDate: '2026-11-20' }) }),
+      '2026-11-05',
+    );
+    const vat = upcoming.filter((d) => d.eventType === 'vat_registration');
+    expect(vat).toHaveLength(1);
+    // offset_days = 0: the obligation lands on the day the ceiling was crossed, not a month end
+    // and not a 30-day term (that was B-22's `month_end + 30` fabrication).
+    expect(vat[0].date).toBe('2026-11-20');
+    expect(vat[0].status).toBe('active');
+    expect(vat[0].appliesTo).toBe('vat-registered-pfa');
+    expect(vat[0].dateFormula).toContain('vat_exceedance');
+    // The citation travels with the rule, not with the caller.
+    expect(vat[0].legalSource.article).toContain('art. 316');
+  });
+
+  it('still produces NO VAT deadline when the profile records no exceedance date', () => {
+    // Silence is the correct outcome, and it must stay correct: the engine has no source for the
+    // date and must not invent one. This is the half of the acceptance criterion that keeps the
+    // pre-fix behaviour honest.
+    const upcoming = getUpcomingDeadlines(makeData(), '2026-11-05');
+    expect(upcoming.some((d) => d.eventType === 'vat_registration')).toBe(false);
+    expect(upcoming.map((d) => d.deadlineId)).toEqual(['PFA_DEADLINE_2026']);
+  });
+
+  it('the dashboard snapshot and the deadline section cannot disagree about it', async () => {
+    const data = makeData({ profile: profile({ vatExceedanceDate: '2026-11-20' }) });
+    const view = buildDashboardData(data, await getTaxEstimate(data, AS_OF), AS_OF_INSTANT);
+    const snapshotVat = view.snapshot.deadlines.filter((d) => d.id === 'VAT_REGISTRATION_DEADLINE_2026');
+    expect(snapshotVat).toHaveLength(1);
+    expect(snapshotVat[0].date).toBe('2026-11-20');
+    // Same query, same obligations: for this data the card and the snapshot list the same set.
+    expect(view.snapshot.deadlines.map((d) => d.id).sort()).toEqual(
+      getUpcomingDeadlines(data, AS_OF).map((d) => d.deadlineId).sort(),
+    );
+  });
+
+  it('an exceedance date already in the past is not shown as upcoming, but is still resolved', async () => {
+    // The rule's own comment is explicit: a resolved VAT registration deadline can only classify as
+    // `past` or `due_today`, so `filterUpcoming` never shows it — "N zile rămase" would be a lie.
+    // Hiding it from the card must not mean the engine forgot the obligation: the snapshot keeps the
+    // real date, which is what distinguishes "no input" from "input, already elapsed".
+    const data = makeData({ profile: profile({ vatExceedanceDate: '2026-01-10' }) });
+    const upcoming = getUpcomingDeadlines(data, AS_OF);
+    expect(upcoming.some((d) => d.eventType === 'vat_registration')).toBe(false);
+    const view = buildDashboardData(data, await getTaxEstimate(data, AS_OF), AS_OF_INSTANT);
+    const resolved = view.snapshot.deadlines.find((d) => d.id === 'VAT_REGISTRATION_DEADLINE_2026');
+    expect(resolved?.date).toBe('2026-01-10');
+  });
+});
