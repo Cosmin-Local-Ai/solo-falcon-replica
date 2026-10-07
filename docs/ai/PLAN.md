@@ -519,11 +519,41 @@ numbering stays readable.
   document (`aggregation.ts:85-87,96,102`; `derived.ts:48`); no issued / received / paid distinction.
 - **Exists today:** a `date` domain module and Romanian date handling (steps 27), deadline event types
   (`deadlines.ts:4-10`), and `DeadlineQuery.eventDate` (`deadlines.ts:28`) that is never fed from a
-  profile because no profile field holds a start date — only `pfaStartYear: number`.
+  profile because no profile field holds a start date — only `pfaStartYear: number`. **Stale after
+  Phase 6:** `pfaStartDate` now exists on the profile. Re-measured after Phase 8: the single `date` lives
+  at `data/types.ts:13` (Revenue) and `:30` (Expense), and fiscal-year membership runs through
+  `inPeriod(r.date, …)` at `aggregation.ts:116,122,147,152` and `derived.ts:64`. `computeDeadlines` is
+  still called with only `{ taxYear, asOfDate }` (`data/dashboard.ts:193`) — **no production code passes
+  `eventDate`**, though `deadlines.test.ts:112,124,248` exercise it.
 - **Must be created:** per-event date fields, and rule parameters that drive `cas_quarterly`,
   `cass_quarterly`, `income_tax_advance` (no rule drives them today).
-- **Entry criteria:** Q-NETGROSS answered; Phase 6 profile fields wired.
-- **Blocked by:** Q-NETGROSS.
+- **Entry criteria: MET.** Q-NETGROSS was answered in Phase 2 (net of VAT) and Phase 6 wired the profile.
+  **No Researcher is needed** — the legal question Phase 9 turned on was settled on 2026-10-06.
+- **Blocked by:** nothing.
+
+- **The premise this phase was drafted on was FALSIFIED — read `research/10` before designing.** CF art. 80
+  is **not** a *pragul de încasare a creanțelor*; it is *„Termenul de plată a impozitului"*, a payroll tax
+  payment deadline. There is **no 15-day late-payment disallowance anywhere in the Cod fiscal** (0 hits for
+  `"15 zile calendaristice"`, `"prag de încasare"`, `"nu sunt deductibile dacă"` across 2.5 M chars, and 0
+  for `"de la scadență"` across ANAF's consolidated CF incl. HG 1/2016 norms; seven 2026 amending acts read
+  directly, none touches art. 80). So `tax.ts:112` deducting expenses unconditionally is **not** a bug on
+  that ground, and a Worker must not manufacture the rule.
+- **What actually makes payment timing load-bearing** — already in the baseline at `phases/02:189-194,205`:
+  art. 68 alin. (2) lit. a) measures venit brut by **„sumele încasate"** (collected), and art. 68 alin. (4)
+  lit. b) puts an expense in the financial year **in which it was paid**. Consequence is **attribution, not
+  punishment**. The invoice **issue** date is not a timing gate. → `collected`/`paid` is load-bearing;
+  `issued` is not.
+- **B-20 is folded into Phase 9 by orchestrator decision (2026-10-06)** rather than scheduled separately:
+  `buildSnapshot` (`data/dashboard.ts:254`) flags `breached` as `distance > 0`, which is inverted for
+  `min-base` rows, while the domain `statusFor` already handles it correctly — so `insights.ts:115,168`
+  never surface the two contribution obligations the seed is under. Fix by driving the flag off the domain
+  status. Expect `e2e/dashboard.spec.ts:272` (12 insights) and `:278` (seven "Termen depășit: PFA") to move.
+- **Also carried:** Phase 6's handoff — `pfaStartDate` must reach `DeadlineQuery.eventDate`.
+- **Migration note Phase 9's archived brief could not know:** Phase 7 built a real chain with
+  `CURRENT_DATA_VERSION = 2` (`data/migration.ts:39`). New persisted date fields require an **appended
+  v2→v3** step, optional fields, and no invented values. The open design question is what a legacy single
+  `date` means — the safe answer is that it **is** the fiscal date, which preserves every seeded figure.
+- **Full brief for the Worker: `docs/ai/briefs/09_payment_dates.md`.**
 
 ### Phase 10 — Money representation
 
