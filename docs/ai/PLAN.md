@@ -641,3 +641,11 @@ numbering stays readable.
     first means rewriting the test suite once instead of twice.** Cost accepted: the B-17 half-cent defect users can
     actually see stays unfixed one phase longer. **`Q-MONEY-UNIT` remains an open decision** and Phase 10 must not
     start until the Declarația 120 rounding tie-break is known (`rounding-cass-exempt-researcher`, in flight).
+12. **Phase 10 decisions — user, 2026-10-08.** (a) **Representation: hybrid** — integer cents (bani) persisted,
+    `decimal.js-light` for intermediates. (b) **Rounding: CF art. 66 alin. (1) applied to income tax, CAS and CASS
+    alike, but explicitly marked as an extension.** Art. 66 is a **Titlul IV (impozitul pe venit)** rule; `rotunj*` has
+    **zero hits in Titlul V** and zero in the official D212 instructions (doc 306268), so the contribution lines have
+    **no rounding rule of their own**. The extension is a deliberate legal inference and must be labelled as one in code
+    and provenance — never presented as a Titlul V requirement. **Tie-break is art. 66's own: a fraction of exactly
+    50 bani rounds DOWN** („până la 50 de bani **inclusiv**"), which is the opposite of `Math.round` at the boundary.
+    Brief: `docs/ai/briefs/12_phase10_money.md`.
