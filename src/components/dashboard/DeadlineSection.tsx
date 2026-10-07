@@ -1,5 +1,6 @@
 import type { Deadline } from '../../domain/deadlines';
 import { classifyDeadline, daysRemaining } from '../../domain/deadlines';
+import { formatRoCalendarDate } from '../../domain/date';
 import { Card, CardHeader, CardTitle, CardDescription } from '../ui/card';
 
 /**
@@ -50,12 +51,6 @@ function labelFor(d: Deadline): string {
   }
 }
 
-/** Presentation-only date formatting (ISO YYYY-MM-DD → DD.MM.YYYY). */
-function formatDate(iso: string): string {
-  const [y, m, d] = iso.split('-');
-  return `${d}.${m}.${y}`;
-}
-
 export interface DeadlineSectionProps {
   deadlines: Deadline[];
   asOfDate: string;
@@ -70,7 +65,7 @@ export default function DeadlineSection({ deadlines, asOfDate }: DeadlineSection
     <Card>
       <CardHeader>
         <CardTitle>Termene limită</CardTitle>
-        <CardDescription>Termene limită viitoare de depunere, la data de {formatDate(asOfDate)}</CardDescription>
+        <CardDescription>Termene limită viitoare de depunere, la data de {formatRoCalendarDate(asOfDate)}</CardDescription>
       </CardHeader>
       {upcoming.length === 0 ? (
         <p className="hint">Niciun termen limită viitor</p>
@@ -86,7 +81,7 @@ export default function DeadlineSection({ deadlines, asOfDate }: DeadlineSection
                 <div className="item-meta">
                   {d.date === null || days === null
                     ? 'Neaplicabil'
-                    : `${formatDate(d.date)} (${days === 1 ? '1 zi rămasă' : `${days} zile rămase`})`}
+                    : `${formatRoCalendarDate(d.date)} (${days === 1 ? '1 zi rămasă' : `${days} zile rămase`})`}
                 </div>
               </div>
               <span className={`badge ${STATUS_BADGE[d.status]}`}>{STATUS_LABEL[d.status] ?? d.status}</span>

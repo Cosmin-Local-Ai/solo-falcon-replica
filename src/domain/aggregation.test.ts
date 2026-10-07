@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AppData, Expense, Revenue, SettingsState } from '../data/types';
 import type { PfaIdentity, PfaProfile } from './models';
-import { inPeriod, selectMonthly, selectYtd, revenueFiscalDate, expenseFiscalDate } from './aggregation';
+import { inPeriod, selectMonthly, selectYtd, revenueFiscalDate, expenseFiscalDate, auditFiscalDates } from './aggregation';
 
 function identity(): PfaIdentity {
   return {
@@ -423,5 +423,104 @@ describe('fiscal date (collected / paid)', () => {
     const r: Revenue = { ...revenue('2026-06-10', 100, 19), collected: '2026-02-01' };
     expect(revenueFiscalDate(r)).toBe('2026-02-01');
     expect(selectYtd(makeData({ revenues: [r] }), '2026-12-31').revenue).toBe(119);
+  });
+});
+
+// ── B-21: an unusable date must be visible, never silent ───────────────────────
+
+describe('inPeriod — the date guard (B-21)', () => {
+  it('accepts a real calendar day inside the period', () => {
+    expect(inPeriod('2026-06-01', '2026-12-31', 2026)).toBe(true);
+    expect(inPeriod('2026-12-31', '2026-12-31', 2026)).toBe(true);
+  });
+
+  it('refuses every value that is not a real calendar day', () => {
+    // Before the guard these failed the comparison by accident and the record disappeared
+    // with no trace. Now the refusal is deliberate and `auditFiscalDates` reports it.
+    expect(inPeriod('', '2026-12-31', 2026)).toBe(false);
+    expect(inPeriod('2026-6-1', '2026-12-31', 2026)).toBe(false);
+    expect(inPeriod('2026-13-01', '2026-12-31', 2026)).toBe(false);
+    expect(inPeriod('not-a-date', '2026-12-31', 2026)).toBe(false);
+    expect(inPeriod('2026-02-30', '2026-12-31', 2026)).toBe(false);
+  });
+
+  it('the comparison is lexicographic, and that is now provable rather than assumed', () => {
+    // Fixed width (4-2-2), zero-padded, year-first, and a day that exists: those are exactly the
+    // conditions under which character order equals chronological order. The old bug lived in the
+    // missing conditions — '2026-6-1' <= '2026-06-15' is FALSE because '6' > '0', so a real June
+    // day sorted after mid-June. Such a value can no longer reach this comparison.
+    const accepted = ['2026-01-31', '2026-02-01', '2026-06-01', '2026-06-15', '2026-12-31'];
+    const lexicographic = [...accepted].sort();
+    const chronological = [...accepted].sort((a, b) => Date.parse(a) - Date.parse(b));
+    expect(lexicographic).toEqual(chronological);
+    // And the counter-example the guard makes unreachable:
+    expect('2026-6-1' <= '2026-06-15').toBe(false);
+    expect(Date.parse('2026-06-01') < Date.parse('2026-06-15')).toBe(true);
+  });
+});
+
+describe('auditFiscalDates — the exclusion report (B-21)', () => {
+  it('is empty for clean data', () => {
+    const data = makeData({
+      revenues: [revenue('2026-06-01', 100, 19)],
+      expenses: [expense('2026-06-02', 50, 9.5)],
+    });
+    expect(auditFiscalDates(data)).toEqual([]);
+  });
+
+  it('reports a malformed persisted record as review_required instead of letting it vanish', () => {
+    // This is the acceptance case: the record is NOT dropped and NOT backfilled. It still exists,
+    // it contributes nothing to the aggregate, and the reason names the field and the value.
+    const bad: Revenue = { ...revenue('2026-6-1', 100, 19) };
+    const data = makeData({ revenues: [bad] });
+
+    const report = auditFiscalDates(data);
+    expect(report).toHaveLength(1);
+    expect(report[0]).toMatchObject({
+      id: bad.id,
+      kind: 'revenue',
+      field: 'date',
+      value: '2026-6-1',
+      status: 'review_required',
+    });
+    expect(report[0].reason).toContain('2026-6-1');
+    expect(report[0].reason).toContain('date');
+    expect(report[0].reason).toContain('două cifre');
+
+    // Excluded from the aggregate…
+    expect(selectYtd(data, '2026-12-31').revenue).toBe(0);
+    // …but not deleted from the dataset, and nothing was invented in its place.
+    expect(data.revenues).toHaveLength(1);
+    expect(data.revenues[0].date).toBe('2026-6-1');
+  });
+
+  it('reports the field the fiscal date actually came from', () => {
+    // A valid document date with an unusable collection date is still unusable: `collected` is
+    // what attributes the revenue (Phase 9), exactly as `revenueFiscalDate` resolves it.
+    const r: Revenue = { ...revenue('2026-06-01', 100, 19), collected: 'not-a-date' };
+    const e: Expense = { ...expense('2026-06-01', 50, 9.5), paid: '' };
+    const report = auditFiscalDates(makeData({ revenues: [r], expenses: [e] }));
+    expect(report.map(x => [x.kind, x.field])).toEqual([
+      ['revenue', 'collected'],
+      ['expense', 'paid'],
+    ]);
+    expect(report[1].value).toBe('');
+    expect(report[1].reason).toContain('necompletat');
+  });
+
+  it('audits records that do not move money yet, because the defect is the same', () => {
+    // Only `inregistrata` rows reach the totals today, but a pending row with an unusable date
+    // becomes a silent hole the moment its status changes.
+    const pending: Revenue = { ...revenue('2026-13-01', 100, 19, 'in-asteptare') };
+    const report = auditFiscalDates(makeData({ revenues: [pending] }));
+    expect(report).toHaveLength(1);
+    expect(report[0].status).toBe('review_required');
+  });
+
+  it('repairs nothing: the offending value is reported verbatim', () => {
+    const bad: Expense = { ...expense('2026-02-30', 50, 9.5) };
+    const report = auditFiscalDates(makeData({ expenses: [bad] }));
+    expect(report[0].value).toBe('2026-02-30');
+    expect(report[0].reason).toContain('nu există în luna respectivă');
   });
 });

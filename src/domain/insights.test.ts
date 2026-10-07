@@ -20,7 +20,7 @@
 import { describe, expect, it } from 'vitest';
 import { getInsights } from './insights';
 import type { Insight, InsightInput } from './insights';
-import type { DashboardSnapshot, Threshold } from './aggregation';
+import type { DashboardSnapshot, ExcludedFiscalDate, Threshold } from './aggregation';
 import type { TaxEstimateResult } from './tax';
 import type { TaxCalculationSnapshot } from './snapshots/types';
 import { assessCompleteness } from './completeness';
@@ -573,5 +573,69 @@ describe('invariants', () => {
     });
 
     expect(getInsights(i)).toEqual(getInsights(i));
+  });
+});
+
+// ── B-21: the aggregate's exclusion must be visible on the dashboard ────────────
+
+describe('fiscal date integrity insight (B-21)', () => {
+  function excluded(overrides: Partial<ExcludedFiscalDate> = {}): ExcludedFiscalDate {
+    return {
+      id: 'r1',
+      kind: 'revenue',
+      field: 'date',
+      value: '2026-6-1',
+      status: 'review_required',
+      reason: '„2026-6-1” pe câmpul „date” nu este o dată calendaristică reală',
+      ...overrides,
+    };
+  }
+
+  it('emits nothing when every stored date is usable', () => {
+    expect(getInsights(input({ fiscalDateIssues: [] })).map(i => i.id)).not.toContain('fiscal-dates');
+    // Callers that pass no report at all are unaffected.
+    expect(getInsights(input())).toEqual([]);
+  });
+
+  it('emits one urgent row naming the record, the kind and the Romanian field label', () => {
+    const insights = getInsights(input({ fiscalDateIssues: [excluded({ field: 'collected' })] }));
+    const row = insights.find(i => i.id === 'fiscal-dates');
+    expect(row).toBeDefined();
+    expect(row!.severity).toBe('danger');
+    expect(row!.title).toContain('1 înregistrare are o dată de verificat');
+    expect(row!.description).toContain('Venit r1');
+    // Raw property names are never rendered.
+    expect(row!.description).toContain('data încasării');
+    expect(row!.description).not.toContain('collected');
+    expect(row!.description).toContain('nu intră în niciun total');
+    expect(row!.action).toContain('De verificat');
+    expect(row!.action).toContain('nu a fost modificată automat');
+  });
+
+  it('collapses many bad records into one row, with the count and the remainder named', () => {
+    const issues = [
+      excluded({ id: 'r1' }),
+      excluded({ id: 'r2' }),
+      excluded({ id: 'e1', kind: 'expense', field: 'paid', value: '' }),
+      excluded({ id: 'r3', value: '2026-13-01' }),
+    ];
+    const row = getInsights(input({ fiscalDateIssues: issues })).find(i => i.id === 'fiscal-dates')!;
+    // One row per defect class, not one per record: a bad import must not bury every other insight.
+    expect(getInsights(input({ fiscalDateIssues: issues })).filter(i => i.id === 'fiscal-dates')).toHaveLength(1);
+    expect(row.title).toContain('4 înregistrări au o dată de verificat');
+    expect(row.description).toContain('Venit r1');
+    expect(row.description).toContain('Cheltuială e1');
+    expect(row.description).toContain('și încă 1');
+    expect(row.description).not.toContain('r3');
+  });
+
+  it('sorts ahead of warnings, because a silently missing total is the more urgent defect', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({ missing: ['profile'] }),
+        fiscalDateIssues: [excluded()],
+      }),
+    );
+    expect(insights.map(i => i.id)).toEqual(['fiscal-dates', 'completeness']);
   });
 });

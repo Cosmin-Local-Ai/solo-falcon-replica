@@ -1,6 +1,7 @@
-import type { DashboardSnapshot, Threshold } from './aggregation';
+import type { DashboardSnapshot, ExcludedFiscalDate, Threshold } from './aggregation';
 import type { TaxEstimateResult } from './tax';
 import type { Expense } from '../data/types';
+import { formatRoCalendarDate } from './date';
 
 // ── Contract ──────────────────────────────────────────────
 // `Insight` and `InsightInput` match the consumers:
@@ -22,6 +23,12 @@ export interface InsightInput {
   expenses?: readonly Expense[];
   /** Optional tax estimate; `undefined` → no tax insight. */
   tax?: TaxEstimateResult;
+  /**
+   * B-21: records the aggregate could not place in time (`domain/aggregation.ts`
+   * `auditFiscalDates`). Optional because the existing callers/tests pass none; when it is
+   * non-empty the exclusion MUST be visible, which is the whole point of the defect.
+   */
+  fiscalDateIssues?: readonly ExcludedFiscalDate[];
 }
 
 // ── Pure formatters (inlined — domain layer must not import the data layer) ──
@@ -37,18 +44,20 @@ function formatCents(cents: number): string {
   return formatLei(cents / 100);
 }
 
-/** Format an ISO 'YYYY-MM-DD' date as 'DD.MM.YYYY'. */
-function formatDate(iso: string): string {
-  const [y, m, d] = iso.split('-');
-  return `${d}.${m}.${y}`;
-}
-
 // ── Romanian label maps (never render raw keys) ────────────
 //
 // Phase 9b removed `cas_quarterly`, `cass_quarterly` and `pfa_estimated_declaration` — those
 // obligations do not exist in fiscal year 2026 (see the `DeadlineEventType` doc comment in
 // src/domain/deadlines.ts). `new_pfa` keeps its key but no longer reads "Declarație estimativă
 // PFA": that label named an obligation abrogated on 01-01-2025, and no rule emits `new_pfa` today.
+
+/** Fiscal date field → Romanian, for the B-21 insight. Raw property names are never rendered. */
+const FISCAL_DATE_FIELD_LABEL: Record<ExcludedFiscalDate['field'], string> = {
+  date: 'data',
+  collected: 'data încasării',
+  paid: 'data plății',
+};
+
 const DEADLINE_LABELS: Record<string, string> = {
   pfa: 'PFA',
   new_pfa: 'PFA nou',
@@ -183,7 +192,7 @@ export function getInsights(input: InsightInput): Insight[] {
     if (typeof d.daysUntil !== 'number' || !Number.isFinite(d.daysUntil)) continue;
     if (typeof d.date !== 'string' || d.date.length === 0) continue;
     const label = deadlineLabel(d.label);
-    const date = formatDate(d.date);
+    const date = formatRoCalendarDate(d.date);
     if (d.daysUntil <= 0) {
       insights.push({
         id: `deadline-${d.id}`,
@@ -253,6 +262,27 @@ export function getInsights(input: InsightInput): Insight[] {
         action: 'Verifică detaliile estimării.',
       });
     }
+  }
+
+  // 6. B-21 — records whose stored date is not a usable calendar date.
+  //    `inPeriod` excludes them from every total, so without this row the dashboard would look
+  //    complete while quietly missing rows. One row for the whole class rather than one per
+  //    record: the operator's job is one fix (correct the date), and a per-record row would let
+  //    a bad import bury every other insight. The record itself is never rewritten.
+  const dateIssues = input.fiscalDateIssues ?? [];
+  if (dateIssues.length > 0) {
+    const shown = dateIssues.slice(0, 3);
+    const where = shown
+      .map(i => `${i.kind === 'revenue' ? 'Venit' : 'Cheltuială'} ${i.id} · ${FISCAL_DATE_FIELD_LABEL[i.field]}`)
+      .join('; ');
+    const more = dateIssues.length > shown.length ? ` și încă ${dateIssues.length - shown.length}` : '';
+    insights.push({
+      id: 'fiscal-dates',
+      severity: 'danger',
+      title: `${dateIssues.length} înregistr${dateIssues.length === 1 ? 'are are' : 'ări au'} o dată de verificat`,
+      description: `Data nu este o dată calendaristică ISO validă, deci înregistrarea nu intră în niciun total pe perioadă: ${where}${more}.`,
+      action: 'De verificat: corectează data în registru; înregistrarea nu a fost modificată automat.',
+    });
   }
 
   // Most urgent first — stable sort keeps natural order within a severity.

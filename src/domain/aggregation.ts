@@ -1,4 +1,5 @@
 import type { AppData, Expense, Revenue } from '../data/types';
+import { isISOCalendarDate, isoCalendarDateProblem, isoCalendarDateProblemText } from './date';
 
 /**
  * Deterministic financial aggregation selectors (Step 13, Part A).
@@ -93,8 +94,80 @@ function inFiscalYear(date: string, fiscalYear: number): boolean {
 }
 
 export function inPeriod(date: string, asOfDate: string, fiscalYear: number): boolean {
-  // ISO 'YYYY-MM-DD' strings compare lexicographically == chronologically.
+  // B-21. This used to be a bare lexicographic comparison, which meant an unusable date
+  // (`''`, `'2026-6-1'`, `'2026-13-01'`) failed the comparison by accident and the record
+  // vanished from every total with no trace. The guard makes the rejection deliberate, and
+  // `auditFiscalDates` below is what makes it VISIBLE — a record is excluded from the
+  // aggregate and reported as `review_required`, never silently deleted.
+  //
+  // The comparison itself stays lexicographic, and that is now provable rather than
+  // assumed: `isISOCalendarDate` fixes the width (4-2-2, zero-padded) and rejects days that
+  // do not exist, so for any two accepted strings the character order and the chronological
+  // order agree — which is the defining property of fixed-width ISO 8601 calendar dates.
+  // Before the guard, `'2026-6-1' <= '2026-06-15'` was FALSE (`'6' > '0'`): a real June day
+  // sorted after mid-June. That mis-sort is now unreachable, because such a value never
+  // reaches the comparison at all.
+  if (!isISOCalendarDate(date)) return false;
   return inFiscalYear(date, fiscalYear) && date <= asOfDate;
+}
+
+// ── B-21: the exclusion report ────────────────────────────────────────────────
+
+/** The field a fiscal date actually came from. */
+export type FiscalDateField = 'date' | 'collected' | 'paid';
+
+/**
+ * A record the aggregate cannot place in time. It is NOT dropped and NOT repaired: it is
+ * reported, with the field and the offending value named, so the exclusion is visible.
+ * `status` deliberately reuses the engine's existing `review_required` vocabulary — the
+ * same one `computeThresholds` uses when a base was never supplied — because the honest
+ * statement here is "the engine refuses to decide", not "there is nothing here".
+ */
+export interface ExcludedFiscalDate {
+  id: string;
+  kind: 'revenue' | 'expense';
+  field: FiscalDateField;
+  value: string;
+  status: 'review_required';
+  reason: string;
+}
+
+/**
+ * Every revenue/expense whose FISCAL date — `collected ?? date`, `paid ?? date`, exactly as
+ * `revenueFiscalDate`/`expenseFiscalDate` resolve it — is not a usable ISO calendar date.
+ *
+ * Audited for every record, not only `status === 'inregistrata'` ones: only the registered
+ * ones move money today, but an unusable date on a pending record is the same defect and
+ * will move money the moment its status changes. The report is ordered by input order, so
+ * it is deterministic.
+ *
+ * This function deliberately repairs nothing. The Phase 9 `payment-dates` chain step set the
+ * pattern — absence is the honest state when there is no real source — and a date invented
+ * here would move money between fiscal years on a guess.
+ */
+export function auditFiscalDates(data: AppData): ExcludedFiscalDate[] {
+  const excluded: ExcludedFiscalDate[] = [];
+  const report = (id: string, kind: 'revenue' | 'expense', field: FiscalDateField, value: string): void => {
+    const problem = isoCalendarDateProblem(value);
+    if (problem === null) return;
+    excluded.push({
+      id,
+      kind,
+      field,
+      value,
+      status: 'review_required',
+      reason:
+        `„${value === '' ? '(necompletat)' : value}” pe câmpul „${field}” nu este o dată calendaristică reală ` +
+        `(${isoCalendarDateProblemText(problem)}); înregistrarea este exclusă din agregat până la corectare.`,
+    });
+  };
+  for (const r of data.revenues) {
+    report(r.id, 'revenue', r.collected !== undefined ? 'collected' : 'date', revenueFiscalDate(r));
+  }
+  for (const e of data.expenses) {
+    report(e.id, 'expense', e.paid !== undefined ? 'paid' : 'date', expenseFiscalDate(e));
+  }
+  return excluded;
 }
 
 /**

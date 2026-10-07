@@ -2,6 +2,7 @@ import type { AppData } from './types';
 import {
   selectYtd,
   selectMonthly,
+  auditFiscalDates,
   type YtdTotals,
   type MonthlyTotals,
   type DashboardSnapshot,
@@ -174,6 +175,9 @@ export function getInsights(data: AppData, snapshot: DashboardSnapshot, tax?: Ta
     snapshot,
     expenses: data.expenses,
     tax,
+    // B-21: the aggregate excludes records with an unusable date; this is what makes that
+    // exclusion visible instead of silent.
+    fiscalDateIssues: auditFiscalDates(data),
   });
 }
 

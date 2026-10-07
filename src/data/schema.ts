@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isoCalendarDateProblem } from '../domain/date';
 import { parsePfaProfile } from '../domain/schema';
 import type { PfaProfile } from '../domain/models';
 import type { RuleRelease } from '../domain/fiscal/rules';
@@ -289,6 +290,108 @@ export function parseAppDataResult(raw: string): ParseAppDataResult {
 export function parseAppData(raw: string): PersistedAppData | null {
   const result = parseAppDataResult(raw);
   return result.ok ? result.data : null;
+}
+
+// ---------------------------------------------------------------------------
+// B-21 — the WRITE-path date validator. This is the schema boundary for input that
+// is about to be stored; it is deliberately NOT wired into `persistedAppDataSchema`.
+//
+// Why not: `persistedAppDataSchema` is the LOAD gate, and its failure mode is
+// `store.tsx` → `rejected()` → quarantine the payload and hand back `seedData`. Adding a
+// date-shape rule there would mean one legacy record with a bad date destroys every other
+// record in the dataset — mass silent data loss, the opposite of what B-21 asks for. The
+// precedent is already written down at `domain/schema.ts:43-49`: format validation is kept
+// out of the persisted gate precisely because it would itself be a data-loss event.
+// So NEW input is refused here, loudly; values ALREADY persisted are reported by
+// `domain/aggregation.ts` → `auditFiscalDates` as `review_required`, never rewritten.
+// ---------------------------------------------------------------------------
+
+export type RecordKind = 'revenue' | 'expense' | 'declaration' | 'companyDocument' | 'statement';
+
+interface DateFieldSpec {
+  /** Property name on the record. */
+  field: string;
+  /** Romanian label, for the message the user sees. */
+  label: string;
+  /** Absent/undefined is acceptable only when this is false. */
+  required: boolean;
+}
+
+export interface DateFieldViolation {
+  field: string;
+  label: string;
+  value: string;
+  /** Problem code from `domain/date.ts` (`missing`, `not zero-padded`, …). */
+  reason: string;
+}
+
+/**
+ * Every date field a stored record carries, per record kind.
+ *
+ * `CompanyDocument.perioada` and `TaxStatement.perioada` are deliberately ABSENT: they are
+ * free text the user types (`'Q2 2026'`, `'2026-Q2'`), not calendar dates, and validating
+ * them as dates would reject data the app is meant to keep. `DocumentItem.data` is written
+ * only from `todayISO()`, never from a user field, so it cannot carry a malformed value.
+ */
+const RECORD_DATE_FIELDS: Record<RecordKind, readonly DateFieldSpec[]> = {
+  revenue: [
+    { field: 'date', label: 'data', required: true },
+    { field: 'collected', label: 'data încasării', required: false },
+  ],
+  expense: [
+    { field: 'date', label: 'data', required: true },
+    { field: 'paid', label: 'data plății', required: false },
+  ],
+  declaration: [
+    { field: 'dataInregistrare', label: 'data înregistrării', required: true },
+    { field: 'dataTrimitere', label: 'data trimiterii', required: false },
+  ],
+  companyDocument: [
+    { field: 'data', label: 'data', required: true },
+    { field: 'dataDepunere', label: 'data depunerii', required: false },
+  ],
+  statement: [{ field: 'dataDepunere', label: 'data depunerii', required: false }],
+};
+
+/**
+ * Anything this app can write that carries a date field. A union of the real record types
+ * (plus their pre-id shapes) rather than a loose bag, so a call site cannot pass the wrong
+ * record for the kind it names.
+ */
+export type DateBearingRecord =
+  | Revenue
+  | Omit<Revenue, 'id'>
+  | Expense
+  | Omit<Expense, 'id'>
+  | Declaration
+  | Omit<Declaration, 'id'>
+  | CompanyDocument
+  | Omit<CompanyDocument, 'id'>
+  | TaxStatement
+  | Omit<TaxStatement, 'id'>;
+
+/**
+ * The date fields of `record` that are not usable ISO calendar dates. Empty array = acceptable.
+ * Fields are read structurally because callers hold both `Omit<T,'id'>` and `T`; the kind selects
+ * which fields exist, so the only cast is the one from a real record type to a property bag.
+ */
+export function validateRecordDates(kind: RecordKind, record: DateBearingRecord): DateFieldViolation[] {
+  const source = record as Record<string, unknown>;
+  const violations: DateFieldViolation[] = [];
+  for (const spec of RECORD_DATE_FIELDS[kind]) {
+    const raw = source[spec.field];
+    if (raw === undefined || raw === null) {
+      if (spec.required) violations.push({ field: spec.field, label: spec.label, value: '', reason: 'missing' });
+      continue;
+    }
+    if (typeof raw !== 'string') {
+      violations.push({ field: spec.field, label: spec.label, value: String(raw), reason: 'not a string' });
+      continue;
+    }
+    const problem = isoCalendarDateProblem(raw);
+    if (problem !== null) violations.push({ field: spec.field, label: spec.label, value: raw, reason: problem });
+  }
+  return violations;
 }
 
 // ---------------------------------------------------------------------------

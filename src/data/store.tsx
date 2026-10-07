@@ -7,9 +7,9 @@ import type {
 import type { PfaProfile } from '../domain/models';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import { todayISO } from './types';
-import { epochMs, toInstantISO } from '../domain/date';
+import { epochMs, isoCalendarDateProblemText, toInstantISO } from '../domain/date';
 import { seedData } from './seed';
-import { parseAppDataResult, type PersistedAppData } from './schema';
+import { parseAppDataResult, validateRecordDates, type PersistedAppData, type RecordKind } from './schema';
 import {
   CURRENT_DATA_VERSION,
   UnsupportedDataVersionError,
@@ -77,20 +77,20 @@ interface StoreValue extends AppData {
   quarantine: QuarantineRecord | null;
   /** Re-read the preserved copy (it survives saves and reloads). */
   getQuarantinedPayload: () => string | null;
-  addRevenue: (r: Omit<Revenue, 'id'>) => void;
-  updateRevenue: (r: Revenue) => void;
+  addRevenue: (r: Omit<Revenue, 'id'>) => boolean;
+  updateRevenue: (r: Revenue) => boolean;
   deleteRevenue: (id: string) => void;
-  addExpense: (e: Omit<Expense, 'id'>) => void;
-  updateExpense: (e: Expense) => void;
+  addExpense: (e: Omit<Expense, 'id'>) => boolean;
+  updateExpense: (e: Expense) => boolean;
   deleteExpense: (id: string) => void;
   addClient: (c: Omit<Client, 'id'>) => void;
   updateClient: (c: Client) => void;
-  addDeclaration: (d: Omit<Declaration, 'id'>) => void;
-  updateDeclaration: (d: Declaration) => void;
+  addDeclaration: (d: Omit<Declaration, 'id'>) => boolean;
+  updateDeclaration: (d: Declaration) => boolean;
   sendDeclaration: (id: string) => void;
-  uploadDocument: (code: DocTypeCode, doc: Omit<CompanyDocument, 'id'>) => void;
+  uploadDocument: (code: DocTypeCode, doc: Omit<CompanyDocument, 'id'>) => boolean;
   deleteDocument: (code: DocTypeCode, id: string) => void;
-  addStatement: (s: Omit<TaxStatement, 'id'>) => void;
+  addStatement: (s: Omit<TaxStatement, 'id'>) => boolean;
   deleteStatement: (id: string) => void;
   addSnapshot: (s: TaxCalculationSnapshot) => void;
   getSnapshot: (id: string) => TaxCalculationSnapshot | undefined;
@@ -213,6 +213,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setToasts(prev => prev.filter(x => x.id !== id));
   }, []);
 
+  /**
+   * B-21: a malformed calendar date used to be accepted here and then silently deleted the
+   * record from every aggregate (`domain/aggregation.ts` `inPeriod`). The write path now
+   * refuses it and names the record, the field and the offending value. Returns true when the
+   * write was refused; the actions return it so a caller (and a test) can see the rejection.
+   */
+  const rejectInvalidDates = useCallback(
+    (kind: RecordKind, record: Parameters<typeof validateRecordDates>[1], label: string, id?: string): boolean => {
+      const violations = validateRecordDates(kind, record);
+      for (const v of violations) {
+        const shown = v.value === '' ? 'necompletat' : v.value;
+        toast(
+          'error',
+          `${label}${id ? ` ${id}` : ''} — câmpul „${v.label}” conține „${shown}”: ` +
+            `${isoCalendarDateProblemText(v.reason)}. Data trebuie să fie o dată calendaristică reală; ` +
+            `înregistrarea nu a fost salvată.`,
+        );
+      }
+      return violations.length > 0;
+    },
+    [toast],
+  );
+
   const value: StoreValue = {
     ...data,
     toasts,
@@ -224,19 +247,43 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     toast,
     dismissToast,
 
-    addRevenue: r => setData(d => ({ ...d, revenues: [{ ...r, id: uid() }, ...d.revenues] })),
-    updateRevenue: r => setData(d => ({ ...d, revenues: d.revenues.map(x => x.id === r.id ? r : x) })),
+    addRevenue: r => {
+      if (rejectInvalidDates('revenue', r, 'Venit')) return false;
+      setData(d => ({ ...d, revenues: [{ ...r, id: uid() }, ...d.revenues] }));
+      return true;
+    },
+    updateRevenue: r => {
+      if (rejectInvalidDates('revenue', r, 'Venit', r.id)) return false;
+      setData(d => ({ ...d, revenues: d.revenues.map(x => x.id === r.id ? r : x) }));
+      return true;
+    },
     deleteRevenue: id => setData(d => ({ ...d, revenues: d.revenues.filter(x => x.id !== id) })),
 
-    addExpense: e => setData(d => ({ ...d, expenses: [{ ...e, id: uid() }, ...d.expenses] })),
-    updateExpense: e => setData(d => ({ ...d, expenses: d.expenses.map(x => x.id === e.id ? e : x) })),
+    addExpense: e => {
+      if (rejectInvalidDates('expense', e, 'Cheltuială')) return false;
+      setData(d => ({ ...d, expenses: [{ ...e, id: uid() }, ...d.expenses] }));
+      return true;
+    },
+    updateExpense: e => {
+      if (rejectInvalidDates('expense', e, 'Cheltuială', e.id)) return false;
+      setData(d => ({ ...d, expenses: d.expenses.map(x => x.id === e.id ? e : x) }));
+      return true;
+    },
     deleteExpense: id => setData(d => ({ ...d, expenses: d.expenses.filter(x => x.id !== id) })),
 
     addClient: c => setData(d => ({ ...d, clients: [...d.clients, { ...c, id: uid() }] })),
     updateClient: c => setData(d => ({ ...d, clients: d.clients.map(x => x.id === c.id ? c : x) })),
 
-    addDeclaration: decl => setData(d => ({ ...d, declarations: [{ ...decl, id: uid() }, ...d.declarations] })),
-    updateDeclaration: d => setData(prev => ({ ...prev, declarations: prev.declarations.map(x => x.id === d.id ? d : x) })),
+    addDeclaration: decl => {
+      if (rejectInvalidDates('declaration', decl, 'Declarație')) return false;
+      setData(d => ({ ...d, declarations: [{ ...decl, id: uid() }, ...d.declarations] }));
+      return true;
+    },
+    updateDeclaration: d => {
+      if (rejectInvalidDates('declaration', d, 'Declarație', d.id)) return false;
+      setData(prev => ({ ...prev, declarations: prev.declarations.map(x => x.id === d.id ? d : x) }));
+      return true;
+    },
     sendDeclaration: id => setData(d => ({
       ...d,
       declarations: d.declarations.map(x =>
@@ -244,19 +291,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ),
     })),
 
-    uploadDocument: (code, doc) => setData(d => ({
-      ...d,
-      companyDocs: {
-        ...d.companyDocs,
-        [code]: [{ ...doc, id: uid() }, ...d.companyDocs[code]],
-      },
-    })),
+    uploadDocument: (code, doc) => {
+      if (rejectInvalidDates('companyDocument', doc, 'Document')) return false;
+      setData(d => ({
+        ...d,
+        companyDocs: {
+          ...d.companyDocs,
+          [code]: [{ ...doc, id: uid() }, ...d.companyDocs[code]],
+        },
+      }));
+      return true;
+    },
     deleteDocument: (code, id) => setData(d => ({
       ...d,
       companyDocs: { ...d.companyDocs, [code]: d.companyDocs[code].filter(x => x.id !== id) },
     })),
 
-    addStatement: s => setData(d => ({ ...d, statements: [{ ...s, id: uid() }, ...d.statements] })),
+    addStatement: s => {
+      if (rejectInvalidDates('statement', s, 'Declarație fiscală')) return false;
+      setData(d => ({ ...d, statements: [{ ...s, id: uid() }, ...d.statements] }));
+      return true;
+    },
     deleteStatement: id => setData(d => ({ ...d, statements: d.statements.filter(x => x.id !== id) })),
     addSnapshot: s => setData(d => ({ ...d, snapshots: [...d.snapshots, s] })),
     getSnapshot: id => data.snapshots.find(x => x.calculationId === id),
