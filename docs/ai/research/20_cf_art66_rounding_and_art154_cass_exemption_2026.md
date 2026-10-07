@@ -418,35 +418,45 @@ built on "nothing changed since U-8" is wrong:
 
 ---
 
-## PROVENANCE WARNING — read before relying on the Continuation 1 section
+## PROVENANCE — corrected 2026-10-08 after the operator's correction
 
-The session that produced **Continuation 1** was **resumed twice**, and between the two resumptions **its own context
-was compacted**. A resumed-and-compacted agent continues from a *summary* of what it read, not from what it read.
-That is the precise condition under which an agent reproduces a citation that is plausible, internally consistent and
-**wrong** — the failure mode this entire project exists to prevent.
+**My first version of this section was wrong and has been rewritten.** I marked **Continuation 1** as
+post-compaction and therefore untrustworthy. It is not. The actual sequence:
+
+1. **First pass** (20m 15s) — output truncated mid-quote at art. 174 alin. (8).
+2. **Resumed once** — produced **Continuation 1** from its own still-intact session context.
+3. **Compaction happened *after* Continuation 1 was delivered.**
+
+The operator's warning — *“it will arrive truncated again, but i think it compacted now so it will hallucinate”* — was
+a prediction about the **next** arrival. I applied it to the arrival that had **already happened**, and downgraded
+first-hand retrieval to “unverified”. That is the mirror-image of the error this project guards against: not
+trusting a citation that was in fact read.
+
+**Continuation 1 is first-hand retrieval, same tier as the first pass.** The compaction risk applies to any *further*
+resumption, and there will not be one.
 
 **Trust tiering for this file:**
 
 | Section | Basis | Status |
 |---|---|---|
-| **Q1 (all of it, incl. art. 66)** | First-pass output, before any compaction | **Trusted as retrieved.** Independently re-verified — see `research/21`. |
-| **Q2 (a)-(e) art. 154 / 153 / 170 / 174 alin. (7)** | First-pass output | **Trusted as retrieved.** Re-verified. |
-| **Continuation 1** — art. 174 alin. (8)-(9), art. 180, the art. 154 note table, the OUG 89/2025 and OUG 8/2026 greps, the Legea 239/2025 finding | **Post-compaction resumption** | **UNVERIFIED. Do not encode, cite to a user, or treat as settled until re-verified against primary text.** |
+| **Q1 (all of it, incl. art. 66)** | First-pass output | **Trusted as retrieved.** Re-verification in flight (`verify-art66-art154`). |
+| **Q2 (a)-(e) art. 154 / 153 / 170 / 174 alin. (7)** | First-pass output | **Trusted as retrieved.** Re-verification in flight. |
+| **Continuation 1** — art. 174 alin. (8)-(9), art. 180, the art. 154 note table, the OUG 89/2025 and OUG 8/2026 greps, the Legea 239/2025 finding | **Resumed session, pre-compaction — first-hand** | **Trusted as retrieved.** Re-verified anyway, because two of its claims are load-bearing. |
 
-**Decision: the session was NOT resumed a third time.** The remaining items — **Q2(h)** (whether `'exempt'` and
-`'neplata'` map to distinct legal concepts at all), the sources list, and the gaps list — were **not recovered**, and
-are carried forward as open rather than reconstructed. A fresh session with no history was spawned to re-verify the
-specific claims above instead. See `research/21`.
+**The session was not resumed a third time.** The remaining items — **Q2(h)** (whether `'exempt'` and `'neplata'`
+map to distinct legal concepts at all), the sources list, and the gaps list — were **not recovered**, and are carried
+forward as **open** rather than reconstructed. A fresh session with no history was spawned to re-verify the specific
+claims above; its report becomes `research/21` when it lands.
 
-**Two items from Continuation 1 that would be load-bearing if true, and are therefore flagged rather than adopted:**
+**Two items from Continuation 1 are load-bearing enough to re-verify even though they are first-hand:**
 
 1. **The 72-SMGW annual CASS base cap applying to the seeded 2026 year** via **art. 170 alin. (1)** as amended by
    **LEGEA nr. 239/2025, MO 1160/15.12.2025**, Pct. 19, Art. XII — this **refutes** the earlier U-8 conclusion that
-   OUG 89/2025 and OUG 8/2026 leave CF art. 154/170/174/180 untouched. It is a *significant* claim that changes the
-   CASS ladder, made by a post-compaction session. **Re-verify before changing any code.**
+   OUG 89/2025 and OUG 8/2026 leave CF art. 154/170/174/180 untouched. It is a *significant* claim: it changes the
+   CASS ladder and it contradicts a question we had closed. **Re-verify before changing any code.**
 2. **Art. 174 alin. (8)** as the only place art. 154 alin. (1) feeds the CASS calculation, limited to lit. a), b), e),
-   f). If true it is the bridge between the exemption list and the waiver. **Re-verify.**
+   f). If true it is the bridge between the exemption list and the waiver.
 
-**What is NOT in doubt:** the art. 66 rounding rule and the art. 154 alin. (1) closed-list reading both come from the
-**first, uncompacted pass**. They are the two results that actually change the code, and they are being re-verified
-independently regardless.
+**What is not in doubt:** the art. 66 rounding rule and the art. 154 alin. (1) closed-list reading both come from the
+first pass. They are the two results that actually change the code, and they are being re-verified independently
+regardless.
