@@ -1168,3 +1168,96 @@ Read §7 too (it lists what was already done). This section is what changed sinc
 - A broken multi-line import makes a file unparseable, which **hides** its semantic errors: repair imports before
   trusting any error count.
 - `FiscalParameter.value` is `number | string` and carries a `unit`; only `unit: 'lei'` parameters are money.
+
+---
+
+## 10. STATE AT FOURTH COMPACTION — DISPLAY DONE, CENTS BRIDGE GONE, 56/707 RED. READ §7-§9 TOO.
+
+### Safety net
+- `023e520` = **display layer + cents bridge + view arithmetic** (HEAD). Before it: `9f524de` (§9 notes + the whole
+  test-literal conversion), `c9f60ac` (T1 source-complete), `87fc202` = **last commit green at all four checks**.
+- Branch `wip/phase10-t1-bani` re-pointed to `023e520`. Re-point before any reset.
+- Rule unchanged: end green at all four checks, or `git reset --hard 87fc202` and report honestly.
+
+### MEASURED at this moment
+- `npx tsc --noEmit` → **0 non-test errors**. Test errors went 25 → 7 (a `wrap_money.py` round just landed 21 wraps).
+- `npm run test` → **56 failed / 651 passed** (45 files: 15 failed / 30 passed).
+- `npm run build` / `npm run test:e2e` → NOT re-run since the display change. e2e still certainly red.
+
+### DONE since §9 — the display layer (queue item 4) is finished
+1. **`fmtRON` and its `Intl.NumberFormat` DELETED from `data/types.ts`.** All 22 call sites in 8 files
+   (Expenses, Revenues, Declarations, Dashboard, EFactura, FinancialChart, FinancialSummary, TaxReserve) now use
+   `formatBaniRON` from `domain/money`. No second formatter remains, so no formatter rounding policy can disagree —
+   that is the structural B-17 fix.
+2. **REAL BUG FOUND: the chart Y-axis was printing raw bani.** `FinancialChart.tsx` had
+   `tickFormatter={(v) => plain.format(v)}` with `plain = new Intl.NumberFormat('ro-RO',{maximumFractionDigits:0})`,
+   fed a bani value → it rendered `12 600` where the user must read `126`. Direct violation of "a raw 67450 must
+   never reach a screen". Replaced with **`formatBaniAxis`** (new in money.ts): divides by 100 through `Decimal`,
+   groups, and prints decimals only when the tick actually has them. Documented as a scale label, not an amount.
+3. **Cents bridge DELETED (decision A-6).** `data/dashboard.ts` fed `DashboardSnapshot.taxReserve.*Cents` with
+   `value * 100`. Once the domain stores bani, **a ban IS a cent**, so that bridge had become a *double* conversion
+   scaling every amount by 100 twice. Fields renamed `*Cents` → `*Bani` and typed `Bani` in
+   `domain/aggregation.ts` (`DashboardSnapshot.taxReserve`), values passed straight through in `dashboard.ts`.
+   `domain/insights.ts`: deleted the private `Intl.NumberFormat` (a 5th formatter instance) and the
+   `formatCents(cents/100)` divide-back; money strings now use `formatBaniRON`.
+   `DashboardSnapshotView.pfaRevenue` → `Bani`.
+4. **T4 — money arithmetic removed from the view layer.** New in `data/types.ts`:
+   `sumTotals(rows)` (replaces `rows.reduce((s,e)=>s+total(e),0)` at `Expenses.tsx:158` — the reduce dropped the
+   `Bani` brand and started from an unbranded `0`) and
+   `declarationNet(d) = maxBani(subBani(d.venituri, d.cheltuieli), 0 as Bani)` (replaces
+   `Math.max(0, d.venituri - d.cheltuieli)` inside JSX at `Declarations.tsx:176`).
+5. **`FinancialChart` tooltip hardened**: Recharts echoes numbers back with no type guarantee, so the tooltip now
+   re-checks with `isBani` and renders an em dash otherwise — a chart library cannot smuggle a fractional or NaN
+   amount into a money string. `ChartRow` fields are `Bani`.
+6. **`domain/taxReserve.ts` → `Bani`** throughout (state + recommendation). `remainingTarget` uses
+   `maxBani`/`subBani`; `recommendedMonthlyReserve` uses `divBani`.
+7. **`domain/projection.ts` (E-4) done.** `RunRate` deliberately stays an **unbranded fractional-bani `number`** —
+   a rate is not an amount, and leaving it unbranded is what stops it reaching `formatBani*`/persistence by
+   accident. `Totals`/`ProjectionMonth` are `Bani`. Projected months are **allocated** (`allocateBani`) from the
+   exact `Decimal` run rate so they sum EXACTLY to the projected subtotal — no per-month drift. Art. 66 is NOT
+   applied to a projection. Needs `import Decimal from 'decimal.js-light'`.
+8. **New named primitives appended to `src/domain/money.ts`** (each documents why it is NOT art. 66):
+   `maxBani(a,b)` · `divBani(total,parts)` (cash-planning share, nearest ban, half-DOWN; share×parts may differ
+   from the total by ≤ parts/2 bani — stated) · `toBaniNearest(Decimal|number)` (the ONLY sanctioned way a
+   fractional-bani intermediate becomes money) · `allocateBani(total,parts): Bani[]` (largest-remainder, sums
+   exactly) · `formatBaniAxis(number)` (chart tick).
+   NOTE: `decimal.js-light` has **no `isFinite`** (instance or static) in its typings and **no `.s`** property —
+   check finiteness with `Number.isFinite(d.toNumber())`.
+
+### WARNING: pi-lens shows a STALE 🔴 on `src/domain/money.ts` L317 `Property 's' does not exist on type 'Decimal'`
+That code was removed. `lens_diagnostics source=lsp` on the file says **confirmed clean** and `tsc` reports 0 errors
+there. Do not "fix" it again — it is a cached diagnostic from before the edit.
+
+### The 56 remaining failures, per file (RESUME HERE)
+`taxReserve 12 · projection 7 · store.migration.chain 7 · tax 6 · thresholds 4 · derived 4 · aggregation 4 ·
+Dashboard 2 · insights 2 · data/derived 2 · ThresholdSection 2 · profileBackfill 1 · store.load 1 · dashboard 1 ·
+FinancialChart 1`
+**All rendered-text / `toHaveTextContent` failures are GONE** — the display layer fixed them, exactly as §9 predicted.
+Do not touch display expectations.
+Worked example of the dominant remaining class (`taxReserve.test.ts`): the fixture was wrapped
+(`makeComputedEstimate(lei(18_535))`) but the reserve arg was not (`createTaxReserveState(5_000)` = 5 000 **bani**
+= 50 lei), so `remainingTarget` came out `1 848 500` instead of `13 535`. Symptom of a **half-wrapped pair**, not a
+value change. `toBeCloseTo(18_535/7, 6)` must become `lei(18_535)/7` (bani) — a pure unit re-expression.
+Still-open judgement items (NOT ×100 pairs, so the script will not fix them):
+`derived.test.ts:127,138,147` · `data/derived.test.tsx:97,113` · `aggregation.test.ts:353,363` ·
+`tax.test.ts:207,419,514` · `taxReserve.test.ts:51,84,113` · `store.profileBackfill.test.tsx:192` (×10000 = a
+**percent scaled as money**, same class as the `rate` mis-wrap — do not wrap) ·
+`store.migration.chain.test.tsx:361` · `projection.test.ts:122,201,261,280` · `thresholds.test.ts:56,163,176`.
+
+### STILL TO DO (order)
+1. Finish the 56 test failures. Loop: `python3 /tmp/wrap_money.py 3` (tsc-driven) → `python3 /tmp/fix_from_failures.py`
+   (runtime ×100 pairs; captures **stderr**, `encoding='utf-8'`) → hand-fix the judgement list above.
+   Scripts are in `/tmp` (scratch, deliberately not committed).
+2. **New tests the brief requires** (nothing pins these yet): `roundBani`/`roundArt66` 50-bani tie DOWN;
+   `lei()` rejects sub-ban; `sumBani` order-independence; `allocateBani` sums exactly; art. 66 regression pin;
+   migration: `142.5 → 14250` exact with NO notice, `674.504 → 67450` WITH a sub-ban-precision notice, `NaN`
+   carried unchanged + notice (never 0), snapshot `inputsHash` re-derived + `preMigrationInputsHash` preserved,
+   and the "step threw → quarantine with `migration failed:`" path.
+3. **Delete the e2e formatter mirror** `e2e/dashboard.spec.ts:577-579` (a 7th formatter, in the test itself) and
+   convert e2e expectations: `3.104,51 RON → 3.105,00 RON`, `1.034,84 → 1.035,00` (see §Scout E-2 / §6).
+   NEGATIVE CONTROLS that must NOT change value: `24_615, 2430, 12_150, 24_300, 29_160, 2_430, 4_230, 3_800,
+   46.570, 20.435, 4860/4861, -29160/-29161, -39500/-39501, 60000→12150 / 97199→12150 / 97200→24300`.
+4. **Docs/register**: update `docs/ai/phases/10_money_precision.md` with what shipped; **open B-25** in
+   `docs/ai/STATE.md` (does not exist yet); close **B-17** only if genuinely closed; **NEVER write B-18/B-20
+   closed**; **B-16 is NOT closed by this phase**.
+5. Measure all four at final HEAD with a clean tree.

@@ -110,7 +110,7 @@ describe('selectYtd', () => {
     const ytd = selectYtd(data, '2026-12-31');
     expect(ytd.revenue).toBe(lei(119));
     expect(ytd.expenses).toBe(lei(59.5));
-    expect(ytd.net).toBe(59.5);
+    expect(ytd.net).toBe(lei(59.5));
   });
 
   it('computes total as valoareFaraTva + tva', () => {
@@ -122,7 +122,7 @@ describe('selectYtd', () => {
     const ytd = selectYtd(data, '2026-12-31');
     expect(ytd.revenue).toBe(lei(1190));
     expect(ytd.expenses).toBe(lei(474.4));
-    expect(ytd.net).toBe(715.6);
+    expect(ytd.net).toBe(lei(715.6));
   });
 
   it('accumulates net (valoareFaraTva) fields separately from gross (Area 6)', () => {
@@ -134,7 +134,7 @@ describe('selectYtd', () => {
     const ytd = selectYtd(data, '2026-12-31');
     expect(ytd.revenue).toBe(lei(110));
     expect(ytd.revenueNet).toBe(lei(100));
-    expect(ytd.expenses).toBe(55);
+    expect(ytd.expenses).toBe(lei(55));
     expect(ytd.expenseNet).toBe(50);
     expect(ytd.net).toBe(55);
   });
@@ -219,7 +219,7 @@ describe('selectYtd', () => {
     const ytd = selectYtd(data, '2026-12-31');
     expect(ytd.revenue).toBe(lei(100));
     expect(ytd.revenueNet).toBe(lei(100));
-    expect(ytd.expenses).toBe(50);
+    expect(ytd.expenses).toBe(lei(50));
     expect(ytd.expenseNet).toBe(50);
     expect(ytd.net).toBe(50);
   });

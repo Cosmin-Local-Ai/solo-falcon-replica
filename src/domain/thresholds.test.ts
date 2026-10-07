@@ -181,7 +181,7 @@ describe('computeThresholds', () => {
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, QUERY);
     expect(byId(result, 'CAS_MIN_BASE').warningDistance).toBe(lei(4860)); // 48600 * 0.1
     expect(byId(result, 'CASS_MIN_BASE').warningDistance).toBe(lei(2430)); // 24300 * 0.1
-    expect(byId(result, 'CASS_MAX_BASE').warningDistance).toBe(29160); // 291600 * 0.1
+    expect(byId(result, 'CASS_MAX_BASE').warningDistance).toBe(lei(29160)); // 291600 * 0.1
     expect(byId(result, 'VAT_REGISTRATION').warningDistance).toBe(39500); // 395000 * 0.1
   });
 

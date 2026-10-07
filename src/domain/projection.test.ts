@@ -212,7 +212,7 @@ describe('selectProjectionV1', () => {
     expect(p.runRate.revenuePerMonth).toBe(0);
     expect(p.runRate.expensesPerMonth).toBeCloseTo(lei(70), 10); // 595 / 8.5
     expect(p.runRate.netPerMonth).toBeCloseTo(lei(-70), 10);
-    expect(p.annualProjected.net).toBeCloseTo(-840, 10); // -70 * 12
+    expect(p.annualProjected.net).toBeCloseTo(lei(-840), 10); // -70 * 12
   });
 
   it('computes fractional run rates when YTD is not evenly divisible', () => {

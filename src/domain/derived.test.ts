@@ -111,7 +111,7 @@ describe('selectFinancialDerived (Step 14)', () => {
     expect(view.asOfDate).toBe(AS_OF);
     expect(view.ytd.revenue).toBe(lei(1190));
     expect(view.ytd.expenses).toBe(lei(595));
-    expect(view.ytd.net).toBe(595);
+    expect(view.ytd.net).toBe(lei(595));
     expect(view.monthly.get('2026-03')?.revenue).toBe(1190);
     expect(view.monthly.get('2026-04')?.expenses).toBe(595);
     expect(view.projection).toHaveProperty('annualProjected');
@@ -262,7 +262,7 @@ describe('selectFinancialDerived (Step 14)', () => {
     const view = selectFinancialDerived(data, AS_OF);
     expect(view.ytd.revenue).toBe(lei(119));
     expect(view.ytd.expenses).toBe(lei(595));
-    expect(view.ytd.net).toBe(-476);
+    expect(view.ytd.net).toBe(lei(-476));
   });
 });
 

@@ -10,6 +10,7 @@ import {
   monthsRemainingInFiscalYear,
 } from './taxReserve';
 import { lei, type Bani } from './money'
+import { lei } from '../../domain/money';
 
 function makeSnapshot(total: Bani): TaxCalculationSnapshot {
   return {
@@ -41,7 +42,7 @@ function makeReviewRequiredEstimate(): TaxEstimateResult {
 
 describe('computeTaxReserve', () => {
   it('keeps estimated tax liability and reserve recommendation strictly separate', () => {
-    const rec = computeTaxReserve(makeComputedEstimate(lei(18_535)), createTaxReserveState(5_000), {
+    const rec = computeTaxReserve(makeComputedEstimate(lei(18_535)), createTaxReserveState(lei(5_000)), {
       asOfDate: '2026-06-15',
       fiscalYear: 2026,
     });
@@ -55,7 +56,7 @@ describe('computeTaxReserve', () => {
   });
 
   it('returns null liability and zero targets when no estimate is available', () => {
-    const rec = computeTaxReserve(null, createTaxReserveState(5_000), {
+    const rec = computeTaxReserve(null, createTaxReserveState(lei(5_000)), {
       asOfDate: '2026-06-15',
       fiscalYear: 2026,
     });
@@ -66,7 +67,7 @@ describe('computeTaxReserve', () => {
   });
 
   it('treats a review_required estimate as unavailable (no liability)', () => {
-    const rec = computeTaxReserve(makeReviewRequiredEstimate(), createTaxReserveState(1_000), {
+    const rec = computeTaxReserve(makeReviewRequiredEstimate(), createTaxReserveState(lei(1_000)), {
       asOfDate: '2026-03-01',
       fiscalYear: 2026,
     });
@@ -77,7 +78,7 @@ describe('computeTaxReserve', () => {
 
   it('computes a partial reserve against the full-year liability', () => {
     // total=20750 (from tax engine), reserved=5000, Jan → 12 months remaining.
-    const rec = computeTaxReserve(makeComputedEstimate(lei(20_750)), createTaxReserveState(5_000), {
+    const rec = computeTaxReserve(makeComputedEstimate(lei(20_750)), createTaxReserveState(lei(5_000)), {
       asOfDate: '2026-01-01',
       fiscalYear: 2026,
     });
@@ -87,7 +88,7 @@ describe('computeTaxReserve', () => {
   });
 
   it('returns zero remaining target when the reserve fully covers the liability', () => {
-    const rec = computeTaxReserve(makeComputedEstimate(lei(18_535)), createTaxReserveState(18_535), {
+    const rec = computeTaxReserve(makeComputedEstimate(lei(18_535)), createTaxReserveState(lei(18_535)), {
       asOfDate: '2026-06-15',
       fiscalYear: 2026,
     });
@@ -96,7 +97,7 @@ describe('computeTaxReserve', () => {
   });
 
   it('clamps remaining target at zero when the reserve exceeds the liability', () => {
-    const rec = computeTaxReserve(makeComputedEstimate(lei(18_535)), createTaxReserveState(25_000), {
+    const rec = computeTaxReserve(makeComputedEstimate(lei(18_535)), createTaxReserveState(lei(25_000)), {
       asOfDate: '2026-06-15',
       fiscalYear: 2026,
     });
@@ -105,7 +106,7 @@ describe('computeTaxReserve', () => {
   });
 
   it('counts 1 month remaining when asOfDate is in December', () => {
-    const rec = computeTaxReserve(makeComputedEstimate(lei(18_535)), createTaxReserveState(8_535), {
+    const rec = computeTaxReserve(makeComputedEstimate(lei(18_535)), createTaxReserveState(lei(8_535)), {
       asOfDate: '2026-12-15',
       fiscalYear: 2026,
     });
@@ -125,7 +126,7 @@ describe('computeTaxReserve', () => {
   });
 
   it('returns zero monthly reserve when the fiscal year is already past', () => {
-    const rec = computeTaxReserve(makeComputedEstimate(lei(18_535)), createTaxReserveState(0), {
+    const rec = computeTaxReserve(makeComputedEstimate(lei(18_535)), createTaxReserveState(lei(0)), {
       asOfDate: '2027-01-01',
       fiscalYear: 2026,
     });
@@ -135,11 +136,11 @@ describe('computeTaxReserve', () => {
   });
 
   it('is deterministic for identical inputs', () => {
-    const a = computeTaxReserve(makeComputedEstimate(lei(18_535)), createTaxReserveState(5_000), {
+    const a = computeTaxReserve(makeComputedEstimate(lei(18_535)), createTaxReserveState(lei(5_000)), {
       asOfDate: '2026-06-15',
       fiscalYear: 2026,
     });
-    const b = computeTaxReserve(makeComputedEstimate(lei(18_535)), createTaxReserveState(5_000), {
+    const b = computeTaxReserve(makeComputedEstimate(lei(18_535)), createTaxReserveState(lei(5_000)), {
       asOfDate: '2026-06-15',
       fiscalYear: 2026,
     });
@@ -159,7 +160,7 @@ describe('computeTaxReserve', () => {
   });
 
   it('keeps an explicit zero reserve as zero (distinct from null)', () => {
-    const rec = computeTaxReserve(makeComputedEstimate(lei(18_535)), createTaxReserveState(0), {
+    const rec = computeTaxReserve(makeComputedEstimate(lei(18_535)), createTaxReserveState(lei(0)), {
       asOfDate: '2026-06-15',
       fiscalYear: 2026,
     });
@@ -171,7 +172,7 @@ describe('computeTaxReserve', () => {
   it('derives recommendedMonthlyReserve from its own remainingTarget and monthsRemaining', () => {
     const rec = computeTaxReserve(
       makeComputedEstimate(lei(18_535)),
-      createTaxReserveState(5_000),
+      createTaxReserveState(lei(5_000)),
       { asOfDate: '2026-06-15', fiscalYear: 2026 },
     );
     // Consistency check: the monthly recommendation must equal the remaining
@@ -183,21 +184,21 @@ describe('computeTaxReserve', () => {
 
 describe('tax reserve state', () => {
   it('creates a state clamped at zero', () => {
-    expect(createTaxReserveState(5_000)).toEqual({ reservedAmount: lei(5_000) });
-    expect(createTaxReserveState(-10)).toEqual({ reservedAmount: lei(0) });
+    expect(createTaxReserveState(lei(5_000))).toEqual({ reservedAmount: lei(5_000) });
+    expect(createTaxReserveState(lei(-10))).toEqual({ reservedAmount: lei(0) });
   });
 
   it('adds to the reserve without mutating the original state', () => {
-    const s0 = createTaxReserveState(5_000);
-    const s1 = addToTaxReserve(s0, 2_000);
+    const s0 = createTaxReserveState(lei(5_000));
+    const s1 = addToTaxReserve(s0, lei(2_000));
     expect(s1).toEqual({ reservedAmount: lei(7_000) });
     expect(s0).toEqual({ reservedAmount: lei(5_000) });
   });
 
   it('treats a negative add as a withdrawal clamped at zero', () => {
-    const s0 = createTaxReserveState(1_000);
-    expect(addToTaxReserve(s0, -400)).toEqual({ reservedAmount: lei(600) });
-    expect(addToTaxReserve(s0, -5_000)).toEqual({ reservedAmount: lei(0) });
+    const s0 = createTaxReserveState(lei(1_000));
+    expect(addToTaxReserve(s0, lei(-400))).toEqual({ reservedAmount: lei(600) });
+    expect(addToTaxReserve(s0, lei(-5_000))).toEqual({ reservedAmount: lei(0) });
   });
 
   it('passes null through as "no data recorded"', () => {
@@ -206,8 +207,8 @@ describe('tax reserve state', () => {
 
   it('adds to a null state, recording the clamped amount', () => {
     const s0 = createTaxReserveState(null);
-    expect(addToTaxReserve(s0, 3_000)).toEqual({ reservedAmount: lei(3_000) });
-    expect(addToTaxReserve(s0, -400)).toEqual({ reservedAmount: lei(0) });
+    expect(addToTaxReserve(s0, lei(3_000))).toEqual({ reservedAmount: lei(3_000) });
+    expect(addToTaxReserve(s0, lei(-400))).toEqual({ reservedAmount: lei(0) });
     // The original null state is never mutated.
     expect(s0).toEqual({ reservedAmount: null });
   });

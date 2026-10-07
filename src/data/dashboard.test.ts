@@ -148,7 +148,7 @@ describe('getFinancialSummary (sync)', () => {
     const ytd = getFinancialSummary(makeData({ revenues: [revenue()], expenses: [expense()] }), AS_OF);
     expect(ytd.revenue).toBe(lei(1190));
     expect(ytd.expenses).toBe(lei(595));
-    expect(ytd.net).toBe(595);
+    expect(ytd.net).toBe(lei(595));
   });
 });
 
@@ -248,7 +248,7 @@ describe('threshold bases (Phase 8 — amount semantics, on seeded data)', () =>
     // carries non-zero TVA. This is the assertion that would fail before Phase 8.
     expect(ytd.revenue).toBe(lei(9317));
     expect(vat.currentValue).not.toBe(ytd.revenue);
-    expect(vat.thresholdValue).toBe(395000);
+    expect(vat.thresholdValue).toBe(lei(395000));
   });
 
   it('every contribution row is measured on the engine contribution base, never on gross revenue', async () => {
@@ -326,7 +326,7 @@ describe('threshold bases (Phase 8 — amount semantics, on seeded data)', () =>
     const line = (l: string) => tax.lines.find((x) => x.label === l)!.value;
     expect(line('Venit brut')).toBe(lei(7700));
     expect(line('Cheltuieli deductibile')).toBe(lei(205.5));
-    expect(line('Venit net din activitate')).toBe(7494.5);
+    expect(line('Venit net din activitate')).toBe(lei(7494.5));
     expect(line('Venit net anual impozabil (art. 118 alin. (2) lit. b))')).toBeCloseTo(6745.05, 6);
     expect(tax.output.total).toBeCloseTo(3104.505, 6);
   });

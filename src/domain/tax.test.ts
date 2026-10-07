@@ -154,7 +154,7 @@ describe('computeTaxEstimate', () => {
     expect(snap.inputsHash).toHaveLength(64);
     expect(snap.inputSnapshot.revenues).toBe(lei(50_000));
     expect(snap.inputSnapshot.expenses).toBe(lei(10_000));
-    expect(snap.output.total).toBe(7_600);
+    expect(snap.output.total).toBe(lei(7_600));
   });
 
   it('zero revenues → computed with CASS 0 (CF art. 174 alin. (2)), not review_required', async () => {
@@ -495,7 +495,7 @@ describe('computeTaxEstimate', () => {
     // alin. (1)”. The 6 SM floor comes from art. 174 alin. (6), so the difference never enters the base.
     expect(res.lines.find((l) => l.label === 'CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))')?.value).toBeCloseTo(lei(2_000), 6);
     // taxable = 20,000 − 2,000 = 18,000 (was 17,570 while the difference was wrongly deducted).
-    expect(res.lines.find((l) => l.label === 'Venit net anual impozabil (art. 118 alin. (2) lit. b))')?.value).toBeCloseTo(18_000, 6);
+    expect(res.lines.find((l) => l.label === 'Venit net anual impozabil (art. 118 alin. (2) lit. b))')?.value).toBeCloseTo(lei(18_000), 6);
     expect(res.lines.find((l) => l.label === 'Impozit pe venit (rată de bază 10%)')?.value).toBeCloseTo(1_800, 6);
     // total = 2,430 owed CASS + 1,800 tax = 4,230 (was 4,187: the bug understated the bill by 43 lei).
     expect(res.output.total).toBeCloseTo(4_230, 6);
@@ -533,7 +533,7 @@ describe('computeTaxEstimate', () => {
     // CAS 48,600 (100% x the 12 SM base) + CASS 5,000 = 53,600 of deductions against a net of 50,000.
     expect(res.lines.find((l) => l.label === 'CAS (25%)')?.value).toBe(lei(48_600));
     expect(res.lines.find((l) => l.label === 'CASS (10%)')?.value).toBeCloseTo(lei(5_000), 6);
-    expect(res.lines.find((l) => l.label === 'Deduceri blocate de plafonul art. 118 alin. (2^4)')?.value).toBeCloseTo(3_600, 6);
+    expect(res.lines.find((l) => l.label === 'Deduceri blocate de plafonul art. 118 alin. (2^4)')?.value).toBeCloseTo(lei(3_600), 6);
     // The base stops at 0 — it never goes negative, so no phantom negative tax.
     expect(res.lines.find((l) => l.label === 'Venit net anual impozabil (art. 118 alin. (2) lit. b))')?.value).toBeCloseTo(0, 6);
     expect(res.lines.find((l) => l.label === 'Impozit pe venit (rată de bază 10%)')).toBeUndefined();
@@ -605,7 +605,7 @@ describe('salaried PFA under the 6 SM floor — both art. 174 alin. (7) lit. a) 
       res.lines.find((l) => l.label === 'CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))')?.value,
     ).toBe(lei(2_000));
     // CAS 0 (net < 12 SM) + CASS 2,000 + impozit 10% × (20,000 − 2,000) = 1,800.
-    expect(res.output.total).toBe(3_800);
+    expect(res.output.total).toBe(lei(3_800));
   });
 
   it('salary below 6 SM: the alin. (6) difference is owed and is not deductible (B-13 shape)', async () => {
@@ -626,7 +626,7 @@ describe('salaried PFA under the 6 SM floor — both art. 174 alin. (7) lit. a) 
     // Same taxable base as the relieved branch, but 430 lei more payable.
     expect(
       res.lines.find((l) => l.label === 'Venit net anual impozabil (art. 118 alin. (2) lit. b))')?.value,
-    ).toBe(18_000);
+    ).toBe(lei(18_000));
     expect(res.output.total).toBe(4_230);
   });
 
