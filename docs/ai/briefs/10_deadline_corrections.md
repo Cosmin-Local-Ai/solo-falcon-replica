@@ -129,8 +129,15 @@ outcome — not a gap to fill. If a test or UI element expects a start-date-deri
 expectation and say so in your notes.
 
 **Two corrections to carry into any future CPF rule**, whenever one becomes necessary:
-- The CPF in force is **OG 2/2024** (Portal Legislativ doc **304520**), **not Legea 207/2015** — that is the
-  *repealed* procedure code. This brief said Legea 207/2015; that was an error in the brief itself.
+- **⚠️ CPF citation is CONTESTED — do not cite the procedure code in code or UI until resolved.**
+  This brief previously said the CPF in force is **OG 2/2024** (doc **304520**) and *not* Legea 207/2015.
+  An independent verifier instead reads art. 82 alin. (6) lit. c) from **Legea 207/2015**, doc
+  **309359** (consolidation 08.05.2026; base form 170007; a newer consolidation **312603** at 08.08.2026).
+  Both quote the **same carve-out wording**, so **no rule in this brief changes** — only the citation
+  does. The likely error is research/13's *label*, not its doc id: STATE.md records doc 304520 as
+  carrying **828 amendment notes**, which fits a heavily-amended Legea 207/2015 far better than a single
+  2024 act. Resolution is running (`research/15` §5 F1). **Until it lands, cite the article number and
+  leave the act name out.**
 - Doc **304520** note count: the repo records **828**, a sweep regex yields **825**. Format variance, not a
   contradiction — cite it as "~825-828" rather than picking one.
 

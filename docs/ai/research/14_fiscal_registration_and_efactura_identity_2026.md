@@ -1,6 +1,14 @@
 # Fiscal registration and e-Factura identity — ONRC carve-out, CNP question
 
-> ## ⚠️ EVIDENCE STATUS: **NOT TRUSTED — RE-VERIFICATION IN PROGRESS**
+> ## ⚠️ EVIDENCE STATUS: **VERIFIED — READ `research/15` BEFORE USING ANYTHING HERE**
+>
+> **Update.** An independent adversarial verifier re-derived this file's claims; see `research/15`.
+> Outcome: **the substance held, the metadata wobbled.** P1 (no 30-day fiscal-registration duty) is
+> **CONFIRMED at primary level**, and the `CNP` = 0 hit count — the most suspicious-looking number
+> here — **reproduced exactly**. What did *not* survive: the note counts (Portal Legislativ does not
+> publish them, `research/15` §3), the label **OG 2/2024** for the procedure code (contested,
+> `research/15` §5 F1), and the name **OUG** 6/2026 (it is an *Ordonanța*).
+> Read `research/15` as the authority and this file as the draft it checked.
 >
 > Everything in this file was produced by research sessions **that had already been compacted**. The
 > operator has flagged that the agent may have **fabricated detail after compaction** — plausible doc
