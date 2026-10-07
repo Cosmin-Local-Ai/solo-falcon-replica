@@ -1,7 +1,8 @@
 import type { PfaProfile } from '../domain/models';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
+import type { MoneyPrecisionNotice } from './migration';
 import { localDateISO, now } from '../domain/date';
-import { addBani, maxBani, subBani, type Bani, sumBani } from '../domain/money';
+import { maxBani, subBani, type Bani, sumBani } from '../domain/money';
 
 // ── Venituri ──────────────────────────────────────────────
 export type RevenueStatus = 'inregistrata' | 'in-asteptare' | 'respinsa';
@@ -185,6 +186,15 @@ export interface AppData {
   statements: TaxStatement[];
   snapshots: TaxCalculationSnapshot[];
   settings: SettingsState;
+  /**
+   * Phase 10 (B-26): the report the `money-bani` step produced when a stored value could not be
+   * reproduced exactly as an integer number of bani. It lives on the **loaded dataset**, not only on the
+   * migration result, because the save effect spreads this object back into localStorage — a report that
+   * lived only in the migration result was erased by the first write after a load, which is the
+   * "surface, not vanish" rule failing silently. `undefined` means "nothing had to be decided", and
+   * `JSON.stringify` drops the key rather than writing an empty array.
+   */
+  moneyNotices?: MoneyPrecisionNotice[];
 }
 
 // ── Formatare ─────────────────────────────────────────────

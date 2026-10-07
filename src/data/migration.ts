@@ -323,8 +323,15 @@ export interface MoneyPrecisionNotice {
    * A record with no id is reported as `'<no id>'` rather than skipped — a missing id is itself a fact. */
   id: string;
   field: string;
-  /** The value exactly as it was stored, in lei. Kept verbatim so the user can see what changed. */
-  original: number;
+  /**
+   * The value exactly as it was stored, in lei, as **text**. Kept verbatim so the user can see what changed.
+   *
+   * It is a string rather than a number on purpose: a non-finite value is the case this field exists to
+   * report, and `JSON.stringify` turns `NaN`/`Infinity` into `null`. A numeric `original` would therefore
+   * fail `persistedAppDataSchema` on the next load and quarantine the whole payload — the report about a
+   * bad value destroying the good data next to it. Text survives the round-trip and stays verbatim.
+   */
+  original: string;
   /** The bani it became. **Omitted** when the value could not be represented at all — never `0`. */
   converted?: Bani;
   reason: 'sub-ban-precision' | 'non-finite';
@@ -357,10 +364,10 @@ export function convertMoneyToBani(input: PersistedAppData): {
   const convert = (value: number, collection: MoneyPrecisionNotice['collection'], id: string, field: string): Bani => {
     const { bani, exact } = baniFromLei(value);
     if (bani === null) {
-      notices.push({ collection, id, field, original: value, reason: 'non-finite' });
+      notices.push({ collection, id, field, original: String(value), reason: 'non-finite' });
       return value as Bani; // preserved verbatim — dropped or zeroed would both be worse
     }
-    if (!exact) notices.push({ collection, id, field, original: value, converted: bani, reason: 'sub-ban-precision' });
+    if (!exact) notices.push({ collection, id, field, original: String(value), converted: bani, reason: 'sub-ban-precision' });
     return bani;
   };
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { StoreProvider, STORAGE_KEY } from './data/store';
+import { seedData } from './data/seed';
 import App from './App';
 
 describe('App topbar identity (Step 25 — Defect 5)', () => {
@@ -77,5 +78,56 @@ describe('App shell identity and recovery (Phase 7)', () => {
       </StoreProvider>,
     );
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+/**
+ * Phase 10, B-26 — the money-conversion report has to reach a screen. The report was produced and
+ * persisted but never rendered, so acceptance criterion 6 ("must surface, not vanish") was half-met.
+ */
+describe('App shell surfaces the money-precision report (Phase 10, B-26)', () => {
+  // Scoped to this block on purpose. The file's other `beforeEach`/`afterEach` live inside the FIRST
+  // describe, and vitest does not inherit those across siblings — without this, the payload written by
+  // the test below is still in localStorage for the one after it, and the banner correctly keeps
+  // showing a report that is still on the data. That is the behaviour under test, not a leak to ignore.
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
+
+  it('shows which sums were adjusted, in lei, after a payload is converted', () => {
+    // A RAW v4 payload: money fields still hold lei, so 674.504 is below ban precision once converted.
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        profile: seedData.profile,
+        revenues: [{ ...seedData.revenues[0], id: 'r-1', valoareFaraTva: 674.504 }],
+        settings: seedData.settings,
+      }),
+    );
+    const { container } = render(
+      <StoreProvider>
+        <App />
+      </StoreProvider>,
+    );
+
+    // Scoped to the banner class inside this render's container: `role="status"` is also used by the chart
+    // tooltip on this page (FinancialChart.test.tsx owns that one), and a document-wide query would also
+    // see a previous test's DOM if cleanup is not automatic in this environment.
+    const banner = container.querySelector('.banner[role="status"]');
+    // A real guard, not `expect(...).not.toBeNull()`: that does not narrow, and every later line would
+    // need a `!` that hides the one thing worth knowing when it fails — that the banner never rendered.
+    if (!banner) throw new Error('the money-precision banner did not render');
+    expect(banner.textContent).toContain('nu a putut fi reprodusă exact');
+    expect(banner.textContent).toContain('674.504'); // the stored value, verbatim
+    expect(banner.textContent).toContain('674,50'); // what it became, in lei
+    expect(banner.textContent).not.toContain('67450'); // never the raw ban count
+  });
+
+  it('shows nothing for data that needed no decision', () => {
+    const { container } = render(
+      <StoreProvider>
+        <App />
+      </StoreProvider>,
+    );
+    expect(container.querySelector('.banner[role=\"status\"]')).toBeNull();
   });
 });

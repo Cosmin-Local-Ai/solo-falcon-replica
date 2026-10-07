@@ -118,6 +118,10 @@ function toAppData(parsed: PersistedAppData): AppData {
     statements: parsed.statements ?? [],
     snapshots: parsed.snapshots ?? [],
     settings: parsed.settings,
+    // B-26: the migration report rides along with the data it describes. The save effect spreads this
+    // object back into localStorage, so carrying it here is what keeps it alive past the first write.
+    // Left `undefined` when absent so the key is not written at all for healthy data.
+    moneyNotices: parsed.moneyNotices?.length ? parsed.moneyNotices : undefined,
   };
 }
 

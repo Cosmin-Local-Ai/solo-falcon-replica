@@ -339,3 +339,102 @@ describe('loadInitial — optional collections are backfilled', () => {
     expect(storeRef!.snapshots).toEqual([]);
   });
 });
+
+/**
+ * Phase 10, B-26 — the report the `money-bani` step produces has to survive the load AND the write that
+ * follows it. It used to be dropped by `toAppData`, so the save effect (which spreads `AppData` back into
+ * localStorage) erased it on the first mutation after a load. Criterion 6 says a value that cannot be
+ * converted must surface, not vanish; a report that lives for one render and then disappears does neither.
+ */
+describe('loadInitial — the money-precision report survives (B-26)', () => {
+  /** A RAW v4 payload: its money fields still hold lei, so they are deliberately NOT wrapped in lei(). */
+  function writeSubBanPayload() {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        profile: seedData.profile,
+        revenues: [{ ...validRevenue, valoareFaraTva: 674.504 }],
+        settings: seedData.settings,
+      }),
+    );
+  }
+
+  it('carries the report out of the migration onto the loaded data', () => {
+    writeSubBanPayload();
+    render(
+      <StoreProvider>
+        <Probe />
+      </StoreProvider>,
+    );
+
+    // The money converted once, to the nearest ban, half-down.
+    expect(storeRef!.revenues[0]!.valoareFaraTva).toBe(lei(674.5));
+    // And the decision it had to make is on the data, not only on the migration result.
+    expect(storeRef!.moneyNotices).toHaveLength(1);
+    expect(storeRef!.moneyNotices![0]).toMatchObject({
+      collection: 'revenues',
+      id: 'r1',
+      field: 'valoareFaraTva',
+      original: '674.504',
+      converted: lei(674.5),
+      reason: 'sub-ban-precision',
+    });
+  });
+
+  it('writes the report back to localStorage instead of letting the save erase it', () => {
+    writeSubBanPayload();
+    render(
+      <StoreProvider>
+        <Probe />
+      </StoreProvider>,
+    );
+
+    // The save effect runs on mount, so by now the payload has been rewritten at the current version.
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
+    expect(saved.version).toBe(CURRENT_DATA_VERSION);
+    expect(saved.moneyNotices).toHaveLength(1);
+    expect(saved.moneyNotices[0].original).toBe('674.504');
+    expect(saved.moneyNotices[0].converted).toBe(67450);
+  });
+
+  it('is still on the data on a second load, when no migration runs at all', () => {
+    writeSubBanPayload();
+    const first = render(
+      <StoreProvider>
+        <Probe />
+      </StoreProvider>,
+    );
+    first.unmount();
+
+    // Second load: the payload is already current, so the money step never runs again and cannot
+    // re-derive the report. Whatever survives here is what the user would actually see.
+    render(
+      <StoreProvider>
+        <Probe />
+      </StoreProvider>,
+    );
+    expect(storeRef!.migration).toBeNull();
+    expect(storeRef!.moneyNotices).toHaveLength(1);
+    expect(storeRef!.moneyNotices![0]!.original).toBe('674.504');
+  });
+
+  it('leaves the report absent for data that needed no decision', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        profile: seedData.profile,
+        revenues: [{ ...validRevenue, valoareFaraTva: 142.5 }],
+        settings: seedData.settings,
+      }),
+    );
+    render(
+      <StoreProvider>
+        <Probe />
+      </StoreProvider>,
+    );
+    expect(storeRef!.revenues[0]!.valoareFaraTva).toBe(lei(142.5));
+    expect(storeRef!.moneyNotices).toBeUndefined();
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
+    expect('moneyNotices' in saved).toBe(false);
+  });
+});

@@ -330,3 +330,80 @@ test.describe('Phase 7 — a corrupt payload is quarantined, not silently replac
     expect(afterSave.raw).toBe('{"profile":');
   });
 });
+
+/**
+ * Phase 10, B-26 — the money-conversion report reaching a screen.
+ *
+ * The v4 → v5 step refuses to decide silently about a stored value that is not a whole number of bani: it
+ * records what it changed. That half shipped first; the report was then dropped by `toAppData` and erased by
+ * the save effect, so the user saw a clean dashboard over data that had quietly been altered. This is the
+ * half that closes it.
+ */
+test.describe('Phase 10 — a sum that could not be converted exactly is named on screen (B-26)', () => {
+  test('names the sum in lei, and the report survives the save that follows the load', async ({ page }) => {
+    await seed(page, {
+      // A v4 payload: its money fields still hold lei, so 674.504 is below ban precision once converted.
+      version: 4,
+      profile: legacyProfile(),
+      revenues: [
+        {
+          id: 'p10-r1',
+          tip: 'factura',
+          nr: 'FCT-2026-001',
+          date: '2026-02-10',
+          client: 'Client A SRL',
+          cui: 'RO12345678',
+          valoareFaraTva: 674.504,
+          tva: 0,
+          status: 'inregistrata',
+        },
+      ],
+      settings: SEED_SETTINGS,
+    });
+
+    await page.goto('/dashboard');
+
+    // Scoped to the banner class: the chart tooltip is also a `role="status"` live region.
+    const banner = page.locator('.banner[role="status"]');
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText('674.504'); // the stored value, verbatim
+    await expect(banner).toContainText('674,50'); // what it became, in lei
+    await expect(banner).not.toContainText('67450'); // never the raw ban count
+
+    // The round-trip proof. `addInitScript` re-seeds on every navigation, so a reload here would re-run the
+    // migration and prove nothing — what B-26 actually broke was the WRITE, so the assertion belongs on the
+    // bytes the save effect put back into localStorage.
+    const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}'), STORAGE_KEY);
+    expect(saved.version).toBe(5);
+    expect(saved.moneyNotices).toHaveLength(1);
+    expect(saved.moneyNotices[0].original).toBe('674.504');
+    expect(saved.moneyNotices[0].converted).toBe(67450);
+  });
+
+  test('shows nothing for a payload the conversion handled exactly', async ({ page }) => {
+    await seed(page, {
+      version: 4,
+      profile: legacyProfile(),
+      revenues: [
+        {
+          id: 'p10-r2',
+          tip: 'factura',
+          nr: 'FCT-2026-002',
+          date: '2026-02-11',
+          client: 'Client B SRL',
+          cui: 'RO87654321',
+          valoareFaraTva: 142.5,
+          tva: 0,
+          status: 'inregistrata',
+        },
+      ],
+      settings: SEED_SETTINGS,
+    });
+
+    await page.goto('/dashboard');
+    await expect(page.locator('.banner[role="status"]')).toHaveCount(0);
+
+    const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}'), STORAGE_KEY);
+    expect('moneyNotices' in saved).toBe(false);
+  });
+});

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type HTMLAttributes } from 'react';
 import { StoreProvider, useStore } from './data/store';
 import { quarantineSummary } from './data/quarantine';
+import { MoneyPrecisionNoticeBanner } from './components/MoneyPrecisionNotice';
 import { useDashboardData } from './data/dashboardAdapter';
 import Dashboard from './pages/Dashboard';
 import Revenues from './pages/Revenues';
@@ -126,7 +127,7 @@ function Shell() {
   const [route, setRoute] = useState<Route>(parseRoute);
   const [navOpen, setNavOpen] = useState(false);
   const isMobile = useIsMobile();
-  const { profile, dataOrigin, migration, quarantine, toast } = useStore();
+  const { profile, dataOrigin, migration, quarantine, moneyNotices, toast } = useStore();
 
   // D-3: a rejected payload must be VISIBLE, not silent (B-11 was the silent
   // reset). The banner below covers the recoverable case; a migration is worth
@@ -190,18 +191,19 @@ function Shell() {
     }
   }, []);
 
+  // SAFETY: `inert` is a real HTML attribute that the installed React `HTMLAttributes` typing predates, so
+  // the object literal needs one assertion to be spread onto the element. The value is always the empty
+  // string the DOM expects, and the object is EMPTY unless the mobile drawer is closed, so the asserted
+  // shape can never reach a visible, interactive element. Hoisted out of the JSX so the invariant sits next
+  // to the assertion instead of being buried between attributes.
+  const inertAttrs = (isMobile && !navOpen ? { inert: '' } : {}) as HTMLAttributes<HTMLElement>;
+
   return (
     <div className="app">
-      {/* SAFETY: `inert` is a real HTML attribute that React's HTMLAttributes typing predates.
-          The spread is applied only when the sidebar is off-screen on mobile, so the asserted
-          shape can never reach a visible, interactive element. */}
       <aside
         className={`sidebar${navOpen ? ' open' : ''}`}
         aria-hidden={isMobile && !navOpen}
-        /* SAFETY: `inert` is a real HTML attribute the installed React types predate.
-           The spread object is empty unless the drawer is closed on mobile, and the
-           value is always the empty string the DOM expects. */
-        {...(isMobile && !navOpen ? ({ inert: '' } as unknown as HTMLAttributes<HTMLElement>) : {})}
+        {...inertAttrs}
       >
         <div className="sidebar-logo">
           <span className="mark">S</span> SOLO
@@ -274,6 +276,10 @@ function Shell() {
               </details>
             </div>
           )}
+          {/* B-26: the money-conversion report has to be visible, not just persisted. `role="status"`, not
+              `alert`: this is informational and stays until the data is re-entered, while the quarantine
+              banner above is the urgent one. */}
+          <MoneyPrecisionNoticeBanner notices={moneyNotices ?? []} />
           {route.page === 'dashboard' && <Dashboard />}
           {route.page === 'revenues' && (
             <Revenues

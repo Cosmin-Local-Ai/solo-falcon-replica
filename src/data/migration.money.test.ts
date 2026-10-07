@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { convertMoneyToBani, DATA_VERSION_MONEY_BANI, type MoneyPrecisionNotice } from './migration';
-import type { PersistedAppData } from './schema';
+import { persistedAppDataSchema, type PersistedAppData } from './schema';
 import { seedData } from './seed';
 import { lei } from '../domain/money';
 
@@ -80,7 +80,7 @@ describe('money migration — a value below ban precision is reported, never sil
       collection: 'revenues',
       id: 'r-1',
       field: 'valoareFaraTva',
-      original: 674.504,
+      original: '674.504',
       converted: 67450,
       reason: 'sub-ban-precision',
     });
@@ -94,7 +94,7 @@ describe('money migration — a value below ban precision is reported, never sil
 
   it('reports the value exactly as stored, so the user can see what changed', () => {
     const { notices } = convertMoneyToBani(v4({ revenues: [revenue('r-1', 0.001)] }));
-    expect(notices[0]!.original).toBe(0.001);
+    expect(notices[0]!.original).toBe('0.001');
     expect(notices[0]!.converted).toBe(0);
   });
 
@@ -122,8 +122,29 @@ describe('money migration — an unrepresentable value is carried, never zeroed'
     });
     // The notice carries the stored value verbatim, and `converted` is OMITTED rather than 0 —
     // a notice that claims the money became zero would be a lie.
-    expect(Number.isNaN(notices[0]!.original)).toBe(true);
+    expect(notices[0]!.original).toBe('NaN');
     expect('converted' in notices[0]!).toBe(false);
+  });
+
+  it('survives the JSON round-trip — a NaN notice must not quarantine the payload it reports on', () => {
+    // `original` is text because `JSON.stringify` turns NaN into null. If it stayed a number, the report
+    // about one bad value would fail the load schema and quarantine the whole payload: the cure killing
+    // the patient. The money field here is a plain valid number — a NaN amount cannot reach localStorage at
+    // all (JSON has no NaN literal), so the only NaN in this payload is the one the notice describes.
+    const base = v4({ revenues: [revenue('r-1', 674.504)] });
+    const notice: MoneyPrecisionNotice = {
+      collection: 'revenues',
+      id: 'r-1',
+      field: 'valoareFaraTva',
+      original: 'NaN',
+      reason: 'non-finite',
+    };
+    const reparsed = persistedAppDataSchema.parse(
+      JSON.parse(JSON.stringify({ ...base, moneyNotices: [notice] })),
+    );
+    expect(reparsed.moneyNotices).toHaveLength(1);
+    expect(reparsed.moneyNotices![0]!.original).toBe('NaN');
+    expect(reparsed.moneyNotices![0]!.reason).toBe('non-finite');
   });
 
   it('does not turn an unconvertible value into 0 anywhere', () => {

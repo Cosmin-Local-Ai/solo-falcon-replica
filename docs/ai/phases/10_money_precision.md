@@ -6,7 +6,9 @@ The earlier status on this file was **PARTIAL**: the rounding policy and the sin
 shipped, but T1 — making money an integer number of bani in storage and in the domain — had been deliberately
 deferred, with §2 below written as a spec for a worker who had never seen the conversation that produced it.
 **That spec has now been executed, and §2 is kept as-written because the gap between what it predicted and what
-actually happened is the useful part.** The delta is §3. Register: **B-25 closed**, **B-17 closed**, **B-26 opened**.
+actually happened is the useful part.** The delta is §3. Register: **B-25 closed**, **B-17 closed**, **B-26 opened and then closed** (§6).
+
+**Measured at the end of the phase (clean tree): `tsc` 0; 48 files / 760 unit tests; build 0; 36 e2e.**
 
 Why the split: the trade-off was requested by the Worker and accepted by the orchestrator explicitly. Option
 (c) — persist in bani but keep the domain in lei behind a conversion boundary — was rejected outright, because
@@ -357,11 +359,11 @@ Measured on the final tree, by the person reporting it: `npx tsc --noEmit` **0 e
 | # | Criterion | Result |
 |---|---|---|
 | 1 | `tsc --noEmit` → 0 | **yes**, repo-wide including tests |
-| 2 | `npm run test` all pass, count ≥ baseline | **yes**, 745 ≥ 685 |
+| 2 | `npm run test` all pass, count ≥ baseline | **yes**, 760 ≥ 685 |
 | 3 | `npm run build` → 0 | **yes** |
-| 4 | `npm run test:e2e` → 34 passed | **yes**, 34 |
+| 4 | `npm run test:e2e` → 34 passed | **yes**, 36 (the two extra are §6) |
 | 5 | a persisted `142.5` lei loads as `14250` bani with no report | **yes**, pinned in `src/data/migration.money.test.ts` |
-| 6 | a stored `674.504` converts to `67450` **and is reported** | **yes** for the report being *produced*; **no** for it ever reaching a person — see B-26 |
+| 6 | a stored `674.504` converts to `67450` **and is reported** | **yes**, both halves — produced, survives the write that follows a load, and renders in the shell (§6) |
 | 7 | a stored snapshot's `inputsHash` re-derived, previous digest preserved | **yes**, `preMigrationInputsHash` |
 | 8 | no `Math.round` / `toFixed` / `Intl.NumberFormat` on money outside `domain/money.ts` | **yes** — the survivors are date arithmetic, byte sizes and one percent, all listed in §3.4 |
 | 9 | every §2.4 negative control unchanged in value | **yes**, re-checked by grep and by the passing suite |
@@ -407,9 +409,8 @@ fractional-bani intermediate becomes money), `leiInputValue` / `parseLeiInput` (
 
 ### 3.6 What is still open after this phase
 
-- **B-26** — the `MoneyPrecisionNotice` report is produced and persisted, but `toAppData` drops it and no screen
-  shows it, so the first write after a load erases it. Criterion 6 is half-met by design and that is a defect, not an
-  oversight to argue about.
+- ~~**B-26**~~ — **closed in §6.** It was the one acceptance criterion this phase shipped half-met: the report was
+  produced and persisted but `toAppData` dropped it, so the first write after a load erased it and no screen showed it.
 - The persisted **key names** still read `salaryIncomeLei` / `cashFloorLei` while the values are bani. Deliberate:
   zod strips unknown keys, so renaming a persisted key would reject every pre-v5 payload and quarantine it. The
   hazard is documented on the field and in `e2e/settings.spec.ts`.
@@ -435,10 +436,10 @@ Two rows the brief does not mention, both real:
 
 - **B-25** — opened by the previous Phase 10 worker as the tracker for the T1 it deliberately deferred. **Closed**
   by executing it. The row's own text is the deferral decision, so closing it is the honest bookkeeping.
-- **B-26** — **opened by this phase.** `convertMoneyToBani` produces one `MoneyPrecisionNotice` per field it could
-  not represent exactly, and the report is persisted — but `toAppData` drops it and no screen renders it, so the
-  first write after a load erases it. Acceptance criterion 6 ("a value that cannot be converted must surface, not
-  vanish") is therefore **half-met by design**. That is a defect, and it is filed rather than argued away.
+- **B-26** — **opened and then closed by this phase** (§6). `convertMoneyToBani` produces one `MoneyPrecisionNotice`
+  per field it could not represent exactly, and the report was persisted — but `toAppData` dropped it and no screen
+  rendered it, so the first write after a load erased it. Acceptance criterion 6 ("a value that cannot be converted
+  must surface, not vanish") was **half-met**. That was filed rather than argued away, and then fixed.
 
 ---
 
@@ -450,3 +451,43 @@ The clearest example: `docs/ai/steps/08_stack_setup.md:32` lists `decimal.js-lig
 single line of source** until Phase 10 — `docs/ai/steps/01_real_baseline.md:100` row 18 records the same thing as
 "documented but not implemented". The archive is left unedited on purpose: it is a record of what was believed at
 the time, and correcting it in place would destroy that. The correction lives here.
+
+---
+
+## 6. B-26 — THE REPORT REACHING A SCREEN (the last open thread, closed)
+
+Criterion 6 has two halves and the first pass shipped one of them. The report existed; nothing read it.
+
+**The fix is one line of plumbing plus one component.** `toAppData` now carries `moneyNotices` into `AppData`.
+That placement is the whole point: the save effect writes `JSON.stringify({ ...data, version })`, so anything on
+`AppData` round-trips through localStorage, while anything held only on the migration result is gone after the
+first mutation. `src/components/MoneyPrecisionNotice.tsx` renders it in the shell under the quarantine banner,
+naming the collection, the record id, the field, the stored value **verbatim** and what it became **in lei**
+through `formatBaniLei`.
+
+**Carrying the report through the save exposed a second defect the first pass could not have seen.**
+`MoneyPrecisionNotice.original` was typed `number`, and the case it exists to report is a value that cannot be
+represented — `JSON.stringify` turns `NaN` into `null`, so the moment the report was written back out, the next
+load would fail `persistedAppDataSchema` on `original: z.number()` and **quarantine the entire payload the notice
+was describing**. The cure would have killed the patient. `original` is now `string`: `JSON.stringify` cannot keep
+a non-finite number verbatim anyway, so text is what "exactly as it was stored" always required. Pinned by a test
+that stringifies a NaN notice and parses it back through the real schema.
+
+**Copy, and why it does not say „leu".** The banner says *„rotunjită la banul cel mai apropiat (0,01 lei),
+jumătate în jos — aceeași direcție pe care o folosește art. 66 alin. (1)"*. „La leul cel mai apropiat" reads better
+as Romanian but is false here: this conversion rounds to 0,01 lei, while rounding to a whole leu is art. 66 and
+happens only at the three tax lines. A banner that said „leu" would overstate what was done to the user's money by
+100× — the same class of error the phase exists to remove. The sentences are built by per-count helpers
+(`headline`, `adjustedSentence`, `carriedSentence`) because interpolating a count into Romanian without agreement
+produces „1 valoare au fost rotunjite"; a test pins both numbers.
+
+**What is deliberately NOT here.** No dismiss button and no acknowledgement flag: the report states a fact about
+stored data, and inventing a persisted "I understand" field to make it stop appearing would be a new state machine
+nobody asked for. It goes away on its own once the affected records are re-entered. And the banner never prints a
+raw ban count and never renders an unconvertible value as `0,00` — both asserted, because those are the two ways
+this component could lie.
+
+**Tests added:** `src/components/MoneyPrecisionNotice.test.tsx` (8), `src/data/store.load.test.tsx` (4 — carried out
+of the migration, written back to localStorage, still present on a second load where no migration runs, absent when
+nothing had to be decided), `src/App.test.tsx` (2), `src/data/migration.money.test.ts` (1 — the NaN notice JSON
+round-trip), `e2e/settings.spec.ts` (2 — the banner on screen, and the saved bytes at version 5).

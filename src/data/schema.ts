@@ -292,7 +292,7 @@ export const persistedAppDataSchema = z.object({
         collection: z.enum(['revenues', 'expenses', 'declarations', 'profile', 'snapshot']),
         id: z.string(),
         field: z.string(),
-        original: z.number(),
+        original: z.string(),
         converted: bani(z.number()).optional(),
         reason: z.enum(['sub-ban-precision', 'non-finite']),
       }),

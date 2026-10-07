@@ -1443,3 +1443,70 @@ vat-exceedance-date → money-bani`; `CURRENT_DATA_VERSION = DATA_VERSION_MONEY_
 ### If a next worker is handed this phase
 There is no resume point — the phase is complete and green. The only work worth doing is **B-26**: carry the
 notice report through `toAppData` and render it, then close criterion 6.
+
+---
+
+## 13. B-26 CLOSED — THE PHASE IS NOW ACTUALLY DONE. READ §12 TOO.
+
+### MEASURED, clean tree
+`tsc` 0. `npm run test` 48 files / 760 tests. `npm run build` built. `npm run test:e2e` **36 passed** (was 34).
+
+### What B-26 was, in one line
+The migration report was produced and persisted but `toAppData` dropped it, so the save effect erased it and no
+screen ever showed it — acceptance criterion 6 ("surface, not vanish") half-met.
+
+### The fix, and why the placement is the whole point
+- `src/data/types.ts` — `AppData.moneyNotices?: MoneyPrecisionNotice[]`.
+- `src/data/store.tsx` `toAppData` carries it. **This is the fix**: the save effect writes
+  `JSON.stringify({ ...data, version })`, so anything on `AppData` round-trips through localStorage; anything held
+  only on the migration result is gone after the first mutation. Left `undefined` when absent so the key is not
+  written for healthy data.
+- `src/components/MoneyPrecisionNotice.tsx` (new) renders it in the shell under the quarantine banner,
+  `role="status"` not `alert` (informational and persistent; the quarantine banner is the urgent one).
+- `src/App.tsx` renders it.
+
+### THE TRAP THIS EXPOSED — not obvious, remember it
+`MoneyPrecisionNotice.original` was `number`. The case it reports is a value that cannot be represented, and
+**`JSON.stringify` turns `NaN` into `null`** — so the moment the report was written back out, the next load failed
+`persistedAppDataSchema` on `original: z.number()` and **quarantined the whole payload the notice was describing**.
+The cure would have killed the patient, and the first pass could not have seen it because nothing ever wrote the
+report back. `original` is now `string` (migration.ts, schema.ts `z.string()`, 3 sites in migration.money.test.ts).
+Pinned by a test that stringifies a NaN notice and parses it through the real schema.
+Still true and unchanged: a NaN money *amount* cannot exist in localStorage at all (JSON has no NaN literal), so
+the carried-NaN branch stays unreachable from persisted data rather than untested-by-accident.
+
+### Copy decisions (orchestrator gave feedback — recorded so it is not relitigated)
+- "cel mai apropiat ban" → awkward; "cel mai apropiat leu" reads better **but is false**: this conversion rounds to
+  0,01 lei, while rounding to a whole leu is art. 66 and happens only at the three tax lines. Saying „leu" would
+  overstate the change to the user's money by 100×. Shipped: **„la banul cel mai apropiat (0,01 lei)"** — idiomatic
+  word order, correct unit. Flagged in the component header and phase doc §6.
+- Romanian agreement: interpolating a count produced "1 valoare au fost rotunjite". Fixed with per-count helpers
+  (`headline`, `adjustedSentence`, `carriedSentence`); a test pins both numbers.
+- Deliberately NO dismiss button / acknowledgement flag: that would invent a persisted state machine nobody asked
+  for. The notice disappears once the affected records are re-entered.
+
+### Tests added (15)
+- `src/components/MoneyPrecisionNotice.test.tsx` (8) — incl. never a raw ban count (`67450`), never `0,00` for an
+  unconvertible value, both kinds in separate sentences.
+- `src/data/store.load.test.tsx` (4) — carried out of the migration; written back to localStorage; **still present
+  on a second load where no migration runs** (that is the B-26 proof); absent when nothing had to be decided.
+- `src/App.test.tsx` (2) — banner on screen; nothing for healthy data.
+- `src/data/migration.money.test.ts` (1) — the NaN notice JSON round-trip.
+- `e2e/settings.spec.ts` (2) — banner visible; saved bytes at version 5 carry the notice.
+
+### Three test-harness facts that cost time
+1. **`beforeEach`/`afterEach` do not inherit across sibling `describe` blocks.** My new App describe had no
+   `localStorage.clear()`, so it inherited the previous test's payload and the banner correctly kept rendering a
+   report still on the data. Behaviour right, test wrong.
+2. **`role="status"` is already used by `FinancialChart`'s tooltip**, and `document.querySelector` also sees a
+   previous test's DOM. Scope queries to `container.querySelector('.banner[role="status"]')`.
+3. `expect(x).not.toBeNull()` does **not** narrow in TS — use `if (!x) throw new Error(...)` so the failure says
+   "the banner did not render" instead of a cascade of `!`.
+
+### Also fixed while in there
+- `src/App.tsx`: the `as unknown as HTMLAttributes` assertion (pi-lens blocker on the touched file) → hoisted
+  `inertAttrs` const with a SAFETY comment next to a single assertion.
+- `src/data/types.ts`: dropped an unused `addBani` import the linter flagged once the file was touched.
+
+### PHASE 10 STATUS: COMPLETE. No open threads owned by this phase.
+B-16 (loss persistence) stays open and was never this brief's. B-18/B-20 are other phases' closed rows.
