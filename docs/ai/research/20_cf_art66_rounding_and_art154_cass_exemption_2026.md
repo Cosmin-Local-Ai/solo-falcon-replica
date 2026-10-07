@@ -460,3 +460,75 @@ claims above; its report becomes `research/21` when it lands.
 **What is not in doubt:** the art. 66 rounding rule and the art. 154 alin. (1) closed-list reading both come from the
 first pass. They are the two results that actually change the code, and they are being re-verified independently
 regardless.
+
+---
+
+## VERIFICATION RESULT — `verify-art66-art154`, independent fresh session, 2026-10-08
+
+A **separate researcher with no shared history** re-checked every load-bearing claim against primary text on
+legislatie.just.ro (Codul fiscal doc **312601**, CPF doc **305984**, Ordin 2.736/2025 doc **305848**, annex doc
+**306268**). **Verdict: 7 of 8 MATCH, 1 PARTLY. The provenance warning above is now lifted.**
+
+| Claim | Verdict |
+|---|---|
+| **C1** art. 66 alin. (1) rounding, incl. „până la 50 de bani inclusiv" | **MATCHES** — art. 66 block is live (abrogation search → 0 hits) |
+| **C2** only 5 `rotunj*` hits in the whole fiscal code | **MATCHES** — exactly art. 66, 77, 300, 315⁴, 342; **0 hits in Titlul I and 0 in Titlul V** |
+| **C3** CPF = Legea 207/2015 | **MATCHES** — `rotunj` 0, `zecimale` 0 in doc 305984 |
+| **C4** Ordin 2.736/2025, MO 1207/29.12.2025, 0 hits for `rotunj`/`zecimale` | **PARTLY** — order, date, issuer, MO all match, **but the doc id was wrong for the 0-hit claim** (see correction 1) |
+| **C5** art. 154 alin. (1) is a closed list of personal-status categories; no PFA letter | **MATCHES** |
+| **C6** art. 174 alin. (7) „Diferența de contribuție … nu se datorează", 6-SMGW condition | **MATCHES** |
+| **C7** **72-SMGW annual CASS base cap, Legea 239/2025 MO 1160/15.12.2025, applies to 2026** | **MATCHES** — checked hardest; correct on all three points |
+| **C8** art. 174 alin. (8) bridge, letters exactly a), b), e), f) | **MATCHES** |
+| **Q-A** is `scutit`/`scutire` a CASS concept? | **DOES NOT MATCH the premise — it is not.** 0 hits in all of Titlul V |
+| **Q-B** art. 155 alin. (1) lit. b) = venituri din activități independente | **MATCHES** |
+
+### Two corrections to the record
+
+1. **C4's doc id was wrong.** The *Instrucțiuni de completare* are **not** in doc 305848 — art. 6 of the order pushes
+   the annexes into **MO nr. 1207 bis**, a separate Portal Legislativ record, **doc 306268**. The 0-hit finding itself
+   **does hold** there: anexa nr. 2 spans idx 62218–258251 (196,033 chars) and returns 0 for `rotunj`, `zecimale`,
+   `rotunjire`, `rotunjit` and `\bleu\b`.
+2. **The 3 `scutit` hits at art. 229, 255, 258 are in Titlul VI, not Titlul V.** Titlul V's boundary was mis-set in the
+   first pass because Titlul VI's heading is not line-anchored in the rendered DOM. Recomputed with the correct
+   boundary (idx 1199182) the Titlul V count is genuinely **0**.
+
+### The finding that changes how the CASS flag must be *named* (Q-A)
+
+`scutit` → 132 hits, `scutire` → 209 hits — **and 0 of each anywhere in Titlul V „Contribuții sociale obligatorii",
+including the whole CASS range art. 150–181.** They belong to profit tax, income tax, TVA, accize, local taxes and the
+non-resident tax. **`scutire` must therefore never be used as a CASS label.**
+
+The code has two distinct CASS concepts, and they map to two different mechanisms:
+
+| Concept | Verbatim | Mechanism |
+|---|---|---|
+| **„exceptat"** | 21 hits code-wide, 11 in Titlul V — art. 154 alin. (1) heading *„Categorii de persoane fizice exceptate de la plata contribuției de asigurări sociale de sănătate"* | a **status-based exemption**, personal categories only |
+| **„nu se datorează"** | 6 hits in Titlul V — art. 146, 154, 168, **174**, 180, 220⁵ | a **conditional non-due rule**, e.g. art. 174 alin. (7) scoped to *the difference* from alin. (6) |
+
+### C7 does **not** require a code change — Phase 4 already got it right
+
+72 SMGW × 4,050 lei = **291,600 lei**, which is already `max_annual_base` in `package2026.ts:125`, labelled
+**„Max annual base (72 SM)"**, and `phases/04_cass.md:21` already cites *„nu poate fi mai mare decât … 72 de salarii
+minime brute"* with **Legea 239/2025, Art. XII pct. 19, MO 1160/15.12.2025** and the „începând cu veniturile aferente
+anului 2026" applicability note. **C7 confirms Phase 4; it does not refute it.**
+
+**U-8 stays open and is unchanged.** U-8 concerns **OUG 89/2025** and **OUG 8/2026** specifically, and `phases/04_cass.md`
+§9 already states the consolidated text „already absorbs Legea 239/2025 and Legea 141/2025". There is no contradiction.
+Closing U-8 still needs both OUGs' Art. I clause lists read directly.
+
+### Implementation caveat carried forward from C7
+
+The 72-SMGW cap sits in **art. 170 alin. (1)**, which is the base rule for **art. 155 alin. (1) lit. b) only**
+(independent activities). **alin. (2)–(4)** — lit. c)–h) — use the **6/12/24-SMGW stepped base** and are **not** capped
+by the 72 figure. Do not apply the cap across all CASS income types.
+
+### Art. 154 alin. (1) — live vs abrogated letters (new detail from verification)
+
+Live letters of alin. (1): **a), b), e), f), g), h¹), h²), i), m), n), p), q), ș)**.
+**Abrogated**: c), d), h), j), k), l), o), r), s) — e.g. lit. c) abrogated 01-08-2025 by **Punctul 14, Articolul II din
+Legea nr. 141/2025, MO 699/25.07.2025**. Nearest letter to a PFA is **h¹)** — salaries/pensions earners *for
+drepturi de proprietate intelectuală* income, **not** independent activity.
+
+Art. 174 alin. (7) now has **three** letters — **lit. c) „venituri din pensii, definite conform art. 99"** was **added
+by Legea 141/2025 Punctul 34**, applicable „începând cu veniturile anului 2025 pentru care termenul de declarare este
+până la data de 25 mai 2026".
