@@ -1,5 +1,5 @@
 import type { YtdTotals } from '../domain/aggregation';
-import { fmtRON } from '../data/types';
+import { formatBaniRON } from '../domain/money';
 
 interface FinancialSummaryProps {
   summary: YtdTotals;
@@ -22,11 +22,11 @@ export default function FinancialSummary({ summary }: FinancialSummaryProps) {
       </div>
       <div className="card-body">
         <div className="grid grid-2">
-          <StatCard label="Venituri" value={fmtRON(summary.revenue)} />
-          <StatCard label="Cheltuieli" value={fmtRON(summary.expenses)} />
+          <StatCard label="Venituri" value={formatBaniRON(summary.revenue)} />
+          <StatCard label="Cheltuieli" value={formatBaniRON(summary.expenses)} />
           <StatCard
             label="Profit net"
-            value={fmtRON(summary.net)}
+            value={formatBaniRON(summary.net)}
             tone={summary.net < 0 ? 'neg' : undefined}
           />
         </div>

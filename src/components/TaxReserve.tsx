@@ -1,5 +1,5 @@
 import type { TaxReserveRecommendation } from '../domain/taxReserve';
-import { fmtRON } from '../data/types';
+import { formatBaniRON } from '../domain/money';
 
 interface TaxReserveProps {
   reserve: TaxReserveRecommendation;
@@ -22,12 +22,12 @@ export default function TaxReserve({ reserve }: TaxReserveProps) {
           <>
             <div className="stat-card">
               <div className="label">Recomandat de pus deoparte lunar</div>
-              <div className="tax-hero-value mono">{fmtRON(reserve.recommendedMonthlyReserve)}</div>
+              <div className="tax-hero-value mono">{formatBaniRON(reserve.recommendedMonthlyReserve)}</div>
               <div className="hint">
                 {reserve.remainingTarget > 0
                   ? reserve.monthsRemaining > 0
-                    ? `Rămâne de pus deoparte ${fmtRON(reserve.remainingTarget)} în următoarele ${reserve.monthsRemaining} luni.`
-                    : `Rămâne de pus deoparte ${fmtRON(reserve.remainingTarget)}.`
+                    ? `Rămâne de pus deoparte ${formatBaniRON(reserve.remainingTarget)} în următoarele ${reserve.monthsRemaining} luni.`
+                    : `Rămâne de pus deoparte ${formatBaniRON(reserve.remainingTarget)}.`
                   : 'Rezerva este complet acoperită.'}
               </div>
             </div>
@@ -41,13 +41,13 @@ export default function TaxReserve({ reserve }: TaxReserveProps) {
                   </>
                 ) : (
                   <div className={reserve.reservedAmount < 0 ? 'value mono neg' : 'value mono'}>
-                    {fmtRON(reserve.reservedAmount)}
+                    {formatBaniRON(reserve.reservedAmount)}
                   </div>
                 )}
               </div>
               <div className="stat-card">
                 <div className="label">Estimare obligație fiscală</div>
-                <div className="hint mono">{fmtRON(liability)}</div>
+                <div className="hint mono">{formatBaniRON(liability)}</div>
               </div>
             </div>
           </>

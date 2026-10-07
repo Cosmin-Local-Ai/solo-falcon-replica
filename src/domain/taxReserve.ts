@@ -12,11 +12,12 @@
  * verbatim from the tax engine output (output.total when status === 'computed').
  */
 import type { TaxEstimateResult } from './tax';
+import { addBani, divBani, maxBani, subBani, type Bani } from './money';
 
 /**
  * Minimal deterministic cash-planning state for the tax reserve.
  *
- * `reservedAmount` is a lei amount managed by the user (cash already set
+ * `reservedAmount` is a bani amount managed by the user (cash already set
  * aside for taxes). Tri-state semantics:
  * - `null` — no data recorded (no amount has ever been entered);
  * - `0` — an explicit zero;
@@ -27,10 +28,10 @@ import type { TaxEstimateResult } from './tax';
  */
 export interface TaxReserveState {
   /**
-   * Lei already reserved for taxes. Tri-state: `null` = no data recorded,
+   * Reserved amount for taxes, in integer bani. Tri-state: `null` = no data recorded,
    * `0` = explicit zero, `> 0` = real amount (always >= 0 when a number).
    */
-  reservedAmount: number | null;
+  reservedAmount: Bani | null;
 }
 
 /** Calendar query parameters for the reserve recommendation. */
@@ -44,7 +45,7 @@ export interface TaxReserveQuery {
 /**
  * Reserve recommendation — liability and reserve are separate fields.
  *
- * - `estimatedTaxLiability` is the tax engine's full-year total (lei),
+ * - `estimatedTaxLiability` is the tax engine's full-year total (bani),
  *   verbatim, or null when no estimate is available.
  * - `reservedAmount` / `remainingTarget` / `recommendedMonthlyReserve` are
  *   cash-planning numbers, never tax liability.
@@ -52,38 +53,44 @@ export interface TaxReserveQuery {
  *   state: `null` = no data recorded, `0` = explicit zero, `> 0` = real.
  */
 export interface TaxReserveRecommendation {
-  /** Estimated full-year tax liability (lei) from the tax engine. null when unavailable. */
-  estimatedTaxLiability: number | null;
+  /** Estimated full-year tax liability (bani) from the tax engine. null when unavailable. */
+  estimatedTaxLiability: Bani | null;
   /**
-   * Lei already reserved (cash-planning input), carried through verbatim.
+   * Already reserved (cash-planning input, bani), carried through verbatim.
    * Tri-state: `null` = no data recorded, `0` = explicit zero, `> 0` = real.
    */
-  reservedAmount: number | null;
-  /** max(0, estimatedTaxLiability − (reservedAmount ?? 0)). 0 when no estimate. */
-  remainingTarget: number;
+  reservedAmount: Bani | null;
+  /** max(0, estimatedTaxLiability − (reservedAmount ?? 0)), in bani. 0 when no estimate. */
+  remainingTarget: Bani;
   /** Calendar months remaining from asOfDate through fiscalYear-12, inclusive (0–12). */
   monthsRemaining: number;
-  /** remainingTarget ÷ monthsRemaining. 0 when no estimate or no months remaining. */
-  recommendedMonthlyReserve: number;
+  /**
+   * remainingTarget ÷ monthsRemaining, in bani. 0 when no estimate or no months remaining.
+   *
+   * A planning suggestion, not a sum due: this division is `divBani` (nearest ban), never `roundArt66`.
+   * `recommendedMonthlyReserve × monthsRemaining` can therefore differ from `remainingTarget` by a few
+   * bani — `remainingTarget` is the authoritative figure.
+   */
+  recommendedMonthlyReserve: Bani;
 }
 
 /**
  * Create a tax-reserve state. `null` passes through unchanged (no data
  * recorded); numbers are clamped to a non-negative lei amount.
  */
-export function createTaxReserveState(reservedAmount: number | null): TaxReserveState {
-  return { reservedAmount: reservedAmount === null ? null : Math.max(0, reservedAmount) };
+export function createTaxReserveState(reservedAmount: Bani | null): TaxReserveState {
+  return { reservedAmount: reservedAmount === null ? null : maxBani(reservedAmount, 0 as Bani) };
 }
 
 /**
- * Return a NEW state with `amount` lei added to the reserve.
+ * Return a NEW state with `amount` (bani) added to the reserve.
  * A negative `amount` is a withdrawal; the result is clamped at 0.
  * A `null` reserve (no data recorded) becomes the clamped `amount` —
  * adding to it records an explicit amount for the first time.
  * Pure — the input state is never mutated.
  */
-export function addToTaxReserve(state: TaxReserveState, amount: number): TaxReserveState {
-  return { reservedAmount: Math.max(0, (state.reservedAmount ?? 0) + amount) };
+export function addToTaxReserve(state: TaxReserveState, amount: Bani): TaxReserveState {
+  return { reservedAmount: maxBani(addBani(state.reservedAmount ?? (0 as Bani), amount), 0 as Bani) };
 }
 
 /**
@@ -108,7 +115,7 @@ export function monthsRemainingInFiscalYear(asOfDate: string, fiscalYear: number
  *   estimate is available. Only `status === 'computed'` carries a liability
  *   (`output.total`); anything else (null / review_required) → liability null,
  *   remaining target 0, monthly reserve 0.
- * - `state` supplies the already-reserved lei (cash-planning input,
+ * - `state` supplies the already-reserved amount in bani (cash-planning input,
  *   tri-state: null = no data recorded, 0 = explicit zero, > 0 = real).
  *   The tri-state is carried through verbatim in the recommendation;
  *   `null` is treated as 0 only for the remaining-target math.
@@ -127,14 +134,14 @@ export function computeTaxReserve(
     estimate !== null && estimate.status === 'computed' ? estimate.output.total : null;
 
   const reservedAmount = state.reservedAmount;
-  const remainingTarget =
+  const remainingTarget: Bani =
     estimatedTaxLiability === null
-      ? 0
-      : Math.max(0, estimatedTaxLiability - (reservedAmount ?? 0));
-  const recommendedMonthlyReserve =
+      ? (0 as Bani)
+      : maxBani(subBani(estimatedTaxLiability, reservedAmount ?? (0 as Bani)), 0 as Bani);
+  const recommendedMonthlyReserve: Bani =
     estimatedTaxLiability === null || monthsRemaining === 0
-      ? 0
-      : remainingTarget / monthsRemaining;
+      ? (0 as Bani)
+      : divBani(remainingTarget, monthsRemaining);
 
   return {
     estimatedTaxLiability,

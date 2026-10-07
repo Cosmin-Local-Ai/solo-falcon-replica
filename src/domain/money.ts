@@ -270,3 +270,97 @@ export function addBani(a: Bani, b: Bani): Bani {
   assertIntegralBani(b, 'addBani');
   return (a + b) as Bani;
 }
+
+/**
+ * The larger of two bani amounts, keeping the brand.
+ *
+ * `Math.max(a, b)` returns a plain `number` and silently drops `Bani`, which is how a money value ends up
+ * unbranded inside a view. Use this wherever a comparison picks an amount.
+ */
+export function maxBani(a: Bani, b: Bani): Bani {
+  assertIntegralBani(a, 'maxBani');
+  assertIntegralBani(b, 'maxBani');
+  return a >= b ? a : b;
+}
+
+/**
+ * Split a bani amount into `parts` equal shares — for a **cash-planning suggestion only**.
+ *
+ * This is deliberately NOT `roundArt66`. Art. 66 rounds the sums a taxpayer owes; a recommended monthly
+ * reserve is a planning figure and the code has no legal basis to round it to a whole leu. The share is
+ * therefore rounded to the nearest **ban** (half-DOWN, the same tie direction `baniFromLei` uses), which is
+ * the smallest unit the representation can hold at all.
+ *
+ * Consequence, stated rather than hidden: `divBani(total, n) * n` can differ from `total` by up to `n/2`
+ * bani. The authoritative figure stays the total; a share is an estimate.
+ */
+export function divBani(total: Bani, parts: number): Bani {
+  assertIntegralBani(total, 'divBani');
+  if (!Number.isInteger(parts) || parts <= 0) {
+    throw new RangeError(`divBani needs a positive whole number of parts, got ${parts}`);
+  }
+  if (parts === 1) return total;
+  return new Decimal(total).div(parts).toDecimalPlaces(0, Decimal.ROUND_HALF_DOWN).toNumber() as Bani;
+}
+
+/**
+ * Turn a **fractional bani intermediate** into integer bani — half-DOWN on an exact .5 tie.
+ *
+ * This is the only sanctioned way a value that is not already whole bani becomes money. It is a
+ * representation necessity (the storage unit is one ban), not a legal rule, and it is deliberately NOT
+ * `roundArt66`: art. 66 rounds sums a taxpayer owes to a whole leu, and applying it to an intermediate
+ * would change the input of the next calculation.
+ */
+export function toBaniNearest(value: Decimal | number): Bani {
+  const d = value instanceof Decimal ? value : new Decimal(value);
+  // decimal.js-light exposes no `isFinite` (instance or static) in its typings; `toNumber()` is the exact
+  // conversion this function is about to perform, so it is the honest place to catch NaN/Infinity.
+  const asNumber = d.toNumber();
+  if (!Number.isFinite(asNumber)) {
+    throw new RangeError(`toBaniNearest needs a finite value, got ${d.toString()}`);
+  }
+  return d.toDecimalPlaces(0, Decimal.ROUND_HALF_DOWN).toNumber() as Bani;
+}
+
+/**
+ * Split an exact integer bani total into `parts` shares that **sum back to the total**.
+ *
+ * `floor(total/parts)` for every share, then the first `total % parts` shares take one extra ban. No share
+ * is rounded independently, so the parts cannot drift away from the whole — which is the failure mode when a
+ * per-month figure is produced by dividing and rounding each month on its own.
+ */
+export function allocateBani(total: Bani, parts: number): Bani[] {
+  assertIntegralBani(total, 'allocateBani');
+  if (!Number.isInteger(parts) || parts <= 0) {
+    throw new RangeError(`allocateBani needs a positive whole number of parts, got ${parts}`);
+  }
+  if (parts === 1) return [total];
+  const negative = total < 0;
+  const magnitude = Math.abs(total);
+  const base = Math.floor(magnitude / parts);
+  const remainder = magnitude % parts;
+  return Array.from({ length: parts }, (_, i) => {
+    const share = base + (i < remainder ? 1 : 0);
+    return (negative ? -share : share) as Bani;
+  });
+}
+
+/**
+ * A chart **axis tick** in lei. Not an amount: it labels a position on a scale.
+ *
+ * Recharts chooses tick values itself, so they are not necessarily values the app produced, and they are
+ * not necessarily whole lei. This divides by 100 through `Decimal` (no float noise) and prints decimals
+ * only when the tick actually has them, so an axis stays readable without inventing a rounded amount.
+ * Every figure the user reads as *money* — tooltip, legend, table, summary — goes through `formatBani*`
+ * instead and is exact.
+ */
+export function formatBaniAxis(value: number): string {
+  if (!Number.isFinite(value)) return '';
+  const d = new Decimal(value);
+  const magnitude = d.abs();
+  const wholeLei = magnitude.div(BANIS_PER_LEI).toDecimalPlaces(0, Decimal.ROUND_FLOOR);
+  const fractionBani = magnitude.minus(wholeLei.times(BANIS_PER_LEI));
+  const grouped = wholeLei.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const fraction = fractionBani.isZero() ? '' : `,${fractionBani.toString()}`;
+  return `${d.isNegative() ? '-' : ''}${grouped}${fraction}`;
+}

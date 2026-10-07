@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { leiInputValue, parseLeiInput } from '../domain/money';
+import { formatBaniRON, leiInputValue, parseLeiInput } from '../domain/money';
 import { useStore } from '../data/store';
-import { fmtRON, fmtDate, total, REV_STATUS_LABEL, statusBadge } from '../data/types';
+import { fmtDate, total, REV_STATUS_LABEL, statusBadge } from '../data/types';
 import type { Revenue } from '../data/types';
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
 
@@ -225,9 +225,9 @@ export default function Revenues({ initialTab, onTabChange }: RevenuesProps) {
                     <td>{r.client}</td>
                     <td className="muted">{r.cui}</td>
                     <td>{fmtDate(r.date)}</td>
-                    <td className="amount">{fmtRON(r.valoareFaraTva)}</td>
-                    <td className="amount">{fmtRON(r.tva)}</td>
-                    <td className="amount">{fmtRON(total(r))}</td>
+                    <td className="amount">{formatBaniRON(r.valoareFaraTva)}</td>
+                    <td className="amount">{formatBaniRON(r.tva)}</td>
+                    <td className="amount">{formatBaniRON(total(r))}</td>
                     <td>
                       <Badge kind={statusBadge(r.status)}>{REV_STATUS_LABEL[r.status]}</Badge>
                       {r.statusDetail && <div className="text-sm muted" style={{ marginTop: 3 }}>{r.statusDetail}</div>}

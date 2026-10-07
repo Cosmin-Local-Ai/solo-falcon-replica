@@ -2,6 +2,7 @@ import type { DashboardSnapshot, ExcludedFiscalDate, Threshold } from './aggrega
 import type { TaxEstimateResult } from './tax';
 import type { Expense } from '../data/types';
 import { formatRoCalendarDate } from './date';
+import { formatBaniRON, type Bani } from './money';
 
 // ── Contract ──────────────────────────────────────────────
 // `Insight` and `InsightInput` match the consumers:
@@ -31,18 +32,11 @@ export interface InsightInput {
   fiscalDateIssues?: readonly ExcludedFiscalDate[];
 }
 
-// ── Pure formatters (inlined — domain layer must not import the data layer) ──
-const ron = new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// ── Formatting ──
+// There is deliberately no formatter in this file. A private `Intl.NumberFormat` here was a fifth
+// instance of the same job, and it rounded on its own policy — that is the B-17 defect. Every money
+// string comes from `formatBaniRON`, which performs no rounding at all.
 
-/** Format a value already in lei as Romanian RON. */
-function formatLei(n: number): string {
-  return `${ron.format(n)} RON`;
-}
-
-/** Format a cents value as Romanian RON. */
-function formatCents(cents: number): string {
-  return formatLei(cents / 100);
-}
 
 // ── Romanian label maps (never render raw keys) ────────────
 //
@@ -235,16 +229,16 @@ export function getInsights(input: InsightInput): Insight[] {
   }
 
   // 3. Reserve gap (warning) — only when there is a real gap.
-  //    No insight when no liability data is recorded (projectedLiabilityCents <= 0)
-  //    and no insight when the reserve already meets the target (gapCents <= 0).
-  const { projectedLiabilityCents, gapCents } = snapshot.taxReserve;
-  if (projectedLiabilityCents > 0 && gapCents > 0) {
-    const gap = gapCents;
+  //    No insight when no liability data is recorded (projectedLiabilityBani <= 0)
+  //    and no insight when the reserve already meets the target (gapBani <= 0).
+  const { projectedLiabilityBani, gapBani } = snapshot.taxReserve;
+  if (projectedLiabilityBani > 0 && gapBani > 0) {
+    const gap = gapBani;
     insights.push({
       id: 'reserve',
       severity: 'warning',
       title: 'Rezervă fiscală sub țintă',
-      description: `Diferența față de ținta de rezervă: ${formatCents(gap)}.`,
+      description: `Diferența față de ținta de rezervă: ${formatBaniRON(gap)}.`,
       action: 'Adaugă fonduri la rezerva fiscală.',
     });
   }
@@ -277,7 +271,7 @@ export function getInsights(input: InsightInput): Insight[] {
         id: 'tax',
         severity: 'info',
         title: 'Estimare impozit',
-        description: `Estimarea totală a impozitului: ${formatLei(tax.output.total)}.`,
+        description: `Estimarea totală a impozitului: ${formatBaniRON(tax.output.total)}.`,
         action: 'Verifică detaliile estimării.',
       });
     }

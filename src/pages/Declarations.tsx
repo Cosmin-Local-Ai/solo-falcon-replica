@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import { leiInputValue, parseLeiInput } from '../domain/money';
+import { formatBaniRON, leiInputValue, parseLeiInput } from '../domain/money';
 import { useStore } from '../data/store';
-import { fmtRON, fmtDate, DECL_STATUS_LABEL, statusBadge } from '../data/types';
+import { fmtDate, declarationNet, DECL_STATUS_LABEL, statusBadge } from '../data/types';
 import type { Declaration, DeclStatus } from '../data/types';
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
 
@@ -171,9 +171,9 @@ export default function Declarations() {
                     <td style={{ fontWeight: 500, color: 'var(--text)' }}>{d.an}-{String(d.luna).padStart(2, '0')}</td>
                     <td>{d.an}</td>
                     <td>{LUNILE[d.luna - 1]}</td>
-                    <td className="amount">{fmtRON(d.venituri)}</td>
-                    <td className="amount">{fmtRON(d.cheltuieli)}</td>
-                    <td className="amount">{fmtRON(Math.max(0, d.venituri - d.cheltuieli))}</td>
+                    <td className="amount">{formatBaniRON(d.venituri)}</td>
+                    <td className="amount">{formatBaniRON(d.cheltuieli)}</td>
+                    <td className="amount">{formatBaniRON(declarationNet(d))}</td>
                     <td>
                       <Badge kind={statusBadge(d.status)}>{DECL_STATUS_LABEL[d.status]}</Badge>
                       {d.dataTrimitere && <div className="text-sm muted" style={{ marginTop: 3 }}>Trimisă {fmtDate(d.dataTrimitere)}</div>}

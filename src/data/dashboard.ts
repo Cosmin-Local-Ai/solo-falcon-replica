@@ -25,6 +25,7 @@ import { getInsights as buildInsights, type Insight } from '../domain/insights';
 import { selectTaxDerived } from '../domain/derived';
 import { PFA_2026_RELEASE, PFA_2026_SYSTEM_REAL_PACKAGE } from '../domain/fiscal';
 import { localDateISO, now } from '../domain/date';
+import type { Bani } from '../domain/money';
 
 export interface PendingCounts {
   revenuesInAsteptare: number;
@@ -34,7 +35,7 @@ export interface PendingCounts {
 }
 
 export interface DashboardSnapshotView extends DashboardSnapshot {
-  pfaRevenue: number;
+  pfaRevenue: Bani;
 }
 
 export interface DashboardData {
@@ -295,13 +296,16 @@ function buildSnapshot(
       type: snapshotThresholdType(t),
       affectedTax: t.affectedTax,
     })),
+    // No unit conversion here. `reserve` is already in bani and the snapshot contract is in bani; the
+    // `* 100` that used to sit on these lines was a lei→cents bridge that, with the domain now storing
+    // bani, would have scaled every amount by 100 twice.
     taxReserve: {
-      projectedLiabilityCents: (reserve.estimatedTaxLiability ?? 0) * 100,
-      targetReserveCents: reserve.remainingTarget * 100,
-      currentReserveCents: (reserve.reservedAmount ?? 0) * 100,
-      gapCents: reserve.remainingTarget * 100,
+      projectedLiabilityBani: reserve.estimatedTaxLiability ?? (0 as Bani),
+      targetReserveBani: reserve.remainingTarget,
+      currentReserveBani: reserve.reservedAmount ?? (0 as Bani),
+      gapBani: reserve.remainingTarget,
       coverageMonths: reserve.monthsRemaining,
-      projectedQ4LiabilityCents: 0,
+      projectedQ4LiabilityBani: 0 as Bani,
       taxYear,
     },
   };

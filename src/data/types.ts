@@ -1,7 +1,7 @@
 import type { PfaProfile } from '../domain/models';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import { localDateISO, now } from '../domain/date';
-import { type Bani, sumBani } from '../domain/money';
+import { addBani, maxBani, subBani, type Bani, sumBani } from '../domain/money';
 
 // ── Venituri ──────────────────────────────────────────────
 export type RevenueStatus = 'inregistrata' | 'in-asteptare' | 'respinsa';
@@ -188,9 +188,9 @@ export interface AppData {
 }
 
 // ── Formatare ─────────────────────────────────────────────
-const ron = new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-export const fmtRON = (n: number) => `${ron.format(n)} RON`;
+// Money formatting lives in exactly one place: `src/domain/money.ts` (`formatBani*`).
+// There is deliberately no formatter here — a second `Intl` instance is what let the B-17
+// half-cent disagreement happen (round-half-even here vs round-half-up in `toFixed`).
 
 export const fmtDate = (iso: string) => {
   const [y, m, d] = iso.split('-');
@@ -202,6 +202,24 @@ export const fmtDate = (iso: string) => {
  * `sumBani` throws rather than let a float accumulate here (`aggregation.ts` was the float origin).
  */
 export const total = (r: Revenue | Expense) => sumBani([r.valoareFaraTva, r.tva]);
+
+/**
+ * Sum of record totals for a list of records.
+ *
+ * This lives here rather than in a `rows.reduce(...)` inside a component: accumulating money in the view
+ * layer is how float drift reappears, and `reduce((s, e) => s + total(e), 0)` also drops the `Bani` brand
+ * and starts from an unbranded `0`. `sumBani` rejects a non-integer instead of absorbing one.
+ */
+export const sumTotals = (rows: readonly (Revenue | Expense)[]): Bani => sumBani(rows.map(total));
+
+/**
+ * Declared net for one month, floored at zero — the figure the declarations table shows.
+ *
+ * A named function so the subtraction and the floor are domain arithmetic on `Bani` (`subBani`/`maxBani`
+ * keep the brand; `Math.max(0, a - b)` in JSX would not).
+ */
+export const declarationNet = (d: Pick<Declaration, 'venituri' | 'cheltuieli'>): Bani =>
+  maxBani(subBani(d.venituri, d.cheltuieli), 0 as Bani);
 
 // ── Statusuri ─────────────────────────────────────────────
 export const REV_STATUS_LABEL: Record<RevenueStatus, string> = {

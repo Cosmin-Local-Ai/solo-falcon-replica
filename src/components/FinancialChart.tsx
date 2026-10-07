@@ -11,7 +11,8 @@ import {
 import { useStore } from '../data/store';
 import { useDashboardData } from '../data/dashboardAdapter';
 import { getProjectedFinancialSeries } from '../data/dashboard';
-import { fmtRON } from '../data/types';
+import { formatBaniAxis, formatBaniOrDash, formatBaniRON, isBani, type Bani } from '../domain/money';
+
 
 type Range = 'monthly' | 'ytd' | 'year';
 
@@ -31,8 +32,6 @@ const RANGES: ReadonlyArray<{ value: Range; label: string }> = [
 
 const MONTH_LABELS = ['Ian', 'Feb', 'Mar', 'Apr', 'Mai', 'Iun', 'Iul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
 
-const plain = new Intl.NumberFormat('ro-RO', { maximumFractionDigits: 0 });
-
 function monthLabel(month: string, withYear: boolean): string {
   const [year, m] = month.split('-');
   const label = MONTH_LABELS[Number(m) - 1] ?? month;
@@ -47,15 +46,15 @@ interface ChartRow {
   month: string;
   label: string;
   kind: 'actual' | 'projected';
-  revenue: number;
-  expenses: number;
-  net: number;
-  revenue_actual: number | null;
-  revenue_projected: number | null;
-  expenses_actual: number | null;
-  expenses_projected: number | null;
-  net_actual: number | null;
-  net_projected: number | null;
+  revenue: Bani;
+  expenses: Bani;
+  net: Bani;
+  revenue_actual: Bani | null;
+  revenue_projected: Bani | null;
+  expenses_actual: Bani | null;
+  expenses_projected: Bani | null;
+  net_actual: Bani | null;
+  net_projected: Bani | null;
 }
 
 /**
@@ -78,7 +77,10 @@ export function FinancialChartTooltip({
       const [metricKey, kind] = String(p.dataKey).split('_') as [MetricKey, 'actual' | 'projected'];
       return {
         metric: METRICS.find((m) => m.key === metricKey)?.label ?? String(p.dataKey),
-        value: p.value as number,
+        // Recharts echoes the numbers we handed it, but the type system cannot see that. Re-checking that
+        // the value is still a whole ban is what keeps a chart library from smuggling a fractional or
+        // NaN amount into a money string; anything else renders as an em dash rather than a guess.
+        value: typeof p.value === 'number' && isBani(p.value) ? p.value : null,
         state: stateLabel(kind),
       };
     });
@@ -88,7 +90,7 @@ export function FinancialChartTooltip({
       <div className="chart-tooltip-period">{label}</div>
       {items.map((item) => (
         <div key={item.metric}>
-          {item.metric} · {item.state}: {fmtRON(item.value)}
+          {item.metric} · {item.state}: {formatBaniOrDash(item.value)}
         </div>
       ))}
     </div>
@@ -183,7 +185,7 @@ export default function FinancialChart() {
               <LineChart data={rows} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e4e7ec" />
                 <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#667085' }} />
-                <YAxis tickFormatter={(v: number) => plain.format(v)} tick={{ fontSize: 12, fill: '#667085' }} />
+                <YAxis tickFormatter={(v: number) => formatBaniAxis(v)} tick={{ fontSize: 12, fill: '#667085' }} />
                 <Tooltip content={<FinancialChartTooltip />} />
                 {METRICS.map((m) => (
                   <Line
@@ -234,7 +236,7 @@ export default function FinancialChart() {
 
         {tax.status === 'computed' ? (
           <p className="chart-tax-note">
-            Estimare impozit YTD: <strong className="mono">{fmtRON(tax.output.total)}</strong>
+            Estimare impozit YTD: <strong className="mono">{formatBaniRON(tax.output.total)}</strong>
           </p>
         ) : (
           <p className="chart-tax-note">Estimare impozit: revizuire necesară — {tax.reason}</p>
@@ -261,13 +263,13 @@ export default function FinancialChart() {
               <tr key={r.month}>
                 <th scope="row">{r.label}</th>
                 <td>
-                  {fmtRON(r.revenue)} — {stateLabel(r.kind)}
+                  {formatBaniRON(r.revenue)} — {stateLabel(r.kind)}
                 </td>
                 <td>
-                  {fmtRON(r.expenses)} — {stateLabel(r.kind)}
+                  {formatBaniRON(r.expenses)} — {stateLabel(r.kind)}
                 </td>
                 <td>
-                  {fmtRON(r.net)} — {stateLabel(r.kind)}
+                  {formatBaniRON(r.net)} — {stateLabel(r.kind)}
                 </td>
               </tr>
             ))}

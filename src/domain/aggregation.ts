@@ -82,13 +82,21 @@ export interface DashboardSnapshot {
   stale: string[];
   deadlines: Array<{ id: string; label: string; daysUntil: number; date: string }>;
   thresholds: Threshold[];
+  /**
+   * Cash-planning figures in integer **bani**.
+   *
+   * These were `*Cents` fields fed by a `* 100` lei→cents bridge in `data/dashboard.ts`. Once the domain
+   * itself stores bani, a ban IS a cent, so that bridge became a double conversion (it multiplied money by
+   * 100 a second time). The fields are renamed to `*Bani` so the name cannot outlive the unit, and the
+   * bridge is gone: the value is passed straight through.
+   */
   taxReserve: {
-    projectedLiabilityCents: number;
-    targetReserveCents: number;
-    currentReserveCents: number;
-    gapCents: number;
+    projectedLiabilityBani: Bani;
+    targetReserveBani: Bani;
+    currentReserveBani: Bani;
+    gapBani: Bani;
     coverageMonths: number;
-    projectedQ4LiabilityCents: number;
+    projectedQ4LiabilityBani: Bani;
     taxYear: number;
   };
 }

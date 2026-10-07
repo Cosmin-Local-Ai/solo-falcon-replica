@@ -2,7 +2,8 @@ import { useDashboardData } from '../data/dashboardAdapter';
 import { useStore } from '../data/store';
 import { getFinancialSummary } from '../data/dashboard';
 import { identityGreeting } from '../domain/profile';
-import { fmtRON, fmtDate } from '../data/types';
+import { fmtDate } from '../data/types';
+import { formatBaniRON } from '../domain/money';
 import FinancialChart from '../components/FinancialChart';
 import FinancialSummary from '../components/FinancialSummary';
 import TaxReserve from '../components/TaxReserve';
@@ -77,14 +78,14 @@ export default function DashboardPage() {
         <>
           {/* 1. Cockpit strip — headline numbers */}
           <div className="grid grid-5">
-            <StatCard label="Venituri PFA (an)" value={fmtRON(snapshot.pfaRevenue)} />
+            <StatCard label="Venituri PFA (an)" value={formatBaniRON(snapshot.pfaRevenue)} />
             <StatCard
               label="Impozit estimat"
-              value={taxTotal === null ? '—' : fmtRON(taxTotal)}
+              value={taxTotal === null ? '—' : formatBaniRON(taxTotal)}
               hint="de pus deoparte"
             />
-            <StatCard label="Rezervă lunară" value={fmtRON(reserve.recommendedMonthlyReserve)} />
-            <StatCard label="Rămâne de pus deoparte" value={fmtRON(reserve.remainingTarget)} />
+            <StatCard label="Rezervă lunară" value={formatBaniRON(reserve.recommendedMonthlyReserve)} />
+            <StatCard label="Rămâne de pus deoparte" value={formatBaniRON(reserve.remainingTarget)} />
             <StatCard
               label="Date complete"
               value={`${completeness.satisfiedCount}/${completeness.totalCount}`}
@@ -101,10 +102,10 @@ export default function DashboardPage() {
                   Date complete: {completeness.satisfiedCount}/{completeness.totalCount}
                 </span>
               </div>
-              <div className="tax-hero-value mono">{taxTotal === null ? '—' : fmtRON(taxTotal)}</div>
+              <div className="tax-hero-value mono">{taxTotal === null ? '—' : formatBaniRON(taxTotal)}</div>
               <p className="hint">
                 Impozit estimat de pus deoparte. Pune deoparte{' '}
-                <strong className="mono">{fmtRON(reserve.recommendedMonthlyReserve)}</strong> pe lună.
+                <strong className="mono">{formatBaniRON(reserve.recommendedMonthlyReserve)}</strong> pe lună.
               </p>
             </div>
           </SectionCard>

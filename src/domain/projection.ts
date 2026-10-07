@@ -1,6 +1,8 @@
 import type { AppData } from '../data/types';
+import Decimal from 'decimal.js-light';
 import { selectMonthly, selectYtd } from './aggregation';
 import { daysInMonth } from './date';
+import { allocateBani, toBaniNearest, type Bani } from './money';
 
 /**
  * Projection v1 — transparent current run rate (Step 13, Part B).
@@ -23,16 +25,28 @@ export interface ProjectionPeriod {
   to: string; // 'YYYY-MM-DD'
 }
 
+/**
+ * A monthly **rate**, in bani, deliberately NOT branded `Bani`.
+ *
+ * A run rate is a division and is usually not a whole number of bani (1071 lei over 8.5 months is
+ * 12 600 bani, but 90 lei over 8.5 months is 1 058.82 bani). Leaving it unbranded is what stops it
+ * reaching `formatBani*` or a persisted field by accident: only `Totals` below carries the brand, and
+ * every value there has already been made whole.
+ *
+ * Art. 66 does NOT apply here. It rounds sums a taxpayer owes; a projection is not a sum owed, so
+ * rounding a projected month to a whole leu would invent a rule that does not exist.
+ */
 export interface RunRate {
   revenuePerMonth: number;
   expensesPerMonth: number;
   netPerMonth: number;
 }
 
+/** Money amounts in integer bani — safe to display and to sum. */
 export interface Totals {
-  revenue: number;
-  expenses: number;
-  net: number;
+  revenue: Bani;
+  expenses: Bani;
+  net: Bani;
 }
 
 export interface ProjectionMonth extends Totals {
@@ -62,32 +76,56 @@ export function selectProjectionV1(data: AppData, asOfDate: string): ProjectionV
   const denom = months > 0 ? Math.max(1, months) : 0;
 
   const ytd = selectYtd(data, asOfDate);
+  // The run rate stays a Decimal so no intermediate is rounded before it is used.
+  const zero = new Decimal(0);
+  const rate = {
+    revenue: denom > 0 ? new Decimal(ytd.revenue).div(denom) : zero,
+    expenses: denom > 0 ? new Decimal(ytd.expenses).div(denom) : zero,
+    net: denom > 0 ? new Decimal(ytd.net).div(denom) : zero,
+  };
   const runRate: RunRate = {
-    revenuePerMonth: denom > 0 ? ytd.revenue / denom : 0,
-    expensesPerMonth: denom > 0 ? ytd.expenses / denom : 0,
-    netPerMonth: denom > 0 ? ytd.net / denom : 0,
+    revenuePerMonth: rate.revenue.toNumber(),
+    expensesPerMonth: rate.expenses.toNumber(),
+    netPerMonth: rate.net.toNumber(),
   };
 
   const annualProjected: Totals = {
-    revenue: runRate.revenuePerMonth * 12,
-    expenses: runRate.expensesPerMonth * 12,
-    net: runRate.netPerMonth * 12,
+    revenue: toBaniNearest(rate.revenue.times(12)),
+    expenses: toBaniNearest(rate.expenses.times(12)),
+    net: toBaniNearest(rate.net.times(12)),
   };
 
   const monthly = selectMonthly(data, asOfDate);
   const asOfMonth = asOfDate.slice(0, 7);
+
+  // Projected months are ALLOCATED, not divided-and-rounded one at a time. Rounding each month on its
+  // own would let the 12 entries drift away from the year they are drawn from. `allocateBani` hands the
+  // leftover bani to the earliest months, so the projected months sum exactly to the projected subtotal.
+  const actualCount = Math.min(12, Math.max(0, Number(asOfMonth.slice(5, 7)) || 0));
+  const projectedCount = 12 - actualCount;
+  const shares =
+    projectedCount > 0
+      ? {
+          revenue: allocateBani(toBaniNearest(rate.revenue.times(projectedCount)), projectedCount),
+          expenses: allocateBani(toBaniNearest(rate.expenses.times(projectedCount)), projectedCount),
+          net: allocateBani(toBaniNearest(rate.net.times(projectedCount)), projectedCount),
+        }
+      : { revenue: [] as Bani[], expenses: [] as Bani[], net: [] as Bani[] };
+
   const series: ProjectionMonth[] = [];
+  let projectedIndex = 0;
   for (let m = 1; m <= 12; m++) {
     const month = `${fiscalYear}-${String(m).padStart(2, '0')}`;
     if (month <= asOfMonth) {
-      const actual = monthly.get(month) ?? { revenue: 0, expenses: 0, net: 0 };
+      const actual = monthly.get(month) ?? { revenue: 0 as Bani, expenses: 0 as Bani, net: 0 as Bani };
       series.push({ month, ...actual, kind: 'actual' });
     } else {
+      const i = projectedIndex++;
       series.push({
         month,
-        revenue: runRate.revenuePerMonth,
-        expenses: runRate.expensesPerMonth,
-        net: runRate.netPerMonth,
+        revenue: shares.revenue[i],
+        expenses: shares.expenses[i],
+        net: shares.net[i],
         kind: 'projected',
       });
     }

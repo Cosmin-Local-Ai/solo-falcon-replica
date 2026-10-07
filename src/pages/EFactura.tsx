@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../data/store';
-import { fmtRON, fmtDate, total } from '../data/types';
+import { fmtDate, total } from '../data/types';
 import type { Revenue } from '../data/types';
+import { formatBaniRON } from '../domain/money';
 import { Card, Badge, Empty, Pagination } from '../components/ui';
 
 const TABS = [
@@ -76,7 +77,7 @@ export default function EFactura() {
                     <td>{r.client}</td>
                     <td className="muted">{r.cui}</td>
                     <td>{fmtDate(r.date)}</td>
-                    <td className="amount">{fmtRON(total(r))}</td>
+                    <td className="amount">{formatBaniRON(total(r))}</td>
                     <td>
                       <Badge kind={eBadge(r.eFacturaStatus)}>{r.eFacturaStatus ?? 'Acceptată'}</Badge>
                       {r.statusDetail && <div className="text-sm muted" style={{ marginTop: 3 }}>{r.statusDetail}</div>}

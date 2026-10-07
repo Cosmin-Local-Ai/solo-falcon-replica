@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { leiInputValue, parseLeiInput } from '../domain/money';
+import { formatBaniRON, leiInputValue, parseLeiInput } from '../domain/money';
 import { useStore } from '../data/store';
-import { fmtRON, fmtDate, total, EXP_STATUS_LABEL, statusBadge } from '../data/types';
+import { fmtDate, sumTotals, total, EXP_STATUS_LABEL, statusBadge } from '../data/types';
 import type { Expense } from '../data/types';
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
 
@@ -155,7 +155,7 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const counts = (k: (typeof TABS)[number]['key']) =>
     expenses.filter(e => e.status === statusFor(k)).length;
-  const sum = rows.reduce((s, e) => s + total(e), 0);
+  const sum = sumTotals(rows);
 
   return (
     <div>
@@ -209,9 +209,9 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
                     <td>{e.furnizor}</td>
                     <td className="muted">{e.cui}</td>
                     <td>{fmtDate(e.date)}</td>
-                    <td className="amount">{fmtRON(e.valoareFaraTva)}</td>
-                    <td className="amount">{fmtRON(e.tva)}</td>
-                    <td className="amount">{fmtRON(total(e))}</td>
+                    <td className="amount">{formatBaniRON(e.valoareFaraTva)}</td>
+                    <td className="amount">{formatBaniRON(e.tva)}</td>
+                    <td className="amount">{formatBaniRON(total(e))}</td>
                     <td>
                       <Badge kind={statusBadge(e.status)}>{EXP_STATUS_LABEL[e.status]}</Badge>
                       {e.statusDetail && <div className="text-sm muted" style={{ marginTop: 3 }}>{e.statusDetail}</div>}
@@ -227,7 +227,7 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
               <tfoot>
                 <tr>
                   <td colSpan={7} style={{ textAlign: 'right' }} className="muted">Total: {rows.length} documente</td>
-                  <td className="amount" style={{ fontWeight: 600 }}>{fmtRON(sum)}</td>
+                  <td className="amount" style={{ fontWeight: 600 }}>{formatBaniRON(sum)}</td>
                   <td colSpan={2} />
                 </tr>
               </tfoot>
