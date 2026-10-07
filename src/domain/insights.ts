@@ -123,6 +123,25 @@ interface ThresholdAlert {
 function makeThresholdAlert(t: Threshold): ThresholdAlert {
   const label = thresholdLabel(t.label);
   const pct = Math.round(t.ratio * 100);
+  if (t.type === 'tier-floor') {
+    // A tier floor is NOT a limit. CF art. 148 alin. (2) lit. b) raises the MINIMUM CAS base to 24 SM
+    // once realised net income reaches that level, so "valoarea curentă a depășit limita fiscală"
+    // would state the opposite of the law. Severity is `warning`, not `danger`: nothing went wrong —
+    // the contribution is simply computed on a higher floor. No amounts are written here; they come
+    // from the CAS rule's `tier2_base` / `tier2_cas` parameters.
+    return {
+      id: `threshold-${t.id}`,
+      severity: 'warning',
+      title: `Treaptă de calcul depășită: ${label}`,
+      description:
+        t.breached === true
+          ? 'Baza minimă de calcul pentru CAS crește la nivelul de 24 SM (CF art. 148 alin. (2) lit. b)).'
+          : `Venitul net este la ${pct}% din pragul de 24 SM care dublează baza minimă de calcul pentru CAS.`,
+      action: 'Verifică venitul net: CAS se calculează la noua bază minimă.',
+      affectedTax: t.affectedTax ?? '',
+      ratio: t.ratio,
+    };
+  }
   if (t.breached === true) {
     return {
       id: `threshold-${t.id}`,

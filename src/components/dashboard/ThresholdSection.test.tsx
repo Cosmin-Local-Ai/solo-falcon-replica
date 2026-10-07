@@ -92,4 +92,30 @@ describe('ThresholdSection (Step 32 — Romanian, no raw enums)', () => {
     expect(screen.queryByText('0,00 lei')).not.toBeInTheDocument();
     expect(screen.getByText(/nu a fost furnizată/)).toBeInTheDocument();
   });
+
+  it('labels the 24 SM CAS step as a ladder step, never as a ceiling', () => {
+    render(
+      <ThresholdSection
+        thresholds={[
+          makeThreshold({
+            thresholdId: 'CAS_TIER2_FLOOR',
+            type: 'tier-floor',
+            currentValue: 120000,
+            thresholdValue: 97200,
+            distance: 22800,
+            status: 'breached',
+            breachMeaning:
+              'Peste pragul de 24 SM — baza minimă de calcul pentru CAS crește de la 12 SM la 24 SM (nu este plafon)',
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('Treaptă de calcul CAS')).toBeInTheDocument();
+    // The 97.200 lei step comes from the rule parameter, and this row is not a maximum.
+    expect(screen.getByText('97.200,00 lei')).toBeInTheDocument();
+    expect(screen.queryByText('Prag maxim CAS')).not.toBeInTheDocument();
+    expect(screen.getByText(/baza minimă de calcul pentru CAS crește/)).toBeInTheDocument();
+    expect(screen.queryByText('tier-floor')).not.toBeInTheDocument();
+  });
 });

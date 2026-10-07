@@ -162,11 +162,11 @@ test.describe('Dashboard — section content (seed data)', () => {
     ).toHaveCount(0);
   });
 
-  test('Praguri: renders all 4 thresholds with current value, threshold and status', async ({ page }) => {
+  test('Praguri: renders all 5 thresholds with current value, threshold and status', async ({ page }) => {
     await page.goto('/dashboard');
 
     const thresholds = sectionWith(page, 'Praguri');
-    await expect(thresholds.locator('.item-row')).toHaveCount(4);
+    await expect(thresholds.locator('.item-row')).toHaveCount(5);
 
     // CAS: below the tier-1 floor of 12 SM → breached. There is no 'Prag maxim CAS' row:
     // CF art. 148 alin. (2) sets FLOORS ("nu poate fi mai mic decât"), never a ceiling, so a
@@ -175,6 +175,11 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(thresholds.getByText('Prag minim CAS', { exact: true })).toBeVisible();
     await expect(thresholds.getByText('Prag: 48.600,00 lei')).toBeVisible();
     await expect(thresholds.getByText('Prag maxim CAS', { exact: true })).toHaveCount(0);
+
+    // The 24 SM step of the same ladder (art. 148 alin. (2) lit. b)) is labelled as a step, not as
+    // a maximum: crossing it raises the MINIMUM CAS base from 12 SM to 24 SM.
+    await expect(thresholds.getByText('Treaptă de calcul CAS', { exact: true })).toBeVisible();
+    await expect(thresholds.getByText('Prag: 97.200,00 lei')).toBeVisible();
 
     // CASS: below the minimum base (breached), within the maximum base.
     await expect(thresholds.getByText('Prag minim CASS', { exact: true })).toBeVisible();
@@ -186,19 +191,20 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(thresholds.getByText('Prag de înregistrare Vat')).toBeVisible();
     await expect(thresholds.getByText('Prag: 395.000,00 lei')).toBeVisible();
 
-    // Phase 8: the four rows no longer share one number. The three contribution rows are
+    // Phase 8: the rows do not share one number. The four contribution rows are
     // measured on the engine's venitul net din activitate (7.700,00 - 205,50 = 7.494,50 lei),
     // per CF art. 148 alin. (1)-(2) / art. 170 alin. (1) / art. 174 alin. (6); the VAT row is
     // measured on VAT-exclusive turnover (4.500 + 3.200 = 7.700,00 lei), per art. 310 alin. (1).
-    await expect(thresholds.getByText(/Curent: 7\.494,50 lei/)).toHaveCount(3);
+    await expect(thresholds.getByText(/Curent: 7\.494,50 lei/)).toHaveCount(4);
     await expect(thresholds.getByText(/Curent: 7\.700,00 lei/)).toHaveCount(1);
-    // The VAT-inclusive figure all four rows used to share is gone from this section. (It is
+    // The VAT-inclusive figure all the rows used to share is gone from this section. (It is
     // still correct — and still shown — as the "Venituri PFA (an)" cockpit card.)
     await expect(thresholds.getByText(/Curent: 9\.317,00 lei/)).toHaveCount(0);
 
-    // Status badges: 2 breached (min CAS, min CASS), 2 within limits.
+    // Status badges: 2 breached (min CAS, min CASS), 3 within limits (max CASS, the 24 SM step,
+    // which the seed is far below).
     await expect(thresholds.getByText('Depășit', { exact: true })).toHaveCount(2);
-    await expect(thresholds.getByText('În limite', { exact: true })).toHaveCount(2);
+    await expect(thresholds.getByText('În limite', { exact: true })).toHaveCount(3);
   });
 
   // Phase 9b: exactly ONE upcoming deadline. The four quarterly/estimated event types were deleted
@@ -815,11 +821,12 @@ test.describe('Dashboard — impozit_pe_cit on a PFA is a data-integrity failure
       .locator('section.card')
       .filter({ has: page.locator('h3', { hasText: 'Praguri' }) });
 
-    // The silent-skip trap: a base the caller cannot supply used to delete the card. All four
-    // rows must still be here — three of them loud, not missing.
-    await expect(thresholds.locator('.item-row')).toHaveCount(4);
-    await expect(thresholds.getByText('De verificat', { exact: true })).toHaveCount(3);
-    await expect(thresholds.getByText(/nu a fost furnizată/)).toHaveCount(3);
+    // The silent-skip trap: a base the caller cannot supply used to delete the card. All five
+    // rows must still be here — four of them loud, not missing (the 24 SM CAS step is measured on
+    // the same net-income base as the other contribution rows).
+    await expect(thresholds.locator('.item-row')).toHaveCount(5);
+    await expect(thresholds.getByText('De verificat', { exact: true })).toHaveCount(4);
+    await expect(thresholds.getByText(/nu a fost furnizată/)).toHaveCount(4);
     // No invented amount is shown for a base that could not be measured.
     await expect(thresholds.getByText(/Curent: 0\.000,00 lei/)).toHaveCount(0);
 

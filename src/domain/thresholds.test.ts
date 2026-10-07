@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { calculatorRegistry } from './fiscal/calculators';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal/package2026';
 import {
   breachMeaningFor,
@@ -37,9 +38,9 @@ const byId = (thresholds: FiscalThreshold[], id: string) =>
   thresholds.find((t) => t.thresholdId === id)!;
 
 describe('computeThresholds', () => {
-  it('returns 4 thresholds for 2026', () => {
+  it('returns one row per spec for 2026', () => {
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, QUERY);
-    expect(result).toHaveLength(4);
+    expect(result).toHaveLength(THRESHOLD_SPECS.length);
     // CAS_MIN_BASE survives the CAS correction: crossing 12 SM is what triggers the
     // contribution obligation at all (CF art. 148 alin. (1)).
     expect(byId(result, 'CAS_MIN_BASE').thresholdValue).toBe(48600);
@@ -59,6 +60,9 @@ describe('computeThresholds', () => {
     expect(result.find((t) => t.thresholdId === 'CAS_MAX_BASE')).toBeUndefined();
     expect(result.filter((t) => t.affectedTax === 'cas').map((t) => t.thresholdId)).toEqual([
       'CAS_MIN_BASE',
+      // The 24 SM figure is back as what the law makes it — a ladder step (`tier-floor`), never a
+      // `max-base` row. It reads the same `tier2_base` parameter `calcCas` doubles the floor on.
+      'CAS_TIER2_FLOOR',
     ]);
     // CASS really does have a ceiling (CF art. 170 alin. (1), "nu poate fi mai mare decât"
     // 72 SM), so the max-base row survives where the law provides one.
@@ -299,8 +303,8 @@ describe('computeThresholds', () => {
       ruleRelease: 'PFA_2026_RELEASE',
     };
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q);
-    // All four specs still return a row — nothing vanished.
-    expect(result).toHaveLength(4);
+    // Every spec still returns a row — nothing vanished.
+    expect(result).toHaveLength(THRESHOLD_SPECS.length);
     const casMin = byId(result, 'CAS_MIN_BASE');
     expect(casMin.status).toBe('review_required');
     expect(casMin.currentValue).toBeNull();
@@ -339,6 +343,82 @@ describe('computeThresholds', () => {
         THRESHOLD_SPECS.map((s) => s.thresholdId).sort(),
       );
     }
+  });
+});
+
+// Phase 6 §7 item 5: the 24 SM CAS boundary as a threshold of its own kind.
+// CF art. 148 alin. (2): the chosen base "nu poate fi mai mic decât" 12 SM, and lit. b) raises that
+// floor to 24 SM "în cazul veniturilor realizate cel puțin egale cu 24 de salarii minime brute pe
+// țară". It is a LADDER STEP — not a ceiling (Phase 3 deleted CAS_MAX_BASE for asserting one) and
+// not a regime change. The citation is the one Phase 3 established; no new provision is invented here.
+describe('tier-floor — the 24 SM CAS ladder step', () => {
+  const casRule = PFA_2026_SYSTEM_REAL_PACKAGE.find((r) => r.ruleId === 'CAS_2026')!;
+  const casParamIds = casRule.parameters.map((p) => p.id);
+
+  it('reads the 24 SM floor from the CAS rule, on the contribution base, with the ladder citation', () => {
+    const spec = THRESHOLD_SPECS.find((s) => s.thresholdId === 'CAS_TIER2_FLOOR')!;
+    expect(spec.type).toBe('tier-floor');
+    expect(spec.ruleId).toBe('CAS_2026');
+    // The SAME parameter calcCas compares against — the row and the amount cannot drift apart.
+    expect(spec.paramId).toBe('tier2_base');
+    expect(spec.affectedTax).toBe('cas');
+    expect(spec.requiredFiscalBase).toBe('net-income');
+    expect(spec.baseSourceArticle).toContain('art. 148 alin. (2) lit. b)');
+
+    const row = byId(computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, QUERY), 'CAS_TIER2_FLOOR');
+    expect(row.thresholdValue).toBe(97200);
+    expect(row.fiscalBase).toBe('net-income');
+    expect(row.source).toContain('art. 148');
+  });
+
+  it('is crossed at the tier, inclusive — the same predicate calcCas uses', () => {
+    // art. 148 alin. (2) lit. b) applies once realised income is "cel puțin egal cu" 24 SM.
+    expect(statusFor('tier-floor', 0, 100)).toBe('breached');
+    expect(statusFor('tier-floor', 1000, 100)).toBe('breached');
+    expect(statusFor('tier-floor', -1, 0)).toBe('ok');
+    expect(statusFor('tier-floor', -50, 100)).toBe('warning');
+    expect(statusFor('tier-floor', -101, 100)).toBe('ok');
+  });
+
+  it('crossing the tier and the doubled CAS floor move together on the same input', () => {
+    // This is the acceptance condition: the visible threshold event and the doubled amount must be
+    // two readings of ONE figure, not two independently hardcoded numbers.
+    for (const { netIncome, cas, status } of [
+      { netIncome: 60000, cas: 12150, status: 'ok' },
+      // 97.199 is one leu below the tier, i.e. inside the app-chosen 10% warning band — the tier-1
+      // floor still applies, but the step is close enough that `ok` would understate it.
+      { netIncome: 97199, cas: 12150, status: 'warning' },
+      { netIncome: 97200, cas: 24300, status: 'breached' },
+    ] as const) {
+      const row = byId(
+        computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...QUERY, bases: allBases(netIncome) }),
+        'CAS_TIER2_FLOOR',
+      );
+      const computed = calculatorRegistry['calc-cas'](casRule, { base: netIncome });
+      expect(computed, `CAS at ${netIncome}`).toMatchObject({ value: cas });
+      expect(row.status, `threshold row at ${netIncome}`).toBe(status);
+      expect(row.currentValue).toBe(netIncome);
+    }
+  });
+
+  it('its breach meaning never claims a ceiling or a regime change', () => {
+    const meaning = breachMeaningFor('tier-floor');
+    expect(meaning).toContain('baza minimă');
+    expect(meaning).not.toContain('schimbare de regim');
+    expect(meaning).not.toContain('dezcalificare');
+    // The only numbers are the statutory tier names (12 SM / 24 SM). No lei amount lives in this
+    // string — 12.150 and 24.300 come from the `tier1_cas` / `tier2_cas` rule parameters.
+    expect(meaning).not.toMatch(/\d{3}/);
+  });
+
+  it('no max_cas parameter returns anywhere in the package (Phase 3 guard)', () => {
+    for (const rule of PFA_2026_SYSTEM_REAL_PACKAGE) {
+      for (const param of rule.parameters) {
+        expect(param.id).not.toBe('max_cas');
+      }
+    }
+    expect(casParamIds).toContain('tier2_base');
+    expect(casParamIds).not.toContain('max_base');
   });
 });
 

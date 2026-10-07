@@ -61,8 +61,12 @@ export interface Threshold {
   /** `current / limit`, or 0 when unmeasured / uncapped. */
   ratio: number;
   breached: boolean;
-  /** Which threshold family this belongs to, when known. */
-  type?: 'income' | 'vat';
+  /**
+   * Which threshold family this belongs to, when known. `tier-floor` is carried through because
+   * its alert wording differs from a limit breach: crossing it steps the minimum CAS base up a
+   * tier (CF art. 148 alin. (2) lit. b)), it does not exceed a cap.
+   */
+  type?: 'income' | 'vat' | 'tier-floor';
   /** Tax this threshold affects (e.g. 'cass', 'vat'). */
   affectedTax?: string;
 }

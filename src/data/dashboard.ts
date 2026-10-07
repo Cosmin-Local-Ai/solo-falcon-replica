@@ -229,6 +229,17 @@ export function getLegislationState(data: AppData): LegislationState {
   return { updatedAt: null, items: [] };
 }
 
+/**
+ * The snapshot's coarse threshold family. The ladder step must survive into the snapshot because
+ * `insights.ts` reads this field to word the alert — crossing a tier floor is not a limit breach
+ * (CF art. 148 alin. (2) lit. b) raises a FLOOR). Everything else keeps the previous vat/income split.
+ */
+function snapshotThresholdType(t: FiscalThreshold): 'income' | 'vat' | 'tier-floor' {
+  if (t.affectedTax === 'vat') return 'vat';
+  if (t.type === 'tier-floor') return 'tier-floor';
+  return 'income';
+}
+
 function buildSnapshot(
   data: AppData,
   asOfDate: string,
@@ -281,7 +292,7 @@ function buildSnapshot(
       // which already branches on the threshold type. `insights.ts` filters on this flag, which is
       // why two real breaches were missing from Observații while Praguri showed `Depășit`.
       breached: t.status === 'breached',
-      type: t.affectedTax === 'vat' ? 'vat' : 'income',
+      type: snapshotThresholdType(t),
       affectedTax: t.affectedTax,
     })),
     taxReserve: {

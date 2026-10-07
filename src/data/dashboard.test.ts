@@ -250,7 +250,7 @@ describe('threshold bases (Phase 8 — amount semantics, on seeded data)', () =>
     expect(vat.thresholdValue).toBe(395000);
   });
 
-  it('the three contribution rows are measured on the engine contribution base, never on gross revenue', async () => {
+  it('every contribution row is measured on the engine contribution base, never on gross revenue', async () => {
     const tax = await getTaxEstimate(seedData, AS_OF_SEED);
     const rows = getThresholdStatuses(seedData, AS_OF_SEED, tax);
     const ytd = selectYtd(seedData, AS_OF_SEED);
@@ -260,6 +260,7 @@ describe('threshold bases (Phase 8 — amount semantics, on seeded data)', () =>
       'CASS_MAX_BASE',
       'CASS_MIN_BASE',
       'CAS_MIN_BASE',
+      'CAS_TIER2_FLOOR',
     ]);
     for (const t of contribution) {
       expect(t.fiscalBase).toBe('net-income');
@@ -301,8 +302,8 @@ describe('threshold bases (Phase 8 — amount semantics, on seeded data)', () =>
       reason: 'test',
       lines: [],
     });
-    expect(rows).toHaveLength(THRESHOLD_SPECS.length); // still four, none vanished
-    for (const id of ['CAS_MIN_BASE', 'CASS_MIN_BASE', 'CASS_MAX_BASE']) {
+    expect(rows).toHaveLength(THRESHOLD_SPECS.length); // still one row per spec, none vanished
+    for (const id of ['CAS_MIN_BASE', 'CAS_TIER2_FLOOR', 'CASS_MIN_BASE', 'CASS_MAX_BASE']) {
       const row = rows.find((t) => t.thresholdId === id)!;
       expect(row.status).toBe('review_required');
       expect(row.currentValue).toBeNull();
@@ -395,6 +396,55 @@ describe('snapshot.thresholds[].breached (B-20)', () => {
     expect(breaches).toHaveLength(1);
     expect(breaches[0].severity).toBe('danger');
     expect(breaches[0].id).toMatch(/^threshold-(CAS|CASS)_MIN_BASE$/);
+  });
+});
+
+// --- Phase 6 §7 item 5: the 24 SM CAS ladder step is a threshold of its own -------------------
+// CF art. 148 alin. (2) sets FLOORS, never a ceiling (Phase 3 deleted CAS_MAX_BASE for asserting
+// one), and lit. b) raises the floor to 24 SM once realised net income is "cel puțin egal cu" 24 SM.
+// The step is therefore typed `tier-floor` and must be VISIBLE: the row and the doubled CAS amount
+// read the same `tier2_base` parameter, so they cannot drift apart.
+describe('CAS_TIER2_FLOOR — the 24 SM ladder step is surfaced (Phase 6 §7 item 5)', () => {
+  const INSTANT = new Date(2026, 11, 31, 12);
+  const AS_OF_SEED = '2026-12-31';
+
+  it('is present on the seed, measured on the contribution base, and not crossed', async () => {
+    const tax = await getTaxEstimate(seedData, AS_OF_SEED);
+    const rows = getThresholdStatuses(seedData, AS_OF_SEED, tax);
+    const row = rows.find((t) => t.thresholdId === 'CAS_TIER2_FLOOR')!;
+    expect(row.type).toBe('tier-floor');
+    expect(row.thresholdValue).toBe(97200);
+    expect(row.currentValue).toBe(7494.5);
+    // Far below the tier, so the tier-1 floor applies and nothing is flagged.
+    expect(row.status).toBe('ok');
+
+    const dashboard = buildDashboardData(seedData, tax, INSTANT);
+    const snapRow = dashboard.snapshot.thresholds.find((s) => s.id === 'CAS_TIER2_FLOOR')!;
+    // The family survives into the snapshot: `insights.ts` words the alert from it, and a ladder
+    // step must not be described as a limit breach.
+    expect(snapRow.type).toBe('tier-floor');
+    expect(snapRow.breached).toBe(false);
+  });
+
+  it('crossing 24 SM flags the row AND doubles the CAS the engine computes, from one figure', async () => {
+    const data = makeData({ revenues: [revenue({ valoareFaraTva: 120000, tva: 0 })] });
+    const tax = await getTaxEstimate(data, AS_OF_SEED);
+    expect(tax.status).toBe('computed');
+
+    const row = getThresholdStatuses(data, AS_OF_SEED, tax).find(
+      (t) => t.thresholdId === 'CAS_TIER2_FLOOR',
+    )!;
+    expect(row.currentValue).toBe(120000);
+    expect(row.status).toBe('breached');
+
+    // The same input, read through the calculator, lands on the tier-2 floor (25% × 97.200).
+    const casLine = tax.lines.find((l) => l.label === 'CAS (25%)')!;
+    expect(casLine.value).toBe(24300);
+
+    const dashboard = buildDashboardData(data, tax, INSTANT);
+    const snapRow = dashboard.snapshot.thresholds.find((s) => s.id === 'CAS_TIER2_FLOOR')!;
+    expect(snapRow.breached).toBe(true);
+    expect(snapRow.type).toBe('tier-floor');
   });
 });
 

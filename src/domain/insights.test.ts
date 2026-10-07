@@ -106,6 +106,68 @@ function formatLei(value: number): string {
   }).format(value);
 }
 
+// Phase 6 §7 item 5 — the 24 SM CAS ladder step (CF art. 148 alin. (2) lit. b).
+// A tier floor is NOT a limit: crossing it raises the MINIMUM CAS base, so the existing
+// "a depășit limita fiscală" wording would state the opposite of the law.
+describe('tier-floor threshold alerts', () => {
+  it('words a crossed tier as a ladder step, never as a limit breach', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          thresholds: [
+            threshold({
+              id: 'CAS_TIER2_FLOOR',
+              affectedTax: 'cas',
+              type: 'tier-floor',
+              ratio: 1.23,
+              breached: true,
+            }),
+          ],
+        }),
+      }),
+    );
+
+    expect(insights).toHaveLength(1);
+    // Nothing went wrong — the contribution is simply computed on a higher floor, so this is not
+    // a `danger`.
+    expect(insights[0].severity).toBe('warning');
+    expect(insights[0].id).toBe('threshold-CAS_TIER2_FLOOR');
+    expect(insights[0].title).toContain('Treaptă de calcul depășită');
+    expect(insights[0].description).toContain('art. 148 alin. (2) lit. b)');
+    expect(texts(insights)).not.toContain('limita fiscală');
+  });
+
+  it('warns as the tier approaches, before it is crossed', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          thresholds: [
+            threshold({ id: 'CAS_TIER2_FLOOR', affectedTax: 'cas', type: 'tier-floor', ratio: 0.9 }),
+          ],
+        }),
+      }),
+    );
+
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('warning');
+    expect(insights[0].description).toContain('90%');
+  });
+
+  it('says nothing while the tier is far away', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          thresholds: [
+            threshold({ id: 'CAS_TIER2_FLOOR', affectedTax: 'cas', type: 'tier-floor', ratio: 0.07 }),
+          ],
+        }),
+      }),
+    );
+
+    expect(insights).toEqual([]);
+  });
+});
+
 // Thresholds
 
 describe('thresholds', () => {

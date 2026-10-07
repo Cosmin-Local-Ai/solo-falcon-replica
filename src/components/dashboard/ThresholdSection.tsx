@@ -49,6 +49,10 @@ function labelFor(t: FiscalThreshold): string {
       return `Prag de înregistrare ${tax}`;
     case 'income':
       return `Prag de venit ${tax}`;
+    case 'tier-floor':
+      // A ladder step, not a ceiling: the label must not read as a maximum. The amount that changes
+      // when this is crossed comes from the rule parameters, never from this component.
+      return `Treaptă de calcul ${tax}`;
   }
 }
 

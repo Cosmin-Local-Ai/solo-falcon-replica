@@ -1,7 +1,16 @@
 import type { FiscalRule } from './fiscal/rules';
 import { selectApplicableRules } from './fiscal/select';
 
-export type ThresholdType = 'min-base' | 'max-base' | 'registration' | 'income';
+/**
+ * `tier-floor` is not a ceiling and not a disqualification — it is a **step in a ladder**.
+ * CF art. 148 alin. (2) makes the chosen base "nu poate fi mai mic decât" 12 SM, and
+ * lit. b) raises that floor to 24 SM once realised income is "cel puțin egal cu 24 de salarii
+ * minime brute pe țară". Crossing it therefore *doubles the floor* (CAS 12.150 → 24.300 lei);
+ * nothing is disqualified and nothing is capped. It is modelled separately precisely because
+ * the `max-base` meaning ("schimbare de regim") would have been false — see the CAS_MAX_BASE
+ * note below `THRESHOLD_SPECS`.
+ */
+export type ThresholdType = 'min-base' | 'max-base' | 'registration' | 'income' | 'tier-floor';
 
 /**
  * The amount a threshold is legally measured against. Each member names ONE
@@ -75,6 +84,7 @@ export interface FiscalThreshold {
    * - `max-base`: above the maximum base → regime change.
    * - `registration`: at/above the threshold → registration obligation triggered.
    * - `income`: above the income threshold → additional tax obligation triggered.
+   * - `tier-floor`: at/above the tier → the minimum contribution base steps up a tier.
    */
   breachMeaning: string;
   /** Present only when `status === 'review_required'`: why no verdict could be given. */
@@ -133,15 +143,27 @@ export const THRESHOLD_SPECS: readonly ThresholdSpec[] = [
     requiredFiscalBase: 'net-income',
     baseSourceArticle: 'Cod fiscal art. 148 alin. (1)-(2) lit. a) (baza: venitul net anual realizat)',
   },
-  // CAS_MAX_BASE was removed in Phase 3. CF art. 148 alin. (2) sets FLOORS — "venitul ales
-  // de contribuabil, care nu poate fi mai mic decât" 12 SM / 24 SM — and contains no ceiling
-  // for CAS, so a `max-base` row on 97.200 lei asserted a statutory cap that does not exist
-  // (docs/ai/phases/02_fiscal_baseline.md §2.1). A correct replacement needs a new
-  // ThresholdType plus a UI `labelFor`/`breachMeaningFor` case: crossing 24 SM doubles the CAS
-  // floor from 12.150 to 24.300, which is real and useful but is not a "schimbare de regim".
-  // Tracked in docs/ai/PLAN.md; the 24 SM floor stays visible in the calculator breakdown.
+  // CAS_MAX_BASE was removed in Phase 3 and is NOT restored. CF art. 148 alin. (2) sets FLOORS —
+  // "venitul ales de contribuabil, care nu poate fi mai mic decât" 12 SM / 24 SM — and contains no
+  // ceiling for CAS, so a `max-base` row on 97.200 lei asserted a statutory cap that does not exist
+  // (docs/ai/phases/02_fiscal_baseline.md §2.1). The row below is the correct replacement the Phase 3
+  // comment asked for: the same 97.200-lei figure, typed as the ladder step it legally is.
   // `max-base` itself remains in ThresholdType — CASS_MAX_BASE legitimately has a cap
   // (CF art. 170 alin. (1), "nu poate fi mai mare decât" 72 SM).
+  {
+    thresholdId: 'CAS_TIER2_FLOOR',
+    type: 'tier-floor',
+    ruleId: 'CAS_2026',
+    // `tier2_base` is the tier-2 floor (24 SM). It is the SAME parameter `calcCas` uses to pick the
+    // doubled floor (`tier2_cas`), so the threshold row and the computed CAS cannot drift apart.
+    paramId: 'tier2_base',
+    affectedDomain: 'pfa-revenue',
+    affectedTax: 'cas',
+    // Art. 148 alin. (2) measures the tier against realised net income, like tier 1.
+    requiredFiscalBase: 'net-income',
+    baseSourceArticle:
+      'Cod fiscal art. 148 alin. (2) lit. b) (baza: venitul net anual realizat cel puțin egal cu 24 SM)',
+  },
   {
     thresholdId: 'CASS_MIN_BASE',
     type: 'min-base',
@@ -193,6 +215,14 @@ export function statusFor(
     if (distance >= -warningDistance) return 'warning';
     return 'ok';
   }
+  if (type === 'tier-floor') {
+    // A tier floor is *crossed*, not exceeded harmfully: art. 148 alin. (2) lit. b) applies once
+    // realised income is "cel puțin egal cu" 24 SM, so the boundary is INCLUSIVE — exactly the
+    // predicate `calcCas` uses (`realized >= tier2Base`). Below it, the tier-1 floor applies.
+    if (distance >= 0) return 'breached';
+    if (distance >= -warningDistance) return 'warning';
+    return 'ok';
+  }
   // min-base: breached when current is below the minimum
   // max-base: breached when current is above the maximum
   // income: breached when current is above the income threshold
@@ -209,6 +239,7 @@ export function statusFor(
  * - `max-base`: above the maximum base → regime change.
  * - `registration`: at/above the threshold → registration obligation triggered.
  * - `income`: above the income threshold → additional tax obligation triggered.
+ * - `tier-floor`: at/above the tier → the minimum CAS base steps up to the next tier.
  */
 export function breachMeaningFor(type: ThresholdType | 'ratio'): string {
   switch (type) {
@@ -220,6 +251,11 @@ export function breachMeaningFor(type: ThresholdType | 'ratio'): string {
       return 'La sau peste prag — se declanșează obligația de înregistrare';
     case 'income':
       return 'Peste pragul de venit — se declanșează obligația fiscală suplimentară';
+    case 'tier-floor':
+      // Deliberately NOT "schimbare de regim" and NOT "plafon": art. 148 alin. (2) lit. b) raises a
+      // FLOOR. The amounts themselves (12.150 / 24.300 lei) are never written here — they come from
+      // the `tier1_cas` / `tier2_cas` parameters of the CAS rule.
+      return 'Peste pragul de 24 SM — baza minimă de calcul pentru CAS crește de la 12 SM la 24 SM (nu este plafon)';
     case 'ratio':
       return 'Raport sub minimumul cerut — risc de reclasificare';
   }
