@@ -612,3 +612,13 @@ numbering stays readable.
    rounds) and is unresearched. Also unverified and now load-bearing in the UI: `pfa_estimated_declaration`'s
    „**art. 81** + 15 days" formula — `research/10` covers art. 80 only, so this repo has never verified the
    article behind that deadline (`phases/09_payment_dates.md` §9).
+
+11. **Ordering decision — user, 2026-10-08: close the phase-less leftovers FIRST, then Phase 10.** The five items
+    that no phase owns — **B-19** (CASS exemption flag, no legal basis retrieved), **P-PROFILE-VAT-DATE** (the VAT
+    registration deadline can never fire; no profile field carries the TVA exceedance date), **Phase 6's 3 recorded
+    scope items**, **B-21** (unvalidated date strings silently drop records between fiscal years), **B-23** (test
+    asserts against `new Date()`) — are closed **before** money representation is touched. Rationale, accepted
+    explicitly: **B-21 and B-23 change inputs and tests, and Phase 10 rewrites the money tests anyway, so doing them
+    first means rewriting the test suite once instead of twice.** Cost accepted: the B-17 half-cent defect users can
+    actually see stays unfixed one phase longer. **`Q-MONEY-UNIT` remains an open decision** and Phase 10 must not
+    start until the Declarația 120 rounding tie-break is known (`rounding-cass-exempt-researcher`, in flight).
