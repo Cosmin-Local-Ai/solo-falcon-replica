@@ -10,7 +10,7 @@
  * | Deadline     | daysUntil < 0 / === 0                        | danger   |
  * | Deadline     | 1..30                                        | warning  |
  * | Deadline     | > 30 / non-finite / empty date               | —        |
- * | Reserve      | projectedLiabilityCents > 0 && gapCents > 0   | warning  |
+ * | Reserve      | projectedLiabilityBani > 0 && gapBani > 0   | warning  |
  * | Completeness | missing.length > 0                           | warning  |
  * | Tax          | review_required / computed                   | info     |
  *
@@ -26,7 +26,7 @@ import type { TaxCalculationSnapshot } from './snapshots/types';
 import { assessCompleteness } from './completeness';
 import type { AppData, SettingsState } from '../data/types';
 import type { PfaProfile } from './models';
-import { lei, type Bani, formatBaniRON } from './money'
+import { lei, subBani, type Bani, formatBaniRON } from './money';
 
 // Factories
 
@@ -63,12 +63,12 @@ function snapshot(overrides: Partial<DashboardSnapshot> = {}): DashboardSnapshot
     deadlines: [],
     thresholds: [],
     taxReserve: {
-      projectedLiabilityCents: 0,
-      targetReserveCents: 0,
-      currentReserveCents: 0,
-      gapCents: 0,
+      projectedLiabilityBani: lei(0),
+      targetReserveBani: lei(0),
+      currentReserveBani: lei(0),
+      gapBani: lei(0),
       coverageMonths: 12,
-      projectedQ4LiabilityCents: 0,
+      projectedQ4LiabilityBani: lei(0),
       taxYear: 2026,
     },
     ...overrides,
@@ -375,41 +375,43 @@ describe('deadlines', () => {
 // Tax reserve
 
 describe('tax reserve', () => {
-  const reserve = (gapCents: number, projectedLiabilityCents: number) =>
+  // These fixtures used to be written in the old cents scale, which is numerically identical to bani
+  // (1 ban = 1 cent), so the VALUES here are unchanged by the migration — only the field names and types.
+  const reserve = (gapBani: Bani, projectedLiabilityBani: Bani) =>
     snapshot({
       taxReserve: {
-        projectedLiabilityCents,
-        targetReserveCents: 100_000,
-        currentReserveCents: 100_000 - gapCents,
-        gapCents,
+        projectedLiabilityBani,
+        targetReserveBani: lei(1000),
+        currentReserveBani: subBani(lei(1000), gapBani),
+        gapBani,
         coverageMonths: 12,
-        projectedQ4LiabilityCents: 0,
+        projectedQ4LiabilityBani: lei(0),
         taxYear: 2026,
       },
     });
 
   it('emits exactly one warning when projected liability > 0 and gap > 0', () => {
-    const insights = getInsights(input({ snapshot: reserve(25_000, 100_000) }));
+    const insights = getInsights(input({ snapshot: reserve(lei(250), lei(1000)) }));
 
     expect(insights).toHaveLength(1);
     expect(insights[0].severity).toBe('warning');
     expect(insights[0].id).toBe('reserve');
   });
 
-  it('emits nothing when gapCents === 0', () => {
-    expect(getInsights(input({ snapshot: reserve(0, 100_000) }))).toEqual([]);
+  it('emits nothing when gapBani === 0', () => {
+    expect(getInsights(input({ snapshot: reserve(lei(0), lei(1000)) }))).toEqual([]);
   });
 
-  it('emits nothing when gapCents < 0', () => {
-    expect(getInsights(input({ snapshot: reserve(-25_000, 100_000) }))).toEqual([]);
+  it('emits nothing when gapBani < 0', () => {
+    expect(getInsights(input({ snapshot: reserve(lei(-250), lei(1000)) }))).toEqual([]);
   });
 
-  it('emits nothing when projectedLiabilityCents === 0', () => {
-    expect(getInsights(input({ snapshot: reserve(100_000, 0) }))).toEqual([]);
+  it('emits nothing when projectedLiabilityBani === 0', () => {
+    expect(getInsights(input({ snapshot: reserve(lei(1000), lei(0)) }))).toEqual([]);
   });
 
-  it('emits nothing when projectedLiabilityCents < 0', () => {
-    expect(getInsights(input({ snapshot: reserve(25_000, -100_000) }))).toEqual([]);
+  it('emits nothing when projectedLiabilityBani < 0', () => {
+    expect(getInsights(input({ snapshot: reserve(lei(250), lei(-1000)) }))).toEqual([]);
   });
 });
 
@@ -561,12 +563,12 @@ describe('invariants', () => {
           thresholds: [threshold({ id: 'cass', affectedTax: 'cass', ratio: 1.1, breached: true })],
           deadlines: [deadline({ id: 'pfa', label: 'pfa', daysUntil: -1, date: '2026-05-14' })],
           taxReserve: {
-            projectedLiabilityCents: 100_000,
-            targetReserveCents: 100_000,
-            currentReserveCents: 75_000,
-            gapCents: 25_000,
+            projectedLiabilityBani: lei(1000),
+            targetReserveBani: lei(1000),
+            currentReserveBani: lei(750),
+            gapBani: lei(250),
             coverageMonths: 12,
-            projectedQ4LiabilityCents: 0,
+            projectedQ4LiabilityBani: lei(0),
             taxYear: 2026,
           },
         }),
@@ -595,12 +597,12 @@ describe('invariants', () => {
             deadline({ id: 'vat', label: 'vat', daysUntil: 10 }),
           ],
           taxReserve: {
-            projectedLiabilityCents: 100_000,
-            targetReserveCents: 100_000,
-            currentReserveCents: 75_000,
-            gapCents: 25_000,
+            projectedLiabilityBani: lei(1000),
+            targetReserveBani: lei(1000),
+            currentReserveBani: lei(750),
+            gapBani: lei(250),
             coverageMonths: 12,
-            projectedQ4LiabilityCents: 0,
+            projectedQ4LiabilityBani: lei(0),
             taxYear: 2026,
           },
         }),

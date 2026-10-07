@@ -203,8 +203,9 @@ describe('computeTaxEstimate', () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(71_280), expenses: lei(0), revenuesNet: lei(71_280), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    // net=71280, CAS=12150 (12 SM floor), CASS=7128, taxable=52002, income=5200.2, total=24478.2
-    expect(res.output.total).toBeCloseTo(24_478.2, 1);
+    // net=71280, CAS=12150 (12 SM floor), CASS=7128, base=52002, income=5200.20 -> art. 66
+    // neglects the 20-bani fraction -> 5200. total = 12150 + 7128 + 5200 = 24478.
+    expect(res.output.total).toBe(lei(24_478));
   });
 
   it('computes for a high-revenue profile', async () => {
@@ -401,24 +402,26 @@ describe('computeTaxEstimate', () => {
     expect(cass).toBe(lei(29_160));
   });
 
-  // ── Rounding: no rounding, raw floats ──
+  // ── Rounding: CF art. 66 alin. (1) — sums DUE are rounded to the last ban ──
 
-  it('net = 71,281 → total = 24478.39 (no rounding, raw float)', async () => {
+  it('net = 71,281 → total = 24478 (art. 66: fractions under 50 bani are neglected)', async () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(71_281), expenses: lei(0), revenuesNet: lei(71_281), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CAS = 48600 * 0.25 = 12150 (12 SM floor — the old clamp charged 17820.25)
-    // CASS = 71281 * 0.10 = 7128.1
-    // taxable = 71281 - 12150 - 7128.1 = 52002.9
-    // incomeTax = 52002.9 * 0.10 = 5200.29
-    // total = 12150 + 7128.1 + 5200.29 = 24478.39
+    // CASS = 71281 * 0.10 = 7128.10 lei -> art. 66 neglects the 10-bani fraction -> 7128.00
+    // BASE = net - (rounded deductible lines) = 71281 - 12150 - 7128 = 52003, exact integer bani.
+    //   Nothing is re-rounded here: art. 66 rounds each sum DUE once, and the base is then plain
+    //   integer arithmetic on those already-rounded amounts (it is never itself a rounded figure).
+    // incomeTax = 52003 * 0.10 = 5200.30 lei -> art. 66 neglects the 30-bani fraction -> 5200.00
+    // total = sum of the ROUNDED lines = 12150 + 7128 + 5200 = 24478.00
     const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
     const cass = res.lines.find(l => l.label === 'CASS (10%)')?.value;
     const incomeTax = res.lines.find(l => l.label === 'Impozit pe venit (rată de bază 10%)')?.value;
     expect(cas).toBeCloseTo(lei(12_150), 3);
-    expect(cass).toBeCloseTo(7_128.1, 3);
-    expect(incomeTax).toBeCloseTo(5_200.29, 3);
-    expect(res.output.total).toBeCloseTo(24_478.39, 3);
+    expect(cass).toBe(lei(7_128));
+    expect(incomeTax).toBe(lei(5_200));
+    expect(res.output.total).toBe(lei(24_478));
   });
 
   // ── Rule-release awareness ──
@@ -496,9 +499,9 @@ describe('computeTaxEstimate', () => {
     expect(res.lines.find((l) => l.label === 'CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))')?.value).toBeCloseTo(lei(2_000), 6);
     // taxable = 20,000 − 2,000 = 18,000 (was 17,570 while the difference was wrongly deducted).
     expect(res.lines.find((l) => l.label === 'Venit net anual impozabil (art. 118 alin. (2) lit. b))')?.value).toBeCloseTo(lei(18_000), 6);
-    expect(res.lines.find((l) => l.label === 'Impozit pe venit (rată de bază 10%)')?.value).toBeCloseTo(1_800, 6);
+    expect(res.lines.find((l) => l.label === 'Impozit pe venit (rată de bază 10%)')?.value).toBeCloseTo(lei(1_800), 6);
     // total = 2,430 owed CASS + 1,800 tax = 4,230 (was 4,187: the bug understated the bill by 43 lei).
-    expect(res.output.total).toBeCloseTo(4_230, 6);
+    expect(res.output.total).toBe(lei(4_230));
   });
 
   // ── Phase 5 / B-15: art. 118 alin. (2^2)/(2^3) proration and the alin. (2^4) cap are explicit ──
@@ -510,12 +513,14 @@ describe('computeTaxEstimate', () => {
     // One sursă ⇒ each denominator (total venituri cumulate, art. 148 alin. (3) / art. 170 alin. (1))
     // IS the sistem-real net. The proration must be a no-op today — it is written out so a second
     // income source (Phase 6) cannot inherit a full deduction it is not entitled to.
-    expect(res.lines.find((l) => l.label === 'CAS deductibilă (art. 118 alin. (2^2))')?.value).toBeCloseTo(lei(12_150), 6);
-    expect(res.lines.find((l) => l.label === 'CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))')?.value).toBeCloseTo(7_128.1, 6);
-    expect(res.lines.find((l) => l.label === 'Venit net anual impozabil (art. 118 alin. (2) lit. b))')?.value).toBeCloseTo(52_002.9, 6);
+    expect(res.lines.find((l) => l.label === 'CAS deductibilă (art. 118 alin. (2^2))')?.value).toBe(lei(12_150));
+    expect(res.lines.find((l) => l.label === 'CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))')?.value).toBe(lei(7_128));
+    // The base is the exact difference of the already-rounded lines: 71281 - 12150 - 7128 = 52003.
+    expect(res.lines.find((l) => l.label === 'Venit net anual impozabil (art. 118 alin. (2) lit. b))')?.value).toBe(lei(52_003));
     // No cap line when the deductions stay under the recalculated net income.
     expect(res.lines.find((l) => l.label.startsWith('Deduceri blocate'))).toBeUndefined();
-    expect(res.output.total).toBeCloseTo(24_478.39, 6);
+    // total = 12150 + 7128 + 5200 = 24478 (income tax 52003 x 10% = 5200.30 -> art. 66 -> 5200.00)
+    expect(res.output.total).toBe(lei(24_478));
   });
 
   it('art. 118 alin. (2^4): the deductions are capped at the recalculated net income of the same source', async () => {
@@ -539,7 +544,7 @@ describe('computeTaxEstimate', () => {
     expect(res.lines.find((l) => l.label === 'Impozit pe venit (rată de bază 10%)')).toBeUndefined();
     expect(res.lines.find((l) => l.label === 'Impozit pe venit (fără bază impozabilă)')?.value).toBe(0);
     // The contributions are still owed in full: the cap limits the DEDUCTION, not the liability.
-    expect(res.output.total).toBeCloseTo(53_600, 6);
+    expect(res.output.total).toBeCloseTo(lei(53_600), 6);
   });
 
   // ── Phase 5 / B-16: a loss year is computed, and the loss is surfaced ──
@@ -627,7 +632,7 @@ describe('salaried PFA under the 6 SM floor — both art. 174 alin. (7) lit. a) 
     expect(
       res.lines.find((l) => l.label === 'Venit net anual impozabil (art. 118 alin. (2) lit. b))')?.value,
     ).toBe(lei(18_000));
-    expect(res.output.total).toBe(4_230);
+    expect(res.output.total).toBe(lei(4_230));
   });
 
   it('with no salary amount the engine still refuses to guess the 6 SM test', async () => {

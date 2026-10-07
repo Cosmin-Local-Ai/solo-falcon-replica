@@ -9,8 +9,7 @@ import {
   addToTaxReserve,
   monthsRemainingInFiscalYear,
 } from './taxReserve';
-import { lei, type Bani } from './money'
-import { lei } from '../../domain/money';
+import { lei, type Bani } from './money';
 
 function makeSnapshot(total: Bani): TaxCalculationSnapshot {
   return {
@@ -48,11 +47,12 @@ describe('computeTaxReserve', () => {
     });
     // Liability is the engine total verbatim — NOT reduced by the reserve.
     expect(rec.estimatedTaxLiability).toBe(lei(18_535));
-    expect(rec.reservedAmount).toBe(5_000);
-    expect(rec.remainingTarget).toBe(13_535);
+    expect(rec.reservedAmount).toBe(lei(5_000));
+    expect(rec.remainingTarget).toBe(lei(13_535));
     // June–December inclusive = 7 months.
     expect(rec.monthsRemaining).toBe(7);
-    expect(rec.recommendedMonthlyReserve).toBeCloseTo(13_535 / 7, 6);
+    // divBani() rounds the share to the nearest ban, so the relation holds within half a ban.
+    expect(rec.recommendedMonthlyReserve).toBeCloseTo(lei(13_535) / 7, 0);
   });
 
   it('returns null liability and zero targets when no estimate is available', () => {
@@ -61,7 +61,7 @@ describe('computeTaxReserve', () => {
       fiscalYear: 2026,
     });
     expect(rec.estimatedTaxLiability).toBeNull();
-    expect(rec.reservedAmount).toBe(5_000);
+    expect(rec.reservedAmount).toBe(lei(5_000));
     expect(rec.remainingTarget).toBe(0);
     expect(rec.recommendedMonthlyReserve).toBe(0);
   });
@@ -82,9 +82,9 @@ describe('computeTaxReserve', () => {
       asOfDate: '2026-01-01',
       fiscalYear: 2026,
     });
-    expect(rec.remainingTarget).toBe(15_750);
+    expect(rec.remainingTarget).toBe(lei(15_750));
     expect(rec.monthsRemaining).toBe(12);
-    expect(rec.recommendedMonthlyReserve).toBe(1_312.5);
+    expect(rec.recommendedMonthlyReserve).toBe(lei(1_312.5));
   });
 
   it('returns zero remaining target when the reserve fully covers the liability', () => {
@@ -111,8 +111,8 @@ describe('computeTaxReserve', () => {
       fiscalYear: 2026,
     });
     expect(rec.monthsRemaining).toBe(1);
-    expect(rec.remainingTarget).toBe(10_000);
-    expect(rec.recommendedMonthlyReserve).toBe(10_000);
+    expect(rec.remainingTarget).toBe(lei(10_000));
+    expect(rec.recommendedMonthlyReserve).toBe(lei(10_000));
   });
 
   it('counts 12 months remaining at the start of the fiscal year', () => {
@@ -156,7 +156,8 @@ describe('computeTaxReserve', () => {
     // null is treated as 0 for the math: the full liability remains to reserve.
     expect(rec.remainingTarget).toBe(lei(18_535));
     expect(rec.monthsRemaining).toBe(7);
-    expect(rec.recommendedMonthlyReserve).toBeCloseTo(18_535 / 7, 6);
+    // 1 853 500 bani / 7 = 264 785.714...; the share is rounded to the nearest ban.
+    expect(rec.recommendedMonthlyReserve).toBeCloseTo(lei(18_535) / 7, 0);
   });
 
   it('keeps an explicit zero reserve as zero (distinct from null)', () => {
@@ -164,9 +165,9 @@ describe('computeTaxReserve', () => {
       asOfDate: '2026-06-15',
       fiscalYear: 2026,
     });
-    expect(rec.reservedAmount).toBe(0);
+    expect(rec.reservedAmount).toBe(lei(0));
     expect(rec.remainingTarget).toBe(lei(18_535));
-    expect(rec.recommendedMonthlyReserve).toBeCloseTo(18_535 / 7, 6);
+    expect(rec.recommendedMonthlyReserve).toBeCloseTo(lei(18_535) / 7, 0);
   });
 
   it('derives recommendedMonthlyReserve from its own remainingTarget and monthsRemaining', () => {
@@ -178,7 +179,8 @@ describe('computeTaxReserve', () => {
     // Consistency check: the monthly recommendation must equal the remaining
     // target divided by the months remaining, using fields returned by
     // computeTaxReserve itself (no hardcoded division).
-    expect(rec.recommendedMonthlyReserve).toBeCloseTo(rec.remainingTarget / rec.monthsRemaining, 6);
+    // precision 0 = within half a ban, which is exactly the rounding error divBani() may introduce.
+    expect(rec.recommendedMonthlyReserve).toBeCloseTo(rec.remainingTarget / rec.monthsRemaining, 0);
   });
 });
 

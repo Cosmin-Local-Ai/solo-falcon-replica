@@ -135,7 +135,7 @@ describe('selectYtd', () => {
     expect(ytd.revenue).toBe(lei(110));
     expect(ytd.revenueNet).toBe(lei(100));
     expect(ytd.expenses).toBe(lei(55));
-    expect(ytd.expenseNet).toBe(50);
+    expect(ytd.expenseNet).toBe(lei(50));
     expect(ytd.net).toBe(55);
   });
 
@@ -220,7 +220,7 @@ describe('selectYtd', () => {
     expect(ytd.revenue).toBe(lei(100));
     expect(ytd.revenueNet).toBe(lei(100));
     expect(ytd.expenses).toBe(lei(50));
-    expect(ytd.expenseNet).toBe(50);
+    expect(ytd.expenseNet).toBe(lei(50));
     expect(ytd.net).toBe(50);
   });
 

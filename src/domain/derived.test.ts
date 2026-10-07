@@ -112,7 +112,7 @@ describe('selectFinancialDerived (Step 14)', () => {
     expect(view.ytd.revenue).toBe(lei(1190));
     expect(view.ytd.expenses).toBe(lei(595));
     expect(view.ytd.net).toBe(lei(595));
-    expect(view.monthly.get('2026-03')?.revenue).toBe(1190);
+    expect(view.monthly.get('2026-03')?.revenue).toBe(lei(1190));
     expect(view.monthly.get('2026-04')?.expenses).toBe(595);
     expect(view.projection).toHaveProperty('annualProjected');
     expect(view.projection).toHaveProperty('runRate');
