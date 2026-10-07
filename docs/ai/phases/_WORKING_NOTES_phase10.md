@@ -846,3 +846,22 @@ number.** Do not "fix" an unverified line by rounding it.
   real total field before "fixing" it.
 - No `Math.round` exists in `FinancialChart.tsx`; the brief's B-18 description is false. Real float accumulation
   is `aggregation.ts:224-232` and `projection.ts:67,73`.
+
+### Persisted-schema money fields (read verbatim, `src/data/schema.ts`)
+- `:36` `const nonNegative = z.number().min(0);` — shared by `valoareFaraTva` (`:48`, `:65`), `tva` (`:49`, `:66`),
+  `venituri`/`cheltuieli` (`:84`, `:85`). **Do not add `.int()` here** (parse runs before migration).
+- Snapshot: `:145-146` `revenues: z.number()` / `expenses: z.number()`; `:155` `value: z.number()`;
+  `:164` `output: z.object({ total: z.number() })`.
+- `:418-421` `Expect<Equal<z.output<typeof revenueSchema>, Revenue>>` (and Expense/Client/Declaration) — **type
+  equality assertions between the persisted schema and the domain type. They will fail the moment one side changes
+  and the other does not, which is exactly the drift guard I want. Do not delete them to get tsc green — fix both
+  sides.**
+- `src/domain/schema.ts`: `:71` `salaryIncomeLei: z.number().min(0).finite().optional()`, `:82`
+  `cashFloorLei: z.number().min(0)`.
+- `src/domain/models.ts`: `:173` `salaryIncomeLei?: number;`, `:199` `cashFloorLei: number;` — **both named `…Lei`;
+  rename to `…Bani` or keep the name and change the unit. Renaming touches the persisted key, which is a data
+  migration, not a type change. Decision: rename the *type*, keep the *persisted key* stable where possible, and
+  say so in the migration step.**
+- `src/data/seed.ts` money lines, verbatim: revenues `:40-43` (`4500/945`, `1200/252`, `800/168`, `3200/672`);
+  expenses `:46-48` (`120/25.2`, `85.5/17.96`, `340/71.4`); declarations `:56-58`
+  (`12500/1800`, `14200/2100`, `9680/546`); `:16` `cashFloorLei: 0`.
