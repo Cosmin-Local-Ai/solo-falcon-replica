@@ -149,7 +149,18 @@ export const taxCalculationSnapshotSchema = z.object({
   // Phase 7: the digest carried before a data migration rewrote the embedded
   // profile. Optional, so snapshots written before AND after Phase 7 both parse.
   preMigrationInputsHash: z.string().optional(),
-  calculationLines: z.array(z.object({ label: z.string(), value: z.number() })),
+  calculationLines: z.array(
+    z.object({
+      label: z.string(),
+      value: z.number(),
+      // B-19: a line the engine could not ground in an applicable rule. Both fields are optional so
+      // snapshots written before this phase still parse — but they must be declared, because zod
+      // STRIPS unknown keys by default and would silently erase the marker on load, which is the
+      // exact failure mode this phase is about: an unverified figure arriving as a plain fact.
+      reviewRequired: z.boolean().optional(),
+      reason: z.string().optional(),
+    }),
+  ),
   output: z.object({ total: z.number() }),
   status: z.enum(['computed', 'superseded', 'void']),
 });

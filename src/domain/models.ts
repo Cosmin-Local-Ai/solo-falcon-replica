@@ -45,7 +45,18 @@ export type PfaOtherIncomeFlag =
   | 'concesiune'
   | 'alte';
 
-/** CASS (social insurance) status for the profile. */
+/**
+ * CASS status for the profile. The three stored strings are PERSISTED DATA — renaming a value would
+ * be a data migration this brief does not authorise, so only the vocabulary AROUND them changes (B-19).
+ *
+ * `exempt` is the app's flag for the CF art. 154 alin. (1) categories „exceptate de la plata
+ * contribuției de asigurări sociale de sănătate" — a CLOSED list, and none of its live letters
+ * covers a persoană fizică cu activitate independentă. A CASS zero that comes from this flag is
+ * therefore marked `reviewRequired` by the engine and never presented as an established exemption.
+ * Titlul V says „exceptat" for that status and „nu se datorează" for a conditional non-due (art.
+ * 174 alin. (7) reaches only the art. 174 alin. (6) difference); the words „scutit"/„scutire" occur
+ * nowhere in Titlul V, so they must not label a CASS result anywhere in this app.
+ */
 export type PfaSocialInsuranceStatus = 'obligatoriu' | 'exempt' | 'neplata';
 
 /**

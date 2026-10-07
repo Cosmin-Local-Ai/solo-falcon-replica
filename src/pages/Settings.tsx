@@ -696,12 +696,16 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                   }
                 >
                   <option value="obligatoriu">obligatoriu</option>
-                  <option value="exempt">scutit</option>
-                  <option value="neplata">neplata</option>
+                  <option value="exempt">exceptat (art. 154 alin. (1))</option>
+                  <option value="neplata">nu se datorează</option>
                 </select>
                 <span className="hint">
-                  Atenție: „scutit”/“neplata” zero CASS în motor, dar temeiul (art. 154 alin. (1)) nu a
-                  fost verificat — să nu fie folosit ca dovedire (docs/ai/STATE.md).
+                  CASS: „exceptat" (art. 154 alin. (1) — o listă închisă de categorii, niciuna nu
+                  acoperă un PFA cu activitate independentă) și „nu se datorează" sunt ambele
+                  neconfirmate ca temei pentru un PFA. Motorul marchează linia CASS cu
+                  „review_required" pentru că nu a găsit nicio regulă aplicabilă; valoarea calculată
+                  rămâne 0 lei. Titlul V nu folosește termenul „scutire" — de aceea nici acest
+                  formular nu-l folosește.
                 </span>
               </div>
 

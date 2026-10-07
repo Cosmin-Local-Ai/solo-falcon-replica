@@ -29,6 +29,15 @@ export interface CalculationInput {
 export interface CalculationLine {
   label: string;
   value: number;
+  /**
+   * B-19: this line's amount is NOT grounded in an applicable rule, so it must not be presented as
+   * an established figure. It is a marker on the LINE, deliberately not a change to the amount —
+   * the number stays exactly what the engine computed, and the consumer is told it is unverified.
+   * Optional: every line written before this phase, and every grounded line, has no marker.
+   */
+  reviewRequired?: boolean;
+  /** Why the line is marked. Present exactly when `reviewRequired` is, and says which basis is missing. */
+  reason?: string;
 }
 
 /** Final result of the calculation. */

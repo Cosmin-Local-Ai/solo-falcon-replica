@@ -37,6 +37,60 @@ describe('computeTaxEstimate', () => {
     expect(res.output.total).toBe(4_000);
   });
 
+  /*
+   * B-19 — the flag short-circuit used to emit a silent `CASS (exempt) = 0`, indistinguishable from a
+   * contribution a rule actually relieved. These tests pin the fix: the money does not move by a single
+   * leu, and the line now says out loud that no legal basis was found.
+   */
+  it('marks the flag-driven CASS zero review_required for both flag values, and moves no money', async () => {
+    for (const status of ['exempt', 'neplata'] as const) {
+      const res = await computeTaxEstimate({ inputs: makeInputs({ socialInsuranceStatus: status }), profile: makeProfile({ socialInsuranceStatus: status }), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+      expect(res.status).toBe('computed');
+      if (res.status !== 'computed') continue;
+      const cass = res.lines.find((l) => l.label.startsWith('CASS ('));
+      expect(cass, `no CASS line for ${status}`).toBeDefined();
+      expect(cass!.value).toBe(0); // exactly the amount the pre-B-19 engine produced
+      expect(cass!.reviewRequired).toBe(true); // and it is no longer a silent zero
+      expect(cass!.reason?.toLowerCase()).toContain('art. 154 alin. (1)');
+      // CAS 0 (below 12 SM) + CASS 0 + 10% x 40 000 — the same total as before the marker existed.
+      expect(res.output.total).toBe(4_000);
+    }
+  });
+
+  it('does NOT mark a CASS zero that a rule does relieve (art. 174 alin. (2) is not a flag)', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 10_000, expenses: 10_000, revenuesNet: 10_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    const cass = res.lines.find((l) => l.label === 'CASS (10%)');
+    expect(cass?.value).toBe(0);
+    expect(cass?.reviewRequired).toBeUndefined();
+  });
+
+  it('never labels a CASS line „scutit" or „scutire" — neither word exists in Titlul V (B-19)', async () => {
+    for (const status of ['obligatoriu', 'exempt', 'neplata'] as const) {
+      const res = await computeTaxEstimate({ inputs: makeInputs({ socialInsuranceStatus: status }), profile: makeProfile({ socialInsuranceStatus: status }), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+      if (res.status !== 'computed') continue;
+      for (const line of res.lines) {
+        if (!line.label.startsWith('CASS')) continue;
+        expect(line.label.toLowerCase()).not.toContain('scutit');
+        expect(line.label.toLowerCase()).not.toContain('scutire');
+        expect(line.label.toLowerCase()).not.toContain('exempt');
+      }
+    }
+  });
+
+  it('carries the CASS provenance into the snapshot, not only onto a screen', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs({ socialInsuranceStatus: 'exempt' }), profile: makeProfile({ socialInsuranceStatus: 'exempt' }), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    const provenance = res.snapshot.calculationLines.find((l) => l.label.startsWith('PROVENANȚĂ CASS'));
+    expect(provenance).toBeDefined();
+    expect(provenance!.label.toLowerCase()).toContain('art. 154 alin. (1)');
+    // The admission is stored with the calculation, so an audit of a past snapshot sees the same
+    // caveat the engine had at compute time — it is not a UI-only decoration.
+    expect(res.snapshot.calculationLines.find((l) => l.label.startsWith('CASS ('))?.reviewRequired).toBe(true);
+  });
+
   it('net = 0 → CASS 0, NOT review_required (CF art. 174 alin. (2): zero net income owes no CASS)', async () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 10_000, expenses: 10_000, revenuesNet: 10_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');

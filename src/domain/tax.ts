@@ -73,6 +73,24 @@ function rr(reason: string, lines: CalculationLine[] = []): TaxEstimateResult {
   return { status: 'review_required', reason, lines };
 }
 
+/**
+ * B-19 — the one sentence the engine says out loud whenever CASS is zeroed by the profile flag
+ * rather than by a rule. Exported as a constant so the engine line, the persisted snapshot and any
+ * UI that surfaces it use the SAME words instead of three paraphrases that can drift apart.
+ *
+ * Established: CF art. 154 alin. (1) is headed „Categorii de persoane fizice exceptate de la plata
+ * contribuției de asigurări sociale de sănătate" and is a CLOSED list; none of its live letters
+ * reaches a persoană fizică cu activitate independentă. NOT established: any legal basis for
+ * zeroing a PFA's CASS from this flag — which is exactly why the line carries `reviewRequired`.
+ * The words „scutit"/„scutire" appear nowhere in Titlul V, so they appear nowhere here either.
+ */
+export const CASS_FLAG_REVIEW_REASON =
+  'CASS = 0 provine din steagul profilului (socialInsuranceStatus), nu dintr-o regulă aplicabilă. '
+  + 'Art. 154 alin. (1) este o listă închisă de categorii „exceptate de la plata contribuției de '
+  + 'asigurări sociale de sănătate", iar niciuna nu acoperă o persoană fizică cu activitate '
+  + 'independentă (PFA); nu a fost găsit niciun temei care să scutească un PFA de CASS. CASS = 0 lei '
+  + 'rămâne valoarea calculată, dar nu poate fi prezentată ca o scutire dovedită.';
+
 export async function computeTaxEstimate(input: TaxCalculationInput): Promise<TaxEstimateResult> {
   const { inputs, profile, revenues, expenses, revenuesNet, expensesNet, ruleRelease, rules } = input;
   if (!Number.isFinite(revenues) || revenues < 0) return rr(`Veniturile trebuie să fie >= 0, s-a obținut ${revenues}`);
@@ -178,7 +196,26 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     cassNonDeductibila = cassRes.nonDeductible ?? 0;
     lines.push({ label: 'CASS (10%)', value: cassValue });
   } else {
-    lines.push({ label: `CASS (${inputs.socialInsuranceStatus})`, value: 0 });
+    // B-19 — the flag short-circuit, now an honest one. This zero is NOT a rule's output: it comes
+    // from a stored profile flag whose legal basis was never found (see CASS_FLAG_REVIEW_REASON).
+    // The flag itself stays (deleting it would destroy user data) and the amount stays 0 lei, but the
+    // line carries `reviewRequired` so no consumer can read this zero as an established exemption.
+    // The label uses the code's own vocabulary: Titlul V separates „exceptat" (art. 154 alin. (1), a
+    // status on a closed list) from „nu se datorează" (a conditional non-due — and art. 174 alin. (7)
+    // reaches only the art. 174 alin. (6) difference, never the whole contribution). Neither „scutit"
+    // nor „scutire" occurs anywhere in Titlul V, so neither may ever label a CASS result.
+    lines.push({
+      label:
+        inputs.socialInsuranceStatus === 'exempt'
+          ? 'CASS (exceptat — art. 154 alin. (1); temeiul nu a fost verificat)'
+          : 'CASS (nu se datorează — temeiul nu a fost verificat)',
+      value: 0,
+      reviewRequired: true,
+      reason: CASS_FLAG_REVIEW_REASON,
+    });
+    // Provenance travels with the result, not with the screen: the snapshot embeds these lines, so
+    // an audit of a stored calculation sees the same admission the engine made at compute time.
+    lines.push({ label: `PROVENANȚĂ CASS: ${CASS_FLAG_REVIEW_REASON}`, value: 0 });
   }
 
   // ---- CF art. 118 alin. (2): the taxable base, composed in the order the law states it ----

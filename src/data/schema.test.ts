@@ -104,6 +104,41 @@ describe('parseAppData — valid payloads', () => {
     expect(parsed?.snapshots).toHaveLength(1);
   });
 
+  // B-19: the marker that tells a consumer a CASS figure is not grounded in a rule must survive the
+  // load path. zod strips unknown keys by default, so an undeclared marker would be erased on load
+  // and the unverified zero would come back as a plain fact — the exact failure this phase closes.
+  it('keeps a line-level review_required marker through the persisted schema', () => {
+    const snapshots = [
+      {
+        calculationId: 'calc-2026-b19',
+        taxYear: 2026,
+        calculatedAt: '2026-09-01T00:00:00.000Z',
+        ruleRelease: validRelease,
+        inputSnapshot: { profile: seedData.profile, revenues: 1000, expenses: 0 },
+        inputsHash: 'abc123',
+        calculationLines: [
+          {
+            label: 'CASS (exceptat — art. 154 alin. (1); temeiul nu a fost verificat)',
+            value: 0,
+            reviewRequired: true,
+            reason: 'art. 154 alin. (1) este o listă închisă și nu acoperă un PFA',
+          },
+          { label: 'Total taxe', value: 0 },
+        ],
+        output: { total: 0 },
+        status: 'computed',
+      },
+    ];
+    const parsed = parseAppData(write({ snapshots }));
+    expect(parsed).not.toBeNull();
+    const lines = parsed?.snapshots?.[0].calculationLines ?? [];
+    expect(lines).toHaveLength(2);
+    expect(lines[0].reviewRequired).toBe(true);
+    expect(lines[0].reason).toContain('art. 154 alin. (1)');
+    // A grounded line keeps having NO marker — absence is meaningful here, not missing data.
+    expect(lines[1].reviewRequired).toBeUndefined();
+  });
+
   it('accepts a person-only profile (empty company identity)', () => {
     const profile = {
       ...seedData.profile,
