@@ -145,7 +145,10 @@ test.describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () =
     expect(saved.caen).toBeUndefined();
     expect(saved.pfaStartDate).toBe('2026-04-01');
     expect(saved.salaryStatus).toBe('da');
-    expect(saved.salaryIncomeLei).toBe(30000);
+    // Phase 10: storage holds integer BANI. The key is still named `…Lei` — renaming a persisted key
+    // would make zod strip it and reject every pre-v5 payload — so the unit lives in the type, not the
+    // name. What the user typed (30 000 lei) is what the field shows back; what is stored is 3 000 000.
+    expect(saved.salaryIncomeLei).toBe(3_000_000);
 
     // The real proof: a fresh document must read the new values back out of storage.
     await page.reload();

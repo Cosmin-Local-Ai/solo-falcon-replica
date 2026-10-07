@@ -6,14 +6,14 @@ import { test, expect, type Page } from '@playwright/test';
  * The dashboard renders from the app's built-in seed dataset on a fresh
  * browser context (no localStorage). All expected values below are
  * deterministic: they are derived from the seed data with asOf = today
- * (fiscal year 2026) and formatted with the app's fmtRON
+ * (fiscal year 2026) and formatted by formatBaniRON in src/domain/money.ts
  * (Intl.NumberFormat('ro-RO', 2 decimals) + ' RON').
  *
  * Cockpit cards rendered by src/pages/Dashboard.tsx (5 StatCards):
- *   - "Venituri PFA (an)"        → fmtRON(snapshot.pfaRevenue)
+ *   - "Venituri PFA (an)"        → formatBaniRON(snapshot.pfaRevenue)
  *   - "Impozit estimat"          → '—' when tax status is not 'computed'
- *   - "Rezervă lunară"           → fmtRON(reserve.recommendedMonthlyReserve)
- *   - "Rămâne de pus deoparte"   → fmtRON(reserve.remainingTarget)
+ *   - "Rezervă lunară"           → formatBaniRON(reserve.recommendedMonthlyReserve)
+ *   - "Rămâne de pus deoparte"   → formatBaniRON(reserve.remainingTarget)
  *   - "Date complete"            → `${satisfiedCount}/${totalCount}`
  */
 
@@ -70,22 +70,27 @@ test.describe('Dashboard — cockpit cards (seed data)', () => {
     // Seed net income is 7.494,50 lei (revenues 4.500 + 3.200 − expenses 120 + 85,50, all 'inregistrata')
     // — inside the 0 < VNA < 6 SM band, so this dataset also exercises B-13: CASS owed = 2.430 lei
     // (art. 174 alin. (6) difference to the 6 SM floor) but only 749,45 lei (10% × VNA, art. 174 alin.
-    // (1)) is deductible, so the tax is 10% × 6.745,05 = 674,505 lei — an exact HALF-CENT, shown as
-    // 674,51 only because Intl.NumberFormat rounds the double it happens to be handed (defect B-17).
-    // Total = 2.430 + 674,505 = 3.104,505 lei → "3.104,51". Before B-13 the seed produced 2.936,45 lei.
+    // (1)) is deductible. CF art. 66 alin. (1) then rounds each sum DUE to a whole leu, fracțiuni de
+    // până la 50 de bani inclusiv neglijate:
+    //   deductibilă 749,45 → 45 bani ≤ 50 → 749,00 lei
+    //   bază        7.494,50 − 749,00 = 6.745,50 lei (the base is never itself rounded)
+    //   impozit     10% × 6.745,50 = 674,55 → 55 bani > 50 → majorat la 675,00 lei
+    //   total       2.430 + 675 = 3.105,00 lei
+    // This is the value B-17 used to disagree about: the same money used to render as 3.104,51 RON on
+    // one path and 3.104,50 RON on another, because two formatters rounded a double independently.
     const impozit = statCard(page, 'Impozit estimat');
     await expect(impozit).toBeVisible();
-    await expect(impozit.locator('.value')).toHaveText('3.104,51 RON');
+    await expect(impozit.locator('.value')).toHaveText('3.105,00 RON');
     await expect(impozit.locator('.hint')).toHaveText('de pus deoparte');
 
     // A computed tax → a recommended monthly reserve (total / 3 months) and a remaining amount.
     const rezerva = statCard(page, 'Rezervă lunară');
     await expect(rezerva).toBeVisible();
-    await expect(rezerva.locator('.value')).toHaveText('1.034,84 RON');
+    await expect(rezerva.locator('.value')).toHaveText('1.035,00 RON');
 
     const ramane = statCard(page, 'Rămâne de pus deoparte');
     await expect(ramane).toBeVisible();
-    await expect(ramane.locator('.value')).toHaveText('3.104,51 RON');
+    await expect(ramane.locator('.value')).toHaveText('3.105,00 RON');
 
     // Completeness: still 8 of 9 — the check looks for a PERSISTED tax snapshot, and the live estimate
     // is not written to storage (persisting it is Phase 7, not Phase 5).
@@ -129,7 +134,7 @@ test.describe('Dashboard — cockpit cards (seed data)', () => {
       .locator('section.card')
       .filter({ has: page.locator('h2.card-title', { hasText: 'Estimare impozit' }) })
       .first();
-    await expect(heroCard.locator('.tax-hero-value')).toHaveText('3.104,51 RON');
+    await expect(heroCard.locator('.tax-hero-value')).toHaveText('3.105,00 RON');
   });
 });
 
@@ -151,10 +156,10 @@ test.describe('Dashboard — section content (seed data)', () => {
 
     const reserve = sectionWith(page, 'Rezervă fiscală', 'h2');
     await expect(reserve).toBeVisible();
-    // 3.104,51 lei over the 3 remaining months of the quarter → 1.034,84 lei/month.
-    await expect(reserve.getByText('1.034,84 RON').first()).toBeVisible();
+    // 3.105,00 lei over the 3 remaining months of the quarter → 1.035,00 lei/month exactly.
+    await expect(reserve.getByText('1.035,00 RON').first()).toBeVisible();
     await expect(
-      reserve.getByText('Rămâne de pus deoparte 3.104,51 RON în următoarele 3 luni.'),
+      reserve.getByText('Rămâne de pus deoparte 3.105,00 RON în următoarele 3 luni.'),
     ).toBeVisible();
     // The no-estimate empty state is gone: the default regime computes (B-14).
     await expect(
@@ -574,10 +579,6 @@ test.describe('Dashboard — Grafic financiar & KPI table (seeded FY2025)', () =
     );
   };
 
-  /** Mirror of the app's fmtRON (src/data/types.ts). */
-  const fmtRON = (n: number) =>
-    `${new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)} RON`;
-
   /**
    * Mirror of the app's month labels (FinancialChart MONTH_LABELS). In the
    * "An" range the label carries no year. Do NOT use toLocaleDateString —
@@ -600,7 +601,7 @@ test.describe('Dashboard — Grafic financiar & KPI table (seeded FY2025)', () =
     const rows = chart.locator('table tbody tr');
     await expect(rows).toHaveCount(12);
 
-    const expected = `${fmtRON(MONTHLY_TOTAL)} — Realizat`;
+    const expected = '202.000,00 RON — Realizat';
     await expect(rows.first().locator('td').first()).toHaveText(expected);
     await expect(rows.last().locator('td').first()).toHaveText(expected);
   });
@@ -615,8 +616,8 @@ test.describe('Dashboard — Grafic financiar & KPI table (seeded FY2025)', () =
     const rows = chart.locator('table tbody tr');
     await expect(rows).toHaveCount(12);
 
-    const revenueCell = `${fmtRON(MONTHLY_TOTAL)} — Realizat`;
-    const expenseCell = `${fmtRON(0)} — Realizat`;
+    const revenueCell = '202.000,00 RON — Realizat';
+    const expenseCell = '0,00 RON — Realizat';
     for (let i = 0; i < 12; i++) {
       const row = rows.nth(i);
       await expect(row.locator('th')).toHaveText(monthLabel(i + 1));
@@ -640,7 +641,7 @@ test.describe('Dashboard — Grafic financiar & KPI table (seeded FY2025)', () =
     await chart.locator('select[aria-label="Lună selectată"]').selectOption('2025-03');
     await expect(rows).toHaveCount(1);
     await expect(rows.first().locator('th')).toHaveText('Mar 2025');
-    await expect(rows.first().locator('td').first()).toHaveText(`${fmtRON(MONTHLY_TOTAL)} — Realizat`);
+    await expect(rows.first().locator('td').first()).toHaveText('202.000,00 RON — Realizat');
   });
 
   test('Grafic financiar: "YTD" range shows the full fiscal year for completed FY2025 data', async ({ page }) => {
@@ -653,7 +654,7 @@ test.describe('Dashboard — Grafic financiar & KPI table (seeded FY2025)', () =
     const rows = chart.locator('table tbody tr');
     await expect(rows).toHaveCount(12);
 
-    const expected = `${fmtRON(MONTHLY_TOTAL)} — Realizat`;
+    const expected = '202.000,00 RON — Realizat';
     await expect(rows.first().locator('th')).toHaveText('Ian');
     await expect(rows.first().locator('td').first()).toHaveText(expected);
     await expect(rows.last().locator('th')).toHaveText('Dec');
@@ -672,7 +673,7 @@ test.describe('Dashboard — Grafic financiar & KPI table (seeded FY2025)', () =
     const rows = chart.locator('table tbody tr');
     await expect(rows).toHaveCount(12);
     await expect(rows.last().locator('th')).toHaveText('Dec');
-    await expect(rows.last().locator('td').first()).toHaveText(`${fmtRON(MONTHLY_TOTAL)} — Realizat`);
+    await expect(rows.last().locator('td').first()).toHaveText('202.000,00 RON — Realizat');
   });
 
   test('mobile (390x844): seeded FY2025 data renders without horizontal overflow', async ({ page }) => {
