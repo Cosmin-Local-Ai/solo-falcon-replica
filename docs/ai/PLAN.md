@@ -649,3 +649,10 @@ numbering stays readable.
     and provenance — never presented as a Titlul V requirement. **Tie-break is art. 66's own: a fraction of exactly
     50 bani rounds DOWN** („până la 50 de bani **inclusiv**"), which is the opposite of `Math.round` at the boundary.
     Brief: `docs/ai/briefs/12_phase10_money.md`.
+13. **Phase 10 scope override — user, 2026-10-08.** The Worker recommended landing the safe subset and handing T1
+    (integer-bani conversion) back as a green spec, because T1 touches ~15 source files, ~22 display call sites and
+    ~200 test literals, with real risk of a red tree. **The user overrode: option (a), finish T1 in this pass.**
+    Standing condition relayed to the Worker: the phase ends **green at all four checks or reverted to the last green
+    commit** — a broken tree is never an acceptable handoff, and green may never be restored by weakening an assertion.
+    Option (c) (storage-only, domain stays in lei) was rejected outright: a permanent lei↔bani boundary is the drift
+    mechanism this phase exists to remove.
