@@ -6,6 +6,7 @@ import {
   downloadDataUrl, downloadText, total,
 } from '../data/types';
 import type { DocTypeCode, CompanyDocument, TaxStatement } from '../data/types';
+import { type Bani, formatBani, formatBaniRON, sumBani, subBani } from '../domain/money';
 import { Card, Badge, Modal, Empty } from '../components/ui';
 
 // Canonical route hash keys — mirror the original SOLO Documents feature:
@@ -409,13 +410,18 @@ function StatementsTab() {
 
 // ---------- Reports tab: RJIP cashflow registers ----------
 
-function rjipCsv(year: number, rows: { data: string; descriere: string; venit: number; cheltuiala: number }[]): string {
+/** Exported so the money rendering of an exported register can be pinned directly (B-17 class defect). */
+export function rjipCsv(
+  year: number,
+  rows: { data: string; descriere: string; venit: Bani; cheltuiala: Bani }[],
+): string {
   const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
   const lines = [
     'Data;Descriere;Venit (RON);Cheltuiala (RON)',
-    ...rows.map(r =>
-      [r.data, esc(r.descriere), r.venit.toFixed(2).replace('.', ','), r.cheltuiala.toFixed(2).replace('.', ',')].join(';'),
-    ),
+    // `formatBani`, not `toFixed(2)`: these are BANI. `14250..toFixed(2)` exported 142,50 lei as
+    // "14250,00" — a 100× error in a register the tax office reads, and an exported file is exactly
+    // where a raw stored unit must not leak.
+    ...rows.map((r) => [r.data, esc(r.descriere), formatBani(r.venit), formatBani(r.cheltuiala)].join(';')),
   ];
   // BOM so Excel opens the semicolon CSV with proper encoding.
   return '\uFEFF' + lines.join('\r\n');
@@ -435,14 +441,14 @@ function ReportsTab() {
   const [year, setYear] = useState(currentYear);
 
   const rows = useMemo(() => {
-    const out: { data: string; descriere: string; venit: number; cheltuiala: number }[] = [];
+    const out: { data: string; descriere: string; venit: Bani; cheltuiala: Bani }[] = [];
     for (const r of revenues) {
       if (r.date.slice(0, 4) === String(year)) {
         out.push({
           data: r.date,
           descriere: `${r.tip === 'factura' ? 'Factură' : 'Notă de factură'} ${r.nr} – ${r.client}`,
           venit: total(r),
-          cheltuiala: 0,
+          cheltuiala: 0 as Bani,
         });
       }
     }
@@ -451,7 +457,7 @@ function ReportsTab() {
         out.push({
           data: e.date,
           descriere: `${e.tip === 'factura' ? 'Factură' : 'Bon fiscal'} ${e.nr} – ${e.furnizor}`,
-          venit: 0,
+          venit: 0 as Bani,
           cheltuiala: total(e),
         });
       }
@@ -459,8 +465,11 @@ function ReportsTab() {
     return out.sort((a, b) => a.data.localeCompare(b.data));
   }, [revenues, expenses, year]);
 
-  const venit = rows.reduce((s, r) => s + r.venit, 0);
-  const chelt = rows.reduce((s, r) => s + r.cheltuiala, 0);
+  // Money arithmetic belongs in the domain, not in JSX: `rows.reduce((s, r) => s + r.venit, 0)` starts
+  // from an unbranded 0 and widens every Bani addend to a plain number on the way through.
+  const venit = sumBani(rows.map((r) => r.venit));
+  const chelt = sumBani(rows.map((r) => r.cheltuiala));
+  const sold = subBani(venit, chelt);
 
   function download() {
     if (!rows.length) {
@@ -493,16 +502,16 @@ function ReportsTab() {
       <div style={{ borderTop: '1px solid var(--border)', padding: '14px 18px', display: 'flex', gap: 24, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Venituri {year}</div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>{venit.toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON</div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>{formatBaniRON(venit)}</div>
         </div>
         <div>
           <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Cheltuieli {year}</div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>{chelt.toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON</div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>{formatBaniRON(chelt)}</div>
         </div>
         <div>
           <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Sold</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: venit - chelt >= 0 ? 'var(--success)' : 'var(--danger)' }}>
-            {(venit - chelt).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
+          <div style={{ fontSize: 16, fontWeight: 700, color: sold >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+            {formatBaniRON(sold)}
           </div>
         </div>
         <div>

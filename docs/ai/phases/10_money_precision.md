@@ -1,14 +1,12 @@
 # Phase 10 — money representation and rounding policy
 
-**STATUS: PARTIAL — T1 WAS NOT EXECUTED.**
+**STATUS: DONE (2026-10-08) — T1 EXECUTED. Money is integer `Bani` end to end.**
 
-What shipped: the rounding policy (CF art. 66 alin. (1)) and the single display conversion, in
-`src/domain/money.ts`, plus the B-17 formatter collapse, `totalDue`, and the view-layer money arithmetic.
-
-What did **not** ship: **T1 — making money an integer number of bani in storage and in the domain.** Money is
-still persisted and computed as **float lei**. The conversion is fully designed and specified in **§2 below,
-which is written to be executed by a Worker who has never seen the conversation that produced it.** It is
-tracked in the defect register as **B-25** (`docs/ai/STATE.md`). Do not read this phase as finished.
+The earlier status on this file was **PARTIAL**: the rounding policy and the single display conversion had
+shipped, but T1 — making money an integer number of bani in storage and in the domain — had been deliberately
+deferred, with §2 below written as a spec for a worker who had never seen the conversation that produced it.
+**That spec has now been executed, and §2 is kept as-written because the gap between what it predicted and what
+actually happened is the useful part.** The delta is §3. Register: **B-25 closed**, **B-17 closed**, **B-26 opened**.
 
 Why the split: the trade-off was requested by the Worker and accepted by the orchestrator explicitly. Option
 (c) — persist in bani but keep the domain in lei behind a conversion boundary — was rejected outright, because
@@ -343,3 +341,76 @@ deleted was itself a defect.
 `inputsHash` is re-derived and its previous digest preserved in `preMigrationInputsHash`. 8. No `Math.round`,
 `toFixed` or `Intl.NumberFormat` on money survives anywhere in `src/` except inside `src/domain/money.ts`.
 9. Every negative control in §2.4 is unchanged in value.
+
+
+---
+
+## 3. WHAT ACTUALLY SHIPPED, AND WHERE §2 WAS WRONG
+
+Measured on the final tree, by the person reporting it: `npx tsc --noEmit` **0 errors**; `npm run test` **47 files /
+745 tests, all passing**; `npm run build` **exit 0**; `npm run test:e2e` **34 passed**. Baseline before the phase was
+44 files / 685 tests and 34 e2e, so the suite grew by 60 tests and none was deleted or weakened.
+
+### 3.1 The §2.8 acceptance list, item by item
+
+| # | Criterion | Result |
+|---|---|---|
+| 1 | `tsc --noEmit` → 0 | **yes**, repo-wide including tests |
+| 2 | `npm run test` all pass, count ≥ baseline | **yes**, 745 ≥ 685 |
+| 3 | `npm run build` → 0 | **yes** |
+| 4 | `npm run test:e2e` → 34 passed | **yes**, 34 |
+| 5 | a persisted `142.5` lei loads as `14250` bani with no report | **yes**, pinned in `src/data/migration.money.test.ts` |
+| 6 | a stored `674.504` converts to `67450` **and is reported** | **yes** for the report being *produced*; **no** for it ever reaching a person — see B-26 |
+| 7 | a stored snapshot's `inputsHash` re-derived, previous digest preserved | **yes**, `preMigrationInputsHash` |
+| 8 | no `Math.round` / `toFixed` / `Intl.NumberFormat` on money outside `domain/money.ts` | **yes** — the survivors are date arithmetic, byte sizes and one percent, all listed in §3.4 |
+| 9 | every §2.4 negative control unchanged in value | **yes**, re-checked by grep and by the passing suite |
+
+### 3.2 Where the spec was right, and it mattered
+
+The brand did exactly what it was designed to do: `Bani + Bani` widens to `number`, so `tsc` found every accumulator
+that had been doing `+=` on money. That single language fact is why the conversion is complete rather than mostly
+complete. `decimal.js-light`, declared at `package.json:16` and never imported until this phase, now carries every
+rate computation through `applyRateDecimal`.
+
+### 3.3 Where the spec was wrong — four things worth recording
+
+1. **`tsc` could not find the write boundary, and the display layer.** §2.1 claimed `§tsc --noEmit is the
+   checklist`. It is not. `Bani` is assignable to `number`, so `parseFloat` feeding a money field, `String(rawBani)`
+   pre-filled into an `<input>`, and a chart axis handed raw bani all type-checked while rendering wrong numbers.
+   Three real bugs were found only by reading: the chart Y-axis printed `12 600` where the user had to read `126`;
+   edit forms pre-filled the raw ban count; and the RJIP CSV exported `142,50` lei as `14250,00`.
+2. **The cents bridge was not a no-op, it had become a double conversion.** `data/dashboard.ts` multiplied by 100 to
+   feed fields named `*Cents`. Once the domain stored bani, a ban *was* a cent, so that bridge scaled every amount by
+   10 000. The fields are now `*Bani` and the values pass straight through.
+3. **Five formatters, not two.** §2 counted `fmtRON` and `formatLei`. There were also a private
+   `Intl.NumberFormat` in `domain/insights.ts`, one in `FinancialChart`'s axis, one in `Documents.tsx`'s totals, and
+   one **inside `e2e/dashboard.spec.ts`** mirroring the app so the test could never catch a formatter regression. All
+   deleted; `formatBaniRON` / `formatBaniLei` / `formatBaniAxis` / `formatBani` are the only exits.
+4. **Test fixtures are payloads, not values.** Wrapping money literals in `lei()` is right for a value handed to a
+   domain function and **wrong** for a fixture written to `localStorage` or handed to `migratePersistedData`: the
+   chain scales those once on load, so wrapping them converted them twice. This cost more time than the conversion
+   itself. The rule is now stated in the migration test as a named helper, `legacyLei`.
+
+### 3.4 The rounding/format calls that survive, and why each is fine
+
+`data/dashboard.ts:60` and `domain/deadlines.ts:110` — `Math.round` on a **day count**. `data/types.ts:290-291` —
+`toFixed(1)` on a **byte size**. `domain/insights.ts:119` — `Math.round` on a **percentage**. None is money.
+
+### 3.5 New primitives §2 did not ask for, and the reason each exists
+
+`addBani` / `subBani` / `maxBani` (the brand widens), `sumBani` order-independence, `divBani` (a cash-planning share
+at the nearest ban — explicitly **not** art. 66), `allocateBani` (largest-remainder, so projected months sum
+*exactly* to the projected subtotal instead of drifting a ban per month), `toBaniNearest` (the only sanctioned way a
+fractional-bani intermediate becomes money), `leiInputValue` / `parseLeiInput` (the write boundary: a sub-ban input is
+**refused**, never silently rounded), `formatBaniAxis`, `formatBaniRONOrDash`.
+
+### 3.6 What is still open after this phase
+
+- **B-26** — the `MoneyPrecisionNotice` report is produced and persisted, but `toAppData` drops it and no screen
+  shows it, so the first write after a load erases it. Criterion 6 is half-met by design and that is a defect, not an
+  oversight to argue about.
+- The persisted **key names** still read `salaryIncomeLei` / `cashFloorLei` while the values are bani. Deliberate:
+  zod strips unknown keys, so renaming a persisted key would reject every pre-v5 payload and quarantine it. The
+  hazard is documented on the field and in `e2e/settings.spec.ts`.
+- Nothing pins the "a migration step threw → quarantine with `migration failed:`" path. No payload can currently
+  make a step throw, so it is unreachable rather than untested-by-accident; it stays a gap, not a Phase 10 deliverable.
