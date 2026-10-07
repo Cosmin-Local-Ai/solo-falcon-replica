@@ -14,6 +14,7 @@ import type { RuleRelease } from './fiscal/rules';
 import type { PfaProfile, PfaRegime } from './models';
 import { assessCompleteness } from './completeness';
 import type { TaxCalculationSnapshot } from './snapshots/types';
+import { lei } from './money';
 
 function makeProfile(): PfaProfile {
   return {
@@ -27,7 +28,7 @@ function makeProfile(): PfaProfile {
     otherIncome: [],
     socialInsuranceStatus: 'obligatoriu',
     vatExempt: false,
-    cashFloorLei: 0,
+    cashFloorLei: lei(0),
     identity: {
       nume: 'Test Person',
       cnp: '1234567890123',
@@ -56,8 +57,8 @@ function makeRevenue(overrides: Partial<Revenue> = {}): Revenue {
     date: '2026-06-01',
     client: 'Client A',
     cui: 'RO12345678',
-    valoareFaraTva: 1000,
-    tva: 190,
+    valoareFaraTva: lei(1000),
+    tva: lei(190),
     status: 'inregistrata',
     ...overrides,
   };
@@ -71,8 +72,8 @@ function makeExpense(overrides: Partial<Expense> = {}): Expense {
     date: '2026-06-02',
     furnizor: 'Furnizor A',
     cui: 'RO87654321',
-    valoareFaraTva: 500,
-    tva: 95,
+    valoareFaraTva: lei(500),
+    tva: lei(95),
     status: 'inregistrata',
     ...overrides,
   };
@@ -94,8 +95,8 @@ function makeDeclaration(): Declaration {
     id: 'dec-1',
     an: 2026,
     luna: 6,
-    venituri: 100_000,
-    cheltuieli: 20_000,
+    venituri: lei(100_000),
+    cheltuieli: lei(20_000),
     status: 'inregistrata',
     dataInregistrare: '2026-07-25',
   };
@@ -140,10 +141,10 @@ function makeSnapshot(status: TaxCalculationSnapshot['status']): TaxCalculationS
     taxYear: 2026,
     calculatedAt: '2026-06-15T10:00:00.000Z',
     ruleRelease: {} as RuleRelease,
-    inputSnapshot: { profile: makeProfile(), revenues: 100_000, expenses: 0 },
+    inputSnapshot: { profile: makeProfile(), revenues: lei(100_000), expenses: lei(0) },
     inputsHash: '0'.repeat(64),
-    calculationLines: [{ label: 'total', value: 10_000 }],
-    output: { total: 10_000 },
+    calculationLines: [{ label: 'total', value: lei(10_000) }],
+    output: { total: lei(10_000) },
     status,
   };
 }

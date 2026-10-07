@@ -5,6 +5,7 @@ import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import { createCalculationSnapshot } from '../domain/snapshots/snapshot';
 import type { PfaProfile } from '../domain/models';
 import type { RuleRelease } from '../domain/fiscal/rules';
+import { lei, type Bani } from '../domain/money';
 
 const STORAGE_KEY = 'pfa-app-data-v2';
 
@@ -38,7 +39,7 @@ const profile: PfaProfile = {
   otherIncome: [],
   socialInsuranceStatus: 'obligatoriu',
   vatExempt: true,
-  cashFloorLei: 0,
+  cashFloorLei: lei(0),
   identity,
   updatedAt: '2025-01-01T00:00:00.000Z',
 };
@@ -63,14 +64,14 @@ function Probe() {
   return null;
 }
 
-async function makeSnapshot(over: Partial<{ revenues: number; expenses: number }>): Promise<TaxCalculationSnapshot> {
+async function makeSnapshot(over: Partial<{ revenues: Bani; expenses: Bani }>): Promise<TaxCalculationSnapshot> {
   return createCalculationSnapshot({
     profile,
-    revenues: over.revenues ?? 1000,
-    expenses: over.expenses ?? 400,
+    revenues: over.revenues ?? lei(1000),
+    expenses: over.expenses ?? lei(400),
     ruleRelease: release2025,
     calculationLines: [],
-    output: { total: 0 },
+    output: { total: lei(0) },
   });
 }
 
@@ -90,8 +91,8 @@ describe('snapshot persistence (Step 12)', () => {
     );
     const store = storeRef!;
 
-    const snapA = await makeSnapshot({ revenues: 1000, expenses: 400 });
-    const snapB = await makeSnapshot({ revenues: 2000, expenses: 800 });
+    const snapA = await makeSnapshot({ revenues: lei(1000), expenses: lei(400) });
+    const snapB = await makeSnapshot({ revenues: lei(2000), expenses: lei(800) });
     const frozenA = structuredClone(snapA);
 
     act(() => {

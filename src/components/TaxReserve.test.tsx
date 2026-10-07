@@ -2,14 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import TaxReserve from './TaxReserve';
 import type { TaxReserveRecommendation } from '../domain/taxReserve';
+import { lei } from '../domain/money';
 
 function makeReserve(overrides: Partial<TaxReserveRecommendation> = {}): TaxReserveRecommendation {
   return {
-    estimatedTaxLiability: 120000,
-    reservedAmount: 30000,
-    remainingTarget: 90000,
+    estimatedTaxLiability: lei(120000),
+    reservedAmount: lei(30000),
+    remainingTarget: lei(90000),
     monthsRemaining: 6,
-    recommendedMonthlyReserve: 15000,
+    recommendedMonthlyReserve: lei(15000),
     ...overrides,
   };
 }
@@ -46,7 +47,7 @@ describe('TaxReserve', () => {
   });
 
   it('shows "fully covered" when the remaining target is 0', () => {
-    render(<TaxReserve reserve={makeReserve({ reservedAmount: 120000, remainingTarget: 0 })} />);
+    render(<TaxReserve reserve={makeReserve({ reservedAmount: lei(120000), remainingTarget: lei(0) })} />);
     expect(screen.getByText('Rezerva este complet acoperită.')).toBeInTheDocument();
   });
 });

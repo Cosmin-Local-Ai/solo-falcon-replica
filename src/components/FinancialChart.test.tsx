@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import FinancialChart, { FinancialChartTooltip } from './FinancialChart';
+import { lei } from '../domain/money';
 
 const { mockUseStore, mockUseDashboardData, mockGetProjectedFinancialSeries } = vi.hoisted(() => ({
   mockUseStore: vi.fn(),
@@ -20,9 +21,9 @@ function buildSeries() {
     const month = `2026-${String(i + 1).padStart(2, '0')}`;
     return {
       month,
-      revenue: 10000 + i * 500,
-      expenses: 4000 + i * 100,
-      net: 6000 + i * 400,
+      revenue: lei(10000) + i * 500,
+      expenses: lei(4000) + i * 100,
+      net: lei(6000) + i * 400,
       kind: i < 6 ? ('actual' as const) : ('projected' as const),
     };
   });
@@ -66,15 +67,15 @@ beforeEach(() => {
   fakeResizeObserver();
   mockGetProjectedFinancialSeries.mockReturnValue({
     periodActual: { from: '2026-01-01', to: AS_OF },
-    runRate: { revenuePerMonth: 13000, expensesPerMonth: 4500, netPerMonth: 8500 },
-    annualProjected: { revenue: 156000, expenses: 54000, net: 102000 },
+    runRate: { revenuePerMonth: lei(13000), expensesPerMonth: 4500, netPerMonth: 8500 },
+    annualProjected: { revenue: lei(156000), expenses: lei(54000), net: lei(102000) },
     series: buildSeries(),
     method: 'run-rate-v1',
   });
   mockUseStore.mockReturnValue({} as never);
   mockUseDashboardData.mockReturnValue({
     snapshot: { asOf: AS_OF },
-    tax: { status: 'computed', output: { total: 1234.56 } },
+    tax: { status: 'computed', output: { total: lei(1234.56) } },
   });
 });
 
@@ -187,9 +188,9 @@ describe('FinancialChartTooltip', () => {
         active
         label="Iul 2026"
         payload={[
-          { dataKey: 'revenue_projected', value: 13000 },
-          { dataKey: 'expenses_projected', value: 4600 },
-          { dataKey: 'net_projected', value: 8400 },
+          { dataKey: 'revenue_projected', value: lei(13000) },
+          { dataKey: 'expenses_projected', value: lei(4600) },
+          { dataKey: 'net_projected', value: lei(8400) },
         ]}
       />,
     );

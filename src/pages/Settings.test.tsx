@@ -4,6 +4,7 @@ import { StoreProvider, STORAGE_KEY } from '../data/store';
 import { seedData } from '../data/seed';
 import type { PfaProfile } from '../domain/models';
 import Settings from './Settings';
+import { lei } from '../domain/money';
 
 // Must match seedData.settings.company.denumire in src/data/seed.ts.
 const SEED_DENUMIRE = 'Popescu Consulting SRL';
@@ -279,7 +280,7 @@ describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () => {
     expect(profile.caen).toBeUndefined();
     expect(profile.pfaStartDate).toBe('2026-04-01');
     expect(profile.salaryStatus).toBe('da');
-    expect(profile.salaryIncomeLei).toBe(30000);
+    expect(profile.salaryIncomeLei).toBe(lei(30000));
     // Untouched fields keep their seed values (shallow merge must not blank them).
     expect(profile.regime).toBe('impozit_pe_venit');
     expect(profile.pfaStartYear).toBe(2020);
@@ -340,7 +341,7 @@ describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () => {
         profile: {
           ...seedData.profile,
           salaryStatus: 'da',
-          salaryIncomeLei: 30000,
+          salaryIncomeLei: lei(30000),
         },
       }),
     );

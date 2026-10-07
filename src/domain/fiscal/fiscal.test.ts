@@ -3,6 +3,7 @@ import { calculatorRegistry } from './calculators';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './package2026';
 import { PFA_2026_RELEASE } from './release2026';
 import { selectApplicableRules } from './select';
+import { lei } from '../money';
 
 describe('PFA 2026 system-real package', () => {
   it('contains exactly 9 rules', () => {
@@ -99,7 +100,7 @@ describe('calculators', () => {
     const result = calculatorRegistry['calc-wage-reference'](
       byId('PFA_2026_TAX_REFERENCE'),
     );
-    expect(result).toMatchObject({ value: 4050 });
+    expect(result).toMatchObject({ value: lei(4050) });
   });
 
   // CF art. 148 alin. (1)-(2): the CAS base is "venitul ales de contribuabil", floored at
@@ -109,83 +110,83 @@ describe('calculators', () => {
   // with no income) — see docs/ai/phases/03_cas.md.
   it('CAS is 0 when no income is provided', () => {
     const result = calculatorRegistry['calc-cas'](byId('CAS_2026'));
-    expect(result).toMatchObject({ value: 0 });
+    expect(result).toMatchObject({ value: lei(0) });
   });
 
   it('CAS is 0 for a loss-making base', () => {
-    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: -5000 });
-    expect(result).toMatchObject({ value: 0 });
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: lei(-5000) });
+    expect(result).toMatchObject({ value: lei(0) });
   });
 
   it('CAS is 0 just below 12 SM (48,599), not 12,150', () => {
-    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: 48599 });
-    expect(result).toMatchObject({ value: 0 });
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: lei(48599) });
+    expect(result).toMatchObject({ value: lei(0) });
   });
 
   it('CAS at exactly 12 SM (48,600) is 12,150', () => {
-    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: 48600 });
-    expect(result).toMatchObject({ value: 12150 });
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: lei(48600) });
+    expect(result).toMatchObject({ value: lei(12150) });
   });
 
   it('CAS in the 12–24 SM band stays on the 12 SM floor: 60,000 → 12,150', () => {
     // The old clamp charged 25% × 60,000 = 15,000, over-stating CAS by 2,850 lei.
-    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: 60000 });
-    expect(result).toMatchObject({ value: 12150 });
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: lei(60000) });
+    expect(result).toMatchObject({ value: lei(12150) });
   });
 
   it('CAS at exactly 24 SM (97,200) is 24,300', () => {
-    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: 97200 });
-    expect(result).toMatchObject({ value: 24300 });
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: lei(97200) });
+    expect(result).toMatchObject({ value: lei(24300) });
   });
 
   it('CAS above 24 SM stays on the 24 SM floor: 200,000 → 24,300', () => {
-    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: 200000 });
-    expect(result).toMatchObject({ value: 24300 });
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: lei(200000) });
+    expect(result).toMatchObject({ value: lei(24300) });
   });
 
   it('CAS is not capped: a voluntarily chosen base above the floor is charged in full', () => {
     const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), {
-      base: 200000,
-      chosenBase: 150000,
+      base: lei(200000),
+      chosenBase: lei(150000),
     });
-    expect(result).toMatchObject({ value: 37500 });
+    expect(result).toMatchObject({ value: lei(37500) });
   });
 
   it('a chosen base below the applicable floor is clamped up to that floor', () => {
     const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), {
-      base: 200000,
-      chosenBase: 50000,
+      base: lei(200000),
+      chosenBase: lei(50000),
     });
-    expect(result).toMatchObject({ value: 24300 });
+    expect(result).toMatchObject({ value: lei(24300) });
   });
 
   it('pensioners owe no CAS (CF art. 150 alin. (1))', () => {
     const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), {
-      base: 200000,
+      base: lei(200000),
       pensionStatus: 'da',
     });
-    expect(result).toMatchObject({ value: 0 });
+    expect(result).toMatchObject({ value: lei(0) });
   });
 
   it('the CAS exemption does not depend on the income amount', () => {
     const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), {
-      base: 60000,
+      base: lei(60000),
       pensionStatus: 'da',
     });
-    expect(result).toMatchObject({ value: 0 });
+    expect(result).toMatchObject({ value: lei(0) });
   });
 
   it('pensionStatus nu is not exempt — only the art. 150 alin. (1) categories are', () => {
     const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), {
-      base: 60000,
+      base: lei(60000),
       pensionStatus: 'nu',
     });
-    expect(result).toMatchObject({ value: 12150 });
+    expect(result).toMatchObject({ value: lei(12150) });
   });
 
   it('the CAS breakdown states the applicable floor and that there is no upper cap', () => {
-    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: 200000 });
-    expect(result).toMatchObject({ value: 24300 });
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), { base: lei(200000) });
+    expect(result).toMatchObject({ value: lei(24300) });
     if ('breakdown' in result) {
       const text = result.breakdown.join('\n');
       expect(text).toContain('97200');
@@ -197,8 +198,8 @@ describe('calculators', () => {
   // art. 174 alin. (2) zero/loss, art. 174 alin. (7) lit. a)/c) relief. See phases/04_cass.md.
 
   it('CASS: VNA = 0 → 0, no CASS at all (CF art. 174 alin. (2))', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 0 });
-    expect(result).toMatchObject({ value: 0 });
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(0) });
+    expect(result).toMatchObject({ value: lei(0) });
     if ('breakdown' in result) {
       const text = result.breakdown.join('\n');
       expect(text).toContain('art. 174 alin. (2)');
@@ -209,27 +210,27 @@ describe('calculators', () => {
   });
 
   it('CASS: VNA < 0 (fiscal loss) → 0 (CF art. 174 alin. (2))', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: -50000 });
-    expect(result).toMatchObject({ value: 0 });
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(-50000) });
+    expect(result).toMatchObject({ value: lei(0) });
   });
 
   it('CASS: VNA just above 0 → 2430, the 6 SM top-up applies (CF art. 174 alin. (6))', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 1 });
-    expect(result).toMatchObject({ value: 2430 });
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(1) });
+    expect(result).toMatchObject({ value: lei(2430) });
   });
 
   it('CASS: VNA just below 6 SM (24299) → 2430 (top-up, not 10% of VNA)', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 24299 });
-    expect(result).toMatchObject({ value: 2430 });
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(24299) });
+    expect(result).toMatchObject({ value: lei(2430) });
   });
 
   it('CASS: VNA exactly 6 SM (24300) → 2430', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 24300 });
-    expect(result).toMatchObject({ value: 2430 });
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(24300) });
+    expect(result).toMatchObject({ value: lei(2430) });
   });
 
   it('CASS: the 6 SM floor is attributed to art. 174 alin. (6), NOT art. 170 alin. (2)-(3)', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 10000 });
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(10000) });
     if (!('breakdown' in result)) throw new Error('expected a computed result');
     const text = result.breakdown.join('\n');
     expect(text).toContain('CF art. 174 alin. (6)');
@@ -240,18 +241,18 @@ describe('calculators', () => {
   });
 
   it('CASS: VNA between 6 SM and 72 SM → 10% x VNA', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 100000 });
-    expect(result).toMatchObject({ value: 10000 });
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(100000) });
+    expect(result).toMatchObject({ value: lei(10000) });
   });
 
   it('CASS: VNA exactly 72 SM (291600) → 29160', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 291600 });
-    expect(result).toMatchObject({ value: 29160 });
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(291600) });
+    expect(result).toMatchObject({ value: lei(29160) });
   });
 
   it('CASS: VNA above 72 SM → 29160, capped by max_annual_base (CF art. 170 alin. (1))', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 500000 });
-    expect(result).toMatchObject({ value: 29160 });
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(500000) });
+    expect(result).toMatchObject({ value: lei(29160) });
     if ('breakdown' in result) {
       const text = result.breakdown.join('\n');
       expect(text).toContain('CF art. 170 alin. (1)');
@@ -265,13 +266,13 @@ describe('calculators', () => {
     const mutated = {
       ...rule,
       parameters: rule.parameters.map((p) =>
-        p.id === 'max_annual_base' ? { ...p, value: 100000 } : p,
+        p.id === 'max_annual_base' ? { ...p, value: lei(100000) } : p,
       ),
     };
     // No hardcoded 291600: with a 100000 ceiling, VNA 150000 caps at 100000 → 10000.
-    expect(calculatorRegistry['calc-cass'](mutated, { base: 150000 })).toMatchObject({ value: 10000 });
+    expect(calculatorRegistry['calc-cass'](mutated, { base: lei(150000) })).toMatchObject({ value: lei(10000) });
     // and the unmutated rule still caps at 291600 → 29160.
-    expect(calculatorRegistry['calc-cass'](rule, { base: 150000 })).toMatchObject({ value: 15000 });
+    expect(calculatorRegistry['calc-cass'](rule, { base: lei(150000) })).toMatchObject({ value: lei(15000) });
   });
 
   it('CASS: min_cass / max_cass are NOT independent parameters (derived from rate x base)', () => {
@@ -283,8 +284,8 @@ describe('calculators', () => {
   });
 
   it('CASS: pensioner below 6 SM → 10% x VNA, NOT 0 and NOT 2430 (art. 174 alin. (7) lit. c))', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 10000, pensionStatus: 'da' });
-    expect(result).toMatchObject({ value: 1000 });
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(10000), pensionStatus: 'da' });
+    expect(result).toMatchObject({ value: lei(1000) });
     if ('breakdown' in result) {
       const text = result.breakdown.join('\n');
       expect(text).toContain('art. 174 alin. (7) lit. c)');
@@ -295,52 +296,52 @@ describe('calculators', () => {
   });
 
   it('CASS: pensioner above 6 SM → 10% x VNA, unchanged (relief is irrelevant there)', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 100000, pensionStatus: 'da' });
-    expect(result).toMatchObject({ value: 10000 });
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(100000), pensionStatus: 'da' });
+    expect(result).toMatchObject({ value: lei(10000) });
   });
 
   it('CASS: pensioner with VNA = 0 → still 0 (art. 174 alin. (2) is upstream of any relief)', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 0, pensionStatus: 'da' });
-    expect(result).toMatchObject({ value: 0 });
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(0), pensionStatus: 'da' });
+    expect(result).toMatchObject({ value: lei(0) });
   });
 
   it('CASS: salaryStatus da below 6 SM → review_required, the profile has no salary amount', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 10000, salaryStatus: 'da' });
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(10000), salaryStatus: 'da' });
     expect(result).toMatchObject({ reviewRequired: true });
     if ('reason' in result) expect(result.reason).toContain('art. 174 alin. (7) lit. a)');
   });
 
   it('CASS: pension relief is checked before salary relief (lit. c) has no threshold)', () => {
     const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
-      base: 10000,
+      base: lei(10000),
       salaryStatus: 'da',
       pensionStatus: 'da',
     });
-    expect(result).toMatchObject({ value: 1000 });
+    expect(result).toMatchObject({ value: lei(1000) });
   });
 
   it('CASS: salaryStatus da above 6 SM → normal 10% (lit. a) relief is irrelevant there)', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: 100000, salaryStatus: 'da' });
-    expect(result).toMatchObject({ value: 10000 });
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(100000), salaryStatus: 'da' });
+    expect(result).toMatchObject({ value: lei(10000) });
   });
 
   it('CASS: no base supplied → 0, treated as a zero/loss year rather than a floor', () => {
     const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {});
-    expect(result).toMatchObject({ value: 0 });
+    expect(result).toMatchObject({ value: lei(0) });
   });
 
   it('income tax applies 10% flat at 48600', () => {
     const result = calculatorRegistry['calc-income-tax'](byId('INCOME_TAX_2026'), {
-      base: 48600,
+      base: lei(48600),
     });
-    expect(result).toMatchObject({ value: 4860 });
+    expect(result).toMatchObject({ value: lei(4860) });
   });
 
   it('income tax applies 10% flat above 48600 (no progressive bracket)', () => {
     const result = calculatorRegistry['calc-income-tax'](byId('INCOME_TAX_2026'), {
-      base: 60000,
+      base: lei(60000),
     });
-    expect(result).toMatchObject({ value: 6000 });
+    expect(result).toMatchObject({ value: lei(6000) });
   });
 
   it('income tax requires review when no base provided', () => {
@@ -352,12 +353,12 @@ describe('calculators', () => {
     const result = calculatorRegistry['calc-vat-threshold'](
       byId('VAT_THRESHOLD_2026'),
     );
-    expect(result).toMatchObject({ value: 395000 });
+    expect(result).toMatchObject({ value: lei(395000) });
   });
 
   it('deadline calculator returns the 2027-05-25 deadline', () => {
     const result = calculatorRegistry['calc-deadline'](byId('PFA_DEADLINE_2026'));
-    expect(result).toMatchObject({ value: 0 });
+    expect(result).toMatchObject({ value: lei(0) });
   });
 
   // KNOWN LIMITATION, flagged for Phase 10 (brief 10 §3.5 forbids touching the calculators).
@@ -384,11 +385,11 @@ describe('calc-cass — salaried PFA below the 6 SM floor (art. 174 alin. (6) + 
 
   it('salary at least 6 SM: no top-up, CASS stays 10% x VNA and is fully deductible', () => {
     const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
-      base: 10_000,
+      base: lei(10_000),
       salaryStatus: 'da',
-      salaryIncomeLei: 30_000,
+      salaryIncomeLei: lei(30_000),
     });
-    expect(result).toMatchObject({ value: 1_000 });
+    expect(result).toMatchObject({ value: lei(1_000) });
     expect(result).not.toHaveProperty('nonDeductible');
     if ('breakdown' in result) {
       expect(result.breakdown.join(' ')).toContain('art. 174 alin. (7) lit. a)');
@@ -398,20 +399,20 @@ describe('calc-cass — salaried PFA below the 6 SM floor (art. 174 alin. (6) + 
 
   it('exactly 6 SM satisfies the condition („cel puțin egal”, not „mai mare”)', () => {
     const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
-      base: 10_000,
+      base: lei(10_000),
       salaryStatus: 'da',
-      salaryIncomeLei: 24_300,
+      salaryIncomeLei: lei(24_300),
     });
-    expect(result).toMatchObject({ value: 1_000 });
+    expect(result).toMatchObject({ value: lei(1_000) });
   });
 
   it('salary below 6 SM: the alin. (6) top-up stands and stays non-deductible', () => {
     const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
-      base: 10_000,
+      base: lei(10_000),
       salaryStatus: 'da',
-      salaryIncomeLei: 20_000,
+      salaryIncomeLei: lei(20_000),
     });
-    expect(result).toMatchObject({ value: 2_430, nonDeductible: 1_430 });
+    expect(result).toMatchObject({ value: lei(2_430), nonDeductible: lei(1_430) });
     if ('breakdown' in result) {
       expect(result.breakdown.join(' ')).toContain('nu este indeplinita');
     }
@@ -419,29 +420,29 @@ describe('calc-cass — salaried PFA below the 6 SM floor (art. 174 alin. (6) + 
 
   it('a salary of zero lei does not trigger the relief', () => {
     const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
-      base: 10_000,
+      base: lei(10_000),
       salaryStatus: 'da',
-      salaryIncomeLei: 0,
+      salaryIncomeLei: lei(0),
     });
-    expect(result).toMatchObject({ value: 2_430, nonDeductible: 1_430 });
+    expect(result).toMatchObject({ value: lei(2_430), nonDeductible: lei(1_430) });
   });
 
   it('pension relief is still evaluated first, even when a salary amount exists', () => {
     const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
-      base: 10_000,
+      base: lei(10_000),
       pensionStatus: 'da',
       salaryStatus: 'da',
-      salaryIncomeLei: 10_000,
+      salaryIncomeLei: lei(10_000),
     });
-    expect(result).toMatchObject({ value: 1_000 });
+    expect(result).toMatchObject({ value: lei(1_000) });
   });
 
   it('once VNA reaches the floor the salary amount is irrelevant', () => {
     const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
-      base: 40_000,
+      base: lei(40_000),
       salaryStatus: 'da',
-      salaryIncomeLei: 100_000,
+      salaryIncomeLei: lei(100_000),
     });
-    expect(result).toMatchObject({ value: 4_000 });
+    expect(result).toMatchObject({ value: lei(4_000) });
   });
 });

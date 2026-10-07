@@ -4,6 +4,7 @@ import type { TaxInputsReference } from './derived';
 import { computeTaxEstimate } from './tax';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal/package2026';
 import { PFA_2026_RELEASE } from './fiscal/release2026';
+import { lei } from './money';
 
 // B-14: the fixtures used to default to `impozit_pe_cit`, which is the regime a PFA can NEVER have in
 // 2026 (CF art. 13 alin. (1), art. 14, art. 15 — Titlul II is for persoane juridice only; the art. 120
@@ -15,26 +16,26 @@ function makeProfile(overrides: Partial<PfaProfile> = {}): PfaProfile {
 }
 
 function makeInputs(overrides: Partial<TaxInputsReference> = {}): TaxInputsReference {
-  return { regime: 'impozit_pe_venit', salaryStatus: 'da', pensionStatus: 'nu', otherIncome: [], socialInsuranceStatus: 'obligatoriu', vatExempt: false, cashFloorLei: 0, fiscalYear: 2026, salaryIncomeLei: null, pfaStartDate: null, inputsKey: 'p1:2026:impozit_pe_venit:obligatoriu', ...overrides };
+  return { regime: 'impozit_pe_venit', salaryStatus: 'da', pensionStatus: 'nu', otherIncome: [], socialInsuranceStatus: 'obligatoriu', vatExempt: false, cashFloorLei: lei(0), fiscalYear: 2026, salaryIncomeLei: null, pfaStartDate: null, inputsKey: 'p1:2026:impozit_pe_venit:obligatoriu', ...overrides };
 }
 
 describe('computeTaxEstimate', () => {
   it('computes CAS + CASS + income tax for a basic profile', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(50_000), expenses: lei(10_000), revenuesNet: lei(50_000), expensesNet: lei(10_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // net=40000, CAS=0 (below 12 SM — CF art. 148 alin. (1)), CASS=4000, taxable=36000, income=3600, total=7600
-    expect(res.output.total).toBe(7_600);
+    expect(res.output.total).toBe(lei(7_600));
     expect(res.lines.length).toBeGreaterThanOrEqual(5);
     expect(res.snapshot).toBeDefined();
   });
 
   it('skips CASS for non-obligatoriu status', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ socialInsuranceStatus: 'exempt' }), profile: makeProfile({ socialInsuranceStatus: 'exempt' }), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs({ socialInsuranceStatus: 'exempt' }), profile: makeProfile({ socialInsuranceStatus: 'exempt' }), revenues: lei(50_000), expenses: lei(10_000), revenuesNet: lei(50_000), expensesNet: lei(10_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CAS=0 (below 12 SM), CASS skipped, taxable=40000, income=4000
-    expect(res.output.total).toBe(4_000);
+    expect(res.output.total).toBe(lei(4_000));
   });
 
   /*
@@ -44,7 +45,7 @@ describe('computeTaxEstimate', () => {
    */
   it('marks the flag-driven CASS zero review_required for both flag values, and moves no money', async () => {
     for (const status of ['exempt', 'neplata'] as const) {
-      const res = await computeTaxEstimate({ inputs: makeInputs({ socialInsuranceStatus: status }), profile: makeProfile({ socialInsuranceStatus: status }), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+      const res = await computeTaxEstimate({ inputs: makeInputs({ socialInsuranceStatus: status }), profile: makeProfile({ socialInsuranceStatus: status }), revenues: lei(50_000), expenses: lei(10_000), revenuesNet: lei(50_000), expensesNet: lei(10_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
       expect(res.status).toBe('computed');
       if (res.status !== 'computed') continue;
       const cass = res.lines.find((l) => l.label.startsWith('CASS ('));
@@ -53,12 +54,12 @@ describe('computeTaxEstimate', () => {
       expect(cass!.reviewRequired).toBe(true); // and it is no longer a silent zero
       expect(cass!.reason?.toLowerCase()).toContain('art. 154 alin. (1)');
       // CAS 0 (below 12 SM) + CASS 0 + 10% x 40 000 — the same total as before the marker existed.
-      expect(res.output.total).toBe(4_000);
+      expect(res.output.total).toBe(lei(4_000));
     }
   });
 
   it('does NOT mark a CASS zero that a rule does relieve (art. 174 alin. (2) is not a flag)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 10_000, expenses: 10_000, revenuesNet: 10_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(10_000), expenses: lei(10_000), revenuesNet: lei(10_000), expensesNet: lei(10_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     const cass = res.lines.find((l) => l.label === 'CASS (10%)');
@@ -68,7 +69,7 @@ describe('computeTaxEstimate', () => {
 
   it('never labels a CASS line „scutit" or „scutire" — neither word exists in Titlul V (B-19)', async () => {
     for (const status of ['obligatoriu', 'exempt', 'neplata'] as const) {
-      const res = await computeTaxEstimate({ inputs: makeInputs({ socialInsuranceStatus: status }), profile: makeProfile({ socialInsuranceStatus: status }), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+      const res = await computeTaxEstimate({ inputs: makeInputs({ socialInsuranceStatus: status }), profile: makeProfile({ socialInsuranceStatus: status }), revenues: lei(50_000), expenses: lei(10_000), revenuesNet: lei(50_000), expensesNet: lei(10_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
       if (res.status !== 'computed') continue;
       for (const line of res.lines) {
         if (!line.label.startsWith('CASS')) continue;
@@ -80,7 +81,7 @@ describe('computeTaxEstimate', () => {
   });
 
   it('carries the CASS provenance into the snapshot, not only onto a screen', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ socialInsuranceStatus: 'exempt' }), profile: makeProfile({ socialInsuranceStatus: 'exempt' }), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs({ socialInsuranceStatus: 'exempt' }), profile: makeProfile({ socialInsuranceStatus: 'exempt' }), revenues: lei(50_000), expenses: lei(10_000), revenuesNet: lei(50_000), expensesNet: lei(10_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     const provenance = res.snapshot.calculationLines.find((l) => l.label.startsWith('PROVENANȚĂ CASS'));
@@ -92,7 +93,7 @@ describe('computeTaxEstimate', () => {
   });
 
   it('net = 0 → CASS 0, NOT review_required (CF art. 174 alin. (2): zero net income owes no CASS)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 10_000, expenses: 10_000, revenuesNet: 10_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(10_000), expenses: lei(10_000), revenuesNet: lei(10_000), expensesNet: lei(10_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // Re-pointed from the old "review_required" expectation, which encoded defect B-3: the
@@ -104,12 +105,12 @@ describe('computeTaxEstimate', () => {
   });
 
   it('computes the default PFA regime impozit_pe_venit — the gate must never reject the default path (B-14)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(50_000), expenses: lei(10_000), revenuesNet: lei(50_000), expensesNet: lei(10_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
   });
 
   it('impozit_pe_cit on a PFA is a DATA-INTEGRITY failure, not "a different base applies" (B-14)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ regime: 'impozit_pe_cit' }), profile: makeProfile({ regime: 'impozit_pe_cit' }), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs({ regime: 'impozit_pe_cit' }), profile: makeProfile({ regime: 'impozit_pe_cit' }), revenues: lei(50_000), expenses: lei(10_000), revenuesNet: lei(50_000), expensesNet: lei(10_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
     if (res.status !== 'review_required') return;
     // The reason has to name the provisions that make the regime impossible, and quote the bad value,
@@ -123,27 +124,27 @@ describe('computeTaxEstimate', () => {
   });
 
   it('returns REVIEW_REQUIRED for negative revenues', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: -1, expenses: 10_000, revenuesNet: -1, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(-1), expenses: lei(10_000), revenuesNet: lei(-1), expensesNet: lei(10_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
   });
 
   it('returns REVIEW_REQUIRED for negative expenses', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 50_000, expenses: -1, revenuesNet: 50_000, expensesNet: -1, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(50_000), expenses: lei(-1), revenuesNet: lei(50_000), expensesNet: lei(-1), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
   });
 
   it('returns REVIEW_REQUIRED when profile id is missing', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile({ id: '' }), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile({ id: '' }), revenues: lei(50_000), expenses: lei(10_000), revenuesNet: lei(50_000), expensesNet: lei(10_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
   });
 
   it('returns REVIEW_REQUIRED when rules package is empty', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: [] });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(50_000), expenses: lei(10_000), revenuesNet: lei(50_000), expensesNet: lei(10_000), ruleRelease: PFA_2026_RELEASE, rules: [] });
     expect(res.status).toBe('review_required');
   });
 
   it('creates a snapshot with provenance', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 50_000, expenses: 10_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(50_000), expenses: lei(10_000), revenuesNet: lei(50_000), expensesNet: lei(10_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     const snap = res.snapshot;
@@ -151,13 +152,13 @@ describe('computeTaxEstimate', () => {
     expect(snap.ruleRelease.releaseId).toBe('PFA_2026_SYSTEM_REAL');
     expect(snap.inputsHash).toBeTruthy();
     expect(snap.inputsHash).toHaveLength(64);
-    expect(snap.inputSnapshot.revenues).toBe(50_000);
-    expect(snap.inputSnapshot.expenses).toBe(10_000);
+    expect(snap.inputSnapshot.revenues).toBe(lei(50_000));
+    expect(snap.inputSnapshot.expenses).toBe(lei(10_000));
     expect(snap.output.total).toBe(7_600);
   });
 
   it('zero revenues → computed with CASS 0 (CF art. 174 alin. (2)), not review_required', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 0, expenses: 0, revenuesNet: 0, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(0), expenses: lei(0), revenuesNet: lei(0), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     expect(res.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(0);
@@ -165,32 +166,32 @@ describe('computeTaxEstimate', () => {
   });
 
   it('applies 10% flat income tax at 50,000 net', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 60_000, expenses: 10_000, revenuesNet: 60_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(60_000), expenses: lei(10_000), revenuesNet: lei(60_000), expensesNet: lei(10_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // net=50000, CAS=12150 (12 SM floor, not 25% of net), CASS=5000, taxable=32850, income=3285, total=20435
-    expect(res.output.total).toBe(20_435);
+    expect(res.output.total).toBe(lei(20_435));
   });
 
   it('keeps CAS on the 24 SM floor for high income (no cap, CF art. 148 alin. (2) lit. b))', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 250_000, expenses: 0, revenuesNet: 250_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(250_000), expenses: lei(0), revenuesNet: lei(250_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // net=250000, CAS=24300 (24 SM floor), CASS=25000, taxable=200700, income=20070, total=69370
-    expect(res.output.total).toBe(69_370);
+    expect(res.output.total).toBe(lei(69_370));
   });
 
   it('applies 10% flat income tax above 200,000 (no progressive bracket)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 300_000, expenses: 0, revenuesNet: 300_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(300_000), expenses: lei(0), revenuesNet: lei(300_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // net=300000, CAS=24300 (24 SM floor), CASS=29160 (capped at 291600 — CASS does have a cap), taxable=246540, income=24654, total=78114
-    expect(res.output.total).toBe(78_114);
+    expect(res.output.total).toBe(lei(78_114));
   });
 
   it('is deterministic for identical inputs', async () => {
-    const a = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 123_456, expenses: 78_900, revenuesNet: 123_456, expensesNet: 78_900, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
-    const b = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 123_456, expenses: 78_900, revenuesNet: 123_456, expensesNet: 78_900, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const a = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(123_456), expenses: lei(78_900), revenuesNet: lei(123_456), expensesNet: lei(78_900), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const b = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(123_456), expenses: lei(78_900), revenuesNet: lei(123_456), expensesNet: lei(78_900), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(a.status).toBe('computed');
     expect(b.status).toBe('computed');
     if (a.status !== 'computed' || b.status !== 'computed') return;
@@ -199,7 +200,7 @@ describe('computeTaxEstimate', () => {
   });
 
   it('computes at 71,280 net (CAS on the 12 SM floor)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 71_280, expenses: 0, revenuesNet: 71_280, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(71_280), expenses: lei(0), revenuesNet: lei(71_280), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // net=71280, CAS=12150 (12 SM floor), CASS=7128, taxable=52002, income=5200.2, total=24478.2
@@ -207,12 +208,12 @@ describe('computeTaxEstimate', () => {
   });
 
   it('computes for a high-revenue profile', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 100_000, expenses: 10_000, revenuesNet: 100_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(100_000), expenses: lei(10_000), revenuesNet: lei(100_000), expensesNet: lei(10_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res).toBeDefined();
   });
 
   it('zero revenues → computed with CASS 0 (CF art. 174 alin. (2))', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 0, expenses: 0, revenuesNet: 0, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(0), expenses: lei(0), revenuesNet: lei(0), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     // Re-pointed from review_required: that expectation was defect B-3 wearing a test's
     // clothes. A zero net income year owes no CASS at all (art. 174 alin. (2)); the 6-SM
     // top-up of art. 174 alin. (6) is not self-executing there.
@@ -223,7 +224,7 @@ describe('computeTaxEstimate', () => {
   });
 
   it('expenses exceed revenues → computed with CASS 0 (net is not positive, art. 174 alin. (2))', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 10_000, expenses: 20_000, revenuesNet: 10_000, expensesNet: 20_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(10_000), expenses: lei(20_000), revenuesNet: lei(10_000), expensesNet: lei(20_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     // Re-pointed with the same reasoning: no positive net, so no CASS base and no CASS.
     // (The old deductible clamp in tax.ts is gone — Phase 5/B-16 lets net go negative so the fiscal
     // loss is representable; the loss itself is surfaced, not stored. Persistence is Phase 7.)
@@ -234,26 +235,26 @@ describe('computeTaxEstimate', () => {
   });
 
   it('computes at 72,000 net (CAS on the 12 SM floor)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 72_000, expenses: 0, revenuesNet: 72_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(72_000), expenses: lei(0), revenuesNet: lei(72_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // net=72000, CAS=12150 (12 SM floor), CASS=7200, taxable=52650, income=5265, total=24615
-    expect(res.output.total).toBe(24_615);
+    expect(res.output.total).toBe(lei(24_615));
   });
 
   // ── Boundary: CASS minimum base ──
 
   it('net exactly at CASS min base (24,300) → computed with CASS = 2430', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 24_300, expenses: 0, revenuesNet: 24_300, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(24_300), expenses: lei(0), revenuesNet: lei(24_300), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CASS = max(min(24300, 291600) * 0.10, 2430) = max(2430, 2430) = 2430
     const cass = res.lines.find(l => l.label === 'CASS (10%)')?.value;
-    expect(cass).toBe(2430);
+    expect(cass).toBe(lei(2430));
   });
 
   it('net just below CASS min base (24,299) → review_required', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 24_299, expenses: 0, revenuesNet: 24_299, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(24_299), expenses: lei(0), revenuesNet: lei(24_299), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
   });
 
@@ -261,29 +262,29 @@ describe('computeTaxEstimate', () => {
   // lit. a) case: the top-up is waived only if salary income reaches 6 SM, and the profile
   // carries no salary amount — so it must surface as review_required, never as a number.
   it('net 24,299 with salaryStatus da → review_required names art. 174 alin. (7) lit. a)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'da', pensionStatus: 'nu' }), profile: makeProfile(), revenues: 24_299, expenses: 0, revenuesNet: 24_299, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'da', pensionStatus: 'nu' }), profile: makeProfile(), revenues: lei(24_299), expenses: lei(0), revenuesNet: lei(24_299), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
     if (res.status !== 'review_required') return;
     expect(res.reason).toContain('art. 174 alin. (7) lit. a)');
   });
 
   it('net 24,299 with no salary and no pension → CASS 2,430 (art. 174 alin. (6) top-up)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'nu', pensionStatus: 'nu' }), profile: makeProfile({ salaryStatus: 'nu', pensionStatus: 'nu' }), revenues: 24_299, expenses: 0, revenuesNet: 24_299, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'nu', pensionStatus: 'nu' }), profile: makeProfile({ salaryStatus: 'nu', pensionStatus: 'nu' }), revenues: lei(24_299), expenses: lei(0), revenuesNet: lei(24_299), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    expect(res.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(2_430);
+    expect(res.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(lei(2_430));
   });
 
   it('pensioner with net below 6 SM → CASS = 10% x net, NOT 0 (art. 174 alin. (7) lit. c) waives only the top-up)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ pensionStatus: 'da' }), profile: makeProfile({ pensionStatus: 'da' }), revenues: 10_000, expenses: 0, revenuesNet: 10_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs({ pensionStatus: 'da' }), profile: makeProfile({ pensionStatus: 'da' }), revenues: lei(10_000), expenses: lei(0), revenuesNet: lei(10_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CAS = 0 (art. 150 alin. (1)) but CASS = 1000 (art. 170 alin. (1)) — the asymmetry.
     expect(res.lines.find(l => l.label === 'CAS (25%)')?.value).toBe(0);
     const cass = res.lines.find(l => l.label === 'CASS (10%)')?.value;
-    expect(cass).toBe(1_000);
+    expect(cass).toBe(lei(1_000));
     // taxable = 10000 - 0 - 1000 = 9000 → income 900 → total 1900.
-    expect(res.output.total).toBe(1_900);
+    expect(res.output.total).toBe(lei(1_900));
   });
 
   it('CASS ceiling is parameter-driven: max_annual_base 100,000 → CASS 10,000 at net 150,000', async () => {
@@ -292,36 +293,36 @@ describe('computeTaxEstimate', () => {
         return {
           ...rule,
           parameters: rule.parameters.map((p) =>
-            p.id === 'max_annual_base' ? { ...p, value: 100_000 } : p,
+            p.id === 'max_annual_base' ? { ...p, value: lei(100_000) } : p,
           ),
         };
       }
       return rule;
     });
-    const original = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 150_000, expenses: 0, revenuesNet: 150_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
-    const modified = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 150_000, expenses: 0, revenuesNet: 150_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: modifiedRules });
+    const original = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(150_000), expenses: lei(0), revenuesNet: lei(150_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const modified = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(150_000), expenses: lei(0), revenuesNet: lei(150_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: modifiedRules });
     expect(original.status).toBe('computed');
     expect(modified.status).toBe('computed');
     if (original.status !== 'computed' || modified.status !== 'computed') return;
     // 29,160 is not a hardcoded figure and there is no max_cass parameter: it is rate x
     // max_annual_base, so moving the base parameter moves the ceiling.
-    expect(original.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(15_000);
-    expect(modified.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(10_000);
+    expect(original.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(lei(15_000));
+    expect(modified.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(lei(10_000));
   });
 
   // ── Boundary: CAS tier-1 floor (12 SM) ──
 
   it('net exactly at CAS tier-1 floor (48,600) → CAS = 12,150', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 48_600, expenses: 0, revenuesNet: 48_600, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(48_600), expenses: lei(0), revenuesNet: lei(48_600), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CAS = 48600 * 0.25 = 12150 (the 12 SM floor applies from 48,600 up).
     const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
-    expect(cas).toBe(12_150);
+    expect(cas).toBe(lei(12_150));
   });
 
   it('net just below CAS tier-1 floor (48,599) → CAS = 0, not 12,150', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 48_599, expenses: 0, revenuesNet: 48_599, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(48_599), expenses: lei(0), revenuesNet: lei(48_599), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CF art. 148 alin. (1): below 12 SM the obligation never arises. The old clamp
@@ -331,79 +332,79 @@ describe('computeTaxEstimate', () => {
   });
 
   it('net just above CAS tier-1 floor (48,601) → CAS stays 12,150 (floor, not 25% of net)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 48_601, expenses: 0, revenuesNet: 48_601, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(48_601), expenses: lei(0), revenuesNet: lei(48_601), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // Realized income only selects the floor; the base stays 48,600 → 12,150.
     const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
-    expect(cas).toBe(12_150);
+    expect(cas).toBe(lei(12_150));
   });
 
   // ── CF art. 150 alin. (1): pension exemption. Salary is NOT an exemption. ──
 
   it('pensionStatus da → CAS = 0 regardless of income (CF art. 150 alin. (1))', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ pensionStatus: 'da' }), profile: makeProfile({ pensionStatus: 'da' }), revenues: 200_000, expenses: 0, revenuesNet: 200_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs({ pensionStatus: 'da' }), profile: makeProfile({ pensionStatus: 'da' }), revenues: lei(200_000), expenses: lei(0), revenuesNet: lei(200_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
     expect(cas).toBe(0);
     // CAS = 0 flows through taxable and the total: CASS 20000, taxable 180000, income 18000.
-    expect(res.output.total).toBe(38_000);
+    expect(res.output.total).toBe(lei(38_000));
   });
 
   it('salaryStatus da does NOT exempt from CAS (CF art. 150 alin. (2) covers only lit. b^1))', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'da', pensionStatus: 'nu' }), profile: makeProfile({ salaryStatus: 'da', pensionStatus: 'nu' }), revenues: 60_000, expenses: 0, revenuesNet: 60_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'da', pensionStatus: 'nu' }), profile: makeProfile({ salaryStatus: 'da', pensionStatus: 'nu' }), revenues: lei(60_000), expenses: lei(0), revenuesNet: lei(60_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
-    expect(cas).toBe(12_150);
+    expect(cas).toBe(lei(12_150));
   });
 
   // ── Boundary: CAS tier-2 floor (24 SM) — a floor, not a cap ──
 
   it('net exactly at CAS tier-2 floor (97,200) → CAS = 24,300', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 97_200, expenses: 0, revenuesNet: 97_200, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(97_200), expenses: lei(0), revenuesNet: lei(97_200), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CAS = 97200 * 0.25 = 24300 (crossing 24 SM doubles the floor, it does not cap anything).
     const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
-    expect(cas).toBe(24_300);
+    expect(cas).toBe(lei(24_300));
   });
 
   it('net just above CAS tier-2 floor (97,201) → CAS stays 24,300 (floor, no cap applied)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 97_201, expenses: 0, revenuesNet: 97_201, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(97_201), expenses: lei(0), revenuesNet: lei(97_201), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // Same figure as the old clamp produced, but for the right reason: art. 148 alin. (2)
     // sets a 24 SM MINIMUM, it never caps the base.
     const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
-    expect(cas).toBe(24_300);
+    expect(cas).toBe(lei(24_300));
   });
 
   // ── Boundary: CASS cap ──
 
   it('net exactly at CASS cap (291,600) → CASS = 29,160', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 291_600, expenses: 0, revenuesNet: 291_600, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(291_600), expenses: lei(0), revenuesNet: lei(291_600), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CASS = max(min(291600, 291600) * 0.10, 2430) = max(29160, 2430) = 29160
     const cass = res.lines.find(l => l.label === 'CASS (10%)')?.value;
-    expect(cass).toBe(29_160);
+    expect(cass).toBe(lei(29_160));
   });
 
   it('net just above CASS cap (291,601) → CASS still 29,160 (capped)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 291_601, expenses: 0, revenuesNet: 291_601, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(291_601), expenses: lei(0), revenuesNet: lei(291_601), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CASS = max(min(291601, 291600) * 0.10, 2430) = max(29160, 2430) = 29160
     const cass = res.lines.find(l => l.label === 'CASS (10%)')?.value;
-    expect(cass).toBe(29_160);
+    expect(cass).toBe(lei(29_160));
   });
 
   // ── Rounding: no rounding, raw floats ──
 
   it('net = 71,281 → total = 24478.39 (no rounding, raw float)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 71_281, expenses: 0, revenuesNet: 71_281, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(71_281), expenses: lei(0), revenuesNet: lei(71_281), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CAS = 48600 * 0.25 = 12150 (12 SM floor — the old clamp charged 17820.25)
@@ -414,7 +415,7 @@ describe('computeTaxEstimate', () => {
     const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
     const cass = res.lines.find(l => l.label === 'CASS (10%)')?.value;
     const incomeTax = res.lines.find(l => l.label === 'Impozit pe venit (rată de bază 10%)')?.value;
-    expect(cas).toBeCloseTo(12_150, 3);
+    expect(cas).toBeCloseTo(lei(12_150), 3);
     expect(cass).toBeCloseTo(7_128.1, 3);
     expect(incomeTax).toBeCloseTo(5_200.29, 3);
     expect(res.output.total).toBeCloseTo(24_478.39, 3);
@@ -428,15 +429,15 @@ describe('computeTaxEstimate', () => {
         return {
           ...rule,
           parameters: rule.parameters.map((p) =>
-            p.id === 'tier2_base' ? { ...p, value: 120_000 } : p,
+            p.id === 'tier2_base' ? { ...p, value: lei(120_000) } : p,
           ),
         };
       }
       return rule;
     });
 
-    const original = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 100_001, expenses: 0, revenuesNet: 100_001, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
-    const modified = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 100_001, expenses: 0, revenuesNet: 100_001, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: modifiedRules });
+    const original = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(100_001), expenses: lei(0), revenuesNet: lei(100_001), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const modified = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(100_001), expenses: lei(0), revenuesNet: lei(100_001), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: modifiedRules });
 
     expect(original.status).toBe('computed');
     expect(modified.status).toBe('computed');
@@ -446,53 +447,53 @@ describe('computeTaxEstimate', () => {
     // Modified: 100001 < 120000 → tier-1 floor 48600 → CAS = 48600 * 0.25 = 12150
     const origCas = original.lines.find(l => l.label === 'CAS (25%)')?.value;
     const modCas = modified.lines.find(l => l.label === 'CAS (25%)')?.value;
-    expect(origCas).toBe(24_300);
-    expect(modCas).toBe(12_150);
+    expect(origCas).toBe(lei(24_300));
+    expect(modCas).toBe(lei(12_150));
     expect(modCas).not.toBe(origCas);
   });
 
   // ── Effective-date awareness ──
 
   it('fiscalYear 2025 (asOfDate 2025-01-01) → review_required (rules effectiveFrom 2026-01-01)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ fiscalYear: 2025 }), profile: makeProfile(), revenues: 100_000, expenses: 0, revenuesNet: 100_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs({ fiscalYear: 2025 }), profile: makeProfile(), revenues: lei(100_000), expenses: lei(0), revenuesNet: lei(100_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
   });
 
   // ── Area 6: VAT not becoming taxable income ──
 
   it('excludes VAT from the taxable base for non-exempt profiles (Area 6)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 55_000, expenses: 11_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(55_000), expenses: lei(11_000), revenuesNet: lei(50_000), expensesNet: lei(10_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // Non-exempt: base is the net figure (VAT excluded), gross 55000 → net 50000.
     const gross = res.lines.find((l) => l.label === 'Venit brut')?.value;
-    expect(gross).toBe(50_000);
+    expect(gross).toBe(lei(50_000));
   });
 
   it('keeps the gross base for vatExempt profiles (Area 6)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ vatExempt: true }), profile: makeProfile(), revenues: 55_000, expenses: 11_000, revenuesNet: 50_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs({ vatExempt: true }), profile: makeProfile(), revenues: lei(55_000), expenses: lei(11_000), revenuesNet: lei(50_000), expensesNet: lei(10_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // Exempt: base stays gross (VAT kept in), 55000.
     const gross = res.lines.find((l) => l.label === 'Venit brut')?.value;
-    expect(gross).toBe(55_000);
+    expect(gross).toBe(lei(55_000));
   });
 
   // ── Phase 5 / B-13: the CF art. 174 alin. (6) difference is OWED but never DEDUCTIBLE ──
 
   it('net 20,000 (0 < VNA < 6 SM): CASS 2,430 owed, only 2,000 deductible, tax on 18,000 (B-13)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'nu' }), profile: makeProfile({ salaryStatus: 'nu' }), revenues: 20_000, expenses: 0, revenuesNet: 20_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'nu' }), profile: makeProfile({ salaryStatus: 'nu' }), revenues: lei(20_000), expenses: lei(0), revenuesNet: lei(20_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CAS 0 — net is under the 12 SM floor of art. 151 alin. (1).
     expect(res.lines.find((l) => l.label === 'CAS (25%)')?.value).toBe(0);
     // CASS owed = the 6 SM floor: art. 174 alin. (6).
-    expect(res.lines.find((l) => l.label === 'CASS (10%)')?.value).toBeCloseTo(2_430, 6);
+    expect(res.lines.find((l) => l.label === 'CASS (10%)')?.value).toBeCloseTo(lei(2_430), 6);
     // Deductible CASS = 10% x VNA only: art. 118 alin. (2) lit. b) deducts the contributions
     // „datorate potrivit prevederilor titlului V” „cu excepția diferenței de contribuție … prevăzută la
     // art. 174 alin. (6)”, and alin. (2^3) prorates over the contribution „calculată potrivit art. 174
     // alin. (1)”. The 6 SM floor comes from art. 174 alin. (6), so the difference never enters the base.
-    expect(res.lines.find((l) => l.label === 'CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))')?.value).toBeCloseTo(2_000, 6);
+    expect(res.lines.find((l) => l.label === 'CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))')?.value).toBeCloseTo(lei(2_000), 6);
     // taxable = 20,000 − 2,000 = 18,000 (was 17,570 while the difference was wrongly deducted).
     expect(res.lines.find((l) => l.label === 'Venit net anual impozabil (art. 118 alin. (2) lit. b))')?.value).toBeCloseTo(18_000, 6);
     expect(res.lines.find((l) => l.label === 'Impozit pe venit (rată de bază 10%)')?.value).toBeCloseTo(1_800, 6);
@@ -503,13 +504,13 @@ describe('computeTaxEstimate', () => {
   // ── Phase 5 / B-15: art. 118 alin. (2^2)/(2^3) proration and the alin. (2^4) cap are explicit ──
 
   it('single source: both art. 118 alin. (2^2)/(2^3) ratios are exactly 1, so the deduction lines equal the contributions', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 71_281, expenses: 0, revenuesNet: 71_281, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(71_281), expenses: lei(0), revenuesNet: lei(71_281), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // One sursă ⇒ each denominator (total venituri cumulate, art. 148 alin. (3) / art. 170 alin. (1))
     // IS the sistem-real net. The proration must be a no-op today — it is written out so a second
     // income source (Phase 6) cannot inherit a full deduction it is not entitled to.
-    expect(res.lines.find((l) => l.label === 'CAS deductibilă (art. 118 alin. (2^2))')?.value).toBeCloseTo(12_150, 6);
+    expect(res.lines.find((l) => l.label === 'CAS deductibilă (art. 118 alin. (2^2))')?.value).toBeCloseTo(lei(12_150), 6);
     expect(res.lines.find((l) => l.label === 'CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))')?.value).toBeCloseTo(7_128.1, 6);
     expect(res.lines.find((l) => l.label === 'Venit net anual impozabil (art. 118 alin. (2) lit. b))')?.value).toBeCloseTo(52_002.9, 6);
     // No cap line when the deductions stay under the recalculated net income.
@@ -526,12 +527,12 @@ describe('computeTaxEstimate', () => {
         ? { ...rule, parameters: rule.parameters.map((p) => (p.id === 'rate' ? { ...p, value: 100 } : p)) }
         : rule,
     );
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 50_000, expenses: 0, revenuesNet: 50_000, expensesNet: 0, ruleRelease: PFA_2026_RELEASE, rules: modifiedRules });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(50_000), expenses: lei(0), revenuesNet: lei(50_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: modifiedRules });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CAS 48,600 (100% x the 12 SM base) + CASS 5,000 = 53,600 of deductions against a net of 50,000.
-    expect(res.lines.find((l) => l.label === 'CAS (25%)')?.value).toBe(48_600);
-    expect(res.lines.find((l) => l.label === 'CASS (10%)')?.value).toBeCloseTo(5_000, 6);
+    expect(res.lines.find((l) => l.label === 'CAS (25%)')?.value).toBe(lei(48_600));
+    expect(res.lines.find((l) => l.label === 'CASS (10%)')?.value).toBeCloseTo(lei(5_000), 6);
     expect(res.lines.find((l) => l.label === 'Deduceri blocate de plafonul art. 118 alin. (2^4)')?.value).toBeCloseTo(3_600, 6);
     // The base stops at 0 — it never goes negative, so no phantom negative tax.
     expect(res.lines.find((l) => l.label === 'Venit net anual impozabil (art. 118 alin. (2) lit. b))')?.value).toBeCloseTo(0, 6);
@@ -547,15 +548,15 @@ describe('computeTaxEstimate', () => {
     // Reachable only because the old Math.min(expenses, gross) clamp is gone: art. 118 alin. (2) lit. a)
     // requires the taxpayer to determine „pierderea netă recalculată pe fiecare sursă”, so expenses above
     // revenues must produce a negative net, not a silent zero.
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 10_000, expenses: 20_000, revenuesNet: 10_000, expensesNet: 20_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(10_000), expenses: lei(20_000), revenuesNet: lei(10_000), expensesNet: lei(20_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // A loss is a fact, not a review item: no CASS (art. 174 alin. (2)), no CAS (below 12 SM), no tax.
     expect(res.output.total).toBe(0);
     expect(res.lines.find((l) => l.label === 'Impozit pe venit (rată de bază 10%)')).toBeUndefined();
     // But the loss itself must be visible, not hidden behind a bare 0.
-    expect(res.lines.find((l) => l.label === 'Pierdere fiscală pe sursă (art. 118 alin. (2) lit. a))')?.value).toBe(10_000);
-    expect(res.lossCarryForward?.amount).toBe(10_000);
+    expect(res.lines.find((l) => l.label === 'Pierdere fiscală pe sursă (art. 118 alin. (2) lit. a))')?.value).toBe(lei(10_000));
+    expect(res.lossCarryForward?.amount).toBe(lei(10_000));
     expect(res.lossCarryForward?.years).toBe(5);
     expect(res.lossCarryForward?.capPercent).toBe(70);
     expect(res.lossCarryForward?.sameSourceOnly).toBe(true);
@@ -565,7 +566,7 @@ describe('computeTaxEstimate', () => {
   });
 
   it('a zero net income is NOT a loss: no carry-forward is reported (art. 118 alin. (2) lit. a))', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: 10_000, expenses: 10_000, revenuesNet: 10_000, expensesNet: 10_000, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(10_000), expenses: lei(10_000), revenuesNet: lei(10_000), expensesNet: lei(10_000), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     expect(res.lines.find((l) => l.label === 'Pierdere fiscală pe sursă (art. 118 alin. (2) lit. a))')).toBeUndefined();
@@ -582,15 +583,15 @@ describe('computeTaxEstimate', () => {
  */
 describe('salaried PFA under the 6 SM floor — both art. 174 alin. (7) lit. a) branches compute', () => {
   const money = {
-    revenues: 30_000,
-    expenses: 10_000,
-    revenuesNet: 30_000,
-    expensesNet: 10_000,
+    revenues: lei(30_000),
+    expenses: lei(10_000),
+    revenuesNet: lei(30_000),
+    expensesNet: lei(10_000),
   };
 
   it('salary at least 6 SM (24,300 lei in 2026): CASS = 10% × net, no top-up', async () => {
     const res = await computeTaxEstimate({
-      inputs: makeInputs({ salaryStatus: 'da', salaryIncomeLei: 30_000 }),
+      inputs: makeInputs({ salaryStatus: 'da', salaryIncomeLei: lei(30_000) }),
       profile: makeProfile(),
       ...money,
       ruleRelease: PFA_2026_RELEASE,
@@ -599,17 +600,17 @@ describe('salaried PFA under the 6 SM floor — both art. 174 alin. (7) lit. a) 
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // VNA 20,000 < 24,300, so alin. (6) would ask for a top-up; alin. (7) lit. a) removes it.
-    expect(res.lines.find((l) => l.label === 'CASS (10%)')?.value).toBe(2_000);
+    expect(res.lines.find((l) => l.label === 'CASS (10%)')?.value).toBe(lei(2_000));
     expect(
       res.lines.find((l) => l.label === 'CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))')?.value,
-    ).toBe(2_000);
+    ).toBe(lei(2_000));
     // CAS 0 (net < 12 SM) + CASS 2,000 + impozit 10% × (20,000 − 2,000) = 1,800.
     expect(res.output.total).toBe(3_800);
   });
 
   it('salary below 6 SM: the alin. (6) difference is owed and is not deductible (B-13 shape)', async () => {
     const res = await computeTaxEstimate({
-      inputs: makeInputs({ salaryStatus: 'da', salaryIncomeLei: 20_000 }),
+      inputs: makeInputs({ salaryStatus: 'da', salaryIncomeLei: lei(20_000) }),
       profile: makeProfile(),
       ...money,
       ruleRelease: PFA_2026_RELEASE,
@@ -617,11 +618,11 @@ describe('salaried PFA under the 6 SM floor — both art. 174 alin. (7) lit. a) 
     });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    expect(res.lines.find((l) => l.label === 'CASS (10%)')?.value).toBe(2_430);
+    expect(res.lines.find((l) => l.label === 'CASS (10%)')?.value).toBe(lei(2_430));
     // Only 10% × VNA is deductible — art. 118 alin. (2) lit. b) excludes the alin. (6) difference.
     expect(
       res.lines.find((l) => l.label === 'CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))')?.value,
-    ).toBe(2_000);
+    ).toBe(lei(2_000));
     // Same taxable base as the relieved branch, but 430 lei more payable.
     expect(
       res.lines.find((l) => l.label === 'Venit net anual impozabil (art. 118 alin. (2) lit. b))')?.value,
@@ -652,10 +653,10 @@ describe('uncomputable regimes surface as REVIEW_REQUIRED with a reason', () => 
     const res = await computeTaxEstimate({
       inputs: makeInputs({ regime: 'norma_venit' }),
       profile: makeProfile({ regime: 'norma_venit' }),
-      revenues: 50_000,
-      expenses: 10_000,
-      revenuesNet: 50_000,
-      expensesNet: 10_000,
+      revenues: lei(50_000),
+      expenses: lei(10_000),
+      revenuesNet: lei(50_000),
+      expensesNet: lei(10_000),
       ruleRelease: PFA_2026_RELEASE,
       rules: PFA_2026_SYSTEM_REAL_PACKAGE,
     });
@@ -670,10 +671,10 @@ describe('uncomputable regimes surface as REVIEW_REQUIRED with a reason', () => 
     const res = await computeTaxEstimate({
       inputs: makeInputs({ regime: 'impozit_pe_cit' }),
       profile: makeProfile({ regime: 'impozit_pe_cit' }),
-      revenues: 50_000,
-      expenses: 10_000,
-      revenuesNet: 50_000,
-      expensesNet: 10_000,
+      revenues: lei(50_000),
+      expenses: lei(10_000),
+      revenuesNet: lei(50_000),
+      expensesNet: lei(10_000),
       ruleRelease: PFA_2026_RELEASE,
       rules: PFA_2026_SYSTEM_REAL_PACKAGE,
     });
@@ -692,10 +693,10 @@ describe('uncomputable regimes surface as REVIEW_REQUIRED with a reason', () => 
  */
 describe('mid-year start date (art. 118 alin. (3))', () => {
   const money = {
-    revenues: 30_000,
-    expenses: 10_000,
-    revenuesNet: 30_000,
-    expensesNet: 10_000,
+    revenues: lei(30_000),
+    expenses: lei(10_000),
+    revenuesNet: lei(30_000),
+    expensesNet: lei(10_000),
   };
 
   it('adds an explicit line and leaves the base unprorated', async () => {
@@ -709,10 +710,10 @@ describe('mid-year start date (art. 118 alin. (3))', () => {
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     const line = res.lines.find((l) => l.label === 'Fracțiune de an (art. 118 alin. (3)): venit anual');
-    expect(line?.value).toBe(20_000);
+    expect(line?.value).toBe(lei(20_000));
     expect(
       res.lines.find((l) => l.label === 'Venit net anual impozabil (art. 118 alin. (2) lit. b))')?.value,
-    ).toBe(18_000);
+    ).toBe(lei(18_000));
   });
 
   it('a 1 January start adds no line (nothing to explain)', async () => {

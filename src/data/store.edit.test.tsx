@@ -3,6 +3,7 @@ import { act, render } from '@testing-library/react';
 import { StoreProvider, useStore } from './store';
 import { seedData } from './seed';
 import type { Client, Declaration } from './types';
+import { lei } from '../domain/money';
 
 // Must match STORAGE_KEY in src/data/store.tsx (module-private, not exported).
 const STORAGE_KEY = 'pfa-app-data-v2';
@@ -122,7 +123,7 @@ describe('updateDeclaration', () => {
     const d3 = storeRef!.declarations.find(d => d.id === 'd3')!;
 
     act(() => {
-      storeRef!.updateDeclaration({ ...d1, venituri: 99999 });
+      storeRef!.updateDeclaration({ ...d1, venituri: lei(99999) });
     });
 
     const d3After = storeRef!.declarations.find(d => d.id === 'd3')!;
@@ -151,8 +152,8 @@ describe('updateDeclaration', () => {
         id: 'does-not-exist',
         an: 2026,
         luna: 1,
-        venituri: 0,
-        cheltuieli: 0,
+        venituri: lei(0),
+        cheltuieli: lei(0),
         status: 'inregistrata',
         dataInregistrare: '2026-01-01',
       });

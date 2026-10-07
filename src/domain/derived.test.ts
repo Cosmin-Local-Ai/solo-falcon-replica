@@ -5,6 +5,7 @@ import { selectFinancialDerived, selectTaxDerived } from './derived';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal/package2026';
 import { selectApplicableRules } from './fiscal/select';
 import type { FiscalRule } from './fiscal/rules';
+import { lei } from './money';
 
 const AS_OF = '2026-10-01';
 
@@ -39,7 +40,7 @@ function profile(overrides: Partial<PfaProfile> = {}): PfaProfile {
     otherIncome: [],
     socialInsuranceStatus: 'obligatoriu',
     vatExempt: false,
-    cashFloorLei: 0,
+    cashFloorLei: lei(0),
     identity: identity(),
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
@@ -76,8 +77,8 @@ function revenue(overrides: Partial<Revenue> = {}): Revenue {
     date: '2026-03-15',
     client: 'Client Test',
     cui: '12345678',
-    valoareFaraTva: 1000,
-    tva: 190,
+    valoareFaraTva: lei(1000),
+    tva: lei(190),
     status: 'inregistrata',
     ...overrides,
   };
@@ -91,8 +92,8 @@ function expense(overrides: Partial<Expense> = {}): Expense {
     date: '2026-04-10',
     furnizor: 'Furnizor Test',
     cui: 'RO12345678',
-    valoareFaraTva: 500,
-    tva: 95,
+    valoareFaraTva: lei(500),
+    tva: lei(95),
     status: 'inregistrata',
     ...overrides,
   };
@@ -108,8 +109,8 @@ describe('selectFinancialDerived (Step 14)', () => {
     const view = selectFinancialDerived(data, AS_OF);
     expect(view.fiscalYear).toBe(2026);
     expect(view.asOfDate).toBe(AS_OF);
-    expect(view.ytd.revenue).toBe(1190);
-    expect(view.ytd.expenses).toBe(595);
+    expect(view.ytd.revenue).toBe(lei(1190));
+    expect(view.ytd.expenses).toBe(lei(595));
     expect(view.ytd.net).toBe(595);
     expect(view.monthly.get('2026-03')?.revenue).toBe(1190);
     expect(view.monthly.get('2026-04')?.expenses).toBe(595);
@@ -120,7 +121,7 @@ describe('selectFinancialDerived (Step 14)', () => {
   it('case 1: income added → derived revenue/net change', () => {
     const before = selectFinancialDerived(makeData({ revenues: [revenue()] }), AS_OF);
     const after = selectFinancialDerived(
-      makeData({ revenues: [revenue(), revenue({ id: 'rev-2', nr: 'FCT-002', date: '2026-05-20', valoareFaraTva: 800, tva: 152 })] }),
+      makeData({ revenues: [revenue(), revenue({ id: 'rev-2', nr: 'FCT-002', date: '2026-05-20', valoareFaraTva: lei(800), tva: lei(152) })] }),
       AS_OF,
     );
     expect(after.ytd.revenue).toBe(before.ytd.revenue + 952);
@@ -131,7 +132,7 @@ describe('selectFinancialDerived (Step 14)', () => {
   it('case 2: expense added → derived expenses/net change', () => {
     const before = selectFinancialDerived(makeData({ expenses: [expense()] }), AS_OF);
     const after = selectFinancialDerived(
-      makeData({ expenses: [expense(), expense({ id: 'exp-2', nr: 'FCT-PRO-002', date: '2026-06-11', valoareFaraTva: 300, tva: 57 })] }),
+      makeData({ expenses: [expense(), expense({ id: 'exp-2', nr: 'FCT-PRO-002', date: '2026-06-11', valoareFaraTva: lei(300), tva: lei(57) })] }),
       AS_OF,
     );
     expect(after.ytd.expenses).toBe(before.ytd.expenses + 357);
@@ -140,7 +141,7 @@ describe('selectFinancialDerived (Step 14)', () => {
   });
 
   it('case 3: expense deleted → derived expenses/net change', () => {
-    const data = makeData({ expenses: [expense(), expense({ id: 'exp-2', valoareFaraTva: 200, tva: 38 })] });
+    const data = makeData({ expenses: [expense(), expense({ id: 'exp-2', valoareFaraTva: lei(200), tva: lei(38) })] });
     const before = selectFinancialDerived(data, AS_OF);
     const after = selectFinancialDerived({ ...data, expenses: [data.expenses[0]] }, AS_OF);
     expect(after.ytd.expenses).toBe(before.ytd.expenses - 238);
@@ -151,7 +152,7 @@ describe('selectFinancialDerived (Step 14)', () => {
   it('case 4: expense reclassified → counting rule changes, line provenance updates', () => {
     const before = selectFinancialDerived(makeData({ expenses: [expense()] }), AS_OF);
     const after = selectFinancialDerived(makeData({ expenses: [expense({ status: 'respinsa', statusDetail: 'Document neconform' })] }), AS_OF);
-    expect(before.ytd.expenses).toBe(595);
+    expect(before.ytd.expenses).toBe(lei(595));
     expect(after.ytd.expenses).toBe(0);
     expect(after.lines.expenses[0].counted).toBe(false);
     expect(after.lines.expenses[0].status).toBe('respinsa');
@@ -189,7 +190,7 @@ describe('selectFinancialDerived (Step 14)', () => {
     const view = selectFinancialDerived(data, '2026-10-01');
     expect(view.lines.revenues.find((l) => l.id === 'rev-on')?.counted).toBe(true);
     expect(view.lines.revenues.find((l) => l.id === 'rev-after')?.counted).toBe(false);
-    expect(view.ytd.revenue).toBe(1190);
+    expect(view.ytd.revenue).toBe(lei(1190));
   });
 
   it('counts a record exactly on fiscal year start, excludes one the day before', () => {
@@ -202,7 +203,7 @@ describe('selectFinancialDerived (Step 14)', () => {
     const view = selectFinancialDerived(data, AS_OF);
     expect(view.lines.revenues.find((l) => l.id === 'rev-start')?.counted).toBe(true);
     expect(view.lines.revenues.find((l) => l.id === 'rev-before')?.counted).toBe(false);
-    expect(view.ytd.revenue).toBe(1190);
+    expect(view.ytd.revenue).toBe(lei(1190));
   });
 
   it('lists out-of-period records with counted: false', () => {
@@ -215,18 +216,18 @@ describe('selectFinancialDerived (Step 14)', () => {
     const view = selectFinancialDerived(data, AS_OF);
     expect(view.lines.revenues).toHaveLength(2);
     expect(view.lines.revenues.find((l) => l.id === 'rev-out')?.counted).toBe(false);
-    expect(view.ytd.revenue).toBe(1190);
+    expect(view.ytd.revenue).toBe(lei(1190));
   });
 
   it('preserves full revenue-line provenance (all fields)', () => {
     const data = makeData({
-      revenues: [revenue({ id: 'rev-p', tip: 'notafactura', nr: 'NI-42', date: '2026-05-20', valoareFaraTva: 800, tva: 152 })],
+      revenues: [revenue({ id: 'rev-p', tip: 'notafactura', nr: 'NI-42', date: '2026-05-20', valoareFaraTva: lei(800), tva: lei(152) })],
     });
     const view = selectFinancialDerived(data, AS_OF);
     expect(view.lines.revenues[0]).toEqual({
       id: 'rev-p',
       date: '2026-05-20',
-      total: 952,
+      total: lei(952),
       status: 'inregistrata',
       counted: true,
       document: { tip: 'notafactura', nr: 'NI-42' },
@@ -249,18 +250,18 @@ describe('selectFinancialDerived (Step 14)', () => {
     const view = selectFinancialDerived(makeData(), AS_OF);
     expect(view.lines.revenues).toEqual([]);
     expect(view.lines.expenses).toEqual([]);
-    expect(view.ytd).toEqual({ revenue: 0, expenses: 0, net: 0, revenueNet: 0, expenseNet: 0 });
+    expect(view.ytd).toEqual({ revenue: lei(0), expenses: lei(0), net: lei(0), revenueNet: 0, expenseNet: 0 });
     expect(view.monthly.size).toBe(0);
   });
 
   it('computes negative net when expenses exceed revenue', () => {
     const data = makeData({
-      revenues: [revenue({ valoareFaraTva: 100, tva: 19 })],
-      expenses: [expense({ valoareFaraTva: 500, tva: 95 })],
+      revenues: [revenue({ valoareFaraTva: lei(100), tva: lei(19) })],
+      expenses: [expense({ valoareFaraTva: lei(500), tva: lei(95) })],
     });
     const view = selectFinancialDerived(data, AS_OF);
-    expect(view.ytd.revenue).toBe(119);
-    expect(view.ytd.expenses).toBe(595);
+    expect(view.ytd.revenue).toBe(lei(119));
+    expect(view.ytd.expenses).toBe(lei(595));
     expect(view.ytd.net).toBe(-476);
   });
 });
@@ -281,11 +282,11 @@ describe('selectTaxDerived (Step 14, structural — no formula)', () => {
   it('case 6: profile tax input changed → inputs reference changes', () => {
     const before = selectTaxDerived(makeData(), activeRules2026());
     const after = selectTaxDerived(
-      makeData({ profile: profile({ cashFloorLei: 5000, vatExempt: true, salaryStatus: 'da', otherIncome: ['alte'] }) }),
+      makeData({ profile: profile({ cashFloorLei: lei(5000), vatExempt: true, salaryStatus: 'da', otherIncome: ['alte'] }) }),
       activeRules2026(),
     );
     expect(after.inputs.inputsKey).not.toBe(before.inputs.inputsKey);
-    expect(after.inputs.cashFloorLei).toBe(5000);
+    expect(after.inputs.cashFloorLei).toBe(lei(5000));
     expect(after.inputs.vatExempt).toBe(true);
     expect(after.inputs.salaryStatus).toBe('da');
     // Release provenance is untouched by a profile change.
@@ -327,11 +328,11 @@ describe('selectTaxDerived (Step 14, structural — no formula)', () => {
     const base = makeData();
     const before = selectTaxDerived(base, activeRules2026());
     const after = selectTaxDerived(
-      makeData({ profile: profile({ cashFloorLei: 10000 }) }),
+      makeData({ profile: profile({ cashFloorLei: lei(10000) }) }),
       activeRules2026(),
     );
     expect(after.inputs.inputsKey).not.toBe(before.inputs.inputsKey);
-    expect(after.inputs.cashFloorLei).toBe(10000);
+    expect(after.inputs.cashFloorLei).toBe(lei(10000));
   });
 
   // Phase 6: the profile→engine contract gained the two fields the CASS 6 SM test and the
@@ -342,13 +343,13 @@ describe('selectTaxDerived (Step 14, structural — no formula)', () => {
       makeData({
         profile: profile({
           salaryStatus: 'da',
-          salaryIncomeLei: 30_000,
+          salaryIncomeLei: lei(30_000),
           pfaStartDate: '2026-04-01',
         }),
       }),
       activeRules2026(),
     );
-    expect(d.inputs.salaryIncomeLei).toBe(30_000);
+    expect(d.inputs.salaryIncomeLei).toBe(lei(30_000));
     expect(d.inputs.pfaStartDate).toBe('2026-04-01');
   });
 
@@ -361,7 +362,7 @@ describe('selectTaxDerived (Step 14, structural — no formula)', () => {
   it('changes inputsKey when the salary amount changes (the 6 SM test is an input, not a constant)', () => {
     const before = selectTaxDerived(makeData(), activeRules2026());
     const after = selectTaxDerived(
-      makeData({ profile: profile({ salaryStatus: 'da', salaryIncomeLei: 30_000 }) }),
+      makeData({ profile: profile({ salaryStatus: 'da', salaryIncomeLei: lei(30_000) }) }),
       activeRules2026(),
     );
     expect(after.inputs.inputsKey).not.toBe(before.inputs.inputsKey);

@@ -13,13 +13,14 @@ import {
   type RatioRuleStatus,
   type ThresholdQuery,
 } from './thresholds';
+import { lei, type Bani } from './money'
 
 /**
  * Supply the same amount for every base. The status-math tests below are about distance and
  * the warning band, not about which base a spec reads, so they hold the bases equal rather
  * than encoding a legal claim.
  */
-const allBases = (value: number) => ({
+const allBases = (value: Bani) => ({
   'revenue-incl-vat': value,
   'revenue-excl-vat': value,
   'expense-incl-vat': value,
@@ -30,7 +31,7 @@ const allBases = (value: number) => ({
 const QUERY: ThresholdQuery = {
   taxYear: 2026,
   asOfDate: '2026-03-15',
-  bases: allBases(100000),
+  bases: allBases(lei(100000)),
   ruleRelease: 'PFA_2026_RELEASE',
 };
 
@@ -43,7 +44,7 @@ describe('computeThresholds', () => {
     expect(result).toHaveLength(THRESHOLD_SPECS.length);
     // CAS_MIN_BASE survives the CAS correction: crossing 12 SM is what triggers the
     // contribution obligation at all (CF art. 148 alin. (1)).
-    expect(byId(result, 'CAS_MIN_BASE').thresholdValue).toBe(48600);
+    expect(byId(result, 'CAS_MIN_BASE').thresholdValue).toBe(lei(48600));
   });
 
   it('CAS min base: thresholdValue 48600, distance = currentValue - 48600', () => {
@@ -51,7 +52,7 @@ describe('computeThresholds', () => {
     const casMin = byId(result, 'CAS_MIN_BASE');
     expect(casMin.type).toBe('min-base');
     expect(casMin.affectedTax).toBe('cas');
-    expect(casMin.thresholdValue).toBe(48600);
+    expect(casMin.thresholdValue).toBe(lei(48600));
     expect(casMin.distance).toBe(100000 - 48600);
   });
 
@@ -67,7 +68,7 @@ describe('computeThresholds', () => {
     // CASS really does have a ceiling (CF art. 170 alin. (1), "nu poate fi mai mare decât"
     // 72 SM), so the max-base row survives where the law provides one.
     expect(byId(result, 'CASS_MAX_BASE').type).toBe('max-base');
-    expect(byId(result, 'CASS_MAX_BASE').thresholdValue).toBe(291600);
+    expect(byId(result, 'CASS_MAX_BASE').thresholdValue).toBe(lei(291600));
   });
 
   it('CASS min base: thresholdValue 24300', () => {
@@ -75,7 +76,7 @@ describe('computeThresholds', () => {
     const cassMin = byId(result, 'CASS_MIN_BASE');
     expect(cassMin.type).toBe('min-base');
     expect(cassMin.affectedTax).toBe('cass');
-    expect(cassMin.thresholdValue).toBe(24300);
+    expect(cassMin.thresholdValue).toBe(lei(24300));
   });
 
   it('CASS max base: thresholdValue 291600', () => {
@@ -83,7 +84,7 @@ describe('computeThresholds', () => {
     const cassMax = byId(result, 'CASS_MAX_BASE');
     expect(cassMax.type).toBe('max-base');
     expect(cassMax.affectedTax).toBe('cass');
-    expect(cassMax.thresholdValue).toBe(291600);
+    expect(cassMax.thresholdValue).toBe(lei(291600));
   });
 
   it('VAT: thresholdValue 395000, effectiveDate 2025-09-01', () => {
@@ -91,7 +92,7 @@ describe('computeThresholds', () => {
     const vat = byId(result, 'VAT_REGISTRATION');
     expect(vat.type).toBe('registration');
     expect(vat.affectedTax).toBe('vat');
-    expect(vat.thresholdValue).toBe(395000);
+    expect(vat.thresholdValue).toBe(lei(395000));
     expect(vat.effectiveDate).toBe('2025-09-01');
   });
 
@@ -102,16 +103,16 @@ describe('computeThresholds', () => {
   });
 
   it('below threshold → negative distance', () => {
-    const q: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', bases: allBases(10000), ruleRelease: '2026-01-01' };
+    const q: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', bases: allBases(lei(10000)), ruleRelease: '2026-01-01' };
     const r = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q);
     // 10000 < 48600 (CAS_MIN_BASE) → distance = 10000 - 48600 = -38600
     const casMin = r.find(t => t.thresholdId === 'CAS_MIN_BASE')!;
-    expect(casMin.distance).toBe(-38600);
+    expect(casMin.distance).toBe(lei(-38600));
     expect(casMin.status).toBe('breached');
   });
 
   it('exactly at threshold → zero distance', () => {
-    const q: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', bases: allBases(48600), ruleRelease: '2026-01-01' };
+    const q: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', bases: allBases(lei(48600)), ruleRelease: '2026-01-01' };
     const r = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q);
     const casMin = r.find(t => t.thresholdId === 'CAS_MIN_BASE')!;
     expect(casMin.distance).toBe(0);
@@ -122,7 +123,7 @@ describe('computeThresholds', () => {
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, {
       taxYear: 2025,
       asOfDate: '2025-06-15',
-      bases: allBases(100000),
+      bases: allBases(lei(100000)),
       ruleRelease: '2025-01-01',
     });
     expect(result).toBeDefined();
@@ -136,15 +137,15 @@ describe('computeThresholds', () => {
   });
 
   it('daysUntilWarning is deterministic', () => {
-    const q1: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', bases: allBases(100000), ruleRelease: '2026-01-01' };
-    const q2: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', bases: allBases(100000), ruleRelease: '2026-01-01' };
+    const q1: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', bases: allBases(lei(100000)), ruleRelease: '2026-01-01' };
+    const q2: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', bases: allBases(lei(100000)), ruleRelease: '2026-01-01' };
     const r1 = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q1);
     const r2 = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q2);
     expect(r1).toEqual(r2);
   });
 
   it('just above threshold → positive distance', () => {
-    const q: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', bases: allBases(48601), ruleRelease: '2026-01-01' };
+    const q: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', bases: allBases(lei(48601)), ruleRelease: '2026-01-01' };
     const r = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q);
     const casMin = r.find(t => t.thresholdId === 'CAS_MIN_BASE')!;
     expect(casMin.distance).toBeGreaterThan(0);
@@ -154,7 +155,7 @@ describe('computeThresholds', () => {
     const q: ThresholdQuery = {
       taxYear: 2026,
       asOfDate: '2026-03-15',
-      bases: allBases(300000),
+      bases: allBases(lei(300000)),
       ruleRelease: 'PFA_2026_RELEASE',
     };
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q);
@@ -167,7 +168,7 @@ describe('computeThresholds', () => {
     const q: ThresholdQuery = {
       taxYear: 2026,
       asOfDate: '2026-03-15',
-      bases: allBases(400000),
+      bases: allBases(lei(400000)),
       ruleRelease: 'PFA_2026_RELEASE',
     };
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q);
@@ -178,8 +179,8 @@ describe('computeThresholds', () => {
 
   it('warningDistance is exactly 10% of the threshold value', () => {
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, QUERY);
-    expect(byId(result, 'CAS_MIN_BASE').warningDistance).toBe(4860); // 48600 * 0.1
-    expect(byId(result, 'CASS_MIN_BASE').warningDistance).toBe(2430); // 24300 * 0.1
+    expect(byId(result, 'CAS_MIN_BASE').warningDistance).toBe(lei(4860)); // 48600 * 0.1
+    expect(byId(result, 'CASS_MIN_BASE').warningDistance).toBe(lei(2430)); // 24300 * 0.1
     expect(byId(result, 'CASS_MAX_BASE').warningDistance).toBe(29160); // 291600 * 0.1
     expect(byId(result, 'VAT_REGISTRATION').warningDistance).toBe(39500); // 395000 * 0.1
   });
@@ -188,18 +189,18 @@ describe('computeThresholds', () => {
     const q: ThresholdQuery = {
       taxYear: 2026,
       asOfDate: '2026-03-15',
-      bases: allBases(53460), // 48600 + 4860 → distance exactly +warningDistance
+      bases: allBases(lei(53460)), // 48600 + 4860 → distance exactly +warningDistance
       ruleRelease: 'PFA_2026_RELEASE',
     };
     const casMin = byId(computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q), 'CAS_MIN_BASE');
-    expect(casMin.distance).toBe(4860);
+    expect(casMin.distance).toBe(lei(4860));
     expect(casMin.status).toBe('warning');
 
     const casMin2 = byId(
-      computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...q, bases: allBases(53461) }),
+      computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...q, bases: allBases(lei(53461)) }),
       'CAS_MIN_BASE',
     );
-    expect(casMin2.distance).toBe(4861);
+    expect(casMin2.distance).toBe(lei(4861));
     expect(casMin2.status).toBe('ok'); // just outside the band
   });
 
@@ -207,18 +208,18 @@ describe('computeThresholds', () => {
     const q: ThresholdQuery = {
       taxYear: 2026,
       asOfDate: '2026-03-15',
-      bases: allBases(262440), // 291600 - 29160 → distance exactly -warningDistance
+      bases: allBases(lei(262440)), // 291600 - 29160 → distance exactly -warningDistance
       ruleRelease: 'PFA_2026_RELEASE',
     };
     const cassMax = byId(computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q), 'CASS_MAX_BASE');
-    expect(cassMax.distance).toBe(-29160);
+    expect(cassMax.distance).toBe(lei(-29160));
     expect(cassMax.status).toBe('warning');
 
     const cassMax2 = byId(
-      computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...q, bases: allBases(262439) }),
+      computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...q, bases: allBases(lei(262439)) }),
       'CASS_MAX_BASE',
     );
-    expect(cassMax2.distance).toBe(-29161);
+    expect(cassMax2.distance).toBe(lei(-29161));
     expect(cassMax2.status).toBe('ok'); // just outside the band
   });
 
@@ -226,18 +227,18 @@ describe('computeThresholds', () => {
     const q: ThresholdQuery = {
       taxYear: 2026,
       asOfDate: '2026-03-15',
-      bases: allBases(355500), // 395000 - 39500 → distance exactly -warningDistance
+      bases: allBases(lei(355500)), // 395000 - 39500 → distance exactly -warningDistance
       ruleRelease: 'PFA_2026_RELEASE',
     };
     const vat = byId(computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q), 'VAT_REGISTRATION');
-    expect(vat.distance).toBe(-39500);
+    expect(vat.distance).toBe(lei(-39500));
     expect(vat.status).toBe('warning');
 
     const vat2 = byId(
-      computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...q, bases: allBases(355499) }),
+      computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...q, bases: allBases(lei(355499)) }),
       'VAT_REGISTRATION',
     );
-    expect(vat2.distance).toBe(-39501);
+    expect(vat2.distance).toBe(lei(-39501));
     expect(vat2.status).toBe('ok'); // just outside the band
   });
 
@@ -299,7 +300,7 @@ describe('computeThresholds', () => {
     const q: ThresholdQuery = {
       taxYear: 2026,
       asOfDate: '2026-03-15',
-      bases: { 'revenue-incl-vat': 100000, 'revenue-excl-vat': 100000 },
+      bases: { 'revenue-incl-vat': lei(100000), 'revenue-excl-vat': lei(100000) },
       ruleRelease: 'PFA_2026_RELEASE',
     };
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q);
@@ -311,7 +312,7 @@ describe('computeThresholds', () => {
     expect(casMin.reviewReason).toBeTruthy();
     // The VAT row, whose base WAS supplied, is still measured normally.
     expect(byId(result, 'VAT_REGISTRATION').status).not.toBe('review_required');
-    expect(byId(result, 'VAT_REGISTRATION').currentValue).toBe(100000);
+    expect(byId(result, 'VAT_REGISTRATION').currentValue).toBe(lei(100000));
   });
 
   it('no base supplied at all → every spec is review_required, none dropped', () => {
@@ -331,7 +332,7 @@ describe('computeThresholds', () => {
   it('a spec is never silently dropped by a base mismatch (silent-skip guard)', () => {
     // Whatever bases we hand over, the row count equals the spec count. This is the test
     // that fails if someone reintroduces `continue` on a base mismatch.
-    for (const bases of [allBases(100000), {}, { 'net-income': 1 }, { 'revenue-excl-vat': 1 }]) {
+    for (const bases of [allBases(lei(100000)), {}, { 'net-income': lei(1) }, { 'revenue-excl-vat': lei(1) }]) {
       const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, {
         taxYear: 2026,
         asOfDate: '2026-03-15',
@@ -366,29 +367,29 @@ describe('tier-floor — the 24 SM CAS ladder step', () => {
     expect(spec.baseSourceArticle).toContain('art. 148 alin. (2) lit. b)');
 
     const row = byId(computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, QUERY), 'CAS_TIER2_FLOOR');
-    expect(row.thresholdValue).toBe(97200);
+    expect(row.thresholdValue).toBe(lei(97200));
     expect(row.fiscalBase).toBe('net-income');
     expect(row.source).toContain('art. 148');
   });
 
   it('is crossed at the tier, inclusive — the same predicate calcCas uses', () => {
     // art. 148 alin. (2) lit. b) applies once realised income is "cel puțin egal cu" 24 SM.
-    expect(statusFor('tier-floor', 0, 100)).toBe('breached');
-    expect(statusFor('tier-floor', 1000, 100)).toBe('breached');
-    expect(statusFor('tier-floor', -1, 0)).toBe('ok');
-    expect(statusFor('tier-floor', -50, 100)).toBe('warning');
-    expect(statusFor('tier-floor', -101, 100)).toBe('ok');
+    expect(statusFor('tier-floor', lei(0), lei(100))).toBe('breached');
+    expect(statusFor('tier-floor', lei(1000), lei(100))).toBe('breached');
+    expect(statusFor('tier-floor', lei(-1), lei(0))).toBe('ok');
+    expect(statusFor('tier-floor', lei(-50), lei(100))).toBe('warning');
+    expect(statusFor('tier-floor', lei(-101), lei(100))).toBe('ok');
   });
 
   it('crossing the tier and the doubled CAS floor move together on the same input', () => {
     // This is the acceptance condition: the visible threshold event and the doubled amount must be
     // two readings of ONE figure, not two independently hardcoded numbers.
     for (const { netIncome, cas, status } of [
-      { netIncome: 60000, cas: 12150, status: 'ok' },
+      { netIncome: lei(60000), cas: lei(12150), status: 'ok' },
       // 97.199 is one leu below the tier, i.e. inside the app-chosen 10% warning band — the tier-1
       // floor still applies, but the step is close enough that `ok` would understate it.
-      { netIncome: 97199, cas: 12150, status: 'warning' },
-      { netIncome: 97200, cas: 24300, status: 'breached' },
+      { netIncome: lei(97199), cas: lei(12150), status: 'warning' },
+      { netIncome: lei(97200), cas: lei(24300), status: 'breached' },
     ] as const) {
       const row = byId(
         computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...QUERY, bases: allBases(netIncome) }),
@@ -424,54 +425,54 @@ describe('tier-floor — the 24 SM CAS ladder step', () => {
 
 describe('income threshold type (Step 29)', () => {
   it('statusFor: income breached when distance > 0', () => {
-    expect(statusFor('income', 1, 100)).toBe('breached');
-    expect(statusFor('income', 1000, 100)).toBe('breached');
+    expect(statusFor('income', lei(1), lei(100))).toBe('breached');
+    expect(statusFor('income', lei(1000), lei(100))).toBe('breached');
   });
 
   it('statusFor: income warning when approaching the threshold (distance near 0)', () => {
-    expect(statusFor('income', 0, 100)).toBe('warning');
-    expect(statusFor('income', -50, 100)).toBe('warning');
+    expect(statusFor('income', lei(0), lei(100))).toBe('warning');
+    expect(statusFor('income', lei(-50), lei(100))).toBe('warning');
   });
 
   it('statusFor: income ok when distance < -warningDistance', () => {
-    expect(statusFor('income', -101, 100)).toBe('ok');
-    expect(statusFor('income', -500, 100)).toBe('ok');
+    expect(statusFor('income', lei(-101), lei(100))).toBe('ok');
+    expect(statusFor('income', lei(-500), lei(100))).toBe('ok');
   });
 
   it('statusFor: min-base breached when below minimum, ok when above', () => {
-    expect(statusFor('min-base', -100, 50)).toBe('breached');
-    expect(statusFor('min-base', 100, 50)).toBe('ok');
+    expect(statusFor('min-base', lei(-100), lei(50))).toBe('breached');
+    expect(statusFor('min-base', lei(100), lei(50))).toBe('ok');
   });
 
   it('statusFor: max-base breached when above maximum, ok when below', () => {
-    expect(statusFor('max-base', 100, 50)).toBe('breached');
-    expect(statusFor('max-base', -100, 50)).toBe('ok');
+    expect(statusFor('max-base', lei(100), lei(50))).toBe('breached');
+    expect(statusFor('max-base', lei(-100), lei(50))).toBe('ok');
   });
 
   it('statusFor: registration breached at/above threshold, ok below', () => {
-    expect(statusFor('registration', 100, 50)).toBe('breached');
-    expect(statusFor('registration', 0, 50)).toBe('breached'); // exactly at threshold
-    expect(statusFor('registration', -100, 50)).toBe('ok');
+    expect(statusFor('registration', lei(100), lei(50))).toBe('breached');
+    expect(statusFor('registration', lei(0), lei(50))).toBe('breached'); // exactly at threshold
+    expect(statusFor('registration', lei(-100), lei(50))).toBe('ok');
   });
 
   it('statusFor: min-base warning band outer boundary (exactly +warningDistance → warning, beyond → ok)', () => {
-    expect(statusFor('min-base', 50, 50)).toBe('warning'); // exactly at +warningDistance
-    expect(statusFor('min-base', 49, 50)).toBe('warning'); // inside the band
-    expect(statusFor('min-base', 0, 50)).toBe('warning'); // exactly at threshold
-    expect(statusFor('min-base', 51, 50)).toBe('ok'); // just outside the band
+    expect(statusFor('min-base', lei(50), lei(50))).toBe('warning'); // exactly at +warningDistance
+    expect(statusFor('min-base', lei(49), lei(50))).toBe('warning'); // inside the band
+    expect(statusFor('min-base', lei(0), lei(50))).toBe('warning'); // exactly at threshold
+    expect(statusFor('min-base', lei(51), lei(50))).toBe('ok'); // just outside the band
   });
 
   it('statusFor: max-base warning band outer boundary (exactly -warningDistance → warning, beyond → ok)', () => {
-    expect(statusFor('max-base', -50, 50)).toBe('warning'); // exactly at -warningDistance
-    expect(statusFor('max-base', -49, 50)).toBe('warning'); // inside the band
-    expect(statusFor('max-base', 0, 50)).toBe('warning'); // exactly at threshold
-    expect(statusFor('max-base', -51, 50)).toBe('ok'); // just outside the band
+    expect(statusFor('max-base', lei(-50), lei(50))).toBe('warning'); // exactly at -warningDistance
+    expect(statusFor('max-base', lei(-49), lei(50))).toBe('warning'); // inside the band
+    expect(statusFor('max-base', lei(0), lei(50))).toBe('warning'); // exactly at threshold
+    expect(statusFor('max-base', lei(-51), lei(50))).toBe('ok'); // just outside the band
   });
 
   it('statusFor: registration warning band (negative distance within the band → warning, beyond → ok)', () => {
-    expect(statusFor('registration', -50, 50)).toBe('warning'); // exactly at -warningDistance
-    expect(statusFor('registration', -49, 50)).toBe('warning'); // inside the band
-    expect(statusFor('registration', -51, 50)).toBe('ok'); // just outside the band
+    expect(statusFor('registration', lei(-50), lei(50))).toBe('warning'); // exactly at -warningDistance
+    expect(statusFor('registration', lei(-49), lei(50))).toBe('warning'); // inside the band
+    expect(statusFor('registration', lei(-51), lei(50))).toBe('ok'); // just outside the band
   });
 
   it('breachMeaningFor: income returns the tax obligation message', () => {
@@ -490,43 +491,43 @@ describe('ratio rule status (Step 29)', () => {
   const rule = (over: Partial<RatioRule> = {}): RatioRule => ({
     id: 'rule-1',
     label: 'Test rule',
-    current: 0,
-    limit: 100,
+    current: lei(0),
+    limit: lei(100),
     breached: false,
     ratio: 0,
     ...over,
   });
 
   it('ok below the warning band (ratio < 0.8)', () => {
-    expect(statusForRatioRule(rule({ current: 50, ratio: 0.5 }))).toBe('ok');
-    expect(statusForRatioRule(rule({ current: 79, ratio: 0.79 }))).toBe('ok');
+    expect(statusForRatioRule(rule({ current: lei(50), ratio: 0.5 }))).toBe('ok');
+    expect(statusForRatioRule(rule({ current: lei(79), ratio: 0.79 }))).toBe('ok');
   });
 
   it('warning at the boundary (ratio >= 0.8)', () => {
-    expect(statusForRatioRule(rule({ current: 80, ratio: 0.8 }))).toBe('warning');
-    expect(statusForRatioRule(rule({ current: 95, ratio: 0.95 }))).toBe('warning');
+    expect(statusForRatioRule(rule({ current: lei(80), ratio: 0.8 }))).toBe('warning');
+    expect(statusForRatioRule(rule({ current: lei(95), ratio: 0.95 }))).toBe('warning');
   });
 
   it('breached flag always wins over ratio', () => {
-    expect(statusForRatioRule(rule({ current: 120, limit: 100, ratio: 1.2, breached: true }))).toBe('breached');
+    expect(statusForRatioRule(rule({ current: lei(120), limit: lei(100), ratio: 1.2, breached: true }))).toBe('breached');
     // Even a low ratio is 'breached' when the caller flags it (e.g. zero-limit rule).
-    expect(statusForRatioRule(rule({ current: 10, limit: 0, ratio: null, breached: true }))).toBe('breached');
+    expect(statusForRatioRule(rule({ current: lei(10), limit: lei(0), ratio: null, breached: true }))).toBe('breached');
   });
 
   it('zero-limit rule ("no cap"): current > 0 → breached, ratio stays null', () => {
-    const r = rule({ current: 10, limit: 0, ratio: null, breached: true });
+    const r = rule({ current: lei(10), limit: lei(0), ratio: null, breached: true });
     expect(r.ratio).toBeNull();
     expect(statusForRatioRule(r)).toBe('breached');
   });
 
   it('zero-limit rule ("no cap"): current === 0 → ok, ratio stays null', () => {
-    const r = rule({ current: 0, limit: 0, ratio: null, breached: false });
+    const r = rule({ current: lei(0), limit: lei(0), ratio: null, breached: false });
     expect(r.ratio).toBeNull();
     expect(statusForRatioRule(r)).toBe('ok');
   });
 
   it('withRatioRuleStatus attaches the derived status without mutating the input', () => {
-    const r = rule({ current: 90, ratio: 0.9 });
+    const r = rule({ current: lei(90), ratio: 0.9 });
     const withStatus = withRatioRuleStatus(r);
     expect(withStatus.status).toBe('warning');
     expect(withStatus.breached).toBe(false);
@@ -542,8 +543,8 @@ describe('ratio rule status (Step 29)', () => {
     const dashboardRule = {
       id: 'CAS_MIN_BASE',
       label: 'pfa-revenue',
-      current: 100000,
-      limit: 48600,
+      current: lei(100000),
+      limit: lei(48600),
       ratio: 100000 / 48600,
       breached: true,
       type: 'income' as const,

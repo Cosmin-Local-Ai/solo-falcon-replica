@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createDefaultProfile, getActiveProfile, profileIdentity } from './profile';
 import { parsePfaProfile } from './schema';
 import type { PfaProfile } from './models';
+import { lei } from './money';
 
 /** A fully valid profile used as the baseline for schema tests. */
 const validProfile: PfaProfile = {
@@ -15,7 +16,7 @@ const validProfile: PfaProfile = {
   otherIncome: [],
   socialInsuranceStatus: 'obligatoriu',
   vatExempt: false,
-  cashFloorLei: 0,
+  cashFloorLei: lei(0),
   identity: {
     nume: 'Popescu Andrei',
     cnp: '1234567890123',
@@ -57,10 +58,10 @@ describe('createDefaultProfile', () => {
   });
 
   it('applies overrides on top of defaults', () => {
-    const p = createDefaultProfile({ regime: 'impozit_pe_cit', caen: '6201', cashFloorLei: 5000 }, PINNED_INSTANT);
+    const p = createDefaultProfile({ regime: 'impozit_pe_cit', caen: '6201', cashFloorLei: lei(5000) }, PINNED_INSTANT);
     expect(p.regime).toBe('impozit_pe_cit');
     expect(p.caen).toBe('6201');
-    expect(p.cashFloorLei).toBe(5000);
+    expect(p.cashFloorLei).toBe(lei(5000));
     // untouched fields keep their defaults
     expect(p.salaryStatus).toBe('nu');
     expect(p.otherIncome).toEqual([]);
@@ -103,7 +104,7 @@ describe('parsePfaProfile', () => {
   });
 
   it('rejects a negative cash floor', () => {
-    expect(parsePfaProfile({ ...validProfile, cashFloorLei: -1 })).toBeNull();
+    expect(parsePfaProfile({ ...validProfile, cashFloorLei: lei(-1) })).toBeNull();
   });
 
   it('rejects a non-integer fiscal year', () => {

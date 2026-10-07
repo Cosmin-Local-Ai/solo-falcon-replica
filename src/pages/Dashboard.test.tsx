@@ -4,6 +4,7 @@ import { StoreProvider } from '../data/store';
 import { seedData } from '../data/seed';
 import type { AppData, Revenue } from '../data/types';
 import Dashboard from './Dashboard';
+import { lei } from '../domain/money';
 
 const STORAGE_KEY = 'pfa-app-data-v2';
 
@@ -15,8 +16,8 @@ const validRevenue: Revenue = {
   date: '2026-02-10',
   client: 'Client A SRL',
   cui: 'RO12345678',
-  valoareFaraTva: 50_000,
-  tva: 9_500,
+  valoareFaraTva: lei(50_000),
+  tva: lei(9_500),
   status: 'inregistrata',
 };
 
@@ -125,8 +126,8 @@ describe('Dashboard page', () => {
           date: '2026-01-15',
           client: 'Client X SRL',
           cui: 'RO12345678',
-          valoareFaraTva: 78_000,
-          tva: 16_380,
+          valoareFaraTva: lei(78_000),
+          tva: lei(16_380),
           status: 'inregistrata',
         },
         {
@@ -136,8 +137,8 @@ describe('Dashboard page', () => {
           date: '2026-02-20',
           client: 'Client Y SRL',
           cui: 'RO12345678',
-          valoareFaraTva: 52_000,
-          tva: 10_920,
+          valoareFaraTva: lei(52_000),
+          tva: lei(10_920),
           status: 'inregistrata',
         },
       ],

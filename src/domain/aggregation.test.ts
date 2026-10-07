@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AppData, Expense, Revenue, SettingsState } from '../data/types';
 import type { PfaIdentity, PfaProfile } from './models';
 import { inPeriod, selectMonthly, selectYtd, revenueFiscalDate, expenseFiscalDate, auditFiscalDates } from './aggregation';
+import { lei, type Bani } from './money'
 
 function identity(): PfaIdentity {
   return {
@@ -34,7 +35,7 @@ function profile(fiscalYear = 2026): PfaProfile {
     otherIncome: [],
     socialInsuranceStatus: 'obligatoriu',
     vatExempt: false,
-    cashFloorLei: 0,
+    cashFloorLei: lei(0),
     identity: identity(),
     updatedAt: '2026-01-01T00:00:00.000Z',
   };
@@ -64,7 +65,7 @@ function makeData(overrides: Partial<AppData> = {}): AppData {
   };
 }
 
-function revenue(date: string, valoareFaraTva: number, tva: number, status: Revenue['status'] = 'inregistrata'): Revenue {
+function revenue(date: string, valoareFaraTva: Bani, tva: Bani, status: Revenue['status'] = 'inregistrata'): Revenue {
   return {
     id: `rev-${date}-${valoareFaraTva}`,
     tip: 'factura',
@@ -78,7 +79,7 @@ function revenue(date: string, valoareFaraTva: number, tva: number, status: Reve
   };
 }
 
-function expense(date: string, valoareFaraTva: number, tva: number, status: Expense['status'] = 'inregistrata'): Expense {
+function expense(date: string, valoareFaraTva: Bani, tva: Bani, status: Expense['status'] = 'inregistrata'): Expense {
   return {
     id: `exp-${date}-${valoareFaraTva}`,
     tip: 'factura',
@@ -96,43 +97,43 @@ describe('selectYtd', () => {
   it('aggregates only records with status === inregistrata', () => {
     const data = makeData({
       revenues: [
-        revenue('2026-02-10', 100, 19, 'inregistrata'),
-        revenue('2026-02-11', 200, 38, 'in-asteptare'),
-        revenue('2026-02-12', 300, 57, 'respinsa'),
+        revenue('2026-02-10', lei(100), lei(19), 'inregistrata'),
+        revenue('2026-02-11', lei(200), lei(38), 'in-asteptare'),
+        revenue('2026-02-12', lei(300), lei(57), 'respinsa'),
       ],
       expenses: [
-        expense('2026-02-15', 50, 9.5, 'inregistrata'),
-        expense('2026-02-16', 60, 11.4, 'respinsa'),
+        expense('2026-02-15', lei(50), lei(9.5), 'inregistrata'),
+        expense('2026-02-16', lei(60), lei(11.4), 'respinsa'),
       ],
     });
 
     const ytd = selectYtd(data, '2026-12-31');
-    expect(ytd.revenue).toBe(119);
-    expect(ytd.expenses).toBe(59.5);
+    expect(ytd.revenue).toBe(lei(119));
+    expect(ytd.expenses).toBe(lei(59.5));
     expect(ytd.net).toBe(59.5);
   });
 
   it('computes total as valoareFaraTva + tva', () => {
     const data = makeData({
-      revenues: [revenue('2026-03-01', 1000, 190)],
-      expenses: [expense('2026-03-02', 400, 74.4)],
+      revenues: [revenue('2026-03-01', lei(1000), lei(190))],
+      expenses: [expense('2026-03-02', lei(400), lei(74.4))],
     });
 
     const ytd = selectYtd(data, '2026-12-31');
-    expect(ytd.revenue).toBe(1190);
-    expect(ytd.expenses).toBe(474.4);
+    expect(ytd.revenue).toBe(lei(1190));
+    expect(ytd.expenses).toBe(lei(474.4));
     expect(ytd.net).toBe(715.6);
   });
 
   it('accumulates net (valoareFaraTva) fields separately from gross (Area 6)', () => {
     const data = makeData({
-      revenues: [revenue('2026-03-01', 100, 10)],
-      expenses: [expense('2026-03-02', 50, 5)],
+      revenues: [revenue('2026-03-01', lei(100), lei(10))],
+      expenses: [expense('2026-03-02', lei(50), lei(5))],
     });
 
     const ytd = selectYtd(data, '2026-12-31');
-    expect(ytd.revenue).toBe(110);
-    expect(ytd.revenueNet).toBe(100);
+    expect(ytd.revenue).toBe(lei(110));
+    expect(ytd.revenueNet).toBe(lei(100));
     expect(ytd.expenses).toBe(55);
     expect(ytd.expenseNet).toBe(50);
     expect(ytd.net).toBe(55);
@@ -141,83 +142,83 @@ describe('selectYtd', () => {
   it('respects the fiscalYear boundary (profile.fiscalYear, calendar year)', () => {
     const data = makeData({
       revenues: [
-        revenue('2025-12-31', 100, 19),
-        revenue('2026-01-01', 200, 38),
-        revenue('2026-06-15', 300, 57),
-        revenue('2027-01-01', 400, 76),
+        revenue('2025-12-31', lei(100), lei(19)),
+        revenue('2026-01-01', lei(200), lei(38)),
+        revenue('2026-06-15', lei(300), lei(57)),
+        revenue('2027-01-01', lei(400), lei(76)),
       ],
     });
 
     const ytd = selectYtd(data, '2026-12-31');
-    expect(ytd.revenue).toBe(595);
+    expect(ytd.revenue).toBe(lei(595));
   });
 
   it('uses the fiscal year of the profile, not the asOfDate year', () => {
     const data = makeData({
       profile: profile(2025),
       revenues: [
-        revenue('2025-05-05', 100, 19),
-        revenue('2026-05-05', 200, 38),
+        revenue('2025-05-05', lei(100), lei(19)),
+        revenue('2026-05-05', lei(200), lei(38)),
       ],
     });
 
     // asOfDate is in 2026, but the fiscal year is 2025.
     const ytd = selectYtd(data, '2026-06-30');
-    expect(ytd.revenue).toBe(119);
+    expect(ytd.revenue).toBe(lei(119));
   });
 
   it('treats asOfDate as an inclusive upper bound', () => {
     const data = makeData({
       revenues: [
-        revenue('2026-03-31', 100, 19),
-        revenue('2026-04-01', 200, 38),
+        revenue('2026-03-31', lei(100), lei(19)),
+        revenue('2026-04-01', lei(200), lei(38)),
       ],
     });
 
     const ytd = selectYtd(data, '2026-03-31');
-    expect(ytd.revenue).toBe(119);
+    expect(ytd.revenue).toBe(lei(119));
   });
 
   it('returns zeros for empty data', () => {
     const ytd = selectYtd(makeData(), '2026-06-30');
-    expect(ytd).toEqual({ revenue: 0, expenses: 0, net: 0, revenueNet: 0, expenseNet: 0 });
+    expect(ytd).toEqual({ revenue: lei(0), expenses: lei(0), net: lei(0), revenueNet: 0, expenseNet: 0 });
   });
 
   it('computes negative net when expenses exceed revenue (zero income)', () => {
     const data = makeData({
-      expenses: [expense('2026-03-15', 500, 95)],
+      expenses: [expense('2026-03-15', lei(500), lei(95))],
     });
     const ytd = selectYtd(data, '2026-12-31');
     expect(ytd.revenue).toBe(0);
-    expect(ytd.expenses).toBe(595);
-    expect(ytd.net).toBe(-595);
+    expect(ytd.expenses).toBe(lei(595));
+    expect(ytd.net).toBe(lei(-595));
   });
 
   it('includes records on the first day of the fiscal year (Jan 1)', () => {
     const data = makeData({
-      revenues: [revenue('2026-01-01', 100, 19)],
+      revenues: [revenue('2026-01-01', lei(100), lei(19))],
     });
     const ytd = selectYtd(data, '2026-12-31');
-    expect(ytd.revenue).toBe(119);
+    expect(ytd.revenue).toBe(lei(119));
   });
 
   it('includes records on the last day of the fiscal year (Dec 31)', () => {
     const data = makeData({
-      revenues: [revenue('2026-12-31', 100, 19)],
+      revenues: [revenue('2026-12-31', lei(100), lei(19))],
     });
     const ytd = selectYtd(data, '2026-12-31');
-    expect(ytd.revenue).toBe(119);
+    expect(ytd.revenue).toBe(lei(119));
   });
 
   it('tva=0 record: revenueNet equals revenue (no VAT to net)', () => {
     const data = makeData({
-      revenues: [revenue('2026-03-01', 100, 0)],
-      expenses: [expense('2026-03-02', 50, 0)],
+      revenues: [revenue('2026-03-01', lei(100), lei(0))],
+      expenses: [expense('2026-03-02', lei(50), lei(0))],
     });
 
     const ytd = selectYtd(data, '2026-12-31');
-    expect(ytd.revenue).toBe(100);
-    expect(ytd.revenueNet).toBe(100);
+    expect(ytd.revenue).toBe(lei(100));
+    expect(ytd.revenueNet).toBe(lei(100));
     expect(ytd.expenses).toBe(50);
     expect(ytd.expenseNet).toBe(50);
     expect(ytd.net).toBe(50);
@@ -227,13 +228,13 @@ describe('selectYtd', () => {
     const data = makeData({
       profile: profile(2026),
       revenues: [
-        revenue('2026-01-15', 100, 19),
-        revenue('2026-06-15', 200, 38),
+        revenue('2026-01-15', lei(100), lei(19)),
+        revenue('2026-06-15', lei(200), lei(38)),
       ],
     });
 
     const ytd = selectYtd(data, '2025-06-15');
-    expect(ytd).toEqual({ revenue: 0, expenses: 0, net: 0, revenueNet: 0, expenseNet: 0 });
+    expect(ytd).toEqual({ revenue: lei(0), expenses: lei(0), net: lei(0), revenueNet: 0, expenseNet: 0 });
   });
 });
 
@@ -241,47 +242,47 @@ describe('selectMonthly', () => {
   it('groups totals by YYYY-MM', () => {
     const data = makeData({
       revenues: [
-        revenue('2026-01-10', 100, 19),
-        revenue('2026-01-20', 50, 9.5),
-        revenue('2026-02-05', 200, 38),
-        revenue('2026-03-01', 300, 57),
+        revenue('2026-01-10', lei(100), lei(19)),
+        revenue('2026-01-20', lei(50), lei(9.5)),
+        revenue('2026-02-05', lei(200), lei(38)),
+        revenue('2026-03-01', lei(300), lei(57)),
       ],
       expenses: [
-        expense('2026-01-15', 40, 7.4),
-        expense('2026-02-10', 80, 15.2),
-        expense('2026-02-20', 20, 3.8),
+        expense('2026-01-15', lei(40), lei(7.4)),
+        expense('2026-02-10', lei(80), lei(15.2)),
+        expense('2026-02-20', lei(20), lei(3.8)),
       ],
     });
 
     const monthly = selectMonthly(data, '2026-12-31');
-    expect(monthly.get('2026-01')).toEqual({ revenue: 178.5, expenses: 47.4, net: 131.1 });
-    expect(monthly.get('2026-02')).toEqual({ revenue: 238, expenses: 119, net: 119 });
-    expect(monthly.get('2026-03')).toEqual({ revenue: 357, expenses: 0, net: 357 });
+    expect(monthly.get('2026-01')).toEqual({ revenue: lei(178.5), expenses: lei(47.4), net: lei(131.1) });
+    expect(monthly.get('2026-02')).toEqual({ revenue: lei(238), expenses: lei(119), net: lei(119) });
+    expect(monthly.get('2026-03')).toEqual({ revenue: lei(357), expenses: lei(0), net: lei(357) });
     expect(monthly.size).toBe(3);
   });
 
   it('excludes out-of-period and non-inregistrata records', () => {
     const data = makeData({
       revenues: [
-        revenue('2025-12-31', 100, 19),
-        revenue('2026-04-01', 200, 38),
-        revenue('2026-02-10', 300, 57, 'in-asteptare'),
-        revenue('2026-02-11', 400, 76, 'inregistrata'),
+        revenue('2025-12-31', lei(100), lei(19)),
+        revenue('2026-04-01', lei(200), lei(38)),
+        revenue('2026-02-10', lei(300), lei(57), 'in-asteptare'),
+        revenue('2026-02-11', lei(400), lei(76), 'inregistrata'),
       ],
     });
 
     const monthly = selectMonthly(data, '2026-03-31');
     expect(monthly.size).toBe(1);
-    expect(monthly.get('2026-02')).toEqual({ revenue: 476, expenses: 0, net: 476 });
+    expect(monthly.get('2026-02')).toEqual({ revenue: lei(476), expenses: lei(0), net: lei(476) });
   });
 
   it('is deterministic for the same data and asOfDate', () => {
     const data = makeData({
       revenues: [
-        revenue('2026-01-10', 100, 19),
-        revenue('2026-02-10', 200, 38),
+        revenue('2026-01-10', lei(100), lei(19)),
+        revenue('2026-02-10', lei(200), lei(38)),
       ],
-      expenses: [expense('2026-01-15', 50, 9.5)],
+      expenses: [expense('2026-01-15', lei(50), lei(9.5))],
     });
 
     const first = selectMonthly(data, '2026-06-30');
@@ -293,28 +294,28 @@ describe('selectMonthly', () => {
   it('omits months with no records (no gap-filling)', () => {
     const data = makeData({
       revenues: [
-        revenue('2026-01-10', 100, 19),
-        revenue('2026-03-10', 200, 38),
+        revenue('2026-01-10', lei(100), lei(19)),
+        revenue('2026-03-10', lei(200), lei(38)),
       ],
     });
     const monthly = selectMonthly(data, '2026-12-31');
     expect(monthly.size).toBe(2);
     expect(monthly.has('2026-02')).toBe(false);
-    expect(monthly.get('2026-01')).toEqual({ revenue: 119, expenses: 0, net: 119 });
-    expect(monthly.get('2026-03')).toEqual({ revenue: 238, expenses: 0, net: 238 });
+    expect(monthly.get('2026-01')).toEqual({ revenue: lei(119), expenses: lei(0), net: lei(119) });
+    expect(monthly.get('2026-03')).toEqual({ revenue: lei(238), expenses: lei(0), net: lei(238) });
   });
 
   it('groups by calendar month across the Jan/Dec boundary', () => {
     const data = makeData({
       revenues: [
-        revenue('2026-12-31', 100, 19),
-        revenue('2026-01-01', 200, 38),
+        revenue('2026-12-31', lei(100), lei(19)),
+        revenue('2026-01-01', lei(200), lei(38)),
       ],
     });
     const monthly = selectMonthly(data, '2026-12-31');
     expect(monthly.size).toBe(2);
-    expect(monthly.get('2026-12')).toEqual({ revenue: 119, expenses: 0, net: 119 });
-    expect(monthly.get('2026-01')).toEqual({ revenue: 238, expenses: 0, net: 238 });
+    expect(monthly.get('2026-12')).toEqual({ revenue: lei(119), expenses: lei(0), net: lei(119) });
+    expect(monthly.get('2026-01')).toEqual({ revenue: lei(238), expenses: lei(0), net: lei(238) });
   });
 });
 
@@ -342,10 +343,10 @@ describe('inPeriod', () => {
 
 describe('source-data reactivity', () => {
   it('adding a record changes aggregates', () => {
-    const before = selectYtd(makeData({ revenues: [revenue('2026-03-10', 100, 19)] }), '2026-12-31');
+    const before = selectYtd(makeData({ revenues: [revenue('2026-03-10', lei(100), lei(19))] }), '2026-12-31');
     const after = selectYtd(
       makeData({
-        revenues: [revenue('2026-03-10', 100, 19), revenue('2026-04-10', 200, 38)],
+        revenues: [revenue('2026-03-10', lei(100), lei(19)), revenue('2026-04-10', lei(200), lei(38))],
       }),
       '2026-12-31',
     );
@@ -355,7 +356,7 @@ describe('source-data reactivity', () => {
 
   it('removing a record changes aggregates', () => {
     const data = makeData({
-      revenues: [revenue('2026-03-10', 100, 19), revenue('2026-04-10', 200, 38)],
+      revenues: [revenue('2026-03-10', lei(100), lei(19)), revenue('2026-04-10', lei(200), lei(38))],
     });
     const before = selectYtd(data, '2026-12-31');
     const after = selectYtd({ ...data, revenues: [data.revenues[0]] }, '2026-12-31');
@@ -374,55 +375,55 @@ describe('fiscal date (collected / paid)', () => {
   it('treats a legacy record\'s single `date` as the fiscal date', () => {
     // Pinned deliberately: the v2->v3 migration refuses to invent a collection or payment event,
     // so a payload with one ambiguous date is read as if that date were the fiscal date.
-    const r = revenue('2026-05-04', 100, 19);
-    const e = expense('2026-05-06', 50, 9.5);
+    const r = revenue('2026-05-04', lei(100), lei(19));
+    const e = expense('2026-05-06', lei(50), lei(9.5));
     expect(revenueFiscalDate(r)).toBe('2026-05-04');
     expect(expenseFiscalDate(e)).toBe('2026-05-06');
     const ytd = selectYtd(makeData({ revenues: [r], expenses: [e] }), '2026-12-31');
-    expect(ytd.revenue).toBe(119);
-    expect(ytd.expenses).toBe(59.5);
+    expect(ytd.revenue).toBe(lei(119));
+    expect(ytd.expenses).toBe(lei(59.5));
   });
 
   it('selects a revenue on its COLLECTED date, not its document date', () => {
-    const collectedNextYear: Revenue = { ...revenue('2026-12-20', 100, 19), collected: '2027-01-05' };
+    const collectedNextYear: Revenue = { ...revenue('2026-12-20', lei(100), lei(19)), collected: '2027-01-05' };
     const in2026 = selectYtd(makeData({ revenues: [collectedNextYear] }), '2026-12-31');
     expect(in2026.revenue).toBe(0);
     const in2027 = selectYtd(
       makeData({ profile: profile(2027), revenues: [collectedNextYear] }),
       '2027-12-31',
     );
-    expect(in2027.revenue).toBe(119);
+    expect(in2027.revenue).toBe(lei(119));
   });
 
   it('selects an expense on its PAID date, not its document date', () => {
-    const paidNextYear: Expense = { ...expense('2026-12-30', 50, 9.5), paid: '2027-02-01' };
+    const paidNextYear: Expense = { ...expense('2026-12-30', lei(50), lei(9.5)), paid: '2027-02-01' };
     expect(selectYtd(makeData({ expenses: [paidNextYear] }), '2026-12-31').expenses).toBe(0);
     expect(
       selectYtd(makeData({ profile: profile(2027), expenses: [paidNextYear] }), '2027-12-31').expenses,
-    ).toBe(59.5);
+    ).toBe(lei(59.5));
   });
 
   it('honours asOfDate against the collected date', () => {
-    const r: Revenue = { ...revenue('2026-01-05', 100, 19), collected: '2026-06-30' };
+    const r: Revenue = { ...revenue('2026-01-05', lei(100), lei(19)), collected: '2026-06-30' };
     expect(selectYtd(makeData({ revenues: [r] }), '2026-06-29').revenue).toBe(0);
-    expect(selectYtd(makeData({ revenues: [r] }), '2026-06-30').revenue).toBe(119);
+    expect(selectYtd(makeData({ revenues: [r] }), '2026-06-30').revenue).toBe(lei(119));
   });
 
   it('buckets monthly totals by the fiscal date', () => {
-    const r: Revenue = { ...revenue('2026-03-31', 100, 19), collected: '2026-04-02' };
-    const e: Expense = { ...expense('2026-03-31', 50, 9.5), paid: '2026-04-03' };
+    const r: Revenue = { ...revenue('2026-03-31', lei(100), lei(19)), collected: '2026-04-02' };
+    const e: Expense = { ...expense('2026-03-31', lei(50), lei(9.5)), paid: '2026-04-03' };
     const monthly = selectMonthly(makeData({ revenues: [r], expenses: [e] }), '2026-12-31');
     // The document month never appears; the collected/paid month does.
     expect(monthly.has('2026-03')).toBe(false);
-    expect(monthly.get('2026-04')).toEqual({ revenue: 119, expenses: 59.5, net: 59.5 });
+    expect(monthly.get('2026-04')).toEqual({ revenue: lei(119), expenses: lei(59.5), net: lei(59.5) });
   });
 
   it('a collected date earlier than the document date still attributes normally', () => {
     // Payment terms are not a legality question here: art. 68 alin. (4) lit. a) only requires the
     // expense be „justificate prin documente", so the issue date is never a timing gate.
-    const r: Revenue = { ...revenue('2026-06-10', 100, 19), collected: '2026-02-01' };
+    const r: Revenue = { ...revenue('2026-06-10', lei(100), lei(19)), collected: '2026-02-01' };
     expect(revenueFiscalDate(r)).toBe('2026-02-01');
-    expect(selectYtd(makeData({ revenues: [r] }), '2026-12-31').revenue).toBe(119);
+    expect(selectYtd(makeData({ revenues: [r] }), '2026-12-31').revenue).toBe(lei(119));
   });
 });
 
@@ -462,8 +463,8 @@ describe('inPeriod — the date guard (B-21)', () => {
 describe('auditFiscalDates — the exclusion report (B-21)', () => {
   it('is empty for clean data', () => {
     const data = makeData({
-      revenues: [revenue('2026-06-01', 100, 19)],
-      expenses: [expense('2026-06-02', 50, 9.5)],
+      revenues: [revenue('2026-06-01', lei(100), lei(19))],
+      expenses: [expense('2026-06-02', lei(50), lei(9.5))],
     });
     expect(auditFiscalDates(data)).toEqual([]);
   });
@@ -471,7 +472,7 @@ describe('auditFiscalDates — the exclusion report (B-21)', () => {
   it('reports a malformed persisted record as review_required instead of letting it vanish', () => {
     // This is the acceptance case: the record is NOT dropped and NOT backfilled. It still exists,
     // it contributes nothing to the aggregate, and the reason names the field and the value.
-    const bad: Revenue = { ...revenue('2026-6-1', 100, 19) };
+    const bad: Revenue = { ...revenue('2026-6-1', lei(100), lei(19)) };
     const data = makeData({ revenues: [bad] });
 
     const report = auditFiscalDates(data);
@@ -497,8 +498,8 @@ describe('auditFiscalDates — the exclusion report (B-21)', () => {
   it('reports the field the fiscal date actually came from', () => {
     // A valid document date with an unusable collection date is still unusable: `collected` is
     // what attributes the revenue (Phase 9), exactly as `revenueFiscalDate` resolves it.
-    const r: Revenue = { ...revenue('2026-06-01', 100, 19), collected: 'not-a-date' };
-    const e: Expense = { ...expense('2026-06-01', 50, 9.5), paid: '' };
+    const r: Revenue = { ...revenue('2026-06-01', lei(100), lei(19)), collected: 'not-a-date' };
+    const e: Expense = { ...expense('2026-06-01', lei(50), lei(9.5)), paid: '' };
     const report = auditFiscalDates(makeData({ revenues: [r], expenses: [e] }));
     expect(report.map(x => [x.kind, x.field])).toEqual([
       ['revenue', 'collected'],
@@ -511,14 +512,14 @@ describe('auditFiscalDates — the exclusion report (B-21)', () => {
   it('audits records that do not move money yet, because the defect is the same', () => {
     // Only `inregistrata` rows reach the totals today, but a pending row with an unusable date
     // becomes a silent hole the moment its status changes.
-    const pending: Revenue = { ...revenue('2026-13-01', 100, 19, 'in-asteptare') };
+    const pending: Revenue = { ...revenue('2026-13-01', lei(100), lei(19), 'in-asteptare') };
     const report = auditFiscalDates(makeData({ revenues: [pending] }));
     expect(report).toHaveLength(1);
     expect(report[0].status).toBe('review_required');
   });
 
   it('repairs nothing: the offending value is reported verbatim', () => {
-    const bad: Expense = { ...expense('2026-02-30', 50, 9.5) };
+    const bad: Expense = { ...expense('2026-02-30', lei(50), lei(9.5)) };
     const report = auditFiscalDates(makeData({ expenses: [bad] }));
     expect(report[0].value).toBe('2026-02-30');
     expect(report[0].reason).toContain('nu există în luna respectivă');

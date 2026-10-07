@@ -32,6 +32,7 @@ import { computeInputsHashSync } from '../domain/snapshots/hashSync';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import type { PfaProfile } from '../domain/models';
 import type { AppData, Client, Declaration, Expense, Revenue } from './types';
+import { lei, type Bani } from '../domain/money';
 
 let storeRef: ReturnType<typeof useStore> | null = null;
 function Probe() {
@@ -59,8 +60,8 @@ const revenues: Revenue[] = [
     date: '2025-03-15',
     client: 'Client Vechi',
     cui: 'RO11111111',
-    valoareFaraTva: 10000,
-    tva: 1900,
+    valoareFaraTva: lei(10000),
+    tva: lei(1900),
     status: 'inregistrata',
   },
   {
@@ -70,8 +71,8 @@ const revenues: Revenue[] = [
     date: '2025-09-02',
     client: 'Alt Client',
     cui: 'RO22222222',
-    valoareFaraTva: 5000,
-    tva: 950,
+    valoareFaraTva: lei(5000),
+    tva: lei(950),
     status: 'inregistrata',
   },
 ];
@@ -83,8 +84,8 @@ const expenses: Expense[] = [
     date: '2025-04-01',
     furnizor: 'Furnizor Vechi',
     cui: 'RO33333333',
-    valoareFaraTva: 1000,
-    tva: 190,
+    valoareFaraTva: lei(1000),
+    tva: lei(190),
     status: 'inregistrata',
   },
 ];
@@ -96,8 +97,8 @@ const declarations: Declaration[] = [
     id: 'd-legacy-1',
     an: 2025,
     luna: 3,
-    venituri: 10000,
-    cheltuieli: 1000,
+    venituri: lei(10000),
+    cheltuieli: lei(1000),
     status: 'inregistrata',
     dataInregistrare: '2025-04-10',
   },
@@ -122,9 +123,9 @@ function prePhase7Profile(): PfaProfile & { caen?: string } {
  * A snapshot as it would be stored by a pre-Phase-7 build: its embedded profile
  * is the old shape, and `inputsHash` is the digest recorded at calculation time.
  */
-function prePhase7Snapshot(calculationId: string, revenuesValue: number): TaxCalculationSnapshot {
+function prePhase7Snapshot(calculationId: string, revenuesValue: Bani): TaxCalculationSnapshot {
   const profile = prePhase7Profile();
-  const inputSnapshot = { profile, revenues: revenuesValue, expenses: 400 };
+  const inputSnapshot = { profile, revenues: revenuesValue, expenses: lei(400) };
   return {
     calculationId,
     taxYear: 2026,
@@ -145,8 +146,8 @@ function prePhase7Snapshot(calculationId: string, revenuesValue: number): TaxCal
     // The digest the calculating build recorded. Deliberately computed here so
     // the test can prove the migrated digest differs from it.
     inputsHash: computeInputsHashSync(inputSnapshot),
-    calculationLines: [{ label: 'Impozit estimat', value: 1000 }],
-    output: { total: 1000 },
+    calculationLines: [{ label: 'Impozit estimat', value: lei(1000) }],
+    output: { total: lei(1000) },
     status: 'computed',
   };
 }
@@ -296,13 +297,13 @@ describe('migration chain (pure)', () => {
 });
 
 /** One pre-Phase-7 snapshot, reused across the snapshot and load-path groups. */
-const legacy = prePhase7Snapshot('calc-legacy-1', 15000);
+const legacy = prePhase7Snapshot('calc-legacy-1', lei(15000));
 
 describe('stored snapshots survive the migration (F-1, acceptance criterion 3)', () => {
   it('keeps every stored snapshot by calculationId', () => {
     const payload = prePhase7Payload({
       profile: prePhase7Profile(),
-      snapshots: [legacy, prePhase7Snapshot('calc-legacy-2', 9000)],
+      snapshots: [legacy, prePhase7Snapshot('calc-legacy-2', lei(9000))],
     });
     const outcome = migratePersistedData(payload as never);
     expect(outcome.data.snapshots!.map((s) => s.calculationId)).toEqual([
@@ -408,7 +409,7 @@ describe('load path runs the chain (acceptance criteria 2 and 3)', () => {
   });
 
   it('never re-hashes a current-version payload on load (F-2 load path)', () => {
-    const snapshot = prePhase7Snapshot('calc-current-1', 20000);
+    const snapshot = prePhase7Snapshot('calc-current-1', lei(20000));
     const payload = prePhase7Payload({
       version: CURRENT_DATA_VERSION,
       snapshots: [snapshot],

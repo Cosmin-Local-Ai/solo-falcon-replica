@@ -13,6 +13,7 @@ import { computeInputsHash } from './hash';
 import { computeInputsHashSync, sha256Hex } from './hashSync';
 import { canonicalize } from './serialize';
 import type { CalculationInput } from './types';
+import { lei } from '../money';
 
 describe('sha256Hex agrees with the platform SHA-256', () => {
   const strings = [
@@ -51,7 +52,7 @@ describe('computeInputsHashSync is the exact sync twin of computeInputsHash', ()
     otherIncome: [] as [],
     socialInsuranceStatus: 'neplata' as const,
     vatExempt: false,
-    cashFloorLei: 0,
+    cashFloorLei: lei(0),
     identity: {
       nume: 'Popescu Andrei',
       cnp: '1900101223344',
@@ -72,9 +73,9 @@ describe('computeInputsHashSync is the exact sync twin of computeInputsHash', ()
   };
 
   const inputs: CalculationInput[] = [
-    { profile, revenues: 1000, expenses: 400 },
-    { profile, revenues: 0, expenses: 0 },
-    { profile: { ...profile, pfaStartDate: '2020-01-01', salaryIncomeLei: 6000 }, revenues: 523456.78, expenses: 0 },
+    { profile, revenues: lei(1000), expenses: lei(400) },
+    { profile, revenues: lei(0), expenses: lei(0) },
+    { profile: { ...profile, pfaStartDate: '2020-01-01', salaryIncomeLei: lei(6000) }, revenues: lei(523456.78), expenses: lei(0) },
     // The exact shape a v0→v1 migration produces: identity gains fields, the
     // deprecated profile.caen string is still embedded.
     {
@@ -83,8 +84,8 @@ describe('computeInputsHashSync is the exact sync twin of computeInputsHash', ()
         caen: '6201',
         identity: { ...profile.identity, caen: [{ cod: '6201', descriere: '' }] },
       },
-      revenues: 1000,
-      expenses: 400,
+      revenues: lei(1000),
+      expenses: lei(400),
     },
   ];
 
@@ -96,21 +97,21 @@ describe('computeInputsHashSync is the exact sync twin of computeInputsHash', ()
   );
 
   it('is order-independent like canonicalize', () => {
-    const a = computeInputsHashSync({ profile, revenues: 1000, expenses: 400 });
+    const a = computeInputsHashSync({ profile, revenues: lei(1000), expenses: lei(400) });
     const reordered = computeInputsHashSync({
-      expenses: 400,
-      revenues: 1000,
+      expenses: lei(400),
+      revenues: lei(1000),
       profile: Object.fromEntries(Object.entries(profile).reverse()) as typeof profile,
     });
     expect(a).toBe(reordered);
   });
 
   it('changes when the embedded profile gains a key (why migration must re-derive)', () => {
-    const before = computeInputsHashSync({ profile, revenues: 1000, expenses: 400 });
+    const before = computeInputsHashSync({ profile, revenues: lei(1000), expenses: lei(400) });
     const after = computeInputsHashSync({
       profile: { ...profile, identity: { ...profile.identity, codTvaIntra: '' } },
-      revenues: 1000,
-      expenses: 400,
+      revenues: lei(1000),
+      expenses: lei(400),
     });
     expect(before).not.toBe(after);
     expect(canonicalize({ a: 1 })).not.toBe(canonicalize({ a: 1, b: 0 }));

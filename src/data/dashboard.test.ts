@@ -18,6 +18,7 @@ import {
 import { seedData } from './seed';
 import { selectYtd } from '../domain/aggregation';
 import { THRESHOLD_SPECS } from '../domain/thresholds';
+import { lei } from '../domain/money';
 
 const AS_OF = '2026-10-01';
 // B-23 standing rule: no test may read the wall clock. `buildDashboardData` and `getActionItems` take an
@@ -56,7 +57,7 @@ function profile(overrides: Partial<PfaProfile> = {}): PfaProfile {
     otherIncome: [],
     socialInsuranceStatus: 'obligatoriu',
     vatExempt: false,
-    cashFloorLei: 0,
+    cashFloorLei: lei(0),
     identity: identity(),
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
@@ -93,8 +94,8 @@ function revenue(overrides: Partial<Revenue> = {}): Revenue {
     date: '2026-03-15',
     client: 'Client Test',
     cui: '12345678',
-    valoareFaraTva: 1000,
-    tva: 190,
+    valoareFaraTva: lei(1000),
+    tva: lei(190),
     status: 'inregistrata',
     ...overrides,
   };
@@ -108,8 +109,8 @@ function expense(overrides: Partial<Expense> = {}): Expense {
     date: '2026-04-10',
     furnizor: 'Furnizor Test',
     cui: 'RO12345678',
-    valoareFaraTva: 500,
-    tva: 95,
+    valoareFaraTva: lei(500),
+    tva: lei(95),
     status: 'inregistrata',
     ...overrides,
   };
@@ -120,8 +121,8 @@ function declaration(overrides: Partial<Declaration> = {}): Declaration {
     id: 'decl-1',
     an: 2026,
     luna: 3,
-    venituri: 0,
-    cheltuieli: 0,
+    venituri: lei(0),
+    cheltuieli: lei(0),
     status: 'inregistrata',
     dataInregistrare: '2026-03-31',
     ...overrides,
@@ -138,15 +139,15 @@ describe('getFinancialSummary (sync)', () => {
 
   it('a revenue entry → matching YTD revenue', () => {
     const ytd = getFinancialSummary(makeData({ revenues: [revenue()] }), AS_OF);
-    expect(ytd.revenue).toBe(1190);
+    expect(ytd.revenue).toBe(lei(1190));
     expect(ytd.expenses).toBe(0);
-    expect(ytd.net).toBe(1190);
+    expect(ytd.net).toBe(lei(1190));
   });
 
   it('revenue + expense → net is the difference', () => {
     const ytd = getFinancialSummary(makeData({ revenues: [revenue()], expenses: [expense()] }), AS_OF);
-    expect(ytd.revenue).toBe(1190);
-    expect(ytd.expenses).toBe(595);
+    expect(ytd.revenue).toBe(lei(1190));
+    expect(ytd.expenses).toBe(lei(595));
     expect(ytd.net).toBe(595);
   });
 });
@@ -159,7 +160,7 @@ describe('getMonthlyFinancialSeries (sync)', () => {
 
   it('a revenue → bucketed under its month', () => {
     const monthly = getMonthlyFinancialSeries(makeData({ revenues: [revenue()] }), AS_OF);
-    expect(monthly.get('2026-03')?.revenue).toBe(1190);
+    expect(monthly.get('2026-03')?.revenue).toBe(lei(1190));
   });
 });
 
@@ -219,7 +220,7 @@ describe('buildDashboardData (sync composer)', () => {
     const dashboard = buildDashboardData(data, tax, AS_OF_INSTANT);
 
     expect(dashboard.taxYear).toBe(2026);
-    expect(dashboard.snapshot.pfaRevenue).toBe(1190);
+    expect(dashboard.snapshot.pfaRevenue).toBe(lei(1190));
     expect(dashboard.tax).toBe(tax);
     expect(Array.isArray(dashboard.thresholds)).toBe(true);
     expect(Array.isArray(dashboard.deadlines)).toBe(true);
@@ -242,10 +243,10 @@ describe('threshold bases (Phase 8 — amount semantics, on seeded data)', () =>
     const vat = rows.find((t) => t.thresholdId === 'VAT_REGISTRATION')!;
 
     expect(vat.fiscalBase).toBe('revenue-excl-vat');
-    expect(vat.currentValue).toBe(7700); // 4500 + 3200, valoareFaraTva only
+    expect(vat.currentValue).toBe(lei(7700)); // 4500 + 3200, valoareFaraTva only
     // The figure it used to be measured on — and it is a different number, because the seed
     // carries non-zero TVA. This is the assertion that would fail before Phase 8.
-    expect(ytd.revenue).toBe(9317);
+    expect(ytd.revenue).toBe(lei(9317));
     expect(vat.currentValue).not.toBe(ytd.revenue);
     expect(vat.thresholdValue).toBe(395000);
   });
@@ -264,7 +265,7 @@ describe('threshold bases (Phase 8 — amount semantics, on seeded data)', () =>
     ]);
     for (const t of contribution) {
       expect(t.fiscalBase).toBe('net-income');
-      expect(t.currentValue).toBe(7494.5); // 7700 - 205.5, net of VAT
+      expect(t.currentValue).toBe(lei(7494.5)); // 7700 - 205.5, net of VAT
       // No contribution row may compare a contribution base to a turnover figure.
       expect(t.currentValue).not.toBe(ytd.revenue);
       // `YtdTotals.net` is VAT-INCLUSIVE profit (9068.34) and is NOT the fiscal VNA (7494.50).
@@ -309,7 +310,7 @@ describe('threshold bases (Phase 8 — amount semantics, on seeded data)', () =>
       expect(row.currentValue).toBeNull();
     }
     // VAT turnover is still measurable without the engine, so it stays measured.
-    expect(rows.find((t) => t.thresholdId === 'VAT_REGISTRATION')!.currentValue).toBe(7700);
+    expect(rows.find((t) => t.thresholdId === 'VAT_REGISTRATION')!.currentValue).toBe(lei(7700));
   });
 
   it('acceptance 6: the seeded taxable base is identical before and after the semantics change', async () => {
@@ -318,13 +319,13 @@ describe('threshold bases (Phase 8 — amount semantics, on seeded data)', () =>
     if (tax.status !== 'computed') return;
     // Measured on HEAD before Phase 8 and re-measured after: byte-identical.
     expect(tax.bases).toEqual({
-      venitulBrut: 7700,
-      cheltuieliDeductibile: 205.5,
-      venitulNetDinActivitate: 7494.5,
+      venitulBrut: lei(7700),
+      cheltuieliDeductibile: lei(205.5),
+      venitulNetDinActivitate: lei(7494.5),
     });
     const line = (l: string) => tax.lines.find((x) => x.label === l)!.value;
-    expect(line('Venit brut')).toBe(7700);
-    expect(line('Cheltuieli deductibile')).toBe(205.5);
+    expect(line('Venit brut')).toBe(lei(7700));
+    expect(line('Cheltuieli deductibile')).toBe(lei(205.5));
     expect(line('Venit net din activitate')).toBe(7494.5);
     expect(line('Venit net anual impozabil (art. 118 alin. (2) lit. b))')).toBeCloseTo(6745.05, 6);
     expect(tax.output.total).toBeCloseTo(3104.505, 6);
@@ -413,8 +414,8 @@ describe('CAS_TIER2_FLOOR — the 24 SM ladder step is surfaced (Phase 6 §7 ite
     const rows = getThresholdStatuses(seedData, AS_OF_SEED, tax);
     const row = rows.find((t) => t.thresholdId === 'CAS_TIER2_FLOOR')!;
     expect(row.type).toBe('tier-floor');
-    expect(row.thresholdValue).toBe(97200);
-    expect(row.currentValue).toBe(7494.5);
+    expect(row.thresholdValue).toBe(lei(97200));
+    expect(row.currentValue).toBe(lei(7494.5));
     // Far below the tier, so the tier-1 floor applies and nothing is flagged.
     expect(row.status).toBe('ok');
 
@@ -427,19 +428,19 @@ describe('CAS_TIER2_FLOOR — the 24 SM ladder step is surfaced (Phase 6 §7 ite
   });
 
   it('crossing 24 SM flags the row AND doubles the CAS the engine computes, from one figure', async () => {
-    const data = makeData({ revenues: [revenue({ valoareFaraTva: 120000, tva: 0 })] });
+    const data = makeData({ revenues: [revenue({ valoareFaraTva: lei(120000), tva: lei(0) })] });
     const tax = await getTaxEstimate(data, AS_OF_SEED);
     expect(tax.status).toBe('computed');
 
     const row = getThresholdStatuses(data, AS_OF_SEED, tax).find(
       (t) => t.thresholdId === 'CAS_TIER2_FLOOR',
     )!;
-    expect(row.currentValue).toBe(120000);
+    expect(row.currentValue).toBe(lei(120000));
     expect(row.status).toBe('breached');
 
     // The same input, read through the calculator, lands on the tier-2 floor (25% × 97.200).
     const casLine = tax.lines.find((l) => l.label === 'CAS (25%)')!;
-    expect(casLine.value).toBe(24300);
+    expect(casLine.value).toBe(lei(24300));
 
     const dashboard = buildDashboardData(data, tax, INSTANT);
     const snapRow = dashboard.snapshot.thresholds.find((s) => s.id === 'CAS_TIER2_FLOOR')!;

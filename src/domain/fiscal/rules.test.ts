@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { selectApplicableRules } from './select';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './package2026';
 import type { FiscalRule } from './rules';
+import { lei } from '../money';
 
 /**
  * Deterministic domain tests for fiscal rule selection (Step 11).
@@ -28,7 +29,7 @@ function makeRule(overrides: Partial<FiscalRule> = {}): FiscalRule {
     taxYear: 2026,
     effectiveFrom: '2026-01-01',
     effectiveTo: null,
-    parameters: [{ id: 'x', label: 'x', value: 1, unit: 'lei' }],
+    parameters: [{ id: 'x', label: 'x', value: lei(1), unit: 'lei' }],
     calculatorId: 'calc-test',
     sourceAct: 'TEST',
     sourceArticle: 'art. 1',

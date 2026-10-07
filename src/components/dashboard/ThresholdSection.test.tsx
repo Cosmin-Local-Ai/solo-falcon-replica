@@ -2,18 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import ThresholdSection from './ThresholdSection';
 import type { FiscalThreshold } from '../../domain/thresholds';
+import { lei } from '../../domain/money';
 
 function makeThreshold(overrides: Partial<FiscalThreshold> = {}): FiscalThreshold {
   return {
     thresholdId: 'CAS_MIN_BASE',
     type: 'min-base',
-    currentValue: 12000,
-    thresholdValue: 6000,
-    distance: 1000,
+    currentValue: lei(12000),
+    thresholdValue: lei(6000),
+    distance: lei(1000),
     affectedDomain: 'pfa-revenue',
     affectedTax: 'cas',
     effectiveDate: '2026-01-01',
-    warningDistance: -1000,
+    warningDistance: lei(-1000),
     ruleRelease: 'PFA-2026-1.0.0',
     source: 'OUG 157/2017 art. 42',
     status: 'ok',
@@ -56,9 +57,9 @@ describe('ThresholdSection (Step 32 — Romanian, no raw enums)', () => {
           makeThreshold({
             thresholdId: 'CAS_MAX_BASE',
             type: 'max-base',
-            currentValue: 100000,
-            thresholdValue: 80000,
-            distance: 20000,
+            currentValue: lei(100000),
+            thresholdValue: lei(80000),
+            distance: lei(20000),
             status: 'breached',
             breachMeaning: 'părăsirea regimului PFA',
           }),
@@ -77,7 +78,7 @@ describe('ThresholdSection (Step 32 — Romanian, no raw enums)', () => {
         thresholds={[
           makeThreshold({
             currentValue: null,
-            distance: 0,
+            distance: lei(0),
             status: 'review_required',
             reviewReason: 'Baza „net-income” nu a fost furnizată; pragul nu poate fi evaluat.',
           }),
@@ -100,9 +101,9 @@ describe('ThresholdSection (Step 32 — Romanian, no raw enums)', () => {
           makeThreshold({
             thresholdId: 'CAS_TIER2_FLOOR',
             type: 'tier-floor',
-            currentValue: 120000,
-            thresholdValue: 97200,
-            distance: 22800,
+            currentValue: lei(120000),
+            thresholdValue: lei(97200),
+            distance: lei(22800),
             status: 'breached',
             breachMeaning:
               'Peste pragul de 24 SM — baza minimă de calcul pentru CAS crește de la 12 SM la 24 SM (nu este plafon)',

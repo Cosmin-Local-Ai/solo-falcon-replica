@@ -6,6 +6,7 @@ import { seedData } from './seed';
 import type { AppData, Revenue } from './types';
 import type { RuleRelease } from '../domain/fiscal/rules';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
+import { lei } from '../domain/money';
 
 let storeRef: ReturnType<typeof useStore> | null = null;
 function Probe() {
@@ -20,8 +21,8 @@ const validRevenue: Revenue = {
   date: '2026-03-15',
   client: 'Presta Consulting SRL',
   cui: 'RO12345678',
-  valoareFaraTva: 1000,
-  tva: 190,
+  valoareFaraTva: lei(1000),
+  tva: lei(190),
   status: 'inregistrata',
 };
 
@@ -95,10 +96,10 @@ describe('loadInitial — valid persisted data loads (not seed)', () => {
       taxYear: 2026,
       calculatedAt: '2026-09-01T00:00:00.000Z',
       ruleRelease: validRelease,
-      inputSnapshot: { profile: seedData.profile, revenues: 1000, expenses: 0 },
+      inputSnapshot: { profile: seedData.profile, revenues: lei(1000), expenses: lei(0) },
       inputsHash: 'abc123',
-      calculationLines: [{ label: 'Baza impozabilă', value: 1000 }],
-      output: { total: 100 },
+      calculationLines: [{ label: 'Baza impozabilă', value: lei(1000) }],
+      output: { total: lei(100) },
       status: 'computed',
     };
     writePayload({ snapshots: [snapshot] });
@@ -146,7 +147,7 @@ describe('loadInitial — corrupt data recovers to seed', () => {
 
   it('falls back to seed on an invalid number', () => {
     writePayload({
-      revenues: [{ ...validRevenue, valoareFaraTva: -5 }],
+      revenues: [{ ...validRevenue, valoareFaraTva: lei(-5) }],
     });
     render(
       <StoreProvider>
@@ -303,7 +304,7 @@ describe('loadInitial — optional collections are backfilled', () => {
       STORAGE_KEY,
       JSON.stringify({
         profile: seedData.profile,
-        revenues: [{ ...validRevenue, valoareFaraTva: 10 }],
+        revenues: [{ ...validRevenue, valoareFaraTva: lei(10) }],
         settings: seedData.settings,
       }),
     );

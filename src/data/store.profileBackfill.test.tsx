@@ -3,6 +3,7 @@ import { render } from '@testing-library/react';
 import { StoreProvider, useStore } from './store';
 import { seedData } from './seed';
 import type { AppData, Client, Declaration, Expense, Revenue } from './types';
+import { lei } from '../domain/money';
 
 /**
  * Phase 6 data-loss regression (docs/ai/phases/06_fiscal_profile.md §4).
@@ -34,8 +35,8 @@ const revenues: Revenue[] = [
     date: '2026-02-10',
     client: 'Presta Consulting SRL',
     cui: 'RO12345678',
-    valoareFaraTva: 18000,
-    tva: 3420,
+    valoareFaraTva: lei(18000),
+    tva: lei(3420),
     status: 'inregistrata',
   },
   {
@@ -45,8 +46,8 @@ const revenues: Revenue[] = [
     date: '2026-05-04',
     client: 'Nord Digital SRL',
     cui: 'RO87654321',
-    valoareFaraTva: 6000,
-    tva: 1140,
+    valoareFaraTva: lei(6000),
+    tva: lei(1140),
     status: 'inregistrata',
   },
 ];
@@ -59,8 +60,8 @@ const expenses: Expense[] = [
     date: '2026-03-01',
     furnizor: 'Biroux SRL',
     cui: 'RO11111111',
-    valoareFaraTva: 2500,
-    tva: 475,
+    valoareFaraTva: lei(2500),
+    tva: lei(475),
     status: 'inregistrata',
   },
 ];
@@ -72,8 +73,8 @@ const declarations: Declaration[] = [
     id: 'd-legacy-1',
     an: 2026,
     luna: 3,
-    venituri: 18000,
-    cheltuieli: 2500,
+    venituri: lei(18000),
+    cheltuieli: lei(2500),
     status: 'inregistrata',
     dataInregistrare: '2026-04-10T10:00:00.000Z',
   },
@@ -181,7 +182,7 @@ describe('Phase 6 profile fields are accepted when present', () => {
         profile: {
           ...(legacyPayload() as { profile: Record<string, unknown> }).profile,
           pfaStartDate: '2026-04-01',
-          salaryIncomeLei: 30000,
+          salaryIncomeLei: lei(30000),
         },
       }),
     );
@@ -219,7 +220,7 @@ describe('Phase 6 profile fields are accepted when present', () => {
         ...legacyPayload(),
         profile: {
           ...(legacyPayload() as { profile: Record<string, unknown> }).profile,
-          salaryIncomeLei: -1,
+          salaryIncomeLei: lei(-1),
         },
       }),
     );

@@ -4,6 +4,7 @@ import { StoreProvider, useStore, STORAGE_KEY, QUARANTINE_STORAGE_KEY } from './
 import { CURRENT_DATA_VERSION } from './migration';
 import { seedData } from './seed';
 import type { Revenue } from './types';
+import { lei } from '../domain/money';
 
 let storeRef: ReturnType<typeof useStore> | null = null;
 function Probe() {
@@ -17,8 +18,8 @@ const newRevenue: Omit<Revenue, 'id'> = {
   date: '2026-03-20',
   client: 'Presta Consulting SRL',
   cui: 'RO12345678',
-  valoareFaraTva: 500,
-  tva: 95,
+  valoareFaraTva: lei(500),
+  tva: lei(95),
   status: 'inregistrata',
 };
 
@@ -124,10 +125,10 @@ describe('save effect — multiple save cycles', () => {
 
     // Cycle 2 — update that revenue.
     const addedId = storeRef!.revenues[0].id;
-    act(() => storeRef!.updateRevenue({ ...storeRef!.revenues[0], valoareFaraTva: 750, tva: 142.5 }));
+    act(() => storeRef!.updateRevenue({ ...storeRef!.revenues[0], valoareFaraTva: lei(750), tva: lei(142.5) }));
     persisted = read();
-    expect(persisted.revenues.find(r => r.id === addedId)!.valoareFaraTva).toBe(750);
-    expect(persisted.revenues.find(r => r.id === addedId)!.tva).toBe(142.5);
+    expect(persisted.revenues.find(r => r.id === addedId)!.valoareFaraTva).toBe(lei(750));
+    expect(persisted.revenues.find(r => r.id === addedId)!.tva).toBe(lei(142.5));
     expect(persisted.revenues).toHaveLength(seedData.revenues.length + 1);
 
     // Cycle 3 — delete the seed revenue r4.

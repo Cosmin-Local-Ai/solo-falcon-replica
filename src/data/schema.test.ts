@@ -3,6 +3,7 @@ import { parseAppData } from './schema';
 import { seedData } from './seed';
 import type { AppData, Revenue } from './types';
 import type { RuleRelease } from '../domain/fiscal/rules';
+import { lei } from '../domain/money';
 
 /** A minimal-but-valid persisted dataset, used as the test baseline. */
 function baseline(): AppData {
@@ -16,8 +17,8 @@ function baseline(): AppData {
         date: '2026-03-15',
         client: 'Presta Consulting SRL',
         cui: 'RO12345678',
-        valoareFaraTva: 1000,
-        tva: 190,
+        valoareFaraTva: lei(1000),
+        tva: lei(190),
         status: 'inregistrata',
       },
     ],
@@ -92,10 +93,10 @@ describe('parseAppData — valid payloads', () => {
         taxYear: 2026,
         calculatedAt: '2026-09-01T00:00:00.000Z',
         ruleRelease: validRelease,
-        inputSnapshot: { profile: seedData.profile, revenues: 1000, expenses: 0 },
+        inputSnapshot: { profile: seedData.profile, revenues: lei(1000), expenses: lei(0) },
         inputsHash: 'abc123',
-        calculationLines: [{ label: 'total', value: 100 }],
-        output: { total: 100 },
+        calculationLines: [{ label: 'total', value: lei(100) }],
+        output: { total: lei(100) },
         status: 'computed',
       },
     ];
@@ -114,18 +115,18 @@ describe('parseAppData — valid payloads', () => {
         taxYear: 2026,
         calculatedAt: '2026-09-01T00:00:00.000Z',
         ruleRelease: validRelease,
-        inputSnapshot: { profile: seedData.profile, revenues: 1000, expenses: 0 },
+        inputSnapshot: { profile: seedData.profile, revenues: lei(1000), expenses: lei(0) },
         inputsHash: 'abc123',
         calculationLines: [
           {
             label: 'CASS (exceptat — art. 154 alin. (1); temeiul nu a fost verificat)',
-            value: 0,
+            value: lei(0),
             reviewRequired: true,
             reason: 'art. 154 alin. (1) este o listă închisă și nu acoperă un PFA',
           },
-          { label: 'Total taxe', value: 0 },
+          { label: 'Total taxe', value: lei(0) },
         ],
-        output: { total: 0 },
+        output: { total: lei(0) },
         status: 'computed',
       },
     ];
@@ -187,9 +188,9 @@ describe('parseAppData — corrupt payloads return null', () => {
   });
 
   it('returns null for invalid revenue numbers', () => {
-    expect(parseAppData(write({ revenues: [{ ...validRevenue, valoareFaraTva: -5 }] }))).toBeNull();
+    expect(parseAppData(write({ revenues: [{ ...validRevenue, valoareFaraTva: lei(-5) }] }))).toBeNull();
     expect(parseAppData(write({ revenues: [{ ...validRevenue, tva: '190' }] }))).toBeNull();
-    expect(parseAppData(write({ revenues: [{ ...validRevenue, tva: -1 }] }))).toBeNull();
+    expect(parseAppData(write({ revenues: [{ ...validRevenue, tva: lei(-1) }] }))).toBeNull();
   });
 
   it('returns null for a revenue with an empty id', () => {
@@ -201,7 +202,7 @@ describe('parseAppData — corrupt payloads return null', () => {
   });
 
   it('returns null for invalid expense entries', () => {
-    expect(parseAppData(write({ expenses: [{ ...seedData.expenses[0], valoareFaraTva: -5 }] }))).toBeNull();
+    expect(parseAppData(write({ expenses: [{ ...seedData.expenses[0], valoareFaraTva: lei(-5) }] }))).toBeNull();
     expect(parseAppData(write({ expenses: [{ ...seedData.expenses[0], status: 'plata' }] }))).toBeNull();
     expect(parseAppData(write({ expenses: [{ ...seedData.expenses[0], tip: 'chec' }] }))).toBeNull();
     expect(parseAppData(write({ expenses: [{ ...seedData.expenses[0], id: '' }] }))).toBeNull();
@@ -282,7 +283,7 @@ describe('parseAppData — corrupt payloads return null', () => {
         taxYear: 2026,
         calculatedAt: '2026-09-01T00:00:00.000Z',
         ruleRelease: validRelease,
-        inputSnapshot: { profile: seedData.profile, revenues: 1000, expenses: 0 },
+        inputSnapshot: { profile: seedData.profile, revenues: lei(1000), expenses: lei(0) },
         inputsHash: 'abc123',
         calculationLines: [],
         status: 'computed',
@@ -298,10 +299,10 @@ describe('parseAppData — corrupt payloads return null', () => {
         taxYear: 2026,
         calculatedAt: '2026-09-01T00:00:00.000Z',
         ruleRelease: { ...validRelease, releaseId: '' },
-        inputSnapshot: { profile: seedData.profile, revenues: 1000, expenses: 0 },
+        inputSnapshot: { profile: seedData.profile, revenues: lei(1000), expenses: lei(0) },
         inputsHash: 'abc123',
         calculationLines: [],
-        output: { total: 100 },
+        output: { total: lei(100) },
         status: 'computed',
       },
     ];

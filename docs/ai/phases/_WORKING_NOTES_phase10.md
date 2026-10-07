@@ -1060,3 +1060,111 @@ Read §7 too (it lists what was already done). This section is what changed sinc
 - `Math.max(chosen, floor)` / `Math.min(vna, maxBase)` drop the brand — replaced by ternaries.
 - All 10 lei rule params are whole lei, so their bani values are divisible by 100 (and by 10).
 - tsc non-test errors went 34 -> 17 -> 8 -> 2. Total tsc errors ~477 (test literals, expected).
+
+---
+
+## 9. STATE AT THIRD COMPACTION — tsc 0 EVERYWHERE, 68/707 TESTS RED. READ §7 AND §8 TOO.
+
+### Safety net
+- `c9f60ac` = **T1 source-complete** (all non-test source speaks integer bani, 0 non-test tsc errors).
+  Before it: `e232c61` (wip), `87fc202` (**last commit green at all four checks**), `a232576` (money.ts),
+  `c2b33ea` (phase doc T1 spec), `f6d7cd8` (baseline).
+- Branch `wip/phase10-t1-bani` points at `e232c61`. **Re-point it before any reset** — HEAD is `c9f60ac` plus a large
+  uncommitted test conversion (29 modified files).
+- Rule unchanged: end green at all four checks, or `git reset --hard 87fc202` and report honestly. NEVER hand off red.
+
+### MEASURED right now (not estimated)
+- `npx tsc --noEmit` → **0 errors** across source AND tests. Whole repo type-checks with `Bani` everywhere.
+- `npm run test` → **68 failed / 639 passed** (707 tests, 18 failed files / 27 passed).
+- `npm run build` and `npm run test:e2e` → not re-run since the conversion. e2e is certainly red (expectations still
+  in lei strings + the e2e formatter mirror is still there).
+
+### Done since §8
+1. The 2 `Settings.tsx` errors are fixed with a cast-free guard:
+   `if (salary === null || cash === null) return; // unreachable; narrows without a cast`.
+2. **Test suite converted mechanically.** Three scripts live in `/tmp/` (`wrap_money.py`, `wrap_asserts.py`,
+   `fix_from_failures.py`). They are scratch tooling — deliberately NOT committed (they trip repo lint and are not
+   deliverables). Their method, in case /tmp is gone:
+   - `wrap_money.py`: run `npx tsc --noEmit`, keep errors mentioning `'Bani'` in test files, wrap the numeric literal
+     at the reported (line,col) in `lei(...)`. Two node shapes: bare literal, or object-literal property (`key: value`
+     → wrap the value). Process bottom-up and right-to-left so columns stay valid. Iterate until no `Bani` errors.
+   - `wrap_asserts.py`: property-name pass (`value:`, `total:`, `current:`, `limit:`, `base:`, money field names) +
+     subject-anchored assertion pass. **Caused the two mis-wraps in item 4 — never trust it blindly.**
+   - `fix_from_failures.py`: run `npx vitest run` and capture **stderr** (vitest writes its report there; pass
+     `encoding='utf-8'` or the `❯`/`→` glyphs fail to match). Pair `AssertionError: expected A to be B` with the
+     `src/...:line:col` site on the next line; when `A == B*100` exactly, wrap the literal at that line. Literals use
+     underscores (`7_600`) so the matcher builds `7_?6_?0_?0`. Idempotent — re-run after every fix round (found 93,
+     then 32 more).
+3. **Test-local helper signatures changed to `Bani`** (this is what made tsc find the call sites):
+   `aggregation.test.ts` + `projection.test.ts` `revenue(...)`/`expense(...)`; `insights.test.ts`
+   `taxComputed(total: Bani)`; `taxReserve.test.ts` `makeSnapshot(total: Bani)` and `makeComputedEstimate(total: Bani)`;
+   `thresholds.test.ts` `allBases(value: Bani)`; `store.snapshots.test.tsx` `Partial<{revenues: Bani; expenses: Bani}>`
+   with `?? lei(1000)` / `?? lei(400)`; `store.migration.chain.test.tsx`
+   `prePhase7Snapshot(calculationId, revenuesValue: Bani)`.
+4. **Two mis-wraps found and reverted — `value:` is NOT always money.**
+   - `domain/deadlines.test.ts:227` `{ id: 'offset_days', …, value: lei(30), unit: 'days' }` → back to `value: 30`.
+     `FiscalParameter.value` is `number | string`; this one is a **days** parameter. Unused money import removed.
+   - `domain/tax.test.ts:527` `(p.id === 'rate' ? { …p, value: lei(100) } : p)` → back to `value: 100`, a **percent**
+     parameter. Symptom that exposed it: `expected 486000000 to be 48600` — a ×10000, i.e. a rate scaled as money.
+   - `rules.test.ts:31` `value: lei(1), unit: 'lei'` IS correct (unit is lei).
+5. **Missing money imports added** to `pages/Settings.test.tsx`, `components/TaxReserve.test.tsx`,
+   `components/FinancialChart.test.tsx`, `domain/fiscal/rules.test.ts`. (The earlier import guard matched
+   `from 'src/domain/money'` but not `from './money'`, and inserted into the middle of multi-line imports — that made
+   two files unparseable and **masked their semantic errors for one whole round**. Repair imports before believing any
+   error count.)
+6. **`insights.test.ts` formatter mirror DELETED** (was lines 103-108, a private `Intl.NumberFormat`) — E-6 done for
+   that file. The test now asserts the literal `'1.234,57 RON'` and `formatBaniRON(total) === '1.234,57 RON'`, with a
+   comment noting that comparing the app to a mirror of itself hid formatter regressions.
+   `const total = 1234.567` → `lei(1234.57)` (1 234,567 lei is not representable in bani); same for
+   `taxComputed(lei(1234.567))` at line 573 — the value is incidental in that test.
+7. `snapshots.test.ts` scientific literals preserved: `revenues: lei(1e3), expenses: lei(4e2)` (the regex had mangled
+   them into `lei(1)e3`).
+
+### The 68 remaining failures, by category (RESUME HERE)
+1. **~8 rendered-text failures — NOT test bugs; the display layer is still unconverted.**
+   `Unable to find an element with the text: 156.000,00 RON` / `97.200,00 lei` / `9.680,00 RON` / `-20.000,00 RON` /
+   `10.000,00 RON` / `12.000,00 lei`, plus 2 `toHaveTextContent`. `fmtRON` is still being handed integer bani, so it
+   prints `1560000,00 RON`. **Do not edit these expectations — fix the display layer (queue item 4) and they clear.**
+2. **12 `toBeCloseTo` mismatches** — genuine art. 66 value changes or projection fractions. Hand-fix each with the
+   reason in the commit message. Known: `tax.test.ts:207` `24478.2 → 24478` lei (fraction 20 bani ≤ 50 → neglected);
+   `tax.test.ts:419` and `:514` `7128.1 → 7128`; `taxReserve.test.ts:51` `13535/7` monthly reserve;
+   `taxReserve.test.ts:84` `15750`; `taxReserve.test.ts:113` `1844965 vs 10000`.
+3. **`derived.test.ts:127,138,147` and `data/derived.test.tsx:97,113`** — expected/received are NOT a ×100 pair
+   (e.g. `214200 vs 119952`), so these are real value changes from per-line art. 66 rounding. Compute by hand from
+   the rule and write the new number.
+4. **`aggregation.test.ts:353,363`** (`35700 vs 12138`, `11900 vs 35462`) — same: real value changes, hand-compute.
+5. **`store.profileBackfill.test.tsx:192`** `300000000 vs 30000` — a ×10000, i.e. a **percent scaled as money**
+   (same class as the `rate` mis-wrap). Look at the fixture, do not wrap.
+6. **`store.migration.chain.test.tsx:361`** and **`thresholds.test.ts:163,176`** and **`projection.test.ts:201,261,280`**
+   — reported as `no-literal`: the expected value is computed, not a literal in the test. Inspect the expression.
+7. **`taxReserve.test.tsx` (5), `FinancialChart.test.tsx` (11), `FinancialSummary.test.tsx` (2),
+   `ThresholdSection.test.tsx` (2), `Dashboard.test.tsx` (2), `Declarations.test.tsx` (2), `Settings.test.tsx` (2),
+   `dashboard.test.ts` (6), `insights.test.ts` (2), `rules.test.ts` (2), `store.load/save.test.tsx` (1 each)** —
+   mostly display strings and object deep-equals; expect a large chunk to clear with the display layer.
+
+### NOT YET DONE (the remaining plan, in order)
+1. **Display layer (queue item 4) — biggest remaining win.** `src/lib/format.ts` still has `fmtRON`/`fmtRONCompact`
+   doing `Intl` on a lei float. Replace with `formatBaniRON` / `formatBaniRONCompact` (already in `money.ts`) and
+   update every call site. Then re-run tests — expect the rendered-text failures to fall.
+2. **Delete the cents bridge** — `data/dashboard.ts` `toCents(v) = Math.round(v*100)` and `domain/insights.ts`
+   `formatCents(cents) = cents/100`. `DashboardSnapshot` fields are named `*Cents` and are still integer cents;
+   insights fixtures still write `targetReserveCents: 100_000`. Either rename the fields to `*Bani` and pass `Bani`
+   straight through, or keep the cents contract deliberately. **Decide and record it — do not leave both scales
+   half-wired.**
+3. **New tests still to add** (brief T1 acceptance): `roundBani` boundaries incl. the **50 bani tie going UP**
+   (2.50 → 3, −2.50 → −3); `lei()` rejecting sub-ban input; `sumBani` order-independence; a regression test pinning
+   the art. 66 rule itself (not just its outputs).
+4. **Delete the second formatter mirror**: `e2e/dashboard.spec.ts:577-579`.
+5. **e2e**: convert expectations to the new display strings, then run `npm run test:e2e`.
+6. **Docs/register**: update `docs/ai/phases/10_money_precision.md` with what actually shipped; open **B-25** in
+   `docs/ai/STATE.md` (it does not exist yet); close **B-17** only if genuinely closed; **NEVER write B-18/B-20
+   closed**; **B-16 is NOT closed by this phase**.
+7. Measure all four: `npx tsc --noEmit` / `npm run test` / `npm run build` / `npm run test:e2e`.
+
+### Facts re-verified this pass
+- vitest writes its report to **stderr**; a subprocess capture that reads only stdout sees nothing (this cost a round).
+- `lei(x)` throws for sub-ban input (`RangeError: lei(1234.567) is not a whole number of bani`) — good guard, but it
+  means mechanical wrapping can crash a test whose value was never money.
+- A broken multi-line import makes a file unparseable, which **hides** its semantic errors: repair imports before
+  trusting any error count.
+- `FiscalParameter.value` is `number | string` and carries a `unit`; only `unit: 'lei'` parameters are money.

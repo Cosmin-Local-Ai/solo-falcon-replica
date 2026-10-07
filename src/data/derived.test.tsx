@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import { StoreProvider, useStore } from './store';
 import { useFinancialDerived, useTaxDerived } from './derived';
+import { lei } from '../domain/money';
 
 const AS_OF = '2026-12-31';
 
@@ -22,8 +23,8 @@ function FinancialProbe() {
             date: '2026-10-15',
             client: 'Client Nou',
             cui: '12345678',
-            valoareFaraTva: 1000,
-            tva: 190,
+            valoareFaraTva: lei(1000),
+            tva: lei(190),
             status: 'inregistrata',
           })
         }
@@ -38,8 +39,8 @@ function FinancialProbe() {
             date: '2026-10-20',
             furnizor: 'Furnizor Nou',
             cui: 'RO12345678',
-            valoareFaraTva: 200,
-            tva: 38,
+            valoareFaraTva: lei(200),
+            tva: lei(38),
             status: 'inregistrata',
           })
         }
@@ -59,7 +60,7 @@ function TaxProbe() {
       <span data-testid="tax-inputs-key">{view.inputs.inputsKey}</span>
       <span data-testid="tax-rule-count">{view.activeRelease.ruleCount}</span>
       <span data-testid="identity-nume">{store.profile.identity.nume}</span>
-      <button onClick={() => store.updateProfile({ vatExempt: true, cashFloorLei: 7500 })}>change-tax-inputs</button>
+      <button onClick={() => store.updateProfile({ vatExempt: true, cashFloorLei: lei(7500) })}>change-tax-inputs</button>
       {/* Phase 7 (F-2): every identity field, including the three absorbed in D-1. */}
       <button
         onClick={() =>

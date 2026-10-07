@@ -26,6 +26,7 @@ import type { TaxCalculationSnapshot } from './snapshots/types';
 import { assessCompleteness } from './completeness';
 import type { AppData, SettingsState } from '../data/types';
 import type { PfaProfile } from './models';
+import { lei, type Bani, formatBaniRON } from './money'
 
 // Factories
 
@@ -33,8 +34,8 @@ function threshold(overrides: Partial<Threshold> = {}): Threshold {
   return {
     id: 't1',
     label: 'pfa-revenue',
-    current: 500_000,
-    limit: 1_000_000,
+    current: lei(500_000),
+    limit: lei(1_000_000),
     ratio: 0.5,
     breached: false,
     ...overrides,
@@ -79,13 +80,13 @@ function input(overrides: Partial<InsightInput> = {}): InsightInput {
 }
 
 /** Minimal `computed` tax result — the engine only reads `status` and `output.total`. */
-function taxComputed(total: number): TaxEstimateResult {
+function taxComputed(total: Bani): TaxEstimateResult {
   return {
     status: 'computed',
     lines: [],
     output: { total },
     snapshot: undefined as unknown as TaxCalculationSnapshot,
-    bases: { venitulBrut: total, cheltuieliDeductibile: 0, venitulNetDinActivitate: total },
+    bases: { venitulBrut: total, cheltuieliDeductibile: lei(0), venitulNetDinActivitate: total },
   };
 }
 
@@ -97,13 +98,6 @@ function taxReviewRequired(reason: string): TaxEstimateResult {
 
 function texts(insights: Insight[]): string {
   return insights.map((i) => `${i.title} ${i.description} ${i.action}`).join('\n');
-}
-
-function formatLei(value: number): string {
-  return new Intl.NumberFormat('ro-RO', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
 }
 
 // Phase 6 §7 item 5 — the 24 SM CAS ladder step (CF art. 148 alin. (2) lit. b).
@@ -519,13 +513,20 @@ describe('tax', () => {
   });
 
   it('emits exactly one info with the formatted total for a computed tax', () => {
-    const total = 1234.567;
+    // 1 234,57 lei is exactly representable as integer bani. The expected string is written out
+    // LITERALLY here: this test used to define its own `Intl.NumberFormat` mirror and compare the
+    // app's text against that mirror, which meant the suite was asserting a formatter that is not
+    // the app's (Phase 10 §2.5 — the mirror is deleted, and a formatter regression can no longer
+    // hide behind two copies agreeing with each other).
+    const total = lei(1234.57);
     const insights = getInsights(input({ snapshot: snapshot(), tax: taxComputed(total) }));
 
     expect(insights).toHaveLength(1);
     expect(insights[0].severity).toBe('info');
     expect(insights[0].id).toBe('tax');
-    expect(insights[0].description).toContain(`${formatLei(total)} RON`);
+    expect(insights[0].description).toContain('1.234,57 RON');
+    // the app's own single boundary turns integer bani into exactly that string
+    expect(formatBaniRON(total)).toBe('1.234,57 RON');
   });
 });
 
@@ -569,7 +570,7 @@ describe('invariants', () => {
             taxYear: 2026,
           },
         }),
-        tax: taxComputed(1234.567),
+        tax: taxComputed(lei(1234.57)),
       }),
     );
 
@@ -603,7 +604,7 @@ describe('invariants', () => {
             taxYear: 2026,
           },
         }),
-        tax: taxComputed(100),
+        tax: taxComputed(lei(100)),
       }),
     );
 

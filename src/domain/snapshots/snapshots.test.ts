@@ -4,6 +4,7 @@ import type { RuleRelease } from '../fiscal/rules';
 import { canonicalize } from './serialize';
 import { computeInputsHash } from './hash';
 import { createCalculationSnapshot } from './snapshot';
+import { lei } from '../money';
 
 // --- Fixtures -------------------------------------------------------------
 
@@ -35,7 +36,7 @@ const profile: PfaProfile = {
   otherIncome: [],
   socialInsuranceStatus: 'obligatoriu',
   vatExempt: true,
-  cashFloorLei: 0,
+  cashFloorLei: lei(0),
   identity,
   updatedAt: '2025-01-01T00:00:00.000Z',
 };
@@ -101,7 +102,7 @@ describe('canonicalize', () => {
 
 describe('computeInputsHash', () => {
   it('is deterministic and produces a 64-char lowercase hex string', async () => {
-    const input = { profile, revenues: 1000, expenses: 400 };
+    const input = { profile, revenues: lei(1000), expenses: lei(400) };
     const h1 = await computeInputsHash(input);
     const h2 = await computeInputsHash(input);
     expect(h1).toBe(h2);
@@ -109,14 +110,14 @@ describe('computeInputsHash', () => {
   });
 
   it('is independent of key declaration order', async () => {
-    const inputA = { profile, revenues: 1000, expenses: 400 };
-    const inputB = { expenses: 400, profile, revenues: 1000 };
+    const inputA = { profile, revenues: lei(1000), expenses: lei(400) };
+    const inputB = { expenses: lei(400), profile, revenues: lei(1000) };
     expect(await computeInputsHash(inputA)).toBe(await computeInputsHash(inputB));
   });
 
   it('is sensitive to input changes', async () => {
-    const h1 = await computeInputsHash({ profile, revenues: 1000, expenses: 400 });
-    const h2 = await computeInputsHash({ profile, revenues: 1001, expenses: 400 });
+    const h1 = await computeInputsHash({ profile, revenues: lei(1000), expenses: lei(400) });
+    const h2 = await computeInputsHash({ profile, revenues: lei(1001), expenses: lei(400) });
     expect(h1).not.toBe(h2);
   });
 });
@@ -125,11 +126,11 @@ describe('createCalculationSnapshot', () => {
   it('builds a snapshot with all 9 fields, default status, and a tax-year-prefixed id', async () => {
     const snap = await createCalculationSnapshot({
       profile,
-      revenues: 1000,
-      expenses: 400,
+      revenues: lei(1000),
+      expenses: lei(400),
       ruleRelease: release2025,
-      calculationLines: [{ label: 'Venit net imposable', value: 600 }],
-      output: { total: 600 },
+      calculationLines: [{ label: 'Venit net imposable', value: lei(600) }],
+      output: { total: lei(600) },
     });
     expect(Object.keys(snap).sort()).toEqual(
       [
@@ -152,11 +153,11 @@ describe('createCalculationSnapshot', () => {
   it('stores an inputsHash that is reproducible from the stored inputSnapshot', async () => {
     const snap = await createCalculationSnapshot({
       profile,
-      revenues: 1000,
-      expenses: 400,
+      revenues: lei(1000),
+      expenses: lei(400),
       ruleRelease: release2025,
       calculationLines: [],
-      output: { total: 0 },
+      output: { total: lei(0) },
     });
     expect(await computeInputsHash(snap.inputSnapshot)).toBe(snap.inputsHash);
   });
@@ -164,19 +165,19 @@ describe('createCalculationSnapshot', () => {
   it('produces equal inputsHash for identical inputs (calculationId may differ)', async () => {
     const a = await createCalculationSnapshot({
       profile,
-      revenues: 1000,
-      expenses: 400,
+      revenues: lei(1000),
+      expenses: lei(400),
       ruleRelease: release2025,
       calculationLines: [],
-      output: { total: 0 },
+      output: { total: lei(0) },
     });
     const b = await createCalculationSnapshot({
       profile,
-      revenues: 1000,
-      expenses: 400,
+      revenues: lei(1000),
+      expenses: lei(400),
       ruleRelease: release2025,
       calculationLines: [],
-      output: { total: 0 },
+      output: { total: lei(0) },
     });
     expect(a.inputsHash).toBe(b.inputsHash);
   });
@@ -184,20 +185,20 @@ describe('createCalculationSnapshot', () => {
   it('keeps old snapshots intact when a new release is created', async () => {
     const snapA = await createCalculationSnapshot({
       profile,
-      revenues: 1000,
-      expenses: 400,
+      revenues: lei(1000),
+      expenses: lei(400),
       ruleRelease: release2025,
       calculationLines: [],
-      output: { total: 0 },
+      output: { total: lei(0) },
     });
     const copyA = structuredClone(snapA);
     await createCalculationSnapshot({
       profile,
-      revenues: 2000,
-      expenses: 800,
+      revenues: lei(2000),
+      expenses: lei(800),
       ruleRelease: release2026,
       calculationLines: [],
-      output: { total: 0 },
+      output: { total: lei(0) },
     });
     expect(snapA).toEqual(copyA);
     expect(snapA.status).toBe('computed');
@@ -206,11 +207,11 @@ describe('createCalculationSnapshot', () => {
   it('respects an explicit status', async () => {
     const snap = await createCalculationSnapshot({
       profile,
-      revenues: 1000,
-      expenses: 400,
+      revenues: lei(1000),
+      expenses: lei(400),
       ruleRelease: release2025,
       calculationLines: [],
-      output: { total: 0 },
+      output: { total: lei(0) },
       status: 'superseded',
     });
     expect(snap.status).toBe('superseded');
@@ -221,8 +222,8 @@ describe('createCalculationSnapshot', () => {
 
 describe('computeInputsHash — equivalent inputs → same hash', () => {
   it('same hash for structurally-equal inputs with reordered top-level keys', async () => {
-    const a = { profile, revenues: 1000, expenses: 400 };
-    const b = { expenses: 400, revenues: 1000, profile };
+    const a = { profile, revenues: lei(1000), expenses: lei(400) };
+    const b = { expenses: lei(400), revenues: lei(1000), profile };
     expect(await computeInputsHash(a)).toBe(await computeInputsHash(b));
   });
 
@@ -257,37 +258,37 @@ describe('computeInputsHash — equivalent inputs → same hash', () => {
       cashFloorLei: profile.cashFloorLei,
       updatedAt: profile.updatedAt,
     };
-    const a = { profile, revenues: 1000, expenses: 400 };
-    const b = { profile: profileShuffled, revenues: 1000, expenses: 400 };
+    const a = { profile, revenues: lei(1000), expenses: lei(400) };
+    const b = { profile: profileShuffled, revenues: lei(1000), expenses: lei(400) };
     expect(await computeInputsHash(a)).toBe(await computeInputsHash(b));
   });
 
   it('same hash for equivalent numeric values', async () => {
-    const a = { profile, revenues: 1000, expenses: 400 };
-    const b = { profile, revenues: 1e3, expenses: 4e2 };
+    const a = { profile, revenues: lei(1000), expenses: lei(400) };
+    const b = { profile, revenues: lei(1e3), expenses: lei(4e2) };
     expect(await computeInputsHash(a)).toBe(await computeInputsHash(b));
   });
 });
 
 describe('computeInputsHash — changed inputs → different hash (per dimension)', () => {
   it('different hash when expenses change', async () => {
-    const a = { profile, revenues: 1000, expenses: 400 };
-    const b = { profile, revenues: 1000, expenses: 401 };
+    const a = { profile, revenues: lei(1000), expenses: lei(400) };
+    const b = { profile, revenues: lei(1000), expenses: lei(401) };
     expect(await computeInputsHash(a)).not.toBe(await computeInputsHash(b));
   });
 
   it('different hash when a top-level profile field changes', async () => {
-    const a = { profile, revenues: 1000, expenses: 400 };
-    const b = { profile: { ...profile, caen: '6202' }, revenues: 1000, expenses: 400 };
+    const a = { profile, revenues: lei(1000), expenses: lei(400) };
+    const b = { profile: { ...profile, caen: '6202' }, revenues: lei(1000), expenses: lei(400) };
     expect(await computeInputsHash(a)).not.toBe(await computeInputsHash(b));
   });
 
   it('different hash when a nested identity field changes', async () => {
-    const a = { profile, revenues: 1000, expenses: 400 };
+    const a = { profile, revenues: lei(1000), expenses: lei(400) };
     const b = {
       profile: { ...profile, identity: { ...profile.identity, cnp: '9999999999999' } },
-      revenues: 1000,
-      expenses: 400,
+      revenues: lei(1000),
+      expenses: lei(400),
     };
     expect(await computeInputsHash(a)).not.toBe(await computeInputsHash(b));
   });
@@ -297,11 +298,11 @@ describe('createCalculationSnapshot — rule-release identity preservation', () 
   it('embeds the exact RuleRelease; a later release (same taxYear, different releaseId) does not alter the stored snapshot', async () => {
     const snap = await createCalculationSnapshot({
       profile,
-      revenues: 1000,
-      expenses: 400,
+      revenues: lei(1000),
+      expenses: lei(400),
       ruleRelease: release2025,
-      calculationLines: [{ label: 'Venit net imposable', value: 600 }],
-      output: { total: 600 },
+      calculationLines: [{ label: 'Venit net imposable', value: lei(600) }],
+      output: { total: lei(600) },
     });
     const frozen = structuredClone(snap);
 
@@ -313,11 +314,11 @@ describe('createCalculationSnapshot — rule-release identity preservation', () 
     };
     await createCalculationSnapshot({
       profile,
-      revenues: 1000,
-      expenses: 400,
+      revenues: lei(1000),
+      expenses: lei(400),
       ruleRelease: laterRelease,
       calculationLines: [],
-      output: { total: 0 },
+      output: { total: lei(0) },
     });
 
     // The stored snapshot is untouched and still carries the original release identity.
