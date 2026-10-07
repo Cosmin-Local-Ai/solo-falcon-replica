@@ -76,7 +76,10 @@ describe('legacyProfileFromSettings (profile migration)', () => {
       bankAccounts: [],
       eFactura: { trimitere: 'manual', dateContact: '' },
     };
-    const p = legacyProfileFromSettings(minimal);
+    // B-23 (Phase 9b): this used to assert `new Date().getFullYear()`, which turns red on 1 January
+    // 2027 for no code reason. No test in this suite may read the wall clock. `instant` is injectable
+    // precisely so that `pfaStartYear` / `fiscalYear` / `updatedAt` are deterministic, so pin it.
+    const p = legacyProfileFromSettings(minimal, new Date('2026-06-01T12:00:00Z'));
     expect(p.regime).toBe('impozit_pe_venit');
     expect(p.salaryStatus).toBe('nu');
     expect(p.pensionStatus).toBe('nu');
@@ -88,6 +91,7 @@ describe('legacyProfileFromSettings (profile migration)', () => {
     expect(p.identity.caen).toBeUndefined();
     expect(p.identity.formaJuridica).toBe('');
     expect(p.identity.contBancar).toBe('');
-    expect(p.fiscalYear).toBe(new Date().getFullYear());
+    expect(p.fiscalYear).toBe(2026);
+    expect(p.pfaStartYear).toBe(2026);
   });
 });
