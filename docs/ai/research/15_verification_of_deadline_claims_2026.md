@@ -177,9 +177,9 @@ No doc id retrieved for an order implementing **art. 10^8 alin. (1)**. What was 
 
 | ID | Status |
 |---|---|
-| **F1 — which CPF governs 2026** | **Open, and load-bearing.** The verifier cites **Legea 207/2015**, doc **309359**, consolidation 08.05.2026, base form 170007, newer consolidation **312603** at 08.08.2026. `research/13` cites **OG 2/2024**, doc **304520**, consolidation 20-03-2026. Both quote the same art. 82 alin. (6) carve-out. **One of these citations is wrong, and I already propagated `OG 2/2024` into brief 10 and STATE.md.** Being resolved now. |
-| **F2 — OG 6/2026 art. IX direction** | Open. Verifier's reading contradicts its own quote. |
-| **F3 — OPANAF 1021/2026 as the art. 10^8 alin. (1) order** | Open. |
+| ~~F1 — which CPF governs 2026~~ | **RESOLVED — see §7.** The verifier cites **Legea 207/2015**, doc **309359**, consolidation 08.05.2026, base form 170007, newer consolidation **312603** at 08.08.2026. `research/13` cites **OG 2/2024**, doc **304520**, consolidation 20-03-2026. Both quote the same art. 82 alin. (6) carve-out. **One of these citations is wrong, and I already propagated `OG 2/2024` into brief 10 and STATE.md.** Being resolved now. |
+| ~~F2 — OG 6/2026 art. IX direction~~ | **RESOLVED — see §8.** It is a relief; my reading was wrong. |
+| ~~F3 — OPANAF 1021/2026 as the art. 10^8 alin. (1) order~~ | **RESOLVED — see §9.** It is the instrument. |
 | **Q-120-NOTES** | Effectively **moot** — note counts are not reproducible (§3). Stop chasing it. |
 | **Q-CUI-CIF-PRIMARY** | Still open. The CIF-vs-CNP step remains **inference + secondary OPANAF**, with no interpretative instrument found. |
 | **art. 10 alin. (1) B2B text** | Retrieved by content extraction, **not** string-verified. Label single-source. |
@@ -193,3 +193,93 @@ No doc id retrieved for an order implementing **art. 10^8 alin. (1)**. What was 
 | e-Factura | out of scope pending identity question | **in scope**: B2C e-Factura applies to a non-VAT-registered sistem-real PFA from 01-01-2025, no VAT or turnover gate. But it is a **standing obligation, not a dated deadline** — it does not enter the deadline table |
 | `d212_filing` 25 May Y+1 | correct | correct, and still the **only** dated obligation a newly opened PFA has |
 | CPF citation | `OG 2/2024` in brief 10 + STATE | **contested — see F1.** Do not cite either in code or UI until resolved |
+
+---
+
+## Addendum — F1, F2, F3 all RESOLVED (second verifier pass)
+
+## 7. F1 — Which CPF governs 2026: **Legea 207/2015. There is no "OG 2/2024".**
+
+**Cite:** Legea nr. 207/2015 privind Codul de procedură fiscală (MO 547/23.07.2015), art. 82 alin. (6) lit. c), forma consolidată din 08.08.2026, Portal Legislativ doc **312603** (base form **170007**)
+
+| Claim | Result |
+|---|---|
+| An act "OG 2/2024" that is a Cod de procedură fiscală exists | **REFUTED.** Nothing resembling it. The only live “OG 2” in Romanian law is **OG 2/2001** (contraventions regime, approved by Legea 180/2002) — cited constantly in 2024–2026 acts, unrelated to fiscal procedure. That is the likely source of the confusion. |
+| Doc **304520** is a CPF | **CONFIRMED.** Resolves to “COD PR FISCALA (A) 20/07/2015”, `id_act = 304520` — a consolidated form of Legea 207/2015, not a separate act. |
+| …consolidation date **20-03-2026** | **REFUTED. It is 18.12.2025.** There is **no 20.03.2026 CPF consolidation anywhere in its history.** Superseded by 10.12.2025 → 24.12.2025 → 01.01.2026 → 09.01.2026 → 14.01.2026 → 02.02.2026 → 25.02.2026 → 08.05.2026 → **08.08.2026**. |
+| …11 notes, latest 20-03-2026 | **REFUTED as to date** — an 18.12.2025 consolidation cannot carry a 2026 note. Count not checkable (§3). |
+| Doc **312603** is the live CPF form | **CONFIRMED.** `id_act = 312603`, `fa_selectata` = **08.08.2026**, base form via `incarcaFormaDeBaza(170007)`. Latest note **08-08-2026** from **Legea 170/2026, MO 648/05.08.2026** (pct. 1.–14. Art. IV, touching art. 157 alin. (2), 165, 166, 167, 186 alin. (1), 194, 209¹⁸, 209¹⁴, 266). |
+| art. 82 alin. (6) lit. c) identical in both | **YES — verbatim identical, same numbering, and no amendment note on lit. c)**: unamended original text. Element ids `id_litA35692810_bdy` (lit. c)), `id_litA70019171_bdy` (chapeau). |
+
+**No new CPF is enacted and none is pending with a future effective date.** In 2026 Legea 207/2015 was amended
+by **OG 1/2026** (MO 75/30.01.2026 — art. 286 lit. i), 291, new art. 291¹⁷–291¹⁹, 303, 305¹, 336, transposing
+Directive (EU) 2025/872), **OG 6/2026** (MO 77/30.01.2026, doc **306803** — introduced art. 85¹, secondary-place
+fiscal registration), **OUG 13/2026** (suspending art. 7 alin. (10) until 31.12.2026) and **Legea 170/2026**
+(MO 648/05.08.2026, the 08.08.2026 consolidation trigger).
+
+**The lesson, recorded because it is the third time in this project:** a *label* was invented by a compacted
+pass while its *doc id* was correct, and the correct answer was **already sitting in `research/11`**. Cross-check
+a new citation against what the repo already holds before propagating it. I did not, and it went into brief 10
+and STATE.md.
+
+## 8. F2 — OG 6/2026 art. IX: **the verifier conceded; it is a relief, and it expires**
+
+My earlier “it pulls CNP-identified suppliers into e-Factura” reading is **indefensible** against the text.
+**alin. (2) settles it beyond argument:**
+
+> „(2) Furnizorii/Prestatorii prevăzuți la alin. (1) care au fost înregistrați în Registrul RO e-Factura obligatoriu
+> **pot solicita scoaterea din acesta**, potrivit…"
+
+A provision allowing removal from the mandatory register is a relief. **It is a suspension of the duty running
+until 01.06.2026.** It is rendered as a *Notă* pinned to art. 5, 9¹, 10 alin. (1), 10¹ alin. (2), 10¹⁰ — **it does not
+amend their text**, so it expires on its own terms.
+
+**Why it existed:** art. 10¹⁰ in its current form only took effect **01-06-2026** (Legea 88/2026 pct. 8 Art. III).
+The derogation covered the gap *before* that date. Net position for a CNP-identified supplier: **not obliged
+either way** — relieved by art. IX to 01.06.2026, by art. 10¹⁰ from 01.06.2026.
+
+**Impact on this app: zero, confirmed.** A registrul-comerțului PFA is CUI-identified; neither provision touches it.
+
+## 9. F3 — `Q-EFACT-ANAF-ORDER` **CLOSED.** The art. 10¸ alin. (1) instrument is **OPANAF 1.021/2026**
+
+| Instrument | Detail |
+|---|---|
+| **OPANAF 3.788/2024** (23.07.2024) | Procedura privind organizarea și înscrierea în **Registrul RO e-Factura opțional** + formular **081**. MO 736/29.07.2024. **Portal Legislativ doc 286255.** Temei: art. 10¸ OUG 120/2021 (paragraph unspecified) + art. 10 alin. (2)–(3), 10⁵ alin. (3)–(4), 10⁶ alin. (2)–(3), 10⁷ alin. (2)–(3), art. 13, HG 520/2013 art. 11 alin. (3) |
+| **OPANAF 1.021/2026** (20.08.2026) | Modifies and completes 3.788/2024. **MO 743/03.09.2026, in force 03.09.2026.** Temei is explicit: HG 520/2013 art. 11 alin. (3), **art. 10¸ alin. (1) din OUG 120/2021**, and **art. IV alin. (2) din Legea 88/2026**. **No Portal Legislativ doc id retrieved** — MO 743/03.09.2026 is the reliable pointer |
+
+**Cite both**: 1.021/2026 is an *amending* order; the operative procedure is 3.788/2024 as amended.
+
+**Two corrections the verifier made against itself:**
+- The wording „furnizorii/prestatorii care se identifică fiscal prin cod numeric personal” is **not in the order**.
+  What 1.021/2026 actually says is that Secțiunea III of formular 081 is completed by “entitățile prevăzute la
+  **art. 10⁵ alin. (1) și (2), art. 10⁷ alin. (1) și art. 10¹⁰ alin. (2)** din OUG 120/2021” — the CNP category enters by
+  **cross-reference**, not by quoted wording. Substance holds; the quotation did not.
+- **Better primary support for the CIF-vs-CNP distinction**, from the 081 instructions themselves: „Caseta „Cod de
+  identificare fiscală” se completează cu codul de identificare fiscală atribuit entității, conform legii, **sau cu
+  codul numeric personal, după caz**". The form itself distinguishes the two — this is the closest thing to an
+  official statement of the distinction, and it partially closes **Q-CUI-CIF-PRIMARY**.
+- Also: OPANAF 1021/2026 art. II **radiates asociațiile/fundațiile/partidele/cultele** not in TVA from the
+  *opțional* register into the *obligatoriu* register (OPANAF 3.789/2024, formular 082). Not our case, but it is
+  the kind of scope change that would matter if the app ever served a nonprofit.
+
+## 10. What is genuinely still unverified
+
+- **Note counts** — permanently unverifiable from Portal Legislativ; would require parsing `S_PAR`/`S_NTA` spans. Not worth doing.
+- **Portal Legislativ doc id for OPANAF 1.021/2026** — likely not yet consolidated.
+- **Whether a new CPF draft exists in the parliamentary pipeline** — no evidence found, but camera.deputat.ro was not queried directly. **Treat “not enacted” as *no evidence found*, not proven absence.**
+- **art. 10 alin. (1) B2B text** — still extraction-only, single-source, not string-verified.
+- **The 5-calendar-day transmission term** (art. 10 alin. (7)) — **never verified in this project**, and it is now a product requirement. See §11.
+
+## 11. New product surface this creates — and the one deadline it implies
+
+The operator has stated the intended behaviour: e-Factura should **not** be a permanent presence in the UI (it is
+noise), invoices must be loaded into e-Factura **within 5 days of emission**, and the platform should
+**transmit to ANAF automatically**.
+
+That last point changes what the app is: automatic transmission is an **integration**, not a display of a rule.
+It also implies the **only** e-Factura date worth modelling is the **emission + 5 days** term — which is a
+*rolling* per-invoice deadline, not a calendar one, so it does not fit the current `due_date` + lead-window model.
+
+**The 5-day term is asserted by the operator, not verified by this project.** It is presumably OUG 120/2021
+art. 10 alin. (7). **Do not encode it until it is read from primary text**, including whether it is *zile
+calendaristice* or *zile lucrătoare* — this project has already been burned twice on exactly that distinction.

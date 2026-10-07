@@ -1,17 +1,16 @@
 # Brief 10 — Phase 9b: delete the phantom deadlines, ground the rest in rules
 
-> **Status: staged, not yet spawned.** A second Researcher pass (`deadline-sweep-researcher`, 2026-10-07) is
-> running on three further obligations the user surfaced — a possible 30-day declaration at PFA setup, the
-> VAT return once registered, and e-Factura transmission. If those land as real, this brief widens to cover
-> them rather than spawning a second Worker over the same file. See `docs/ai/research/13_*` when it exists.
-
 > **On the 30-day claim specifically — RESOLVED, and it changes this brief.** The sweep (`research/13`) returned
 > **REFUTED at high confidence**: there is no 30-day DU at PFA setup. CF art. 120/120¹ are `Abrogat.` from
 > 01-01-2025, and **CF art. 122 alin. (3) extends the 25 May term to the alin. (2) start-of-activity case
 > verbatim**: *„Prevederea se aplică și în situațiile prevăzute la alin. (2)."* A PFA opened any time in 2026
 > files its first DU by **25 May 2027**, which `d212_filing` already emits correctly. **Section 2c is therefore
-> ON HOLD — see the rewrite there.** Do not reinstate the deleted phantom under any new name, and add no 30-day
+> CLOSED — see the rewrite there.** Do not reinstate the deleted phantom under any new name, and add no 30-day
 > rule of any kind in this pass.
+
+> **Status: SPAWN-READY (2026-10-08).** The deadline sweep and its independent re-verification are both
+> complete (`research/13`, `research/14`, `research/15`). Every rule in this brief now rests on verified primary
+> text. The one thing that changed under verification was a **citation label**, not a rule — see §2c.
 
 **You are one Worker. Do not spawn other agents. Do not run a Researcher.** Everything you need is in this
 brief and in `docs/ai/research/11_...md` and `docs/ai/research/12_...md`. The legal research is **done**;
@@ -129,15 +128,19 @@ outcome — not a gap to fill. If a test or UI element expects a start-date-deri
 expectation and say so in your notes.
 
 **Two corrections to carry into any future CPF rule**, whenever one becomes necessary:
-- **⚠️ CPF citation is CONTESTED — do not cite the procedure code in code or UI until resolved.**
-  This brief previously said the CPF in force is **OG 2/2024** (doc **304520**) and *not* Legea 207/2015.
-  An independent verifier instead reads art. 82 alin. (6) lit. c) from **Legea 207/2015**, doc
-  **309359** (consolidation 08.05.2026; base form 170007; a newer consolidation **312603** at 08.08.2026).
-  Both quote the **same carve-out wording**, so **no rule in this brief changes** — only the citation
-  does. The likely error is research/13's *label*, not its doc id: STATE.md records doc 304520 as
-  carrying **828 amendment notes**, which fits a heavily-amended Legea 207/2015 far better than a single
-  2024 act. Resolution is running (`research/15` §5 F1). **Until it lands, cite the article number and
-  leave the act name out.**
+- **CPF citation, resolved 2026-10-08.** There is **no such thing as "OG 2/2024" as a procedure code** — that
+  label was invented by a post-compaction research pass and I propagated it into this brief. The only Cod de
+  procedură fiscală in force in 2026 is **Legea nr. 207/2015** (MO 547/23.07.2015, in force since 01.01.2016).
+  Cite it as: Legea nr. 207/2015 privind Codul de procedură fiscală (MO 547/23.07.2015), art. 82 alin. (6) lit. c), forma consolidată din 08.08.2026, Portal Legislativ doc **312603** (base form **170007**).
+  - Doc **304520** *is* a genuine CPF consolidation — but its date is **18.12.2025**, not 20.03.2026, and it is
+    **superseded**. The live form is **312603** (08.08.2026). There is no 20.03.2026 CPF consolidation at all.
+  - `research/11` had this right from the start („Cod de procedură fiscală (Legea 207/2015), doc 304520”).
+    `research/13` introduced the wrong label. **No rule in this brief changes** — the carve-out wording is
+    verbatim identical in 304520 and 312603, same numbering, and **lit. c) carries no amendment note**: it is
+    unamended original text.
+  - **Trap to remember:** **OG 6/2026 (MO 77/30.01.2026)** is a *CPF* act — it introduced art. 85¹ on
+    secondary-place fiscal registration — *and* its **art. IX** carries the e-Factura derogation. One act, two
+    codebases. Do not file it under only one of them.
 - Doc **304520** note count: the repo records **828**, a sweep regex yields **825**. Format variance, not a
   contradiction — cite it as "~825-828" rather than picking one.
 
@@ -177,8 +180,9 @@ expectation and say so in your notes.
   from deadline counts. Recompute them from the new reality; do not adjust them until they pass.
 - `:383-458` — the Phase 9 test. **`:456` asserts `Declarație estimativă PFA` is visible. Delete that
   assertion**; it pins a phantom rule. **Keep `:458`** (`Înregistrare TVA` count 0): the guarantee that a PFA
-  *start* date must not resolve a *VAT* deadline is still correct and still valuable. Re-point the test at
-  `fiscal_registration` for the start-date half.
+  *start* date must not resolve a *VAT* deadline is still correct and still valuable. **Do not re-point it at a
+  `fiscal_registration` expectation** — there is no such event type (§2c). Widen it instead: a PFA start date
+  must resolve **no** deadline at all.
 
 Add tests that would fail under the old code:
 - no `cas_quarterly` / `cass_quarterly` / `income_tax_advance` / `pfa_estimated_declaration` event type is ever
@@ -187,7 +191,9 @@ Add tests that would fail under the old code:
   the rule, e.g. by mutating the rule's `sourceArticle` in a test and seeing it flow through);
 - removing a rule from the package removes its deadline (proves no literal fallback);
 - VAT registration deadline equals the exceedance date exactly, offset 0, and classifies as `past`/`due_today`;
-- fiscal registration equals `pfaStartDate + 30 days`, and a VAT exceedance date does **not** resolve it.
+- **no deadline of any kind is derivable from `pfaStartDate`** — a query carrying a PFA start date must
+  resolve **zero** deadlines attributable to it. This is the positive form of §2c: the correct behaviour is
+  silence, so the test must fail if any rule ever starts consuming `pfaStartDate` again.
 
 **`isApplicable` (`deadlines.ts:236-245`) is dead and misleading** — it takes a `rule` argument but only ever
 looks for `d212_filing`, so it returns false for every other event type. It has no production caller. Delete

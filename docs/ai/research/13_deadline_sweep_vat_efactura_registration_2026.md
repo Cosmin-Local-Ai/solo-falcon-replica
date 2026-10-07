@@ -9,7 +9,7 @@ already flagged. Complements `research/11` (first-year PFA, VAT registration) an
 | Act | Doc id | Notes | Latest note | Used for |
 |---|---|---|---|---|
 | Cod fiscal, Legea 227/2015 | **312601** | 1,008 | 29-12-2025 | CF art. 122, 316, 319, 322, 323, 326, 120/120¹ status |
-| Cod de procedură fiscală, OG 2/2024 | **304520** | 825 by this pass's regex (repo records 828 — format variance, not a contradiction) | 18-12-2025 | CPF art. 81, 82, 83 |
+| Cod de procedură fiscală — **Legea 207/2015** (this pass mislabelled it “OG 2/2024” — **see erratum below**) | **304520** | 825 by this pass's regex (repo records 828 — format variance, not a contradiction) | 18-12-2025 | CPF art. 81, 82, 83 |
 | OUG 120/2021 (RO e-Factura) | **310662** | 47 | 24-12-2025 | art. 10, 10^1, 10^8, 10^10 |
 
 **Not reached:** **OUG 44/2008** — no consolidation, no doc id, no note count. This is a gap, not a
@@ -256,3 +256,20 @@ Wrong or unverified:
 | 30-day DU = **art. 120 alin. (2)** | art. 120 is **Abrogat** from 01-01-2025 — right number, dead article | ❌ |
 | 30 days still relevant for **normă de venit** / opting into CAS-CASS | not established; this repo keeps `NORMA_VENIT` parseable-but-refused because the 2026 package has no norm-of-income rule | ❓ |
 | art. 13 OUG 120/2021 fines 1.000–2.500 lei | not retrieved from a primary source | ❓ |
+
+---
+
+## Erratum, applied 2026-10-08 after independent verification (`research/15` §7)
+
+This pass's source table labels the procedure code **“OG 2/2024”**. **That label is wrong and no such act
+exists.** The code is **Legea nr. 207/2015** (MO 547/23.07.2015). Doc **304520 is a real CPF consolidation**,
+so every provision this pass read from it is sound — but its consolidation date is **18.12.2025** and it is
+**superseded**; the live form is **doc 312603, consolidated 08.08.2026** (base form 170007).
+
+**Nothing this pass concluded changes.** art. 82 alin. (6) lit. c) is verbatim identical in both forms, same
+numbering, unamended. The error is a label, not a finding — but it propagated into brief 10 and STATE.md
+before it was caught, which is the cost of not checking a label against `research/11`, which already had it right.
+
+Also corrected in this pass: **“OG 6/2026 art. IX”** (§ near art. 10¹⁰) is a real derogation and it is a
+**relief**, not an imposition — CNP-identified suppliers have **no** e-Factura duty until 01.06.2026, after
+which art. 10¹⁰ relieves them anyway. It is a *Notă*, not an amendment, and it expires. See `research/15` §7 F2.

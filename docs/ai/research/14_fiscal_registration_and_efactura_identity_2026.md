@@ -156,7 +156,7 @@ panel is JS-loaded, so post-2022 acts could not be enumerated. The predicate is 
 current portal consolidation**; it is **not** established that no unconsolidated post-2022 amendment
 exists.
 
-**CPF (OG 2/2024) was not re-reached in pass A** — two searches returned unrelated acts. That does not
+**CPF (Legea 207/2015 — this file called it “OG 2/2024”, which is wrong; see `research/15` §7) was not re-reached in pass A** — two searches returned unrelated acts. That does not
 weaken the verdict: art. 82 alin. (1)-(7) was read verbatim from doc **304520** in the earlier pass
 (`research/13` §7), and the verdict rests on that text plus OUG 44/2008 art. 7 alin. (1) + art. 13
 alin. (3).
