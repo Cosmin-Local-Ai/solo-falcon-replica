@@ -268,7 +268,8 @@ either way** — relieved by art. IX to 01.06.2026, by art. 10¹⁰ from 01.06.2
 - **Portal Legislativ doc id for OPANAF 1.021/2026** — likely not yet consolidated.
 - **Whether a new CPF draft exists in the parliamentary pipeline** — no evidence found, but camera.deputat.ro was not queried directly. **Treat “not enacted” as *no evidence found*, not proven absence.**
 - **art. 10 alin. (1) B2B text** — still extraction-only, single-source, not string-verified.
-- **The 5-calendar-day transmission term** (art. 10 alin. (7)) — **never verified in this project**, and it is now a product requirement. See §11.
+- **The transmission term in art. 10 alin. (7)** — **never verified at primary level** when this note was written, and it is now a product requirement. See §11.
+  > **Corrected 2026-10-08 by `research/16`: the 2026 term is 5 ZILE LUCRĂTOARE, not 5 calendaristice.** The „5-calendar-day“ label here was inherited from the operator/Gemini claim this note was auditing, rather than corrected against it. `research/13` §4 already had it right. Now closed at primary level in `research/16` §Q2 — OUG 89/2025 art. X pct. 2, MO 1203/24.12.2025, effective 01.01.2026.
 
 ## 11. New product surface this creates — and the one deadline it implies
 
