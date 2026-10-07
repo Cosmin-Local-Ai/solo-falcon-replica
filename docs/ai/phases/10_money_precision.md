@@ -265,3 +265,81 @@ the pre-change digest, and say why. Also `:345-359` pins fiscal keys inside a sn
 treatment. And `:163-172` pins the exact `[from,to]` list and `CURRENT_DATA_VERSION === DATA_VERSION_VAT_DATE`;
 `:184-199,203-212,214-223,381-396` pin `stepsApplied` to an exact array of the four step names. All five must be
 updated to include `money-bani` / version 5.
+
+### 2.4 The test-literal plan (~200 literals, 20 files, plus e2e)
+
+**Method: a script, not hand edits.** A scripted rewrite produces a reviewable diff; 200 hand edits is where a
+real assertion silently becomes "whatever the new output happens to be". After the rewrite, **read the diff of
+every test file** and confirm each changed number is a unit conversion, not a re-pointed expectation.
+
+**Read the legend correctly.** The reconnaissance MOVE column is about **value** change, not unit
+re-expression. A whole-lei amount marked "no change" still gets ×100 when it is a persisted or domain amount.
+Three axes: **(R)** the value changes because of art. 66 · **(I)** the literal is re-expressed as integer bani ·
+**(F)** the string is formatter-sensitive.
+
+**Mitigation that keeps the suite readable and the negative controls visible:** introduce a test helper
+`lei(n) → Bani` (re-export from `src/domain/money.ts`) and write expectations as `lei(2430)` rather than
+`243000`. Then a unit change does not destroy readability, and an unintended *value* change still stands out.
+
+**Assertions whose VALUE legitimately changes — only these, and each must be justified in the commit message by
+art. 66:**
+`tax.test.ts:206, 415-420, 512-517` · `taxReserve.test.ts:52, 82-85` · `dashboard.test.ts:329, 330` ·
+`insights.test.ts:528` · `e2e/dashboard.spec.ts:78, 84, 88, 132, 155, 157`.
+The seeded chain moves as: income tax `674,505 → 675` lei, CASS `2 430` unchanged, total `3 104,505 → 3 105` lei,
+monthly reserve `1 034,835 → 1 035` lei. So `3.104,51 RON → 3.105,00 RON` and `1.034,84 RON → 1.035,00 RON`.
+
+**Negative controls — these must NOT change value. If one moves, something is broken:**
+`24_615`, `2430`, `12_150`, `24_300`, `29_160`, `2_430`, `4_230`, `3_800`, `46.570`, `20.435`, `4860/4861`,
+`-29160/-29161`, `-39500/-39501`, `60000→12150 / 97199→12150 / 97200→24300`, `Dashboard.test.tsx:106,152`,
+`fiscal.test.ts:414,426`, `e2e/settings.spec.ts:222,233`.
+
+**Bases must never be rounded** (they become integer bani, value-preserving): `6745.05` taxable base → `674505`,
+`7494.5` VNA → `749450`, `205.5` deductible expenses → `20550`, and every `thresholds.test.ts` parameter.
+`6745.05` must **not** become `6745`. This is the easiest place to over-round.
+
+**Highest-risk rewrite: the threshold band edges.** `thresholds.test.ts:193,201,210,217,226,233` and the tier
+ladder at `:385-387` test a ±1 **lei** boundary. Under bani the edge becomes ±100 bani (`lei(4860)` vs
+`lei(4861)`). Keep the adjacency explicit; an off-by-one here silently moves a statutory threshold.
+
+**Hardest arithmetic: `projection.test.ts:120-122, 128-130, 148-152`** assert `/17` fractions (`180/17`,
+`1962/17`, `2160/17`, `23544/17`). A per-month split of integer bani cannot be exact for every denominator.
+Keep the projection in **decimal intermediates**, convert to integer bani only when a month is displayed or
+summed, and pin by test that the months still sum to the total. **A projection is not a sum due — art. 66 does
+not apply to it. Do not invent rounding there.**
+
+**Fractional persisted round-trips that prove the migration:** `store.save.test.tsx:130` `tva: 142.5 → 14250`
+(the only fractional value written and read back) · `snapshots/hashSync.test.ts:77` `revenues: 523456.78 →
+52345678` (a hash input, so the digest changes — see §2.3).
+
+**Money TEXT assertions — NO-MOVE. A diff here is a bug, not a refactor:**
+`Settings.test.tsx:373 'Valoare invalidă (lei, ≥ 0).'` · `regimes.test.ts:77 not.toMatch(/\d+\s*lei/)` ·
+`deadlines.test.ts:186` (title cites `395.000 lei`, no numeric assert) · `thresholds.test.ts:409
+not.toMatch(/\d{3}/)` · **`fiscal/fiscal.test.ts:259 toContain('derivata din 291600 x 0.1')`** ·
+`ThresholdSection.test.tsx:115` (comment).
+
+**`null`/`undefined` invariants that must survive:** `Settings.test.tsx:332,359` `toBeUndefined()` ×2 and
+`e2e/settings.spec.ts:170` `toBeUndefined()`. With money as integers, "no value" collapsing to `0` becomes
+invisible — these are the assertions that keep it visible. Do not let a `?? 0` sneak in.
+
+### 2.5 Named hazard — formatter mirrors inside tests
+
+Two formatters are reimplemented **inside test files**. They pin rounding the application does not use, so a
+future pass can "fix the app to match the test" and re-introduce the defect:
+
+| file:line | mirror | effect |
+|---|---|---|
+| `e2e/dashboard.spec.ts:577-579` | `fmtRON = Intl.NumberFormat('ro-RO',{min/max 2}) + ' RON'` | drives **every `RON` cell in that file** — the e2e suite asserts a formatter that is not the app's |
+| `src/domain/insights.test.ts:102-107` | `formatLei = Intl.NumberFormat('ro-RO',{min/max 2})` | keeps half-up rounding pinned (`1234.567 → '1.234,57'`) |
+
+**Delete both and replace them with assertions on real app output** — rendered screen text and the actual CSV
+bytes. A deleted assertion with nothing in its place is the weakening the hard rule forbids, even when the thing
+deleted was itself a defect.
+
+### 2.6 Acceptance for T1
+
+1. `npx tsc --noEmit` → 0. 2. `npm run test` → all files pass, count ≥ baseline. 3. `npm run build` → 0.
+4. `npm run test:e2e` → 34 passed. 5. A persisted `142.5` lei value loads as `14250` bani with no report.
+6. A stored `674.504` converts to `67450` bani **and is reported**, not swallowed. 7. A stored snapshot's
+`inputsHash` is re-derived and its previous digest preserved in `preMigrationInputsHash`. 8. No `Math.round`,
+`toFixed` or `Intl.NumberFormat` on money survives anywhere in `src/` except inside `src/domain/money.ts`.
+9. Every negative control in §2.4 is unchanged in value.
