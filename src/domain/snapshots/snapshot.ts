@@ -1,13 +1,19 @@
 import type { PfaProfile } from '../models';
 import type { RuleRelease } from '../fiscal/rules';
+import type { Bani } from '../money';
 import type { CalculationInput, CalculationLine, CalculationOutput, SnapshotStatus, TaxCalculationSnapshot } from './types';
 import { computeInputsHash } from './hash';
 import { toInstantISO } from '../date';
 
 export interface CreateSnapshotParams {
   profile: PfaProfile;
-  revenues: number;
-  expenses: number;
+  /**
+   * Integer **bani**. These two values are the money that feeds `inputsHash`: `canonicalize` writes a
+   * number as `String(value)`, so the unit is part of the digest's bytes. Convert to whole bani BEFORE
+   * calling this, or the digest carries float noise (`7128.100000000001`) and stops being reproducible.
+   */
+  revenues: Bani;
+  expenses: Bani;
   ruleRelease: RuleRelease;
   calculationLines: CalculationLine[];
   output: CalculationOutput;

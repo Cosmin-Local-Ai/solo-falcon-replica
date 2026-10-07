@@ -1,3 +1,5 @@
+import type { Bani } from './money';
+
 /**
  * PFA/profile domain model — the single source of truth for the PFA profile.
  *
@@ -30,7 +32,6 @@
  *   engine refuses it as REVIEW_REQUIRED. No norm value is invented anywhere.
  */
 export type PfaRegime = 'impozit_pe_venit' | 'impozit_pe_cit' | 'norma_venit';
-
 /** Whether the PFA holder has a concurrent salary (impozit pe venit thresholds depend on it). */
 export type PfaSalaryStatus = 'da' | 'nu';
 
@@ -170,7 +171,16 @@ export interface PfaProfile {
    * CASS ONLY. It must never reach `calcCas`: CF art. 150 alin. (2) exempts salary
    * earners only for art. 137 alin. (1) lit. b^1), not lit. b).
    */
-  salaryIncomeLei?: number;
+  /**
+   * Salary income for the fiscal year, **integer bani** (Phase 10).
+   *
+   * The key keeps the historical `…Lei` suffix. Renaming a persisted key is not a type change: `safeParse`
+   * runs before the migration chain and zod strips unknown keys, so a schema requiring a new key would
+   * reject every v4 payload and quarantine it rather than convert it. The key is carried unchanged through
+   * v4→v5 and only the unit changes; the `Bani` brand is what stops the stale name being exploited, and the
+   * hazard is recorded in `docs/ai/phases/10_money_precision.md`.
+   */
+  salaryIncomeLei?: Bani;
   /** Pension status. */
   pensionStatus: PfaPensionStatus;
   /** Other relevant income flags. */
@@ -195,8 +205,8 @@ export interface PfaProfile {
    * `pfaStartDate` / `vatExceedanceMonth` deliberately and that split stands.
    */
   vatExceedanceDate?: string;
-  /** Cash payment floor threshold in lei (limitele de casă). Default 0. */
-  cashFloorLei: number;
+  /** Cash payment floor threshold (limitele de casă). Default 0. **Integer bani** — same key-name caveat as `salaryIncomeLei`. */
+  cashFloorLei: Bani;
   /** Identity/contact data used by the application. */
   identity: PfaIdentity;
   /** Last update timestamp (ISO 8601). */

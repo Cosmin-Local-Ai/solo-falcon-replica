@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { isoCalendarDateProblem } from '../domain/date';
 import { parsePfaProfile } from '../domain/schema';
 import type { PfaProfile } from '../domain/models';
+import type { Bani } from '../domain/money';
 import type { RuleRelease } from '../domain/fiscal/rules';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import type {
@@ -35,6 +36,21 @@ import type {
 const nonEmptyString = z.string().min(1);
 const nonNegative = z.number().min(0);
 
+/**
+ * Phase 10: stored money is an integer number of **bani**.
+ *
+ * The gate deliberately stays **permissive about integrality**: `safeParse` runs *before* the migration
+ * chain, so a `v4` payload still holds float lei (`85.5`, `142.5`). An `.int()` here would reject every
+ * pre-migration payload and quarantine the user's data instead of converting it. Integer-ness is enforced
+ * after migration, in the domain (`domain/money.ts` throws on a non-integer), and asserted by test.
+ *
+ * The `transform` is a type-level cast, not a runtime conversion. It exists because the
+ * `Expect<Equal<z.output<…>, Revenue>>` assertions at the bottom of this file force the zod output and the
+ * domain type to be the *same* type, so both sides of the boundary have to move together — that is the
+ * drift guard, and it is why this file cannot be left in lei while the domain is in bani.
+ */
+const bani = (schema: z.ZodNumber = nonNegative) => schema.transform((n) => n as Bani);
+
 export const revenueSchema = z.object({
   id: nonEmptyString,
   tip: z.enum(['factura', 'notafactura']),
@@ -45,8 +61,8 @@ export const revenueSchema = z.object({
   collected: z.string().optional(),
   client: z.string(),
   cui: z.string(),
-  valoareFaraTva: nonNegative,
-  tva: nonNegative,
+  valoareFaraTva: bani(),
+  tva: bani(),
   status: z.enum(['inregistrata', 'in-asteptare', 'respinsa']),
   statusDetail: z.string().optional(),
   eFacturaStatus: z.enum(['Acceptată', 'În așteptare', 'Respinsă']).optional(),
@@ -62,8 +78,8 @@ export const expenseSchema = z.object({
   paid: z.string().optional(),
   furnizor: z.string(),
   cui: z.string(),
-  valoareFaraTva: nonNegative,
-  tva: nonNegative,
+  valoareFaraTva: bani(),
+  tva: bani(),
   status: z.enum(['inregistrata', 'respinsa']),
   statusDetail: z.string().optional(),
 });
@@ -81,8 +97,8 @@ export const declarationSchema = z.object({
   id: nonEmptyString,
   an: z.number().int(),
   luna: z.number().int().min(1).max(12),
-  venituri: nonNegative,
-  cheltuieli: nonNegative,
+  venituri: bani(),
+  cheltuieli: bani(),
   status: z.enum(['inregistrata', 'in-asteptare', 'transmisa', 'respinsa']),
   dataInregistrare: z.string(),
   dataTrimitere: z.string().optional(),
@@ -142,8 +158,11 @@ export const taxCalculationSnapshotSchema = z.object({
   ruleRelease: ruleReleaseSchema,
   inputSnapshot: z.object({
     profile: profileSchema,
-    revenues: z.number(),
-    expenses: z.number(),
+    // Money inside a snapshot feeds `inputsHash`, so these are the values whose unit change moves the
+    // digest (§2.3 of the phase doc). Left permissive — no `.min(0)`, no `.int()` — for the same reason
+    // as above: parse happens before migration.
+    revenues: bani(z.number()),
+    expenses: bani(z.number()),
   }),
   inputsHash: z.string(),
   // Phase 7: the digest carried before a data migration rewrote the embedded
@@ -152,7 +171,7 @@ export const taxCalculationSnapshotSchema = z.object({
   calculationLines: z.array(
     z.object({
       label: z.string(),
-      value: z.number(),
+      value: bani(z.number()),
       // B-19: a line the engine could not ground in an applicable rule. Both fields are optional so
       // snapshots written before this phase still parse — but they must be declared, because zod
       // STRIPS unknown keys by default and would silently erase the marker on load, which is the
@@ -161,7 +180,7 @@ export const taxCalculationSnapshotSchema = z.object({
       reason: z.string().optional(),
     }),
   ),
-  output: z.object({ total: z.number() }),
+  output: z.object({ total: bani(z.number()) }),
   status: z.enum(['computed', 'superseded', 'void']),
 });
 

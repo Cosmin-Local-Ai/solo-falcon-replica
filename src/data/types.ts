@@ -1,6 +1,7 @@
 import type { PfaProfile } from '../domain/models';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import { localDateISO, now } from '../domain/date';
+import { type Bani, sumBani } from '../domain/money';
 
 // ── Venituri ──────────────────────────────────────────────
 export type RevenueStatus = 'inregistrata' | 'in-asteptare' | 'respinsa';
@@ -23,8 +24,9 @@ export interface Revenue {
   collected?: string;
   client: string;
   cui: string;
-  valoareFaraTva: number;
-  tva: number;
+  /** Integer **bani** (Phase 10). A persisted lei value became bani through the `money-bani` migration step. */
+  valoareFaraTva: Bani;
+  tva: Bani;
   status: RevenueStatus;
   statusDetail?: string;
   eFacturaStatus?: EFacturaStatus;
@@ -50,8 +52,9 @@ export interface Expense {
   paid?: string;
   furnizor: string;
   cui: string;
-  valoareFaraTva: number;
-  tva: number;
+  /** Integer **bani** (Phase 10). */
+  valoareFaraTva: Bani;
+  tva: Bani;
   status: ExpenseStatus;
   statusDetail?: string;
 }
@@ -73,8 +76,9 @@ export interface Declaration {
   id: string;
   an: number;
   luna: number;
-  venituri: number;
-  cheltuieli: number;
+  /** Integer **bani** (Phase 10). */
+  venituri: Bani;
+  cheltuieli: Bani;
   status: DeclStatus;
   dataInregistrare: string;
   dataTrimitere?: string;
@@ -193,7 +197,11 @@ export const fmtDate = (iso: string) => {
   return `${d}.${m}.${y}`;
 };
 
-export const total = (r: Revenue | Expense) => r.valoareFaraTva + r.tva;
+/**
+ * Phase 10: money is an integer number of bani, so a record total is an exact integer sum —
+ * `sumBani` throws rather than let a float accumulate here (`aggregation.ts` was the float origin).
+ */
+export const total = (r: Revenue | Expense) => sumBani([r.valoareFaraTva, r.tva]);
 
 // ── Statusuri ─────────────────────────────────────────────
 export const REV_STATUS_LABEL: Record<RevenueStatus, string> = {

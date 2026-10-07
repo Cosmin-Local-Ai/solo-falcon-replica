@@ -220,3 +220,29 @@ describe('money — representation invariants', () => {
     expect(roundArt66(applyRateDecimal(lei(7494.5), 10))).toBe(74900);
   });
 });
+
+describe('money — `lei()` literals must not depend on IEEE-754 noise', () => {
+  // 71.4 is a real seeded value (`expenses.e3.tva`). `71.4 * 100` is 7140.000000000001, so a float
+  // multiply makes this literal throw while `lei(17.96)` passes. Whether a literal works must not
+  // depend on which side the rounding noise falls, so scaling goes through Decimal.
+  it('scales every two-decimal lei literal exactly', () => {
+    for (const [amount, expected] of [
+      [71.4, 7140],
+      [17.96, 1796],
+      [25.2, 2520],
+      [85.5, 8550],
+      [142.5, 14250],
+      [7494.5, 749450],
+      [6745.05, 674505],
+      [523456.78, 52345678],
+    ] as const) {
+      expect(lei(amount)).toBe(expected);
+    }
+  });
+
+  it('still refuses a literal with sub-ban precision', () => {
+    expect(() => lei(0.005)).toThrow(/not a whole number of bani/);
+    expect(() => lei(674.505)).toThrow(/not a whole number of bani/);
+    expect(() => lei(Number.NaN)).toThrow(/finite/);
+  });
+});

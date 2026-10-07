@@ -7,6 +7,7 @@
  * to that type so validation and typing cannot drift apart.
  */
 import { z } from 'zod';
+import type { Bani } from './money';
 import type { PfaProfile } from './models';
 import { PFA_REGIME_VALUES } from './regimes';
 import { ISO_CALENDAR_DATE } from './date';
@@ -68,7 +69,14 @@ export const pfaProfileSchema: z.ZodType<PfaProfile> = z.object({
   salaryStatus: z.enum(['da', 'nu']),
   // CASS only — CF art. 174 alin. (7) lit. a). Optional: absent means "unknown", which
   // calcCass reports as REVIEW_REQUIRED rather than guessing in either direction.
-  salaryIncomeLei: z.number().min(0).finite().optional(),
+  // Phase 10: **integer bani**, but the gate stays permissive about integrality because parse runs
+  // before the v4→v5 migration. Absence must stay absence — never default this to 0 bani.
+  salaryIncomeLei: z
+    .number()
+    .min(0)
+    .finite()
+    .transform((n) => n as Bani)
+    .optional(),
   pensionStatus: z.enum(['da', 'nu']),
   otherIncome: z.array(z.enum(['imobiliare', 'autovehicule', 'dividende', 'concesiune', 'alte'])),
   socialInsuranceStatus: z.enum(['obligatoriu', 'exempt', 'neplata']),
@@ -79,7 +87,9 @@ export const pfaProfileSchema: z.ZodType<PfaProfile> = z.object({
   // safe because no legacy payload can contain the field at all — there is nothing legacy to
   // reject, unlike the CUI/CNP shape checks deliberately left out of `pfaIdentitySchema` above.
   vatExceedanceDate: z.string().regex(ISO_CALENDAR_DATE, 'vatExceedanceDate must be ISO YYYY-MM-DD').optional(),
-  cashFloorLei: z.number().min(0),
+  // Phase 10: **integer bani** (key name kept — see the caveat on `PfaProfile.cashFloorLei`). Required:
+  // a payload without it is corrupt, and defaulting it would fabricate a cash floor of 0.
+  cashFloorLei: z.number().min(0).transform((n) => n as Bani),
   identity: pfaIdentitySchema,
   updatedAt: z.string().min(1),
 });

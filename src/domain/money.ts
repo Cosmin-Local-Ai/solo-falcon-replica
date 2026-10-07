@@ -66,15 +66,24 @@ function assertIntegralBani(value: number, fn: string): Bani {
 }
 
 /**
- * Exact lei → bani, for literals in source, seed data and tests: `lei(2430)` is 2 430 lei.
- * Throws rather than silently accepting a fractional-lei literal — use `baniFromLei` for that.
+ * Exact lei → bani, for literals in source, seed data and tests: `lei(2430)` is 2 430 lei,
+ * `lei(25.2)` is 2 520 bani. Throws rather than silently accepting a fractional-bani literal
+ * (`lei(0.005)`) — use `baniFromLei` for a value that genuinely has sub-ban precision.
+ *
+ * The scaling goes through `Decimal`, **not** `amount * 100`. This is not a micro-optimisation: `71.4 * 100`
+ * is `7140.000000000001` in IEEE-754, so a float multiply would make `lei(71.4)` — a real seeded value, the
+ * TVA on expense `e3` — throw for no reason, while `lei(17.96)` happened to pass. Whether a literal works
+ * must not depend on which side the noise falls.
  */
 export function lei(amount: number): Bani {
-  const scaled = amount * BANIS_PER_LEI;
-  if (!Number.isSafeInteger(scaled)) {
+  if (typeof amount !== 'number' || !Number.isFinite(amount)) {
+    throw new RangeError(`lei(${amount}) requires a finite number of lei`);
+  }
+  const scaled = new Decimal(amount).times(BANIS_PER_LEI);
+  if (!scaled.isInteger() || !Number.isSafeInteger(scaled.toNumber())) {
     throw new RangeError(`lei(${amount}) is not a whole number of bani; use baniFromLei()`);
   }
-  return scaled as Bani;
+  return scaled.toNumber() as Bani;
 }
 
 /** Result of converting a legacy float-lei value to bani. */
@@ -193,4 +202,35 @@ export function formatBaniLei(amount: Bani): string {
 export function formatBaniOrDash(amount: Bani | null | undefined): string {
   if (amount === null || amount === undefined || !Number.isSafeInteger(amount)) return '—';
   return formatBani(amount);
+}
+
+/**
+ * Bani as a plain machine-readable lei string for an `<input value>`: `2430000` → `'24300'`,
+ * `8550` → `'85.50'`. Exact — no rounding, no locale grouping, `.` as the decimal separator.
+ *
+ * This exists because a form field is a screen. Pre-filling one with the stored integer would show the
+ * user `2430000` for 24 300 lei, which is the "a raw `67450` must never reach a screen" rule.
+ */
+export function leiInputValue(amount: Bani): string {
+  const bani = assertIntegralBani(amount, 'leiInputValue');
+  const whole = Math.trunc(bani / BANIS_PER_LEI);
+  const fraction = Math.abs(bani - whole * BANIS_PER_LEI);
+  return fraction === 0 ? String(whole) : `${whole}.${String(fraction).padStart(2, '0')}`;
+}
+
+/**
+ * Parse a lei amount typed by a user into integer bani. Accepts `,` or `.` as the decimal separator.
+ *
+ * Returns `null` when the input is not a finite number **or** carries sub-ban precision (`85.555`).
+ * The second case is a refusal, not a silent round: a fraction of a ban cannot be stored, and rounding a
+ * number on the way INTO someone's ledger is exactly the silent money change this phase forbids. The
+ * caller shows its existing invalid-value message rather than inventing new copy.
+ */
+export function parseLeiInput(text: string): Bani | null {
+  const trimmed = text.trim();
+  if (trimmed === '') return null;
+  const value = Number(trimmed.replace(',', '.'));
+  if (!Number.isFinite(value)) return null;
+  const { bani, exact } = baniFromLei(value);
+  return exact ? bani : null;
 }

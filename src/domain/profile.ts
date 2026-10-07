@@ -6,6 +6,7 @@
  * source of truth for identity/contact data).
  */
 import type { PfaIdentity, PfaProfile } from './models';
+import { lei } from './money';
 import { localYear, now, toInstantISO } from './date';
 
 const EMPTY_IDENTITY: PfaIdentity = {
@@ -48,7 +49,9 @@ export function createDefaultProfile(
     otherIncome: [],
     socialInsuranceStatus: 'neplata',
     vatExempt: false,
-    cashFloorLei: 0,
+    // Phase 10: money is integer bani. `lei(0)` rather than a bare `0` keeps the unit explicit at the
+    // factory — a cash floor of 0 is a deliberate value, not an absent one.
+    cashFloorLei: lei(0),
     identity: { ...EMPTY_IDENTITY },
     updatedAt: toInstantISO(instant),
     ...overrides,

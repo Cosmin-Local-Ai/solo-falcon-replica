@@ -802,7 +802,10 @@ invent a rule.** Those two are where a plausible guess does real damage.
    persistence) is NOT closed by this phase.
 8. ☐ Measure all four numbers at final HEAD with a clean tree.
 
-### Exact declaration text for step 1 (read just before compaction, verbatim)
+### Exact declaration text for step 1 — **VERIFIED BY RE-READ AFTER COMPACTION (2026-10-07 ~16:05)**
+The first version of this section and the "Persisted-schema money fields" section below were written from reads made
+*before* a compaction, so every line was re-read from disk and confirmed. Two line numbers were wrong and one claim was
+understated; both corrected in place below. Nothing else changed.
 `src/domain/fiscal/rules.ts` — `FiscalParameter` is:
 ```ts
 export type FiscalParameter = {
@@ -820,9 +823,9 @@ by lei/percent/date/count/days/text, so it **cannot simply become `Bani`** — t
 `package2026.ts` become integer bani, `unit:'percent'` values stay unscaled integers. This keeps one rule-store
 type and puts the unit decision in one function.
 
-`src/domain/snapshots/types.ts` — `CalculationInput.revenues: number` / `.expenses: number` (comments say
-"valoareFaraTva, lei" — **update the comments too**), `CalculationLine.value: number`,
-`CalculationOutput.total: number`. `CalculationLine` also carries `reviewRequired?: boolean` + `reason?: string`
+`src/domain/snapshots/types.ts` — `CalculationInput.revenues: number` (`:23`) / `.expenses: number` (`:25`), comments
+read `/** Total revenues (valoareFaraTva), lei. */` — **update the comments too**; `CalculationLine.value: number`
+(**`:31`**, not `:30`); `CalculationOutput.total: number` (**`:45`**, not `:42`). `CalculationLine` also carries `reviewRequired?: boolean` + `reason?: string`
 (B-19) — **the amount must stay exactly what the engine computed; the marker is on the LINE, not a change to the
 number.** Do not "fix" an unverified line by rounding it.
 
@@ -852,10 +855,13 @@ number.** Do not "fix" an unverified line by rounding it.
   `venituri`/`cheltuieli` (`:84`, `:85`). **Do not add `.int()` here** (parse runs before migration).
 - Snapshot: `:145-146` `revenues: z.number()` / `expenses: z.number()`; `:155` `value: z.number()`;
   `:164` `output: z.object({ total: z.number() })`.
-- `:418-421` `Expect<Equal<z.output<typeof revenueSchema>, Revenue>>` (and Expense/Client/Declaration) — **type
-  equality assertions between the persisted schema and the domain type. They will fail the moment one side changes
-  and the other does not, which is exactly the drift guard I want. Do not delete them to get tsc green — fix both
-  sides.**
+- `:418-428` — **eleven** `Expect<Equal<z.output<typeof X>, Y>>` assertions, not four: `revenueSchema`,
+  `expenseSchema`, `clientSchema`, `declarationSchema`, `documentItemSchema`, `companyDocumentSchema`,
+  `taxStatementSchema`, `ruleReleaseSchema`, **`taxCalculationSnapshotSchema`**, `settingsSchema`,
+  **`persistedAppDataSchema`**. (My earlier note listed only four — understated.) **These force the zod output and the
+  TS types to stay identical. The snapshot and root-payload ones are the ones that will bite in T1: changing
+  `CalculationLine.value` to `Bani` without changing `value: z.number()` at `:155` is a compile error. Do not delete
+  an assertion to get tsc green — fix both sides.**
 - `src/domain/schema.ts`: `:71` `salaryIncomeLei: z.number().min(0).finite().optional()`, `:82`
   `cashFloorLei: z.number().min(0)`.
 - `src/domain/models.ts`: `:173` `salaryIncomeLei?: number;`, `:199` `cashFloorLei: number;` — **both named `…Lei`;
@@ -865,3 +871,87 @@ number.** Do not "fix" an unverified line by rounding it.
 - `src/data/seed.ts` money lines, verbatim: revenues `:40-43` (`4500/945`, `1200/252`, `800/168`, `3200/672`);
   expenses `:46-48` (`120/25.2`, `85.5/17.96`, `340/71.4`); declarations `:56-58`
   (`12500/1800`, `14200/2100`, `9680/546`); `:16` `cashFloorLei: 0`.
+
+---
+
+## 7. T1 EXECUTION IN PROGRESS — TREE IS CURRENTLY RED. READ THIS FIRST AFTER COMPACTION.
+
+**Status at this moment: MID-MIGRATION, NOT GREEN.** tsc had ~201 errors at last full measure (34 of them in
+non-test source). The last green commit is the notes commit before I started editing types. If context runs out
+before I get back to green: git reset --hard to the last green commit and report honestly. NEVER hand off a red tree.
+
+Git state right now (uncommitted work is the T1 type migration):
+$(git status --short)
+HEAD: $(git log --oneline -1)
+
+### What is DONE in this pass (uncommitted)
+1. **src/domain/money.ts** — (a) **BUG FIX: lei() now scales through Decimal, not amount*100.** Reason, verified:
+   71.4*100 === 7140.000000000001, and 71.4 is a real seed value (expenses.e3.tva), so lei(71.4) threw while
+   lei(17.96) passed. Whether a literal works must not depend on which side the float noise falls. lei() now also
+   rejects non-finite. (b) NEW helpers appended: **leiInputValue(bani) -> plain lei string for an <input value>**
+   (2430000 -> '24300', 8550 -> '85.50'; exact, no grouping) and **parseLeiInput(text) -> Bani|null** (accepts , or
+   .; returns null for non-finite OR sub-ban precision — a REFUSAL, not a silent round; caller reuses its existing
+   'Valoare invalidă (lei, ≥ 0).' message, which is a NO-MOVE text assertion in Settings.test.tsx:373).
+   money.test.ts now has 22 tests (added a describe pinning lei(71.4)=7140 etc. and that lei(0.005) throws).
+2. **src/data/types.ts** — Revenue/Expense valoareFaraTva+tva, Declaration venituri+cheltuieli -> Bani. total() ->
+   sumBani([r.valoareFaraTva, r.tva]). fmtRON NOT deleted yet (display step still to do).
+3. **src/data/schema.ts** — added helper: const bani = (schema: z.ZodNumber = nonNegative) => schema.transform((n) => n as Bani);
+   applied to the 6 record money fields and to snapshot revenues/expenses/value/total. **Load gate stays permissive
+   (no .int()) — parse runs before migration.** The 11 Expect<Equal<...>> assertions all still present.
+4. **src/domain/snapshots/types.ts** — CalculationInput.revenues/expenses: Bani (comments updated, hash hazard
+   documented), CalculationLine.value: Bani, CalculationOutput.total: Bani.
+5. **src/domain/models.ts** — import type Bani added at line 1; salaryIncomeLei?: Bani; cashFloorLei: Bani.
+   **DECISION: keep the persisted KEY names (…Lei) unchanged, change only the type.** Reason: safeParse runs before
+   the chain and zod strips unknown keys, so requiring a new key would reject every v4 payload and quarantine it.
+   The stale name is documented on the field as a known hazard; the Bani brand is what makes it non-exploitable.
+6. **src/domain/schema.ts** — import type Bani; salaryIncomeLei -> .transform(n => n as Bani).optional(); cashFloorLei
+   -> .transform(n => n as Bani).
+7. **src/data/seed.ts** — 21 money literals wrapped in lei(...) by a python regex over
+   (valoareFaraTva|tva|venituri|cheltuieli|cashFloorLei): <number>. cotaTva untouched (percent). Import added.
+8. **src/domain/profile.ts** — import lei; createDefaultProfile cashFloorLei: lei(0).
+9. **src/domain/snapshots/snapshot.ts** — CreateSnapshotParams.revenues/expenses -> Bani (doc: convert BEFORE
+   calling or the digest carries float noise).
+10. **src/data/migration.ts** — imports baniFromLei/lei/Bani + Revenue/Expense/Declaration; DATA_VERSION_MONEY_BANI = 5;
+    CURRENT_DATA_VERSION = DATA_VERSION_MONEY_BANI; default-profile cashFloorLei: lei(0); **new exported
+    MoneyPrecisionNotice interface + convertMoneyToBani(input) -> {data, notices} + migrateMoneyBaniV5**, and the
+    chain entry {from: 4, to: 5, name: 'money-bani', apply: migrateMoneyBaniV5}.
+
+### THE CURRENT BLOCKER (fix this first)
+migration.ts L455: 'moneyNotices' does not exist in type 'PersistedAppData'.
+FIX: add to src/data/schema.ts — PersistedAppData gets moneyNotices?: MoneyPrecisionNotice[] AND
+persistedAppDataSchema gets the matching optional field (zod strips undeclared keys, so an undeclared report is
+erased on the next load = the "vanish" the brief forbids). Watch the Expect<Equal<z.output<persistedAppDataSchema>,
+PersistedAppData>> assertion: both sides must match exactly. Import MoneyPrecisionNotice type into schema.ts from
+./migration (check for a circular import — migration.ts imports PersistedAppData from schema.ts; a type-only import
+back is erased at compile time, so it is safe, but verify tsc agrees).
+Also 4 ast-grep warnings: no-conditional-empty-object-spread x4 in convertMoneyToBani (the ...(input.expenses ? {...} : {})
+pattern) — style only, but consider restructuring if cheap.
+
+### Remaining queue (from the 34 non-test errors + known semantic gaps)
+- src/domain/tax.ts — 22 errors. THE HARD ONE: the three art. 66 lines (income tax, CAS, CASS owed) must go through
+  applyRateDecimal(...) then roundArt66 ONCE; bases stay exact integer bani, never rounded.
+- src/pages/{Revenues,Expenses,Declarations}.tsx — form submit: parseFloat -> parseLeiInput, null -> existing error msg.
+- src/pages/Settings.tsx — pre-fill must use leiInputValue (raw bani in an input = the "raw 67450 on a screen" rule);
+  save must use parseLeiInput. Lines ~87,94 (pre-fill), ~159,167,184,190 (save).
+- **tsc will NOT find these** (Bani is assignable to number): must deliberately change signatures in
+  domain/fiscal/calculators.ts (CalculatorInput.base, chosenBase, salaryIncomeLei, CalculatorResult.value,
+  nonDeductible; paramNumber unit-aware per decision (i)), domain/aggregation.ts (YtdTotals, MonthlyTotals,
+  Threshold.current/limit, the += at :224-232 -> sumBani), domain/thresholds.ts, domain/taxReserve.ts,
+  domain/projection.ts (keep decimal intermediates; art.66 does NOT apply to a projection), domain/derived.ts,
+  domain/insights.ts, data/dashboard.ts (delete the *100 cents bridge :299-302 and insights.ts:43-44 divide-back).
+- Display: delete fmtRON, route 22 call sites to formatBaniRON; lib/format.ts formatLei -> formatBaniLei;
+  Documents.tsx:417 CSV toFixed(2) and :496,500,505 toLocaleString -> formatBani*; Documents.tsx:462 rows.reduce
+  money arithmetic out of JSX (T4).
+- Tests: ~200 literals across 20 files + e2e. USE A SCRIPT, then read every diff. Negative controls in §2.4 of the
+  phase doc must not change value. store.migration.chain.test.tsx :163-172,184-199,203-212,214-223,265-292,345-359,
+  381-396 must be re-scoped deliberately with the reason written down.
+- New tests needed: 142.5 -> 14250 exact with no notice; 674.504 -> 67450 WITH a notice; NaN carried unchanged +
+  notice, never 0; snapshot inputsHash re-derived + preMigrationInputsHash preserved; the "step threw -> quarantine
+  with 'migration failed:'" path (nothing pins it today).
+- Register: open B-25 (money precision) in docs/ai/STATE.md — it does NOT exist yet (verified: grep -c B-25 = 0).
+  Close B-17 only if genuinely closed. Do NOT write B-18/B-20 closed.
+
+### Facts re-verified this pass (do not re-derive)
+- tsc at last green: 0. Unit tests at last green: 45 files / 705 tests. money.test.ts alone: 22 passing.
+- 25.2*100, 17.96*100, 85.5*100, 142.5*100, 7494.5*100, 6745.05*100, 523456.78*100 are all safe integers;
+  71.4*100 and 1234.567*100 are NOT.

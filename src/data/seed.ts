@@ -1,4 +1,5 @@
 import type { AppData } from './types';
+import { lei } from '../domain/money';
 
 export const seedData: AppData = {
   profile: {
@@ -13,7 +14,7 @@ export const seedData: AppData = {
     otherIncome: [],
     socialInsuranceStatus: 'obligatoriu',
     vatExempt: false,
-    cashFloorLei: 0,
+    cashFloorLei: lei(0),
     identity: {
       nume: 'Popescu Andrei',
       cnp: '1234567890123',
@@ -37,15 +38,15 @@ export const seedData: AppData = {
     updatedAt: '2026-09-28T10:00:00.000Z',
   },
   revenues: [
-    { id: 'r1', tip: 'factura', nr: 'FCT-2026-001', date: '2026-09-02', client: 'Presta Consulting SRL', cui: 'RO12345678', valoareFaraTva: 4500, tva: 945, status: 'inregistrata', eFacturaStatus: 'Acceptată' },
-    { id: 'r2', tip: 'factura', nr: 'FCT-2026-002', date: '2026-09-10', client: 'Andrei Popescu', cui: '1234567890123', valoareFaraTva: 1200, tva: 252, status: 'in-asteptare', eFacturaStatus: 'În așteptare' },
-    { id: 'r3', tip: 'notafactura', nr: 'NF-2026-003', date: '2026-09-18', client: 'Marius Ionescu', cui: '9876543210987', valoareFaraTva: 800, tva: 168, status: 'respinsa', statusDetail: 'CUI nevalid', eFacturaStatus: 'Respinsă' },
-    { id: 'r4', tip: 'factura', nr: 'FCT-2026-004', date: '2026-09-25', client: 'Presta Consulting SRL', cui: 'RO12345678', valoareFaraTva: 3200, tva: 672, status: 'inregistrata', eFacturaStatus: 'Acceptată' },
+    { id: 'r1', tip: 'factura', nr: 'FCT-2026-001', date: '2026-09-02', client: 'Presta Consulting SRL', cui: 'RO12345678', valoareFaraTva: lei(4500), tva: lei(945), status: 'inregistrata', eFacturaStatus: 'Acceptată' },
+    { id: 'r2', tip: 'factura', nr: 'FCT-2026-002', date: '2026-09-10', client: 'Andrei Popescu', cui: '1234567890123', valoareFaraTva: lei(1200), tva: lei(252), status: 'in-asteptare', eFacturaStatus: 'În așteptare' },
+    { id: 'r3', tip: 'notafactura', nr: 'NF-2026-003', date: '2026-09-18', client: 'Marius Ionescu', cui: '9876543210987', valoareFaraTva: lei(800), tva: lei(168), status: 'respinsa', statusDetail: 'CUI nevalid', eFacturaStatus: 'Respinsă' },
+    { id: 'r4', tip: 'factura', nr: 'FCT-2026-004', date: '2026-09-25', client: 'Presta Consulting SRL', cui: 'RO12345678', valoareFaraTva: lei(3200), tva: lei(672), status: 'inregistrata', eFacturaStatus: 'Acceptată' },
   ],
   expenses: [
-    { id: 'e1', tip: 'factura', nr: 'FCT-PRO-118', date: '2026-09-05', furnizor: 'CloudHost SRL', cui: 'RO87654321', valoareFaraTva: 120, tva: 25.2, status: 'inregistrata' },
-    { id: 'e2', tip: 'bon-fiscal', nr: 'BF-4471', date: '2026-09-12', furnizor: 'Carrefour', cui: 'RO11223344', valoareFaraTva: 85.5, tva: 17.96, status: 'inregistrata' },
-    { id: 'e3', tip: 'factura', nr: 'FCT-PRO-121', date: '2026-09-20', furnizor: 'Office Supplies SA', cui: 'RO55667788', valoareFaraTva: 340, tva: 71.4, status: 'respinsa', statusDetail: 'Document neconform' },
+    { id: 'e1', tip: 'factura', nr: 'FCT-PRO-118', date: '2026-09-05', furnizor: 'CloudHost SRL', cui: 'RO87654321', valoareFaraTva: lei(120), tva: lei(25.2), status: 'inregistrata' },
+    { id: 'e2', tip: 'bon-fiscal', nr: 'BF-4471', date: '2026-09-12', furnizor: 'Carrefour', cui: 'RO11223344', valoareFaraTva: lei(85.5), tva: lei(17.96), status: 'inregistrata' },
+    { id: 'e3', tip: 'factura', nr: 'FCT-PRO-121', date: '2026-09-20', furnizor: 'Office Supplies SA', cui: 'RO55667788', valoareFaraTva: lei(340), tva: lei(71.4), status: 'respinsa', statusDetail: 'Document neconform' },
   ],
   clients: [
     { id: 'c1', denumire: 'Presta Consulting SRL', cui: 'RO12345678', email: 'contact@presta.ro', telefon: '0721 111 222', oras: 'București' },
@@ -53,9 +54,9 @@ export const seedData: AppData = {
     { id: 'c3', denumire: 'Marius Ionescu', cui: '9876543210987', email: 'm.ionescu@mail.ro', telefon: '0742 555 666', oras: 'Timișoara' },
   ],
   declarations: [
-    { id: 'd1', an: 2026, luna: 3, venituri: 12500, cheltuieli: 1800, status: 'transmisa', dataInregistrare: '2026-04-10', dataTrimitere: '2026-04-15' },
-    { id: 'd2', an: 2026, luna: 6, venituri: 14200, cheltuieli: 2100, status: 'in-asteptare', dataInregistrare: '2026-07-08' },
-    { id: 'd3', an: 2026, luna: 9, venituri: 9680, cheltuieli: 546, status: 'inregistrata', dataInregistrare: '2026-09-28' },
+    { id: 'd1', an: 2026, luna: 3, venituri: lei(12500), cheltuieli: lei(1800), status: 'transmisa', dataInregistrare: '2026-04-10', dataTrimitere: '2026-04-15' },
+    { id: 'd2', an: 2026, luna: 6, venituri: lei(14200), cheltuieli: lei(2100), status: 'in-asteptare', dataInregistrare: '2026-07-08' },
+    { id: 'd3', an: 2026, luna: 9, venituri: lei(9680), cheltuieli: lei(546), status: 'inregistrata', dataInregistrare: '2026-09-28' },
   ],
   documents: [
     { id: 'doc1', nume: 'FCT-2026-001.pdf', data: '2026-09-02', categoria: 'Facturi' },

@@ -12,6 +12,7 @@
  */
 import type { PfaProfile } from '../models';
 import type { RuleRelease } from '../fiscal/rules';
+import type { Bani } from '../money';
 
 /** Lifecycle status of a snapshot. */
 export type SnapshotStatus = 'computed' | 'superseded' | 'void';
@@ -19,16 +20,24 @@ export type SnapshotStatus = 'computed' | 'superseded' | 'void';
 /** The frozen inputs a calculation ran on. */
 export interface CalculationInput {
   profile: PfaProfile;
-  /** Total revenues (valoareFaraTva), lei. */
-  revenues: number;
-  /** Total expenses (valoareFaraTva), lei. */
-  expenses: number;
+  /**
+   * Total revenues (valoareFaraTva), **integer bani** (Phase 10).
+   *
+   * This value is hashed. `canonicalize` emits a number as `String(value)`, so the unit is baked into the
+   * digest's bytes: `7700` lei and `770000` bani hash to different strings. A persisted-data migration that
+   * converts it MUST re-derive `inputsHash` and keep the old digest — see `preMigrationInputsHash` and
+   * `docs/ai/phases/10_money_precision.md` §2.3.
+   */
+  revenues: Bani;
+  /** Total expenses (valoareFaraTva), **integer bani**. Also hashed. */
+  expenses: Bani;
 }
 
 /** One labeled line of the calculation breakdown. */
 export interface CalculationLine {
   label: string;
-  value: number;
+  /** Integer **bani**. Not hashed — `calculationLines` are outside the digest payload. */
+  value: Bani;
   /**
    * B-19: this line's amount is NOT grounded in an applicable rule, so it must not be presented as
    * an established figure. It is a marker on the LINE, deliberately not a change to the amount —
@@ -42,7 +51,8 @@ export interface CalculationLine {
 
 /** Final result of the calculation. */
 export interface CalculationOutput {
-  total: number;
+  /** Integer **bani**. Not hashed. */
+  total: Bani;
 }
 
 /** Immutable audit record of a single calculation. */

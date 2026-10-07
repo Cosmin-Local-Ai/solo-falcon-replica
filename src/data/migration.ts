@@ -25,6 +25,8 @@
 import type { CaenCode, PfaIdentity, PfaProfile } from '../domain/models';
 import { computeInputsHashSync } from '../domain/snapshots/hashSync';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
+import { baniFromLei, lei, type Bani } from '../domain/money';
+import type { Declaration, Expense, Revenue } from './types';
 import { localYear, now, toInstantISO } from '../domain/date';
 import type { SettingsState } from './types';
 import type { PersistedAppData } from './schema';
@@ -48,8 +50,14 @@ export const DATA_VERSION_DATES = 3;
  * feed it, so it could only ever resolve `not_applicable`. See `migrateVatExceedanceDateV4`.
  */
 export const DATA_VERSION_VAT_DATE = 4;
+/**
+ * Phase 10 step 5: money stops being a float number of lei and becomes an integer number of **bani**.
+ * See `docs/ai/phases/10_money_precision.md` §2.2 — this is the step that touches the user's money, so it
+ * is the one step in the chain that must never change a value by accident.
+ */
+export const DATA_VERSION_MONEY_BANI = 5;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_VAT_DATE;
+export const CURRENT_DATA_VERSION = DATA_VERSION_MONEY_BANI;
 
 export interface MigrationStep {
   readonly from: number;
@@ -110,7 +118,7 @@ export function legacyProfileFromSettings(s: SettingsState, instant: Date = now(
     otherIncome: [],
     socialInsuranceStatus: 'neplata',
     vatExempt: false,
-    cashFloorLei: 0,
+    cashFloorLei: lei(0),
     identity: absorbCompanyIdentity(
       {
         nume: p.nume,
@@ -301,6 +309,152 @@ export function migrateVatExceedanceDateV4(data: PersistedAppData): PersistedApp
   return { ...data, version: DATA_VERSION_VAT_DATE };
 }
 
+/**
+ * One stored money value whose move to integer bani was not a lossless unit change.
+ *
+ * The brief's rule is that such a value must **surface, not vanish**. Throwing is the wrong instrument
+ * here: a throwing step quarantines the whole payload and the save effect then overwrites the main key
+ * with seed data, so the user's money becomes *less* reachable, not more. The conversion therefore
+ * completes and records what it had to decide.
+ */
+export interface MoneyPrecisionNotice {
+  collection: 'revenues' | 'expenses' | 'declarations' | 'profile' | 'snapshot';
+  /** The record's own id; for a snapshot, its `calculationId`; for the profile, `'profile'`.
+   * A record with no id is reported as `'<no id>'` rather than skipped — a missing id is itself a fact. */
+  id: string;
+  field: string;
+  /** The value exactly as it was stored, in lei. Kept verbatim so the user can see what changed. */
+  original: number;
+  /** The bani it became. **Omitted** when the value could not be represented at all — never `0`. */
+  converted?: Bani;
+  reason: 'sub-ban-precision' | 'non-finite';
+}
+
+/**
+ * The v4→v5 unit conversion: every stored money field goes from float lei to integer bani.
+ *
+ * Two things this deliberately is NOT:
+ * - It is **not** CF art. 66 rounding. Art. 66 rounds to a whole leu, so applying it here would turn a
+ *   stored revenue of `85.5` lei into `86` lei — a silent change to the user's money. Only
+ *   `roundArt66` in `domain/money.ts` is allowed to change a *value*, and only at the three tax lines.
+ * - It is **not** `Math.round(x * 100)`, the function this phase exists to remove. `baniFromLei` scales
+ *   through `Decimal`, so `71.4` becomes exactly `7140` instead of `7140.000000000001`.
+ *
+ * A value with sub-ban precision (`674.504` lei → `67 450,4` bani) is taken to the nearest ban with
+ * **half-DOWN** ties — the same direction art. 66 takes („până la 50 de bani inclusiv”), so migration and
+ * domain never disagree — and it is reported. A non-finite value is carried through **unchanged** and
+ * reported; it is never replaced by `0`, because a fabricated zero is the failure the previous phase's
+ * invariants forbid.
+ */
+export function convertMoneyToBani(input: PersistedAppData): {
+  data: PersistedAppData;
+  notices: MoneyPrecisionNotice[];
+} {
+  const notices: MoneyPrecisionNotice[] = [];
+
+  // The payload arriving here is a v4 payload: its money fields are typed `Bani` only because the load
+  // gate casts, and they still hold lei. The brand describes the post-migration world, not this one.
+  const convert = (value: number, collection: MoneyPrecisionNotice['collection'], id: string, field: string): Bani => {
+    const { bani, exact } = baniFromLei(value);
+    if (bani === null) {
+      notices.push({ collection, id, field, original: value, reason: 'non-finite' });
+      return value as Bani; // preserved verbatim — dropped or zeroed would both be worse
+    }
+    if (!exact) notices.push({ collection, id, field, original: value, converted: bani, reason: 'sub-ban-precision' });
+    return bani;
+  };
+
+  const convertProfile = (profile: PfaProfile, id: string): PfaProfile => {
+    const next: PfaProfile = {
+      ...profile,
+      cashFloorLei: convert(profile.cashFloorLei as number, 'profile', id, 'cashFloorLei'),
+    };
+    // Omit, never null: no persisted money field is `.nullable()`, so writing `null` would fail
+    // `safeParse` on the next load and quarantine the payload. Absence must stay absence.
+    if (profile.salaryIncomeLei !== undefined) {
+      next.salaryIncomeLei = convert(profile.salaryIncomeLei as number, 'profile', id, 'salaryIncomeLei');
+    }
+    return next;
+  };
+
+  const convertSnapshot = (snapshot: TaxCalculationSnapshot): TaxCalculationSnapshot => {
+    const profile = convertProfile(snapshot.inputSnapshot.profile, snapshot.calculationId);
+    const revenues = convert(snapshot.inputSnapshot.revenues as number, 'snapshot', snapshot.calculationId, 'inputSnapshot.revenues');
+    const expenses = convert(snapshot.inputSnapshot.expenses as number, 'snapshot', snapshot.calculationId, 'inputSnapshot.expenses');
+    const inputSnapshot = { ...snapshot.inputSnapshot, profile, revenues, expenses };
+
+    const calculationLines = snapshot.calculationLines.map((line) => ({
+      ...line,
+      value: convert(line.value as number, 'snapshot', snapshot.calculationId, 'calculationLines.value'),
+    }));
+    const output = { total: convert(snapshot.output.total as number, 'snapshot', snapshot.calculationId, 'output.total') };
+
+    // `canonicalize` writes a number as `String(value)`, so the unit is baked into the digest's bytes:
+    // `7700` and `770000` hash differently. Re-derive, and keep the digest that was recorded at
+    // calculation time — same contract as `backfillSnapshotIdentity` above.
+    const untouched =
+      inputSnapshot.revenues === snapshot.inputSnapshot.revenues &&
+      inputSnapshot.expenses === snapshot.inputSnapshot.expenses &&
+      inputSnapshot.profile === snapshot.inputSnapshot.profile;
+    if (untouched) {
+      return { ...snapshot, calculationLines, output };
+    }
+    return {
+      ...snapshot,
+      inputSnapshot,
+      calculationLines,
+      output,
+      inputsHash: computeInputsHashSync(inputSnapshot),
+      preMigrationInputsHash: snapshot.preMigrationInputsHash ?? snapshot.inputsHash,
+    };
+  };
+
+  const data: PersistedAppData = {
+    ...input,
+    version: DATA_VERSION_MONEY_BANI,
+    revenues: input.revenues.map((r: Revenue) => ({
+      ...r,
+      valoareFaraTva: convert(r.valoareFaraTva as number, 'revenues', r.id ?? '<no id>', 'valoareFaraTva'),
+      tva: convert(r.tva as number, 'revenues', r.id ?? '<no id>', 'tva'),
+    })),
+    ...(input.expenses
+      ? {
+          expenses: input.expenses.map((e: Expense) => ({
+            ...e,
+            valoareFaraTva: convert(e.valoareFaraTva as number, 'expenses', e.id ?? '<no id>', 'valoareFaraTva'),
+            tva: convert(e.tva as number, 'expenses', e.id ?? '<no id>', 'tva'),
+          })),
+        }
+      : {}),
+    ...(input.declarations
+      ? {
+          declarations: input.declarations.map((d: Declaration) => ({
+            ...d,
+            venituri: convert(d.venituri as number, 'declarations', d.id ?? '<no id>', 'venituri'),
+            cheltuieli: convert(d.cheltuieli as number, 'declarations', d.id ?? '<no id>', 'cheltuieli'),
+          })),
+        }
+      : {}),
+    ...(input.profile ? { profile: convertProfile(input.profile, 'profile') } : {}),
+    ...(input.snapshots ? { snapshots: input.snapshots.map(convertSnapshot) } : {}),
+  };
+
+  return { data, notices };
+}
+
+/**
+ * Phase 10 step 5 (`4 → 5`): stored money becomes integer bani. See `convertMoneyToBani` and
+ * `docs/ai/phases/10_money_precision.md` §2.2.
+ *
+ * The notices it produces are returned by `convertMoneyToBani`; the chain's signature has no channel for
+ * them, so they are carried on the payload under `moneyNotices` (declared in `data/schema.ts`, because
+ * zod strips undeclared keys and would erase the report on the next load).
+ */
+export function migrateMoneyBaniV5(data: PersistedAppData): PersistedAppData {
+  const { data: converted, notices } = convertMoneyToBani(data);
+  return notices.length ? { ...converted, moneyNotices: notices } : converted;
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -333,6 +487,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Profile may now carry the date the TVA ceiling was exceeded. Nothing was backfilled: no legacy field records that event, and an invented date would invent a filing deadline.',
     apply: migrateVatExceedanceDateV4,
+  },
+  {
+    from: DATA_VERSION_VAT_DATE,
+    to: DATA_VERSION_MONEY_BANI,
+    name: 'money-bani',
+    summary:
+      'Banii se stochează acum ca număr întreg de bani (1 leu = 100 de bani), nu ca zecimale de lei. Valorile cu precizie subun ban au fost rotunjite la cel mai apropiat ban (semn +50 în jos) și sunt raportate, nu ascunse.',
+    apply: migrateMoneyBaniV5,
   },
 ];
 
