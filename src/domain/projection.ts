@@ -2,7 +2,7 @@ import type { AppData } from '../data/types';
 import Decimal from 'decimal.js-light';
 import { selectMonthly, selectYtd } from './aggregation';
 import { daysInMonth } from './date';
-import { allocateBani, toBaniNearest, type Bani } from './money';
+import { allocateBani, subBani, toBaniNearest, type Bani } from './money';
 
 /**
  * Projection v1 — transparent current run rate (Step 13, Part B).
@@ -89,10 +89,13 @@ export function selectProjectionV1(data: AppData, asOfDate: string): ProjectionV
     netPerMonth: rate.net.toNumber(),
   };
 
+  const annualRevenue = toBaniNearest(rate.revenue.times(12));
+  const annualExpenses = toBaniNearest(rate.expenses.times(12));
   const annualProjected: Totals = {
-    revenue: toBaniNearest(rate.revenue.times(12)),
-    expenses: toBaniNearest(rate.expenses.times(12)),
-    net: toBaniNearest(rate.net.times(12)),
+    revenue: annualRevenue,
+    expenses: annualExpenses,
+    // Derived, not independently rounded — see the note above the projected shares.
+    net: subBani(annualRevenue, annualExpenses),
   };
 
   const monthly = selectMonthly(data, asOfDate);
@@ -101,16 +104,25 @@ export function selectProjectionV1(data: AppData, asOfDate: string): ProjectionV
   // Projected months are ALLOCATED, not divided-and-rounded one at a time. Rounding each month on its
   // own would let the 12 entries drift away from the year they are drawn from. `allocateBani` hands the
   // leftover bani to the earliest months, so the projected months sum exactly to the projected subtotal.
-  const actualCount = Math.min(12, Math.max(0, Number(asOfMonth.slice(5, 7)) || 0));
+  // actualCount MUST agree with the loop's own predicate below (`month <= asOfMonth`), otherwise the
+  // share arrays are the wrong length and a projected month indexes past the end. An asOfDate before
+  // January makes every month projected (0 actual), and one after December makes every month actual.
+  const firstMonth = `${fiscalYear}-01`;
+  const lastMonth = `${fiscalYear}-12`;
+  const actualCount =
+    asOfMonth >= lastMonth ? 12 : asOfMonth < firstMonth ? 0 : Number(asOfMonth.slice(5, 7));
   const projectedCount = 12 - actualCount;
+  // `net` is DERIVED by subtraction, never allocated on its own. If each of the three were rounded
+  // independently, a single row could show revenue 12 600 − expenses 1 059 = net 11 542 and fail the
+  // reader's own arithmetic. Deriving it makes every row add up AND makes the rows sum exactly to
+  // annualProjected.net, because allocateBani() sums exactly to its total.
   const shares =
     projectedCount > 0
       ? {
           revenue: allocateBani(toBaniNearest(rate.revenue.times(projectedCount)), projectedCount),
           expenses: allocateBani(toBaniNearest(rate.expenses.times(projectedCount)), projectedCount),
-          net: allocateBani(toBaniNearest(rate.net.times(projectedCount)), projectedCount),
         }
-      : { revenue: [] as Bani[], expenses: [] as Bani[], net: [] as Bani[] };
+      : { revenue: [] as Bani[], expenses: [] as Bani[] };
 
   const series: ProjectionMonth[] = [];
   let projectedIndex = 0;
@@ -125,7 +137,7 @@ export function selectProjectionV1(data: AppData, asOfDate: string): ProjectionV
         month,
         revenue: shares.revenue[i],
         expenses: shares.expenses[i],
-        net: shares.net[i],
+        net: subBani(shares.revenue[i], shares.expenses[i]),
         kind: 'projected',
       });
     }

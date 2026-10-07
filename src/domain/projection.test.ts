@@ -119,15 +119,19 @@ describe('selectProjectionV1', () => {
     // elapsed = 8 full months + 15/30 = 8.5
     expect(p.elapsedMonths).toBe(8.5);
     expect(p.runRate.revenuePerMonth).toBe(lei(126)); // 1071 / 8.5
-    expect(p.runRate.expensesPerMonth).toBeCloseTo(180 / 17, 10); // 90 / 8.5
-    expect(p.runRate.netPerMonth).toBeCloseTo(1962 / 17, 10); // 981 / 8.5
+    // A run rate is NOT money: it is an unbranded FRACTIONAL BANI figure, so it is 100x the lei
+    // number and may legitimately keep fractions. It can never reach formatBani*() or persistence.
+    expect(p.runRate.expensesPerMonth).toBeCloseTo(18_000 / 17, 10); // 9 000 bani / 8.5
+    expect(p.runRate.netPerMonth).toBeCloseTo(196_200 / 17, 10); // 98 100 bani / 8.5
   });
 
   it('computes annual projection as run rate x 12', () => {
     const p = selectProjectionV1(midYearData(), '2026-09-15');
     expect(p.annualProjected.revenue).toBe(lei(1512)); // 126 * 12
-    expect(p.annualProjected.expenses).toBeCloseTo(2160 / 17, 10); // (180/17) * 12
-    expect(p.annualProjected.net).toBeCloseTo(23544 / 17, 10); // (1962/17) * 12
+    // annualProjected IS money, so it is a whole number of bani: 12 705.88 -> 12 706.
+    expect(p.annualProjected.expenses).toBeCloseTo(216_000 / 17, 0); // (18 000/17) * 12
+    // net is DERIVED from the two rounded figures (151 200 - 12 706), never rounded on its own.
+    expect(p.annualProjected.net).toBe(151_200 - 12_706);
   });
 
   it('builds a 12-month series with the correct actual/projected split', () => {
@@ -146,8 +150,11 @@ describe('selectProjectionV1', () => {
     expect(p.series[2]).toEqual({ month: '2026-03', revenue: lei(357), expenses: lei(0), net: lei(357), kind: 'actual' });
     expect(p.series[3]).toEqual({ month: '2026-04', revenue: lei(0), expenses: lei(90), net: lei(-90), kind: 'actual' });
     expect(p.series[8]).toEqual({ month: '2026-09', revenue: lei(0), expenses: lei(0), net: lei(0), kind: 'actual' });
-    expect(p.series[9]).toEqual({ month: '2026-10', revenue: lei(126), expenses: lei(180) / 17, net: lei(1962) / 17, kind: 'projected' });
-    expect(p.series[11]).toEqual({ month: '2026-12', revenue: lei(126), expenses: lei(180) / 17, net: lei(1962) / 17, kind: 'projected' });
+    // The 3 projected months share 3 176 bani of expenses (1 058.82 x 3 = 3 176.47 -> 3 176),
+    // ALLOCATED by largest remainder as 1 059 + 1 059 + 1 058 so they sum EXACTLY to the subtotal.
+    // net is the row's own revenue - expenses, so every row adds up on the screen.
+    expect(p.series[9]).toEqual({ month: '2026-10', revenue: lei(126), expenses: lei(10.59), net: lei(115.41), kind: 'projected' });
+    expect(p.series[11]).toEqual({ month: '2026-12', revenue: lei(126), expenses: lei(10.58), net: lei(115.42), kind: 'projected' });
   });
 
   it('marks all 12 months actual when asOfDate is the last day of the fiscal year', () => {
@@ -198,7 +205,7 @@ describe('selectProjectionV1', () => {
     const p = selectProjectionV1(data, '2026-02-01');
     // elapsed = 1 + 1/28 = 29/28
     expect(p.elapsedMonths).toBeCloseTo(29 / 28, 10);
-    expect(p.runRate.revenuePerMonth).toBeCloseTo(3332 / 29, 10); // 119 * 28 / 29
+    expect(p.runRate.revenuePerMonth).toBeCloseTo(11_900 * 28 / 29, 10); // 11 900 bani x 28/29
     expect(p.series[0].kind).toBe('actual');
     expect(p.series[1].kind).toBe('actual');
     expect(p.series[2].kind).toBe('projected');
@@ -258,14 +265,14 @@ describe('selectProjectionV1', () => {
     // 2026-02-28: 1 full month + 28/28 = exactly 2
     const p28 = selectProjectionV1(data, '2026-02-28');
     expect(p28.elapsedMonths).toBe(2);
-    expect(p28.runRate.revenuePerMonth).toBe(119 / 2);
+    expect(p28.runRate.revenuePerMonth).toBe(lei(119) / 2);
     expect(p28.series[1].kind).toBe('actual'); // February is actual
     expect(p28.series[2].kind).toBe('projected'); // March is projected
 
     // 2026-06-30: 5 full months + 30/30 = exactly 6
     const p30 = selectProjectionV1(data, '2026-06-30');
     expect(p30.elapsedMonths).toBe(6);
-    expect(p30.runRate.revenuePerMonth).toBe(119 / 6);
+    expect(p30.runRate.revenuePerMonth).toBe(lei(119) / 6);
     expect(p30.series[5].kind).toBe('actual'); // June is actual
     expect(p30.series[6].kind).toBe('projected'); // July is projected
   });
@@ -277,7 +284,7 @@ describe('selectProjectionV1', () => {
     });
     const p = selectProjectionV1(data, '2028-02-29');
     expect(p.elapsedMonths).toBe(2); // 1 full month + 29/29
-    expect(p.runRate.revenuePerMonth).toBe(119 / 2);
+    expect(p.runRate.revenuePerMonth).toBe(lei(119) / 2);
     expect(p.series.map((m) => m.month)).toEqual([
       '2028-01', '2028-02', '2028-03', '2028-04', '2028-05', '2028-06',
       '2028-07', '2028-08', '2028-09', '2028-10', '2028-11', '2028-12',
