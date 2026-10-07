@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AppData, Expense, Revenue, SettingsState } from '../data/types';
 import type { PfaIdentity, PfaProfile } from './models';
-import { inPeriod, selectMonthly, selectYtd } from './aggregation';
+import { inPeriod, selectMonthly, selectYtd, revenueFiscalDate, expenseFiscalDate } from './aggregation';
 
 function identity(): PfaIdentity {
   return {
@@ -360,5 +360,68 @@ describe('source-data reactivity', () => {
     const before = selectYtd(data, '2026-12-31');
     const after = selectYtd({ ...data, revenues: [data.revenues[0]] }, '2026-12-31');
     expect(after.revenue).toBe(before.revenue - 238);
+  });
+});
+
+// --- Phase 9: the FISCAL date is the collected / paid date -------------------------------
+// CF art. 68 alin. (2) lit. a) measures venit brut by „sumele încasate" (amounts COLLECTED) and
+// art. 68 alin. (4) lit. b) attributes an expense to „anului în cursul căruia au fost plătite"
+// (the year it was PAID). The consequence is ATTRIBUTION, not punishment: a record collected or
+// paid in a later year moves to that year, it is not disallowed. There is no late-payment
+// disallowance in the Cod fiscal — see docs/ai/research/10 §1.
+
+describe('fiscal date (collected / paid)', () => {
+  it('treats a legacy record\'s single `date` as the fiscal date', () => {
+    // Pinned deliberately: the v2->v3 migration refuses to invent a collection or payment event,
+    // so a payload with one ambiguous date is read as if that date were the fiscal date.
+    const r = revenue('2026-05-04', 100, 19);
+    const e = expense('2026-05-06', 50, 9.5);
+    expect(revenueFiscalDate(r)).toBe('2026-05-04');
+    expect(expenseFiscalDate(e)).toBe('2026-05-06');
+    const ytd = selectYtd(makeData({ revenues: [r], expenses: [e] }), '2026-12-31');
+    expect(ytd.revenue).toBe(119);
+    expect(ytd.expenses).toBe(59.5);
+  });
+
+  it('selects a revenue on its COLLECTED date, not its document date', () => {
+    const collectedNextYear: Revenue = { ...revenue('2026-12-20', 100, 19), collected: '2027-01-05' };
+    const in2026 = selectYtd(makeData({ revenues: [collectedNextYear] }), '2026-12-31');
+    expect(in2026.revenue).toBe(0);
+    const in2027 = selectYtd(
+      makeData({ profile: profile(2027), revenues: [collectedNextYear] }),
+      '2027-12-31',
+    );
+    expect(in2027.revenue).toBe(119);
+  });
+
+  it('selects an expense on its PAID date, not its document date', () => {
+    const paidNextYear: Expense = { ...expense('2026-12-30', 50, 9.5), paid: '2027-02-01' };
+    expect(selectYtd(makeData({ expenses: [paidNextYear] }), '2026-12-31').expenses).toBe(0);
+    expect(
+      selectYtd(makeData({ profile: profile(2027), expenses: [paidNextYear] }), '2027-12-31').expenses,
+    ).toBe(59.5);
+  });
+
+  it('honours asOfDate against the collected date', () => {
+    const r: Revenue = { ...revenue('2026-01-05', 100, 19), collected: '2026-06-30' };
+    expect(selectYtd(makeData({ revenues: [r] }), '2026-06-29').revenue).toBe(0);
+    expect(selectYtd(makeData({ revenues: [r] }), '2026-06-30').revenue).toBe(119);
+  });
+
+  it('buckets monthly totals by the fiscal date', () => {
+    const r: Revenue = { ...revenue('2026-03-31', 100, 19), collected: '2026-04-02' };
+    const e: Expense = { ...expense('2026-03-31', 50, 9.5), paid: '2026-04-03' };
+    const monthly = selectMonthly(makeData({ revenues: [r], expenses: [e] }), '2026-12-31');
+    // The document month never appears; the collected/paid month does.
+    expect(monthly.has('2026-03')).toBe(false);
+    expect(monthly.get('2026-04')).toEqual({ revenue: 119, expenses: 59.5, net: 59.5 });
+  });
+
+  it('a collected date earlier than the document date still attributes normally', () => {
+    // Payment terms are not a legality question here: art. 68 alin. (4) lit. a) only requires the
+    // expense be „justificate prin documente", so the issue date is never a timing gate.
+    const r: Revenue = { ...revenue('2026-06-10', 100, 19), collected: '2026-02-01' };
+    expect(revenueFiscalDate(r)).toBe('2026-02-01');
+    expect(selectYtd(makeData({ revenues: [r] }), '2026-12-31').revenue).toBe(119);
   });
 });

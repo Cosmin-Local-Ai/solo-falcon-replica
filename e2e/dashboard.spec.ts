@@ -269,7 +269,7 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(legislation.getByText('Nicio modificare viitoare verificată.')).toBeVisible();
   });
 
-  test('Observații: renders all 12 insights with severity badges', async ({ page }) => {
+  test('Observații: renders all 13 insights with severity badges', async ({ page }) => {
     await page.goto('/dashboard');
 
     const insights = sectionWith(page, 'Observații', 'h2');
@@ -289,8 +289,14 @@ test.describe('Dashboard — section content (seed data)', () => {
     // estimate is computed.
     await expect(insights.getByText('Rezervă fiscală sub țintă')).toBeVisible();
 
-    // Severity badges: 7 Urgent, 4 Atenție (2 deadlines + completeness + reserve), 1 Info (tax).
-    await expect(insights.getByText('Urgent', { exact: true })).toHaveCount(7);
+    // Phase 9 / B-20: the two contribution FLOORS (CAS_MIN_BASE, CASS_MIN_BASE) are breached —
+    // the seed's net income is far below both — and `breached` is now driven off the domain status,
+    // so they reach Observații as ONE canonical CASS/CAS alert (canonicalCassCas collapses them).
+    await expect(insights.getByText('Prag depășit:')).toHaveCount(1);
+
+    // Severity badges: 8 Urgent (7 overdue deadlines + 1 threshold breach), 4 Atenție (2 deadlines +
+    // completeness + reserve), 1 Info (tax).
+    await expect(insights.getByText('Urgent', { exact: true })).toHaveCount(8);
     await expect(insights.getByText('Atenție', { exact: true })).toHaveCount(4);
     await expect(insights.getByText('Info', { exact: true })).toHaveCount(1);
   });
@@ -365,6 +371,91 @@ test.describe('Dashboard — empty state', () => {
     // No cockpit cards or dashboard sections in the empty state.
     await expect(page.locator('.stat-card')).toHaveCount(0);
     await expect(page.locator('h2.card-title')).toHaveCount(0);
+  });
+});
+
+// --- Phase 9, item 3: an event-relative deadline resolved from the profile ---------------------
+// `computeDeadlines` used to be called with only `{ taxYear, asOfDate }`, so the one event-relative
+// deadline a real profile can resolve (`pfa_estimated_declaration`) stayed `date: null` and never
+// reached the UI. This test proves the wiring end to end, and that the PFA start date does NOT
+// fabricate a VAT registration deadline (each event-relative rule reads only its own event).
+test.describe('Dashboard — PFA start date resolves an event-relative deadline', () => {
+  test('renders the estimated-declaration deadline, and no invented VAT deadline', async ({ page }) => {
+    // The other suites run with asOf = today, so the start date is derived from the browser clock:
+    // start = today + 5 days → deadline = start + 15 days = today + 10 days, always upcoming.
+    await page.addInitScript(
+      ([key]: [string]) => {
+        const iso = (d: Date) => d.toISOString().slice(0, 10);
+        const start = new Date(Date.now() + 5 * 86_400_000);
+        const dataset = {
+          version: 3,
+          profile: {
+            id: 'profile-dates-1',
+            pfaStartYear: 2026,
+            pfaStartDate: iso(start),
+            fiscalYear: 2026,
+            regime: 'impozit_pe_venit',
+            caen: '6201',
+            salaryStatus: 'nu',
+            pensionStatus: 'nu',
+            otherIncome: [],
+            socialInsuranceStatus: 'obligatoriu',
+            vatExempt: false,
+            cashFloorLei: 0,
+            identity: {
+              nume: 'Popescu Andrei',
+              cnp: '1234567890123',
+              adresa: 'Str. Libertății 12, Cluj-Napoca',
+              telefon: '0750 123 456',
+              email: 'andrei@popescuconsulting.ro',
+              denumire: 'Popescu Consulting SRL',
+              cui: 'RO4455667788990',
+              formaJuridica: 'SRL',
+              numarRegComert: 'J40/1234/2020',
+              adresaSocietate: 'Str. Libertății 12, Cluj-Napoca',
+              telefonSocietate: '0750 123 456',
+              emailSocietate: 'contact@popescuconsulting.ro',
+              contBancar: 'RO44 BACX 0000 0000 1234 5678 9000',
+              banca: 'BCR',
+            },
+            updatedAt: '2026-06-01T10:00:00.000Z',
+          },
+          revenues: [
+            {
+              id: 'rev-dates-1',
+              tip: 'factura',
+              nr: 'F2026-001',
+              date: '2026-06-15',
+              collected: '2026-06-20',
+              client: 'Client Test SRL',
+              cui: 'RO12345678',
+              valoareFaraTva: 1000,
+              tva: 0,
+              status: 'inregistrata',
+            },
+          ],
+          settings: {
+            cotaTva: 9,
+            company: { denumire: 'Popescu Consulting SRL', cui: 'RO4455667788990', numarRegComert: 'J40/1234/2020', adresa: 'Str. Libertății 12, Cluj-Napoca', caen: [] },
+            personal: { nume: 'Popescu Andrei', cnp: '1234567890123', adresa: 'Str. Libertății 12, Cluj-Napoca', telefon: '0750 123 456', email: 'andrei@popescuconsulting.ro' },
+            bankAccounts: [],
+            eFactura: { trimitere: 'manual', dateContact: '2026-06-01' },
+          },
+        };
+        localStorage.setItem(key, JSON.stringify(dataset));
+      },
+      [STORAGE_KEY],
+    );
+
+    await page.goto('/dashboard');
+
+    // Same section locator as the seed-data suite (`sectionWith` is scoped to that describe block).
+    const deadlines = page
+      .locator('section.card')
+      .filter({ has: page.locator('h3', { hasText: 'Termene limită' }) });
+    await expect(deadlines.getByText('Declarație estimativă PFA')).toBeVisible();
+    // The PFA start date must not resolve the VAT registration deadline: that event never happened.
+    await expect(deadlines.getByText('Înregistrare TVA')).toHaveCount(0);
   });
 });
 

@@ -142,6 +142,9 @@ export function getUpcomingDeadlines(data: AppData, asOfDate: string): Deadline[
     computeDeadlines(PFA_2026_SYSTEM_REAL_PACKAGE, {
       taxYear: data.profile.fiscalYear,
       asOfDate,
+      // Phase 9 item 3: the profile's PFA start date was never passed, so the only event-relative
+      // deadline that a real profile can resolve stayed `date: null` and never reached the UI.
+      pfaStartDate: data.profile.pfaStartDate,
     }),
     asOfDate,
   );
@@ -220,7 +223,11 @@ function buildSnapshot(
 ): DashboardSnapshotView {
   const taxYear = data.profile.fiscalYear;
   const completeness = assessCompleteness(data);
-  const deadlines = computeDeadlines(PFA_2026_SYSTEM_REAL_PACKAGE, { taxYear, asOfDate });
+  const deadlines = computeDeadlines(PFA_2026_SYSTEM_REAL_PACKAGE, {
+    taxYear,
+    asOfDate,
+    pfaStartDate: data.profile.pfaStartDate,
+  });
   const ytd = selectYtd(data, asOfDate);
   // Single source for both the snapshot rows and `DashboardData.thresholds` — the inline
   // duplicate that used to live here is what let the two paths drift.
@@ -251,7 +258,13 @@ function buildSnapshot(
         t.thresholdValue === 0 || t.currentValue === null
           ? 0
           : t.currentValue / t.thresholdValue,
-      breached: t.currentValue !== null && t.distance > 0,
+      // B-20: driven off the DOMAIN status, not re-derived from `distance` here.
+      // `distance` is `currentValue - thresholdValue`, so for a `min-base` (floor) row being *below*
+      // the floor is a breach — `distance < 0`. The old `distance > 0` inverted exactly the floor
+      // rows (CAS_MIN_BASE / CASS_MIN_BASE), so `breached` contradicted `thresholds.ts` `statusFor`,
+      // which already branches on the threshold type. `insights.ts` filters on this flag, which is
+      // why two real breaches were missing from Observații while Praguri showed `Depășit`.
+      breached: t.status === 'breached',
       type: t.affectedTax === 'vat' ? 'vat' : 'income',
       affectedTax: t.affectedTax,
     })),

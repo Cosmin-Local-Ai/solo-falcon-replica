@@ -7,7 +7,7 @@
 // calculations will use.
 
 import type { AppData } from '../data/types';
-import { selectMonthly, selectYtd, inPeriod, type MonthlyTotals, type YtdTotals } from './aggregation';
+import { selectMonthly, selectYtd, inPeriod, revenueFiscalDate, expenseFiscalDate, type MonthlyTotals, type YtdTotals } from './aggregation';
 import { selectProjectionV1, type ProjectionV1 } from './projection';
 import type { FiscalRule } from './fiscal/rules';
 import type {
@@ -55,15 +55,26 @@ type HasRecordFields = {
   nr: string;
 };
 
-function toLines<T extends HasRecordFields>(records: T[], asOfDate: string, fiscalYear: number): RecordLine[] {
-  return records.map(r => ({
-    id: r.id,
-    date: r.date,
-    total: r.valoareFaraTva + r.tva,
-    status: r.status,
-    counted: r.status === 'inregistrata' && inPeriod(r.date, asOfDate, fiscalYear),
-    document: { tip: r.tip, nr: r.nr },
-  }));
+function toLines<T extends HasRecordFields>(
+  records: T[],
+  asOfDate: string,
+  fiscalYear: number,
+  fiscalDate: (r: T) => string,
+): RecordLine[] {
+  return records.map(r => {
+    // The date shown and the date that decide `counted` are the SAME date: the fiscal date
+    // (collected / paid, falling back to the legacy `date`) — CF art. 68 alin. (2) lit. a) and
+    // alin. (4) lit. b). A line must never display a date that is not the one that made it count.
+    const date = fiscalDate(r);
+    return {
+      id: r.id,
+      date,
+      total: r.valoareFaraTva + r.tva,
+      status: r.status,
+      counted: r.status === 'inregistrata' && inPeriod(date, asOfDate, fiscalYear),
+      document: { tip: r.tip, nr: r.nr },
+    };
+  });
 }
 
 /** Single derived financial view for the whole app state.
@@ -77,8 +88,8 @@ export function selectFinancialDerived(data: AppData, asOfDate: string): Financi
     monthly: selectMonthly(data, asOfDate),
     projection: selectProjectionV1(data, asOfDate),
     lines: {
-      revenues: toLines(data.revenues, asOfDate, fiscalYear),
-      expenses: toLines(data.expenses, asOfDate, fiscalYear),
+      revenues: toLines(data.revenues, asOfDate, fiscalYear, revenueFiscalDate),
+      expenses: toLines(data.expenses, asOfDate, fiscalYear, expenseFiscalDate),
     },
   };
 }

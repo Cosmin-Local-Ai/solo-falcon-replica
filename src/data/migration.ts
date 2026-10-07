@@ -35,8 +35,14 @@ export const DATA_VERSION_BASE = 0;
 export const DATA_VERSION_PROFILE = 1;
 /** Phase 7 step 2: `profile.identity` becomes the one identity store (D-1). */
 export const DATA_VERSION_IDENTITY = 2;
+/**
+ * Phase 9 step 3: records may carry a **collected** date (`Revenue`) / **paid** date (`Expense`)
+ * — CF art. 68 alin. (2) lit. a) „sumele încasate" / art. 68 alin. (4) lit. b) „anului în cursul
+ * căruia au fost plătite". See `migratePaymentDatesV3` and `docs/ai/phases/09_payment_dates.md`.
+ */
+export const DATA_VERSION_DATES = 3;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_IDENTITY;
+export const CURRENT_DATA_VERSION = DATA_VERSION_DATES;
 
 export interface MigrationStep {
   readonly from: number;
@@ -248,6 +254,25 @@ export function backfillSnapshotIdentity(snapshot: TaxCalculationSnapshot): TaxC
   };
 }
 
+/**
+ * Phase 9 step 3 (`2 → 3`): the record schema now permits an optional **collected** date on
+ * `Revenue` and an optional **paid** date on `Expense`.
+ *
+ * **It backfills nothing, on purpose.** A legacy payload's single `date` is *interpreted* as the
+ * fiscal date by the read-side resolver (`domain/aggregation.ts` `revenueFiscalDate` /
+ * `expenseFiscalDate`). Copying `date` into `collected`/`paid` would manufacture a collection or
+ * payment event that was never recorded, and would make an unrecorded fact indistinguishable from a
+ * recorded one — the same class of error as the F-1 `canonicalize` defect, where a normalisation
+ * step silently asserted something the source never said. Absence is the honest state, so absence
+ * survives the step. This is the single place a future, *evidenced* backfill would live.
+ *
+ * The step is idempotent-safe and touches no bytes. It cannot change any `inputSnapshot` digest:
+ * `buildInputSnapshot` hashes `profile` plus two aggregate numbers, not the record arrays.
+ */
+export function migratePaymentDatesV3(data: PersistedAppData): PersistedAppData {
+  return { ...data, version: DATA_VERSION_DATES };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -264,6 +289,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Identity/contact data moved into the profile (company CAEN codes, cod TVA intracomunitar, mentiuni pe factură).',
     apply: migrateIdentityV2,
+  },
+  {
+    from: DATA_VERSION_IDENTITY,
+    to: DATA_VERSION_DATES,
+    name: 'payment-dates',
+    summary:
+      'Records may now carry a collected (revenue) / paid (expense) date. Nothing was backfilled: a legacy payload keeps a single date, which is read as the fiscal date.',
+    apply: migratePaymentDatesV3,
   },
 ];
 

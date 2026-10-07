@@ -39,6 +39,9 @@ export const revenueSchema = z.object({
   tip: z.enum(['factura', 'notafactura']),
   nr: z.string(),
   date: z.string(),
+  // Phase 9: the fiscal date for a revenue is the date it was COLLECTED (CF art. 68 alin. (2) lit. a).
+  // Optional — a legacy payload has only `date`, and no migration invents this value.
+  collected: z.string().optional(),
   client: z.string(),
   cui: z.string(),
   valoareFaraTva: nonNegative,
@@ -53,6 +56,9 @@ export const expenseSchema = z.object({
   tip: z.enum(['factura', 'bon-fiscal']),
   nr: z.string(),
   date: z.string(),
+  // Phase 9: the fiscal date for an expense is the date it was PAID (CF art. 68 alin. (4) lit. b).
+  // Optional — a legacy payload has only `date`, and no migration invents this value.
+  paid: z.string().optional(),
   furnizor: z.string(),
   cui: z.string(),
   valoareFaraTva: nonNegative,

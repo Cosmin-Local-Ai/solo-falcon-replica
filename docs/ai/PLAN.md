@@ -513,8 +513,7 @@ numbering stays readable.
     insights engine never alerts on a breached minimum base.
 - **Blocked by:** nothing — **complete**. Phase 9 (date semantics) is the next phase.
 
-### Phase 9 — Date semantics
-
+### Phase 9 — Date semantics — **DONE 2026-10-07** (`phases/09_payment_dates.md`)
 - **Correction:** date semantics are **absent**, not partial. There is a single `date` field per
   document (`aggregation.ts:85-87,96,102`; `derived.ts:48`); no issued / received / paid distinction.
 - **Exists today:** a `date` domain module and Romanian date handling (steps 27), deadline event types
@@ -594,9 +593,22 @@ numbering stays readable.
    The art. 68 alin. (4) gate is captured as an input gap, not faked into a rule.
 4. Open ADRs in `docs/ai/decisions/` for the fiscal corrections (only 07 and 09 exist today).
 5. Add e2e coverage for `Documents.tsx`, `EFactura.tsx`, `Expenses.tsx` and the Clients edit path
-   when the pages they exercise are next touched — the existing 24 e2e tests are dashboard-only.
+   when the pages they exercise are next touched — the existing 34 e2e tests (re-measured after
+   Phase 9) are dashboard/settings-only.
 6. Fix the miscited articles in `steps/16:50-54,84` **only** in new documents; the step file itself
    stays as historical record (01 §6.4).
 7. **Verification method for any future fiscal re-check: read amending acts directly.** The Portal
    Legislativ consolidated rendering of CF doc 312601 did not surface the OUG 8/2026 note on art. 68
    alin. (5), so a consolidated text can lag the act (phases/02 §11).
+8. **Phase 9 (date semantics) is DONE** (2026-10-07, `phases/09_payment_dates.md`) — `Revenue.collected`
+   and `Expense.paid` are the fiscal dates (art. 68 alin. (2) lit. a) / alin. (4) lit. b), aggregation and
+   the provenance lines select through one named accessor each, the chain gained an appended `2 → 3`
+   `payment-dates` step that backfills **nothing**, **B-20 is closed**, and `pfaStartDate` finally reaches
+   the deadline engine — via a **split** `DeadlineQuery` (`pfaStartDate` / `vatExceedanceMonth`), because the
+   brief's literal single-`eventDate` wording would have invented a VAT registration deadline. The falsified
+   15-day premise was **not** implemented. **Phase 10 (money representation + rounding policy, B-17) is next.**
+9. **Open a research question before Phase 10, not during it:** the rounding tie-break for the seeded
+   half-cent (`3 104,505` lei total, `674,505` lei income tax) is a **legal** question (how Declarația 120
+   rounds) and is unresearched. Also unverified and now load-bearing in the UI: `pfa_estimated_declaration`'s
+   „**art. 81** + 15 days" formula — `research/10` covers art. 80 only, so this repo has never verified the
+   article behind that deadline (`phases/09_payment_dates.md` §9).

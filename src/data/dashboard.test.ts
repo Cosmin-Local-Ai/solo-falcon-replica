@@ -13,6 +13,7 @@ import {
   getThresholdStatuses,
   buildThresholdBases,
   buildDashboardData,
+  getUpcomingDeadlines,
 } from './dashboard';
 import { seedData } from './seed';
 import { selectYtd } from '../domain/aggregation';
@@ -342,5 +343,79 @@ describe('getLegislationState (sync)', () => {
     const state = getLegislationState(makeData());
     expect(state.updatedAt).toBeNull();
     expect(state.items).toEqual([]);
+  });
+});
+
+// --- Phase 9, item 2: B-20 — `snapshot.thresholds[].breached` must agree with the domain ------
+// `buildSnapshot` used to re-derive the flag as `distance > 0`. `distance` is
+// `currentValue - thresholdValue`, so for a `min-base` (floor) row a breach is `distance < 0`:
+// the old expression inverted exactly the floor rows and contradicted `thresholds.ts` `statusFor`,
+// which already branches on the threshold type. `insights.ts` filters on this flag, so two real
+// breaches (CAS_MIN_BASE, CASS_MIN_BASE) never reached Observații while Praguri showed `Depășit`.
+describe('snapshot.thresholds[].breached (B-20)', () => {
+  const AS_OF_SEED = '2026-12-31';
+  // `buildDashboardData` derives asOfDate from `instant` in LOCAL time, so pass an unambiguous
+  // local date rather than an ISO string that a timezone could shift.
+  const INSTANT = new Date(2026, 11, 31, 12);
+
+  it('agrees with the domain status for every threshold row', async () => {
+    const tax = await getTaxEstimate(seedData, AS_OF_SEED);
+    const dashboard = buildDashboardData(seedData, tax, INSTANT);
+    for (const row of dashboard.thresholds) {
+      const snapRow = dashboard.snapshot.thresholds.find((s) => s.id === row.thresholdId);
+      expect(snapRow, `no snapshot row for ${row.thresholdId}`).toBeDefined();
+      expect(snapRow!.breached).toBe(row.status === 'breached');
+    }
+  });
+
+  it('marks a floor (min-base) row breached when the measured value is BELOW the floor', async () => {
+    const tax = await getTaxEstimate(seedData, AS_OF_SEED);
+    const dashboard = buildDashboardData(seedData, tax, INSTANT);
+    const floors = dashboard.thresholds.filter((t) => t.type === 'min-base');
+    expect(floors.map((t) => t.thresholdId).sort()).toEqual(['CASS_MIN_BASE', 'CAS_MIN_BASE']);
+    for (const floor of floors) {
+      // The seed's net income (7,494.50) is far below both statutory floors.
+      expect(floor.distance).toBeLessThan(0);
+      expect(floor.status).toBe('breached');
+      const snapRow = dashboard.snapshot.thresholds.find((s) => s.id === floor.thresholdId)!;
+      // This is the assertion that fails under the old `distance > 0` derivation.
+      expect(snapRow.breached).toBe(true);
+    }
+  });
+
+  it('surfaces the floor breach in Observații (the flag is what insights.ts filters on)', async () => {
+    const tax = await getTaxEstimate(seedData, AS_OF_SEED);
+    const dashboard = buildDashboardData(seedData, tax, INSTANT);
+    const breaches = dashboard.insights.filter((i) => i.title.startsWith('Prag depășit:'));
+    // CASS and CAS collapse into at most ONE canonical alert (canonicalCassCas), so exactly one.
+    expect(breaches).toHaveLength(1);
+    expect(breaches[0].severity).toBe('danger');
+    expect(breaches[0].id).toMatch(/^threshold-(CAS|CASS)_MIN_BASE$/);
+  });
+});
+
+// --- Phase 9, item 3: the profile's PFA start date reaches the deadline engine ----------------
+// `computeDeadlines` was called with only `{ taxYear, asOfDate }`, so the one event-relative
+// deadline a real profile can resolve stayed `date: null` and never reached the UI.
+describe('pfaStartDate reaches the deadline engine', () => {
+  it('resolves the PFA estimated declaration to a real date', () => {
+    const data = makeData({ profile: profile({ pfaStartDate: '2026-11-01' }) });
+    const upcoming = getUpcomingDeadlines(data, '2026-11-05');
+    const pfa = upcoming.find((d) => d.deadlineId === 'PFA_ESTIMATED_DECLARATION');
+    expect(pfa).toBeDefined();
+    expect(pfa!.date).toBe('2026-11-16'); // start_date + 15 days
+  });
+
+  it('degrades safely when the profile has no start date', () => {
+    const data = makeData(); // profile() carries no pfaStartDate
+    expect(data.profile.pfaStartDate).toBeUndefined();
+    const upcoming = getUpcomingDeadlines(data, '2026-11-05');
+    expect(upcoming.some((d) => d.deadlineId === 'PFA_ESTIMATED_DECLARATION')).toBe(false);
+  });
+
+  it('never resolves the VAT registration deadline from a PFA start date', () => {
+    const data = makeData({ profile: profile({ pfaStartDate: '2026-11-01' }) });
+    const upcoming = getUpcomingDeadlines(data, '2026-11-05');
+    expect(upcoming.some((d) => d.deadlineId === 'VAT_REGISTRATION')).toBe(false);
   });
 });

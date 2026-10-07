@@ -11,6 +11,16 @@ export interface Revenue {
   tip: 'factura' | 'notafactura';
   nr: string;
   date: string;
+  /**
+   * The date the amount was actually **collected** — the date that attributes this revenue to a
+   * fiscal year. CF art. 68 alin. (2) lit. a) measures venit brut by „sumele încasate" (amounts
+   * collected), so collection is the fiscally load-bearing date.
+   *
+   * Optional by design: a payload written before Phase 9 recorded a single `date`, and that date is
+   * read as the fiscal date (`domain/aggregation.ts` `revenueFiscalDate`). The v2→v3 migration
+   * deliberately does **not** invent a collection event. The invoice issue date is not a timing gate.
+   */
+  collected?: string;
   client: string;
   cui: string;
   valoareFaraTva: number;
@@ -28,6 +38,16 @@ export interface Expense {
   tip: 'factura' | 'bon-fiscal';
   nr: string;
   date: string;
+  /**
+   * The date the expense was actually **paid** — the date that attributes it to a fiscal year.
+   * CF art. 68 alin. (4) lit. b) requires expenses be „cuprinse în cheltuielile exercițiului
+   * financiar al anului în cursul căruia au fost plătite", i.e. the year of PAYMENT. The consequence
+   * is attribution, not punishment: a late-paid expense is not disallowed, it falls into the payment year.
+   *
+   * Optional by design; never invented by a migration. Art. 68 alin. (4) lit. a) only requires the
+   * expense be „justificate prin documente" — the invoice is the justificativ, its issue date is not a gate.
+   */
+  paid?: string;
   furnizor: string;
   cui: string;
   valoareFaraTva: number;

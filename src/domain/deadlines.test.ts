@@ -109,11 +109,12 @@ describe('computeDeadlines', () => {
     expect(result.filter((d) => d.taxYear === 2026)).toHaveLength(0);
   });
 
-  it('computes event-relative deadlines when eventDate is given', () => {
+  it('computes event-relative deadlines when each event date is given', () => {
     const result = computeDeadlines(rules, {
       taxYear: 2026,
       asOfDate: '2026-06-01',
-      eventDate: '2026-03-01',
+      pfaStartDate: '2026-03-01',
+      vatExceedanceMonth: '2026-03-15',
     });
     const pfa = result.find((d) => d.eventType === 'pfa_estimated_declaration');
     expect(pfa?.date).toBe('2026-03-16');
@@ -121,7 +122,33 @@ describe('computeDeadlines', () => {
     expect(vat?.date).toBe('2026-04-30');
   });
 
-  it('leaves event-relative dates null without eventDate', () => {
+  // Phase 9 (D-P9-7): each event-relative rule reads ONLY its own event. A PFA start date must not
+  // fabricate a VAT registration deadline for an exceedance that never happened.
+  it('does not resolve vat_registration from a PFA start date', () => {
+    const result = computeDeadlines(rules, {
+      taxYear: 2026,
+      asOfDate: '2026-06-01',
+      pfaStartDate: '2026-03-01',
+    });
+    expect(result.find((d) => d.eventType === 'pfa_estimated_declaration')?.date).toBe('2026-03-16');
+    const vat = result.find((d) => d.eventType === 'vat_registration');
+    expect(vat?.date).toBeNull();
+    expect(vat?.status).toBe('not_applicable');
+  });
+
+  it('does not resolve pfa_estimated_declaration from a VAT exceedance month', () => {
+    const result = computeDeadlines(rules, {
+      taxYear: 2026,
+      asOfDate: '2026-06-01',
+      vatExceedanceMonth: '2026-03-15',
+    });
+    expect(result.find((d) => d.eventType === 'vat_registration')?.date).toBe('2026-04-30');
+    const pfa = result.find((d) => d.eventType === 'pfa_estimated_declaration');
+    expect(pfa?.date).toBeNull();
+    expect(pfa?.status).toBe('not_applicable');
+  });
+
+  it('leaves event-relative dates null without event dates', () => {
     const result = computeDeadlines(rules, baseQuery);
     const pfa = result.find((d) => d.eventType === 'pfa_estimated_declaration');
     expect(pfa?.date).toBeNull();
@@ -245,8 +272,8 @@ describe('deadline helpers', () => {
     expect(applicable).toEqual(all.filter((d) => d.date !== null));
   });
 
-  it('getApplicableDeadlines includes event-relative deadlines when eventDate is given', () => {
-    const query = { ...baseQuery, eventDate: '2026-03-01' };
+  it('getApplicableDeadlines includes event-relative deadlines when both event dates are given', () => {
+    const query = { ...baseQuery, pfaStartDate: '2026-03-01', vatExceedanceMonth: '2026-03-15' };
     const applicable = getApplicableDeadlines(rules, query);
     expect(applicable.every((d) => d.date !== null)).toBe(true);
     expect(applicable).toHaveLength(15);

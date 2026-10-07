@@ -13,7 +13,7 @@ export interface Deadline {
   deadlineId: string;
   taxYear: number;
   eventType: DeadlineEventType;
-  date: string | null; // resolved ISO date 'YYYY-MM-DD'; null when event-relative and no eventDate given
+  date: string | null; // resolved ISO date 'YYYY-MM-DD'; null when event-relative and the event is not known
   dateFormula: string;
   appliesTo: string;
   legalSource: { act: string; article: string };
@@ -25,7 +25,19 @@ export interface Deadline {
 export interface DeadlineQuery {
   taxYear: number;
   asOfDate: string;
-  eventDate?: string; // for event-relative deadlines (PFA start, VAT exceedance month)
+  /**
+   * The date the PFA began independent activity. Resolves `pfa_estimated_declaration` ONLY.
+   *
+   * Phase 9 split the former single `eventDate` into two named fields on purpose. One shared
+   * event date would let a PFA **start** date fabricate a VAT **registration** deadline
+   * (`month_end(exceedance_month) + 30 days`) — a deadline for an event that never happened.
+   * Each event-relative rule reads only its own event.
+   */
+  pfaStartDate?: string;
+  /**
+   * The month in which the VAT turnover threshold was exceeded. Resolves `vat_registration` ONLY.
+   */
+  vatExceedanceMonth?: string;
 }
 
 export type DeadlinePhase = 'past' | 'due_today' | 'upcoming';
@@ -76,7 +88,7 @@ export function computeDeadlines(
   rules: FiscalRule[],
   query: DeadlineQuery,
 ): Deadline[] {
-  const { taxYear, asOfDate, eventDate } = query;
+  const { taxYear, asOfDate, pfaStartDate, vatExceedanceMonth } = query;
   const results: Deadline[] = [];
   const yearStart = `${taxYear}-01-01`;
 
@@ -159,14 +171,14 @@ export function computeDeadlines(
   }
 
   // pfa_estimated_declaration — start_date + 15 days (art. 81), event-relative
-  // appliesTo: 'new_pfa' — only applies when a PFA start date (eventDate) is known.
-  // When eventDate is absent, the deadline has no resolvable date and is not applicable.
-  const pfaApplies = eventDate !== undefined;
+  // appliesTo: 'new_pfa' — only applies when a PFA start date is known.
+  // When it is absent, the deadline has no resolvable date and is not applicable.
+  const pfaApplies = pfaStartDate !== undefined;
   results.push({
     deadlineId: 'PFA_ESTIMATED_DECLARATION',
     taxYear,
     eventType: 'pfa_estimated_declaration',
-    date: eventDate ? isoDaysAfter(eventDate, 15) : null,
+    date: pfaStartDate ? isoDaysAfter(pfaStartDate, 15) : null,
     dateFormula: 'start_date + 15 days (art. 81)',
     appliesTo: 'new_pfa',
     legalSource: { act: 'Cod. fiscal', article: 'art. 81' },
@@ -176,14 +188,14 @@ export function computeDeadlines(
   });
 
   // vat_registration — month_end(exceedance_month) + 30 days (art. 338), event-relative
-  // appliesTo: 'vat-registered-pfa' — only applies when a VAT exceedance month (eventDate) is known.
-  // When eventDate is absent, the deadline has no resolvable date and is not applicable.
-  const vatApplies = eventDate !== undefined;
+  // appliesTo: 'vat-registered-pfa' — only applies when a VAT exceedance month is known.
+  // When it is absent, the deadline has no resolvable date and is not applicable.
+  const vatApplies = vatExceedanceMonth !== undefined;
   results.push({
     deadlineId: 'VAT_REGISTRATION',
     taxYear,
     eventType: 'vat_registration',
-    date: eventDate ? isoDaysAfter(monthEnd(eventDate), 30) : null,
+    date: vatExceedanceMonth ? isoDaysAfter(monthEnd(vatExceedanceMonth), 30) : null,
     dateFormula: 'month_end(exceedance_month) + 30 days (art. 338)',
     appliesTo: 'vat-registered-pfa',
     legalSource: { act: 'Cod. fiscal', article: 'art. 338' },

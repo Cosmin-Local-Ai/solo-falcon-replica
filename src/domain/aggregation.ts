@@ -97,6 +97,35 @@ export function inPeriod(date: string, asOfDate: string, fiscalYear: number): bo
   return inFiscalYear(date, fiscalYear) && date <= asOfDate;
 }
 
+/**
+ * The date a revenue is attributed to a fiscal year.
+ *
+ * **CF art. 68 alin. (2) lit. a)** measures venit brut by „**sumele încasate**" — amounts
+ * **COLLECTED**. Collection is therefore the fiscally load-bearing date for a revenue.
+ *
+ * A record with no recorded collection date falls back to its single legacy `date`: **the legacy
+ * `date` IS the fiscal date** (Phase 9 decision, pinned by `aggregation.test.ts`). The v2→v3
+ * migration deliberately refuses to invent a collection event, so the fallback is where that
+ * assumption lives — it is not a guess per record, it is the reading of a field that was always
+ * ambiguous. The invoice **issue** date is not a timing gate (see `docs/ai/research/10` §2).
+ */
+export function revenueFiscalDate(r: Pick<Revenue, 'date' | 'collected'>): string {
+  return r.collected ?? r.date;
+}
+
+/**
+ * The date an expense is attributed to a fiscal year.
+ *
+ * **CF art. 68 alin. (4) lit. b)** requires expenses be „cuprinse în cheltuielile exercițiului
+ * financiar **al anului în cursul căruia au fost plătite**" — the year in which they were **PAID**.
+ * The consequence is attribution, not punishment: there is no late-payment disallowance in the
+ * Cod fiscal (`docs/ai/research/10` §1 — the "15-day collection threshold" does not exist), so a
+ * late-paid expense simply lands in the payment year.
+ */
+export function expenseFiscalDate(e: Pick<Expense, 'date' | 'paid'>): string {
+  return e.paid ?? e.date;
+}
+
 function monthKey(date: string): string {
   return date.slice(0, 7); // 'YYYY-MM'
 }
@@ -113,13 +142,15 @@ export function selectYtd(data: AppData, asOfDate: string): YtdTotals {
   let expenseNet = 0;
 
   for (const r of data.revenues) {
-    if (r.status === 'inregistrata' && inPeriod(r.date, asOfDate, fiscalYear)) {
+    const fiscalDate = revenueFiscalDate(r);
+    if (r.status === 'inregistrata' && inPeriod(fiscalDate, asOfDate, fiscalYear)) {
       revenue += recordTotal(r);
       revenueNet += r.valoareFaraTva;
     }
   }
   for (const e of data.expenses) {
-    if (e.status === 'inregistrata' && inPeriod(e.date, asOfDate, fiscalYear)) {
+    const fiscalDate = expenseFiscalDate(e);
+    if (e.status === 'inregistrata' && inPeriod(fiscalDate, asOfDate, fiscalYear)) {
       expenses += recordTotal(e);
       expenseNet += e.valoareFaraTva;
     }
@@ -144,13 +175,15 @@ export function selectMonthly(data: AppData, asOfDate: string): Map<string, Mont
   };
 
   for (const r of data.revenues) {
-    if (r.status === 'inregistrata' && inPeriod(r.date, asOfDate, fiscalYear)) {
-      add(monthKey(r.date), 'revenue', recordTotal(r));
+    const fiscalDate = revenueFiscalDate(r);
+    if (r.status === 'inregistrata' && inPeriod(fiscalDate, asOfDate, fiscalYear)) {
+      add(monthKey(fiscalDate), 'revenue', recordTotal(r));
     }
   }
   for (const e of data.expenses) {
-    if (e.status === 'inregistrata' && inPeriod(e.date, asOfDate, fiscalYear)) {
-      add(monthKey(e.date), 'expenses', recordTotal(e));
+    const fiscalDate = expenseFiscalDate(e);
+    if (e.status === 'inregistrata' && inPeriod(fiscalDate, asOfDate, fiscalYear)) {
+      add(monthKey(fiscalDate), 'expenses', recordTotal(e));
     }
   }
 

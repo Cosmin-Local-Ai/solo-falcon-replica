@@ -18,9 +18,11 @@ import { StoreProvider, useStore, STORAGE_KEY, QUARANTINE_STORAGE_KEY } from './
 import {
   CURRENT_DATA_VERSION,
   DATA_VERSION_BASE,
+  DATA_VERSION_DATES,
   DATA_VERSION_IDENTITY,
   DATA_VERSION_PROFILE,
   MIGRATION_CHAIN,
+  UnsupportedDataVersionError,
   migratePersistedData,
 } from './migration';
 import { seedData } from './seed';
@@ -170,12 +172,41 @@ beforeEach(() => {
 });
 
 describe('migration chain (pure)', () => {
-  it('covers the Phase 6 profile backfill and the Phase 7 identity absorption as separate steps', () => {
+  it('covers the Phase 6 profile backfill, the Phase 7 identity absorption and the Phase 9 payment dates as separate steps', () => {
     expect(MIGRATION_CHAIN.map((s) => [s.from, s.to])).toEqual([
       [DATA_VERSION_BASE, DATA_VERSION_PROFILE],
       [DATA_VERSION_PROFILE, DATA_VERSION_IDENTITY],
+      [DATA_VERSION_IDENTITY, DATA_VERSION_DATES],
     ]);
-    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_IDENTITY);
+    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_DATES);
+  });
+
+  // Phase 9 acceptance criterion 4: a payload written by a newer build is refused loudly rather
+  // than silently down-migrated. Asserted on the PURE chain here; the load-path half is the
+  // quarantine test below.
+  it('throws UnsupportedDataVersionError for a version newer than the chain', () => {
+    const payload = prePhase7Payload({ version: CURRENT_DATA_VERSION + 1 });
+    expect(() => migratePersistedData(payload as never)).toThrow(UnsupportedDataVersionError);
+  });
+
+  // Phase 9: the v2→v3 step widens the schema and NOTHING MORE. It must not manufacture a
+  // collection or payment event that the payload never recorded — absence is the honest state, and
+  // an invented one would be indistinguishable from a recorded fact.
+  it('the payment-dates step backfills nothing: collected/paid stay absent', () => {
+    const payload = prePhase7Payload({ version: DATA_VERSION_IDENTITY });
+    const outcome = migratePersistedData(payload as never);
+    expect(outcome.stepsApplied).toEqual(['payment-dates']);
+    expect(outcome.toVersion).toBe(DATA_VERSION_DATES);
+    for (const r of outcome.data.revenues) {
+      expect('collected' in r).toBe(false);
+    }
+    const expenses = outcome.data.expenses ?? [];
+    for (const e of expenses) {
+      expect('paid' in e).toBe(false);
+    }
+    // Every record survives the step unchanged and by id.
+    expect(outcome.data.revenues.map((r) => r.id)).toEqual(['r-legacy-1', 'r-legacy-2']);
+    expect(expenses.map((e) => e.id)).toEqual(['e-legacy-1']);
   });
 
   it('treats a payload with no version key as the base of the chain', () => {
@@ -184,7 +215,7 @@ describe('migration chain (pure)', () => {
     expect(outcome.fromVersion).toBe(DATA_VERSION_BASE);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     expect(outcome.migrated).toBe(true);
-    expect(outcome.stepsApplied).toEqual(['profile-materialization', 'identity-absorption']);
+    expect(outcome.stepsApplied).toEqual(['profile-materialization', 'identity-absorption', 'payment-dates']);
     expect(outcome.data.version).toBe(CURRENT_DATA_VERSION);
   });
 
@@ -343,7 +374,7 @@ describe('load path runs the chain (acceptance criteria 2 and 3)', () => {
     expect(storeRef!.migration).toEqual({
       fromVersion: DATA_VERSION_BASE,
       toVersion: CURRENT_DATA_VERSION,
-      stepsApplied: ['profile-materialization', 'identity-absorption'],
+      stepsApplied: ['profile-materialization', 'identity-absorption', 'payment-dates'],
     });
     // Not the seed: the seed's ids are different.
     expect(storeRef!.revenues).not.toEqual(seedData.revenues);
@@ -388,6 +419,7 @@ describe('load path runs the chain (acceptance criteria 2 and 3)', () => {
       raw: string;
     };
     expect(preserved.reason).toBe('unsupported-version');
-    expect(preserved.raw).toContain('"version":3');
+    // Written from the CURRENT build forward, so it tracks the version constant instead of a literal.
+    expect(preserved.raw).toContain(`"version":${CURRENT_DATA_VERSION + 1}`);
   });
 });
