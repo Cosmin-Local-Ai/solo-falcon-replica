@@ -20,6 +20,7 @@ import {
   DATA_VERSION_BASE,
   DATA_VERSION_DATES,
   DATA_VERSION_VAT_DATE,
+  DATA_VERSION_MONEY_BANI,
   DATA_VERSION_IDENTITY,
   DATA_VERSION_PROFILE,
   MIGRATION_CHAIN,
@@ -123,9 +124,21 @@ function prePhase7Profile(): PfaProfile & { caen?: string } {
  * A snapshot as it would be stored by a pre-Phase-7 build: its embedded profile
  * is the old shape, and `inputsHash` is the digest recorded at calculation time.
  */
-function prePhase7Snapshot(calculationId: string, revenuesValue: Bani): TaxCalculationSnapshot {
+/**
+ * A pre-v5 payload stores money as plain LEI. Every fixture in this file is such a payload, so its
+ * amounts are deliberately NOT bani even though the types say they are — the brand describes the
+ * post-migration world, and `migrateMoneyBaniV5` is what turns these numbers into bani. Naming the
+ * lie in one helper keeps it from being mistaken for a real `Bani` value.
+ */
+const legacyLei = (amount: number): Bani => amount as unknown as Bani;
+
+function prePhase7Snapshot(calculationId: string, revenuesValueLei: number): TaxCalculationSnapshot {
   const profile = prePhase7Profile();
-  const inputSnapshot = { profile, revenues: revenuesValue, expenses: lei(400) };
+  const inputSnapshot = {
+    profile,
+    revenues: legacyLei(revenuesValueLei),
+    expenses: legacyLei(400),
+  };
   return {
     calculationId,
     taxYear: 2026,
@@ -146,8 +159,8 @@ function prePhase7Snapshot(calculationId: string, revenuesValue: Bani): TaxCalcu
     // The digest the calculating build recorded. Deliberately computed here so
     // the test can prove the migrated digest differs from it.
     inputsHash: computeInputsHashSync(inputSnapshot),
-    calculationLines: [{ label: 'Impozit estimat', value: lei(1000) }],
-    output: { total: lei(1000) },
+    calculationLines: [{ label: 'Impozit estimat', value: legacyLei(1000) }],
+    output: { total: legacyLei(1000) },
     status: 'computed',
   };
 }
@@ -174,14 +187,15 @@ beforeEach(() => {
 });
 
 describe('migration chain (pure)', () => {
-  it('covers the Phase 6 profile backfill, the Phase 7 identity absorption, the Phase 9 payment dates and the VAT exceedance date as separate steps', () => {
+  it('covers the Phase 6 profile backfill, the Phase 7 identity absorption, the Phase 9 payment dates, the VAT exceedance date and the Phase 10 money scale as separate steps', () => {
     expect(MIGRATION_CHAIN.map((s) => [s.from, s.to])).toEqual([
       [DATA_VERSION_BASE, DATA_VERSION_PROFILE],
       [DATA_VERSION_PROFILE, DATA_VERSION_IDENTITY],
       [DATA_VERSION_IDENTITY, DATA_VERSION_DATES],
       [DATA_VERSION_DATES, DATA_VERSION_VAT_DATE],
+      [DATA_VERSION_VAT_DATE, DATA_VERSION_MONEY_BANI],
     ]);
-    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_VAT_DATE);
+    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_MONEY_BANI);
   });
 
   // Phase 9 acceptance criterion 4: a payload written by a newer build is refused loudly rather
@@ -198,8 +212,10 @@ describe('migration chain (pure)', () => {
   it('the payment-dates step backfills nothing: collected/paid stay absent', () => {
     const payload = prePhase7Payload({ version: DATA_VERSION_IDENTITY });
     const outcome = migratePersistedData(payload as never);
-    expect(outcome.stepsApplied).toEqual(['payment-dates', 'vat-exceedance-date']);
-    expect(outcome.toVersion).toBe(DATA_VERSION_VAT_DATE);
+    // The chain runs to the current version, so the money-scale step follows; it converts
+    // amounts and invents no fields, which is what the assertions below check.
+    expect(outcome.stepsApplied).toEqual(['payment-dates', 'vat-exceedance-date', 'money-bani']);
+    expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     for (const r of outcome.data.revenues) {
       expect('collected' in r).toBe(false);
     }
@@ -219,8 +235,8 @@ describe('migration chain (pure)', () => {
     const payload = prePhase7Payload({ version: DATA_VERSION_DATES });
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_DATES);
-    expect(outcome.stepsApplied).toEqual(['vat-exceedance-date']);
-    expect(outcome.toVersion).toBe(DATA_VERSION_VAT_DATE);
+    expect(outcome.stepsApplied).toEqual(['vat-exceedance-date', 'money-bani']);
+    expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     expect('vatExceedanceDate' in outcome.data.profile!).toBe(false);
     // And nothing else about the profile moved.
     expect(outcome.data.profile).toEqual(seedData.profile);
@@ -232,7 +248,13 @@ describe('migration chain (pure)', () => {
     expect(outcome.fromVersion).toBe(DATA_VERSION_BASE);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     expect(outcome.migrated).toBe(true);
-    expect(outcome.stepsApplied).toEqual(['profile-materialization', 'identity-absorption', 'payment-dates', 'vat-exceedance-date']);
+    expect(outcome.stepsApplied).toEqual([
+      'profile-materialization',
+      'identity-absorption',
+      'payment-dates',
+      'vat-exceedance-date',
+      'money-bani',
+    ]);
     expect(outcome.data.version).toBe(CURRENT_DATA_VERSION);
   });
 
@@ -297,13 +319,13 @@ describe('migration chain (pure)', () => {
 });
 
 /** One pre-Phase-7 snapshot, reused across the snapshot and load-path groups. */
-const legacy = prePhase7Snapshot('calc-legacy-1', lei(15000));
+const legacy = prePhase7Snapshot('calc-legacy-1', 15000);
 
 describe('stored snapshots survive the migration (F-1, acceptance criterion 3)', () => {
   it('keeps every stored snapshot by calculationId', () => {
     const payload = prePhase7Payload({
       profile: prePhase7Profile(),
-      snapshots: [legacy, prePhase7Snapshot('calc-legacy-2', lei(9000))],
+      snapshots: [legacy, prePhase7Snapshot('calc-legacy-2', 9000)],
     });
     const outcome = migratePersistedData(payload as never);
     expect(outcome.data.snapshots!.map((s) => s.calculationId)).toEqual([
@@ -339,31 +361,40 @@ describe('stored snapshots survive the migration (F-1, acceptance criterion 3)',
     expect(migrated.preMigrationInputsHash).toBe(legacy.inputsHash);
   });
 
-  it('leaves the fiscal inputs inside a snapshot byte-identical', () => {
-    // The recorded `output` must still correspond to the inputs it was computed
-    // from: only identity-shaped keys may change.
-    const fiscalKeys = (p: PfaProfile) =>
+  it('leaves the fiscal policy inputs byte-identical and scales the money inside a snapshot exactly once', () => {
+    // The recorded `output` must still correspond to the inputs it was computed from. Phase 10
+    // changes the SCALE of every amount inside a snapshot, so "byte-identical" can no longer hold
+    // for money; what has to hold is that the rule-selecting inputs do not move at all, and that
+    // every amount is multiplied by exactly 100 — once, not twice, and not per field inconsistently.
+    const policyKeys = (p: PfaProfile) =>
       canonicalize({
         regime: p.regime,
         salaryStatus: p.salaryStatus,
-        salaryIncomeLei: p.salaryIncomeLei ?? null,
         pensionStatus: p.pensionStatus,
         otherIncome: p.otherIncome,
         socialInsuranceStatus: p.socialInsuranceStatus,
         vatExempt: p.vatExempt,
-        cashFloorLei: p.cashFloorLei,
         fiscalYear: p.fiscalYear,
         pfaStartDate: p.pfaStartDate ?? null,
       });
     const payload = prePhase7Payload({ profile: prePhase7Profile(), snapshots: [legacy] });
     const migrated = migratePersistedData(payload as never).data.snapshots![0];
-    expect(fiscalKeys(migrated.inputSnapshot.profile)).toBe(fiscalKeys(legacy.inputSnapshot.profile));
-    expect(migrated.inputSnapshot.revenues).toBe(legacy.inputSnapshot.revenues);
-    expect(migrated.inputSnapshot.expenses).toBe(legacy.inputSnapshot.expenses);
-    expect(migrated.output).toEqual(legacy.output);
+    expect(policyKeys(migrated.inputSnapshot.profile)).toBe(policyKeys(legacy.inputSnapshot.profile));
+    expect(migrated.inputSnapshot.revenues).toBe(lei(legacy.inputSnapshot.revenues));
+    expect(migrated.inputSnapshot.expenses).toBe(lei(legacy.inputSnapshot.expenses));
+    expect(migrated.output).toEqual({ total: lei(legacy.output.total) });
+    expect(migrated.calculationLines.map((l) => l.value)).toEqual([lei(1000)]);
+    // The profile fields that carry money follow the same single scaling; the ones that do not
+    // carry money are untouched.
+    expect(migrated.inputSnapshot.profile.cashFloorLei).toBe(lei(legacy.inputSnapshot.profile.cashFloorLei));
+    expect(migrated.inputSnapshot.profile.fiscalYear).toBe(legacy.inputSnapshot.profile.fiscalYear);
   });
 
-  it('does not rewrite a snapshot it had nothing to add to', () => {
+  it('leaves the digest alone when the identity step has nothing to add, and re-derives it when the money step does', () => {
+    // The identity-absorption step genuinely has nothing to add here, so on its own it would leave
+    // the snapshot byte-identical and keep the digest. The money-scale step does have something to
+    // say — it rewrites every amount — so the digest MUST move and the calculation-time digest MUST
+    // survive beside it. That is the provenance contract, not a regression.
     const alreadyCurrent: TaxCalculationSnapshot = {
       ...legacy,
       inputSnapshot: {
@@ -373,8 +404,10 @@ describe('stored snapshots survive the migration (F-1, acceptance criterion 3)',
     };
     const payload = prePhase7Payload({ snapshots: [alreadyCurrent] });
     const migrated = migratePersistedData(payload as never).data.snapshots![0];
-    expect(migrated.inputsHash).toBe(alreadyCurrent.inputsHash);
-    expect(migrated.preMigrationInputsHash).toBeUndefined();
+    expect(migrated.preMigrationInputsHash).toBe(alreadyCurrent.inputsHash);
+    expect(migrated.inputsHash).not.toBe(alreadyCurrent.inputsHash);
+    expect(migrated.inputsHash).toBe(computeInputsHashSync(migrated.inputSnapshot));
+    expect(migrated.inputSnapshot.revenues).toBe(lei(alreadyCurrent.inputSnapshot.revenues));
   });
 });
 
@@ -391,7 +424,13 @@ describe('load path runs the chain (acceptance criteria 2 and 3)', () => {
     expect(storeRef!.migration).toEqual({
       fromVersion: DATA_VERSION_BASE,
       toVersion: CURRENT_DATA_VERSION,
-      stepsApplied: ['profile-materialization', 'identity-absorption', 'payment-dates', 'vat-exceedance-date'],
+      stepsApplied: [
+        'profile-materialization',
+        'identity-absorption',
+        'payment-dates',
+        'vat-exceedance-date',
+        'money-bani',
+      ],
     });
     // Not the seed: the seed's ids are different.
     expect(storeRef!.revenues).not.toEqual(seedData.revenues);
@@ -409,7 +448,7 @@ describe('load path runs the chain (acceptance criteria 2 and 3)', () => {
   });
 
   it('never re-hashes a current-version payload on load (F-2 load path)', () => {
-    const snapshot = prePhase7Snapshot('calc-current-1', lei(20000));
+    const snapshot = prePhase7Snapshot('calc-current-1', 20000);
     const payload = prePhase7Payload({
       version: CURRENT_DATA_VERSION,
       snapshots: [snapshot],
