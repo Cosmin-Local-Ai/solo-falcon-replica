@@ -563,8 +563,27 @@ numbering stays readable.
 - **Must be created:** either integer-bani storage or a decimal type at the domain boundary, plus a
   decision on rounding and on the snapshot hash stability (changing money representation changes
   `inputsHash`, `derived.ts:107,145`).
-- **Entry criteria:** Q-MONEY-UNIT answered. Must come **after** the fiscal corrections, or every
-  corrected test will be rewritten twice.
+- **Entry criteria:** ~~Q-MONEY-UNIT answered~~ **answered 2026-10-08 — see the decision below.** Must come **after**
+  the fiscal corrections, or every corrected test will be rewritten twice. **Now also gated on the ordering decision
+  in item 11: the phase-less leftovers close first.**
+
+- **Q-MONEY-UNIT — DECIDED 2026-10-08 (user): HYBRID.**
+  - **Persisted, aggregated and displayed money = integer bani.** Everything the user sees, everything stored, and
+    everything feeding `inputsHash` / `derivedHash` is a whole number of hundredths. Exact by construction; float
+    drift is not representable.
+  - **Intermediate rate arithmetic = decimal** — the 10% / 16% rates, the art. 118 alin. (2) proration, the per-month
+    split — converted back to bani through **one named rounding function**. This matches how tax is actually computed:
+    full precision on the rate, then round once.
+  - **The boundary must be enforced**, not documented: types plus a test forbidding float arithmetic on persisted
+    money. A hybrid whose boundary is not policed rots back into floats.
+  - `decimal.js-light` (`package.json:16`, declared and never imported, contradicting ADR 09) now has an actual role.
+    Either it is the rate layer, or the ADR records why it was not.
+  - **CONSTRAINED BY `research/20`:** the rounding function must implement **CF art. 66** — round **to a leu**,
+    neglecting fractions up to **and including 50 bani**, rounding up only fractions **exceeding** 50 bani. A
+    `roundMoney()` that rounds to two decimals is wrong under art. 66 while looking entirely reasonable. **The legal
+    unit for the Titlul IV income tax is the whole leu, not the ban.**
+  - Changing representation changes `inputsHash` → one appended snapshot chain step plus migration, backfilling
+    nothing.
 - **B-17 (found in Phase 5) is the strongest evidence for this phase, and it is not cosmetic.** Exact
   decimal arithmetic on the seed gives an income tax of **674.505 — a half-cent** — and the fiscal
   domain has **no rounding policy at all**. The cent that ships comes from IEEE-754, not a rule:
