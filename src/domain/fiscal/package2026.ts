@@ -1,4 +1,5 @@
 import type { FiscalRule } from './rules';
+import { lei } from '../money';
 
 const PROVENANCE_2026 = {
   jurisdiction: 'RO',
@@ -29,7 +30,7 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     effectiveFrom: '2026-01-01',
     effectiveTo: null,
     parameters: [
-      { id: 'reference', label: 'Reference value', value: 4050, unit: 'lei' },
+      { id: 'reference', label: 'Reference value', value: lei(4050), unit: 'lei' },
       // DELETED in Phase 5 (defect B-6, the part left open by Phases 3-4): `multiple_6x` / `multiple_12x` /
       // `multiple_24x` / `multiple_72x` were duplicate data with no reader anywhere in src/ or e2e/ (verified
       // by grep). Each equals
@@ -55,7 +56,7 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     effectiveFrom: '2026-01-01',
     effectiveTo: '2026-06-30',
     parameters: [
-      { id: 'monthly', label: 'Monthly minimum wage', value: 4050, unit: 'lei' },
+      { id: 'monthly', label: 'Monthly minimum wage', value: lei(4050), unit: 'lei' },
     ],
     calculatorId: 'calc-wage-reference',
     sourceAct: 'HG 1506/2024',
@@ -70,7 +71,7 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     effectiveFrom: '2026-07-01',
     effectiveTo: null,
     parameters: [
-      { id: 'monthly', label: 'Monthly minimum wage', value: 4325, unit: 'lei' },
+      { id: 'monthly', label: 'Monthly minimum wage', value: lei(4325), unit: 'lei' },
     ],
     calculatorId: 'calc-wage-reference',
     sourceAct: 'HG 146/2026',
@@ -86,10 +87,10 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     effectiveTo: null,
     parameters: [
       { id: 'rate', label: 'CAS rate', value: 25, unit: 'percent' },
-      { id: 'min_base', label: 'Tier-1 floor (12 SM annual)', value: 48600, unit: 'lei' },
-      { id: 'tier2_base', label: 'Tier-2 floor (24 SM annual) — not a ceiling', value: 97200, unit: 'lei' },
-      { id: 'tier1_cas', label: 'CAS at the 12 SM floor', value: 12150, unit: 'lei' },
-      { id: 'tier2_cas', label: 'CAS at the 24 SM floor — not a ceiling', value: 24300, unit: 'lei' },
+      { id: 'min_base', label: 'Tier-1 floor (12 SM annual)', value: lei(48600), unit: 'lei' },
+      { id: 'tier2_base', label: 'Tier-2 floor (24 SM annual) — not a ceiling', value: lei(97200), unit: 'lei' },
+      { id: 'tier1_cas', label: 'CAS at the 12 SM floor', value: lei(12150), unit: 'lei' },
+      { id: 'tier2_cas', label: 'CAS at the 24 SM floor — not a ceiling', value: lei(24300), unit: 'lei' },
     ],
     calculatorId: 'calc-cas',
     // CF art. 148 alin. (2) lit. a) — 12 SM minimum base for art. 137 alin. (1) lit. b)/b^1) income.
@@ -121,8 +122,8 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     effectiveTo: null,
     parameters: [
       { id: 'rate', label: 'CASS rate', value: 10, unit: 'percent' },
-      { id: 'min_base', label: 'Top-up floor (6 SM annual) — CF art. 174 alin. (6); conditional, not an unconditional minimum', value: 24300, unit: 'lei' },
-      { id: 'max_annual_base', label: 'Max annual base (72 SM)', value: 291600, unit: 'lei' },
+      { id: 'min_base', label: 'Top-up floor (6 SM annual) — CF art. 174 alin. (6); conditional, not an unconditional minimum', value: lei(24300), unit: 'lei' },
+      { id: 'max_annual_base', label: 'Max annual base (72 SM)', value: lei(291600), unit: 'lei' },
       // REMOVED in Phase 4: `min_cass` (2,430) and `max_cass` (29,160) were independent parameters
       // encoding figures that are fully DERIVABLE as rate × min_base and rate × max_annual_base.
       // Two sources of truth for one legal number is the defect — `max_cass` was in fact read by
@@ -221,7 +222,7 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     effectiveFrom: '2025-09-01',
     effectiveTo: null,
     parameters: [
-      { id: 'threshold', label: 'VAT threshold', value: 395000, unit: 'lei' },
+      { id: 'threshold', label: 'VAT threshold', value: lei(395000), unit: 'lei' },
     ],
     calculatorId: 'calc-vat-threshold',
     // CF art. 310 alin. (1) — "plafonul de 395.000 lei", unchanged for 2026. Amended by ORDONANȚA

@@ -1,5 +1,6 @@
 import type { AppData, Expense, Revenue } from '../data/types';
 import { isISOCalendarDate, isoCalendarDateProblem, isoCalendarDateProblemText } from './date';
+import { addBani, lei, subBani, sumBani, type Bani } from './money';
 
 /**
  * Deterministic financial aggregation selectors (Step 13, Part A).
@@ -25,22 +26,25 @@ import { isISOCalendarDate, isoCalendarDateProblem, isoCalendarDateProblemText }
  * owned by the tax engine (`src/domain/tax.ts` → `TaxAmountBases.venitulNetDinActivitate`).
  */
 export interface YtdTotals {
+  // Phase 10: every amount here is an integer number of bani. Summing integers is exact, so the YTD figure
+  // no longer depends on the order the records were added in — `revenue` for the same set of records is the
+  // same number whether they arrived oldest-first or newest-first.
   /** Cash collected: `valoareFaraTva + tva`. */
-  revenue: number;
+  revenue: Bani;
   /** Cash paid: `valoareFaraTva + tva`. */
-  expenses: number;
+  expenses: Bani;
   /** `revenue - expenses`, both VAT-inclusive. Cash profit — not a fiscal contribution base. */
-  net: number;
+  net: Bani;
   /** **Cifră de afaceri**: `valoareFaraTva` only. The base CF art. 310 alin. (1) measures. */
-  revenueNet: number;
+  revenueNet: Bani;
   /** Deductible expense excluding VAT: `valoareFaraTva` only. */
-  expenseNet: number;
+  expenseNet: Bani;
 }
 
 export interface MonthlyTotals {
-  revenue: number;
-  expenses: number;
-  net: number;
+  revenue: Bani;
+  expenses: Bani;
+  net: Bani;
 }
 
 /**
@@ -56,8 +60,8 @@ export interface MonthlyTotals {
 export interface Threshold {
   id: string;
   label: string;
-  current: number | null;
-  limit: number;
+  current: Bani | null;
+  limit: Bani;
   /** `current / limit`, or 0 when unmeasured / uncapped. */
   ratio: number;
   breached: boolean;
@@ -89,8 +93,8 @@ export interface DashboardSnapshot {
   };
 }
 
-function recordTotal(r: Pick<Revenue, 'valoareFaraTva' | 'tva'>): number {
-  return r.valoareFaraTva + r.tva;
+function recordTotal(r: Pick<Revenue, 'valoareFaraTva' | 'tva'>): Bani {
+  return sumBani([r.valoareFaraTva, r.tva]);
 }
 
 function inFiscalYear(date: string, fiscalYear: number): boolean {
@@ -213,27 +217,28 @@ function monthKey(date: string): string {
  */
 export function selectYtd(data: AppData, asOfDate: string): YtdTotals {
   const fiscalYear = data.profile.fiscalYear;
-  let revenue = 0;
-  let expenses = 0;
-  let revenueNet = 0;
-  let expenseNet = 0;
+  // `addBani`, not `+=`: `Bani + Bani` widens to `number` and drops the brand.
+  let revenue: Bani = lei(0);
+  let expenses: Bani = lei(0);
+  let revenueNet: Bani = lei(0);
+  let expenseNet: Bani = lei(0);
 
   for (const r of data.revenues) {
     const fiscalDate = revenueFiscalDate(r);
     if (r.status === 'inregistrata' && inPeriod(fiscalDate, asOfDate, fiscalYear)) {
-      revenue += recordTotal(r);
-      revenueNet += r.valoareFaraTva;
+      revenue = addBani(revenue, recordTotal(r));
+      revenueNet = addBani(revenueNet, r.valoareFaraTva);
     }
   }
   for (const e of data.expenses) {
     const fiscalDate = expenseFiscalDate(e);
     if (e.status === 'inregistrata' && inPeriod(fiscalDate, asOfDate, fiscalYear)) {
-      expenses += recordTotal(e);
-      expenseNet += e.valoareFaraTva;
+      expenses = addBani(expenses, recordTotal(e));
+      expenseNet = addBani(expenseNet, e.valoareFaraTva);
     }
   }
 
-  return { revenue, expenses, net: revenue - expenses, revenueNet, expenseNet };
+  return { revenue, expenses, net: subBani(revenue, expenses), revenueNet, expenseNet };
 }
 
 /**
@@ -244,10 +249,10 @@ export function selectMonthly(data: AppData, asOfDate: string): Map<string, Mont
   const fiscalYear = data.profile.fiscalYear;
   const monthly = new Map<string, MonthlyTotals>();
 
-  const add = (key: string, field: 'revenue' | 'expenses', amount: number): void => {
-    const entry = monthly.get(key) ?? { revenue: 0, expenses: 0, net: 0 };
-    entry[field] += amount;
-    entry.net = entry.revenue - entry.expenses;
+  const add = (key: string, field: 'revenue' | 'expenses', amount: Bani): void => {
+    const entry = monthly.get(key) ?? { revenue: lei(0), expenses: lei(0), net: lei(0) };
+    entry[field] = addBani(entry[field], amount);
+    entry.net = subBani(entry.revenue, entry.expenses);
     monthly.set(key, entry);
   };
 

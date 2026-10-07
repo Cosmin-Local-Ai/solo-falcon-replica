@@ -1,5 +1,6 @@
 import type { FiscalRule } from './fiscal/rules';
 import { selectApplicableRules } from './fiscal/select';
+import { lei, subBani, type Bani } from './money';
 
 /**
  * `tier-floor` is not a ceiling and not a disqualification — it is a **step in a ladder**.
@@ -50,20 +51,22 @@ export type ThresholdStatus = 'ok' | 'warning' | 'breached' | 'review_required';
 
 /** Every amount a caller can supply, keyed by the base it represents. Absent = unknown. */
 export interface ThresholdBases {
-  'revenue-incl-vat'?: number;
-  'revenue-excl-vat'?: number;
-  'expense-incl-vat'?: number;
-  'expense-excl-vat'?: number;
-  'net-income'?: number;
+  // Phase 10: integer bani. A threshold comparison is a comparison of amounts, so the unit has to be the
+  // same one the rule package stores its `unit:'lei'` parameters in.
+  'revenue-incl-vat'?: Bani;
+  'revenue-excl-vat'?: Bani;
+  'expense-incl-vat'?: Bani;
+  'expense-excl-vat'?: Bani;
+  'net-income'?: Bani;
 }
 
 export interface FiscalThreshold {
   thresholdId: string;
   type: ThresholdType;
   /** The amount measured, or `null` when the required base was unavailable. */
-  currentValue: number | null;
-  thresholdValue: number;
-  distance: number; // currentValue - thresholdValue (negative = below threshold); 0 when unmeasured
+  currentValue: Bani | null;
+  thresholdValue: Bani;
+  distance: Bani; // currentValue - thresholdValue (negative = below threshold); 0 when unmeasured
   affectedDomain: string; // e.g. 'pfa-revenue'
   affectedTax: string; // e.g. 'cas', 'cass', 'vat'
   effectiveDate: string;
@@ -72,7 +75,7 @@ export interface FiscalThreshold {
    * (10% of the threshold), NOT a statutory figure** — it carries no citation and must not
    * acquire one.
    */
-  warningDistance: number;
+  warningDistance: Bani;
   ruleRelease: string;
   source: string;
   status: ThresholdStatus;
@@ -206,8 +209,8 @@ export const THRESHOLD_SPECS: readonly ThresholdSpec[] = [
 
 export function statusFor(
   type: ThresholdType,
-  distance: number,
-  warningDistance: number,
+  distance: Bani,
+  warningDistance: Bani,
 ): Exclude<ThresholdStatus, 'review_required'> {
   if (type === 'registration') {
     // current >= threshold means VAT registration is required
@@ -277,10 +280,17 @@ export function computeThresholds(
     const param = rule.parameters.find((p) => p.id === spec.paramId);
     if (!param || typeof param.value !== 'number') continue;
 
-    const thresholdValue = param.value;
+    // Phase 10: a `unit: 'lei'` rule parameter is an integer number of bani, so the threshold, the
+    // distance and the warning band are all `Bani` and compare against a `Bani` base without a conversion.
+    const thresholdValue = param.value as Bani;
     // Presentation band only — 10% of the threshold, chosen by the app. Not a statutory
     // figure and deliberately never given a citation.
-    const warningDistance = thresholdValue * 0.1;
+    //
+    // This used to be `thresholdValue * 0.1`, a float multiply: 486000 * 0.1 is 48600.000000000004 in
+    // IEEE-754, which is how a purely presentational band acquired a fraction of a ban. Every stored
+    // threshold is a whole leu, so dividing its bani by 10 is exact; the floor only guards a future
+    // parameter that is not, and it can never widen the band past 10%.
+    const warningDistance = Math.floor(thresholdValue / 10) as Bani;
 
     const currentValue = query.bases[spec.requiredFiscalBase];
     if (currentValue === undefined) {
@@ -291,7 +301,7 @@ export function computeThresholds(
         type: spec.type,
         currentValue: null,
         thresholdValue,
-        distance: 0,
+        distance: lei(0),
         affectedDomain: spec.affectedDomain,
         affectedTax: spec.affectedTax,
         effectiveDate: rule.effectiveFrom,
@@ -306,7 +316,7 @@ export function computeThresholds(
       continue;
     }
 
-    const distance = currentValue - thresholdValue;
+    const distance = subBani(currentValue, thresholdValue);
 
     results.push({
       thresholdId: spec.thresholdId,
@@ -356,8 +366,8 @@ export type RatioRuleStatus = 'ok' | 'warning' | 'breached';
 export interface RatioRule {
   id: string;
   label: string;
-  current: number;
-  limit: number;
+  current: Bani;
+  limit: Bani;
   /** Backward-compatible flag — kept exactly as-is, never re-derived. */
   breached: boolean;
   /** `current / limit`, or `null` when `limit === 0` (no cap). */

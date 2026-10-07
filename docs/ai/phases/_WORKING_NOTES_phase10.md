@@ -955,3 +955,108 @@ pattern) — style only, but consider restructuring if cheap.
 - tsc at last green: 0. Unit tests at last green: 45 files / 705 tests. money.test.ts alone: 22 passing.
 - 25.2*100, 17.96*100, 85.5*100, 142.5*100, 7494.5*100, 6745.05*100, 523456.78*100 are all safe integers;
   71.4*100 and 1234.567*100 are NOT.
+
+---
+
+## 8. STATE AT SECOND COMPACTION — GOOD PROGRESS, TREE STILL RED, 2 ERRORS FROM CLEAN SOURCE
+
+Read §7 too (it lists what was already done). This section is what changed since §7.
+
+### Safety net
+- Last GREEN commit: 87fc202 (docs only; tsc 0, 45 files / 705 tests).
+- Branch wip/phase10-t1-bani exists (was at 257c0e2). **RE-POINT IT before any reset** — it is stale now.
+- Rule unchanged: end green at all four checks, or reset --hard to 87fc202 and report honestly. NEVER hand off red.
+
+### DONE since §7 (all verified by tsc, not by eye)
+1. **Blocker cleared**: data/schema.ts now declares `moneyNotices?: MoneyPrecisionNotice[]` on PersistedAppData AND
+   on persistedAppDataSchema (converted uses `bani(z.number()).optional()` so the Equal<> assertion holds). Type-only
+   import from ./migration — no circular-import problem, tsc agrees. Also removed a genuinely unused `BankAccount`
+   import from data/schema.ts (was a lint blocker).
+2. **src/domain/money.ts** — three new exports appended:
+   - `leiText(bani): string` — shortest EXACT lei string via `Decimal(bani).div(100).toString()`. For PROSE only
+     (calculator breakdown notes, engine review reasons). Keeps `fiscal.test.ts:259`
+     `toContain('derivata din 291600 x 0.1')` byte-identical: 29160000 bani -> '29160', and 749450 -> '7494.5'.
+   - `subBani(a,b): Bani`, `addBani(a,b): Bani` — needed because `Bani + Bani` widens to `number` and drops the brand,
+     so `+=` and unary `-` cannot be used on money.
+3. **domain/fiscal/package2026.ts** — all 10 `unit:'lei'` params wrapped in `lei(...)` by regex
+   (`value: N, unit: 'lei'` -> `value: lei(N), unit: 'lei'`). `unit:'percent'` params untouched (25, 10 stay unscaled).
+   Import added.
+4. **domain/fiscal/calculators.ts** — CalculatorResult.value/nonDeductible -> Bani; CalculatorInput.base/
+   salaryIncomeLei/chosenBase -> Bani. NEW `paramBani(rule,id)` = the unit-aware funnel (decision (i)): throws if the
+   parameter's `unit` is not 'lei', or if the value is not an integer. `paramNumber` kept for percents only.
+   Rate math is now `roundArt66(applyRateDecimal(base, ratePercent))` — ONE art. 66 rounding per sum due, inside the
+   calculator, so `total = sumBani(rounded lines)` can never round twice. `Math.max/Math.min` replaced by ternaries
+   (they return plain number and would drop the brand) — 2 prefer-math-min-max advisories are deliberate, documented.
+   `nonDeductible = subBani(floorCass, due)` so `value - nonDeductible === due` holds exactly.
+   49 prose interpolations now go through `leiText(...)`; `${rate}` became `${ratePercent / 100}` so the sentences
+   still print 0.1 / 0.25.
+5. **domain/tax.ts** — all money in/out is Bani (TaxCalculationInput, FiscalLossCarryForward.amount, TaxAmountBases).
+   NEW local `exactBani(Decimal): Bani|null` — accepts an intermediate ONLY if already integral; the proration
+   products go through it and a non-integer returns `review_required` instead of inventing a rounding rule
+   (art. 66 rounds sums DUE, never bases or deductions — the A-3 boundary). Proration ratios are now `Decimal`
+   (that is where 7_128.1 / 52_002.9 came from). `Decimal.max` does NOT exist in decimal.js-light — use
+   `.isNegative() ? new Decimal(0) : x`. Guard messages use `leiText(...)` so they still read in lei.
+6. **domain/aggregation.ts** — YtdTotals, MonthlyTotals, Threshold.current/limit -> Bani; `recordTotal` -> sumBani;
+   the four `+=` accumulators -> `addBani`; `net` -> subBani. This is what fixed dashboard.ts:93-96 and derived.ts
+   without touching those call sites.
+7. **domain/thresholds.ts** — ThresholdBases, FiscalThreshold.currentValue/thresholdValue/distance/warningDistance,
+   statusFor params, RatioRule.current/limit -> Bani. `warningDistance` was `thresholdValue * 0.1` (float: 486000*0.1
+   = 48600.000000000004) -> now `Math.floor(thresholdValue / 10)`, documented as a presentation band (not a legal
+   figure), floored so it can never exceed 10%.
+8. **domain/derived.ts** — TaxInputsReference.salaryIncomeLei -> Bani|null, cashFloorLei -> Bani, RecordLine
+   total -> sumBani, the local record constraint's valoareFaraTva/tva -> Bani.
+9. **Write boundary (the semantic part tsc could NOT find)** — pages/Revenues.tsx, Expenses.tsx, Declarations.tsx,
+   Settings.tsx: `parseFloat`/`Number` -> `parseLeiInput` (returns null for non-finite OR sub-ban precision = a
+   REFUSAL, never a silent round); edit-mode pre-fill `String(initial.valoareFaraTva)` -> `leiInputValue(...)`
+   (raw bani in an input was the "67450 on a screen" violation); Settings pre-fill for salaryIncomeLei/cashFloorLei
+   same. All error messages kept word-for-word ('Introduceți o valoare validă', 'Introduceți un TVA valid',
+   'Valoare invalidă (lei, ≥ 0).' — the last is a NO-MOVE assertion at Settings.test.tsx:373). Settings keeps three
+   states: undefined = empty field, null = unparseable, number = valid.
+   Pattern used to avoid casts: after `if (Object.keys(e).length) return;` add
+   `if (v === null || t === null) return; // unreachable; narrows without a cast`.
+
+### THE ONLY 2 REMAINING NON-TEST ERRORS (fix these first)
+- pages/Settings.tsx:189 `salaryIncomeLei: fiscal.salaryStatus === 'da' ? salary : undefined` — `salary` is
+  `Bani | null | undefined`. Fix: `? (salary ?? undefined) : undefined` is WRONG (it would turn an invalid value
+  into "not recorded"). Correct: that line is only reached when validation passed, so narrow explicitly, e.g.
+  `salaryIncomeLei: fiscal.salaryStatus === 'da' ? (salary as Bani) : undefined` — but prefer an explicit
+  unreachable-guard like the pages pattern instead of a cast.
+- pages/Settings.tsx:195 `cashFloorLei: cash` where cash is `Bani | null` — same guard pattern.
+
+### STILL TO DO (the big remaining blocks)
+- **domain/taxReserve.ts** — reservedAmount / estimatedTaxLiability / remainingTarget / recommendedMonthlyReserve
+  -> Bani. `remainingTarget = Math.max(0, estimatedTaxLiability - (reservedAmount ?? 0))` is the B-17 origin value.
+  Monthly reserve 13_535/7 is fractional -> decide: keep Decimal and convert at display, do NOT art.66 a reserve.
+- **domain/projection.ts** — the `/17` fractions. Keep decimal intermediates, convert at display; months must still
+  sum to the total; art. 66 does NOT apply to a projection.
+- **domain/insights.ts + data/dashboard.ts** — DELETE the lei->cents bridge (dashboard.ts:299-302 `*100`) and the
+  divide-back (insights.ts:43-44 `/100`); the `taxReserve.*Cents` fields in DashboardSnapshot are already integer
+  cents and must not be double-converted. insights.ts:125 Math.round(ratio*100) is a PERCENT — leave it.
+- **Display**: delete `fmtRON` (data/types.ts:186-189) and route its 22 call sites to `formatBaniRON`
+  (FinancialSummary 3, FinancialChart 5, TaxReserve 5, Revenues 3, Declarations 3, Dashboard 6, Expenses 4,
+  EFactura 1); lib/format.ts `formatLei` -> `formatBaniLei` (ThresholdSection 3 sites); Documents.tsx:417 CSV
+  `toFixed(2)` and :496,500,505 `toLocaleString` -> formatBani*; Documents.tsx:462 `rows.reduce` money arithmetic
+  out of JSX (that is T4).
+- **Tests**: ~475 test errors now. Script the mechanical re-expression with `lei(...)`, then hand-fix ONLY the
+  value-changers from §Scout E-2: tax.test.ts:206,415-420,512-517; taxReserve.test.ts:52,82-85;
+  dashboard.test.ts:329,330; insights.test.ts:528; e2e/dashboard.spec.ts:78,84,88,132,155,157.
+  NEGATIVE CONTROLS that must NOT change value: 24_615, 2430, 12_150, 24_300, 29_160, 2_430, 4_230, 3_800,
+  46.570, 20.435, 4860/4861, -29160/-29161, -39500/-39501, 60000->12150 / 97199->12150 / 97200->24300.
+  Highest risk: thresholds.test.ts band edges (a +/-1 lei edge becomes +/-100 bani).
+  store.migration.chain.test.tsx :163-172,184-199,203-212,214-223,265-292,345-359,381-396 must be re-scoped
+  deliberately with the reason written down (CURRENT_DATA_VERSION is now 5 and the chain has 5 names).
+- **New tests to add**: 142.5 -> 14250 exact with NO notice; 674.504 -> 67450 WITH a sub-ban-precision notice;
+  NaN carried unchanged + non-finite notice, never 0; snapshot inputsHash re-derived + preMigrationInputsHash
+  preserved; the "step threw -> quarantine, detail 'migration failed:'" path (nothing pins it).
+- **Delete the two test-internal formatter mirrors**: e2e/dashboard.spec.ts:577-579 and insights.test.ts:102-107.
+- **Docs/register**: update docs/ai/phases/10_money_precision.md with what actually shipped; open B-25 in
+  docs/ai/STATE.md (B-25 does not exist yet); close B-17 only if genuinely closed; NEVER write B-18/B-20 closed;
+  B-16 is NOT closed by this phase.
+- Then measure all four: npx tsc --noEmit / npm run test / npm run build / npm run test:e2e.
+
+### Facts re-verified this pass
+- decimal.js-light has NO static `Decimal.max` / `Decimal.min`. Use comparisons.
+- `Bani + Bani`, `Bani - Bani`, `-Bani` all widen to `number` — always use addBani/subBani/sumBani.
+- `Math.max(chosen, floor)` / `Math.min(vna, maxBase)` drop the brand — replaced by ternaries.
+- All 10 lei rule params are whole lei, so their bani values are divisible by 100 (and by 10).
+- tsc non-test errors went 34 -> 17 -> 8 -> 2. Total tsc errors ~477 (test literals, expected).

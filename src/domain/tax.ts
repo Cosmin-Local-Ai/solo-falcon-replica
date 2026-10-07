@@ -11,16 +11,18 @@ import { selectApplicableRules } from './fiscal/select';
 import { calculatorRegistry } from './fiscal/calculators';
 import { regimeRefusalReason } from './regimes';
 import { createCalculationSnapshot } from './snapshots/snapshot';
+import Decimal from 'decimal.js-light';
+import { lei, leiText, subBani, sumBani, type Bani } from './money';
 
 export interface TaxCalculationInput {
   inputs: TaxInputsReference;
   profile: PfaProfile;
-  revenues: number;
-  expenses: number;
-  /** Total revenues without VAT (valoareFaraTva only), lei. */
-  revenuesNet: number;
-  /** Total expenses without VAT (valoareFaraTva only), lei. */
-  expensesNet: number;
+  revenues: Bani;
+  expenses: Bani;
+  /** Total revenues without VAT (valoareFaraTva only). */
+  revenuesNet: Bani;
+  /** Total expenses without VAT (valoareFaraTva only). */
+  expensesNet: Bani;
   ruleRelease: RuleRelease;
   rules: FiscalRule[];
 }
@@ -28,7 +30,7 @@ export interface TaxCalculationInput {
 /** CF art. 118 alin. (2) lit. a) + alin. (4)-(5): a fiscal loss on this source, surfaced for
  * display. Phase 5 does NOT persist it — there is no prior-year store yet (Phase 7). */
 export interface FiscalLossCarryForward {
-  amount: number;
+  amount: Bani;
   years: number;
   capPercent: number;
   sameSourceOnly: true;
@@ -45,16 +47,16 @@ export interface TaxAmountBases {
    * Venit brut — the revenue base the engine selected: `revenuesNet` (VAT-exclusive) for a
    * VAT payer, `revenues` (VAT-inclusive) otherwise. See CF art. 68 alin. (2)-(3).
    */
-  venitulBrut: number;
+  venitulBrut: Bani;
   /** Cheltuieli deductibile — the expense base selected by the same VAT rule. */
-  cheltuieliDeductibile: number;
+  cheltuieliDeductibile: Bani;
   /**
    * Venit net din activitate = `venitulBrut - cheltuieliDeductibile`. This IS the base CAS is
    * chosen on (CF art. 148 alin. (1)-(2)) and the base CASS is owed on (CF art. 170 alin. (1),
    * art. 174 alin. (2) și (6)) — the exact value passed as `base` to `calcCas` and `calcCass`.
    * It is NOT `YtdTotals.net`, which subtracts VAT-inclusive operands.
    */
-  venitulNetDinActivitate: number;
+  venitulNetDinActivitate: Bani;
 }
 
 export type TaxEstimateResult =
@@ -71,6 +73,17 @@ export type TaxEstimateResult =
 
 function rr(reason: string, lines: CalculationLine[] = []): TaxEstimateResult {
   return { status: 'review_required', reason, lines };
+}
+
+/**
+ * Accept a Decimal money amount only when it is already a whole number of bani.
+ *
+ * Deliberately NOT a rounding function. CF art. 66 alin. (1) rounds the sums that are DUE; it says nothing
+ * about a deduction or a base, and rounding either of those changes the tax itself. So an inexact
+ * intermediate is reported, never repaired.
+ */
+function exactBani(value: Decimal): Bani | null {
+  return value.isInteger() ? (value.toNumber() as Bani) : null;
 }
 
 /**
@@ -93,10 +106,11 @@ export const CASS_FLAG_REVIEW_REASON =
 
 export async function computeTaxEstimate(input: TaxCalculationInput): Promise<TaxEstimateResult> {
   const { inputs, profile, revenues, expenses, revenuesNet, expensesNet, ruleRelease, rules } = input;
-  if (!Number.isFinite(revenues) || revenues < 0) return rr(`Veniturile trebuie să fie >= 0, s-a obținut ${revenues}`);
-  if (!Number.isFinite(expenses) || expenses < 0) return rr(`Cheltuielile trebuie să fie >= 0, s-a obținut ${expenses}`);
-  if (!Number.isFinite(revenuesNet) || revenuesNet < 0) return rr(`Veniturile nete (fără TVA) trebuie să fie >= 0, s-a obținut ${revenuesNet}`);
-  if (!Number.isFinite(expensesNet) || expensesNet < 0) return rr(`Cheltuielile nete (fără TVA) trebuie să fie >= 0, s-a obținut ${expensesNet}`);
+  // `leiText`, not the raw value: these sentences are read by a person, and a person reads leu.
+  if (!Number.isFinite(revenues) || revenues < 0) return rr(`Veniturile trebuie să fie >= 0, s-a obținut ${leiText(revenues)}`);
+  if (!Number.isFinite(expenses) || expenses < 0) return rr(`Cheltuielile trebuie să fie >= 0, s-a obținut ${leiText(expenses)}`);
+  if (!Number.isFinite(revenuesNet) || revenuesNet < 0) return rr(`Veniturile nete (fără TVA) trebuie să fie >= 0, s-a obținut ${leiText(revenuesNet)}`);
+  if (!Number.isFinite(expensesNet) || expensesNet < 0) return rr(`Cheltuielile nete (fără TVA) trebuie să fie >= 0, s-a obținut ${leiText(expensesNet)}`);
   if (!profile?.id) return rr('Profilul lipsește sau nu are id');
   const lines: CalculationLine[] = [];
   const asOf = `${inputs.fiscalYear}-01-01`;
@@ -137,7 +151,8 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // Still out of scope (recorded as an input gap, not faked into a rule): whether each individual
   // expense is deductibilă under CF art. 68 alin. (4) — the app holds no per-expense nature data.
   lines.push({ label: 'Cheltuieli deductibile', value: deductibleBase });
-  const net = gross - deductibleBase;
+  // `subBani`, not `-`: integer minus integer stays integer, and the Bani brand survives.
+  const net = subBani(gross, deductibleBase);
   lines.push({ label: 'Venit net din activitate', value: net });
 
   // CF art. 118 alin. (3) verbatim: „Veniturile din categoriile prevăzute la art. 61 lit. a), a^1), c) și
@@ -165,8 +180,8 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   if ('reviewRequired' in casRes) return rr(casRes.reason, lines);
   lines.push({ label: 'CAS (25%)', value: casRes.value });
 
-  let cassValue = 0;
-  let cassNonDeductibila = 0;
+  let cassValue: Bani = lei(0);
+  let cassNonDeductibila: Bani = lei(0);
   // CASS AND CAS TREAT PENSIONERS DIFFERENTLY — never mirror one branch into the other.
   //   CAS:  CF art. 150 alin. (1) — a pensioner owes NO CAS at all on art. 137 alin. (1)
   //         lit. b)/b^1) income (the call above).
@@ -193,7 +208,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     cassValue = cassRes.value;
     // CF art. 118 alin. (2) lit. b): only the part of CASS that art. 170 alin. (1) provides enters
     // the taxable base; calcCass reports the art. 174 alin. (6) difference as `nonDeductible`.
-    cassNonDeductibila = cassRes.nonDeductible ?? 0;
+    cassNonDeductibila = cassRes.nonDeductible ?? lei(0);
     lines.push({ label: 'CASS (10%)', value: cassValue });
   } else {
     // B-19 — the flag short-circuit, now an honest one. This zero is NOT a rule's output: it comes
@@ -209,13 +224,13 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
         inputs.socialInsuranceStatus === 'exempt'
           ? 'CASS (exceptat — art. 154 alin. (1); temeiul nu a fost verificat)'
           : 'CASS (nu se datorează — temeiul nu a fost verificat)',
-      value: 0,
+      value: lei(0),
       reviewRequired: true,
       reason: CASS_FLAG_REVIEW_REASON,
     });
     // Provenance travels with the result, not with the screen: the snapshot embeds these lines, so
     // an audit of a stored calculation sees the same admission the engine made at compute time.
-    lines.push({ label: `PROVENANȚĂ CASS: ${CASS_FLAG_REVIEW_REASON}`, value: 0 });
+    lines.push({ label: `PROVENANȚĂ CASS: ${CASS_FLAG_REVIEW_REASON}`, value: lei(0) });
   }
 
   // ---- CF art. 118 alin. (2): the taxable base, composed in the order the law states it ----
@@ -223,8 +238,8 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // reportate”, PE SURSĂ, before incomes are summed. The app models one sistem-real source and has no
   // prior-year loss store (Phase 7 owns persistence), so the reported-loss term is 0 here and the
   // current-year loss is surfaced below rather than silently dropped.
-  const pierderiReportate = 0;
-  const vnaRecalculat = net - pierderiReportate;
+  const pierderiReportate: Bani = lei(0);
+  const vnaRecalculat = subBani(net, pierderiReportate);
 
   // alin. (2^2): CAS deductibilă = (venit net anual determinat în sistem real ÷ total venituri cumulate
   // potrivit art. 148 alin. (3)) × contribuția de asigurări sociale calculată potrivit art. 151 alin. (1).
@@ -234,32 +249,50 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // While there is a single source, each denominator IS the sistem-real net, so both ratios are exactly
   // 1 and the proration is a no-op — the numbers do not move. It is written out anyway so that a second
   // income source (Phase 6) cannot silently inherit a full deduction it is not entitled to.
-  const vnaSistemReal = Math.max(net, 0);
+  const vnaSistemReal: Bani = net > 0 ? net : lei(0);
   const totalCumulatCass = vnaSistemReal; // art. 170 alin. (1)
   const totalCumulatCas = vnaSistemReal; // art. 148 alin. (3)
-  const ratioCas = totalCumulatCas > 0 ? vnaSistemReal / totalCumulatCas : 1;
-  const ratioCass = totalCumulatCass > 0 ? vnaSistemReal / totalCumulatCass : 1;
-  const casDeductibila = ratioCas * casRes.value;
+  // Phase 10: the ratios and their products are Decimal, not float. A float ratio is exactly how the
+  // fractional line values `7_128.1` and `52_002.9` got into this engine in the first place.
+  const ratioCas = totalCumulatCas > 0 ? new Decimal(vnaSistemReal).div(totalCumulatCas) : new Decimal(1);
+  const ratioCass = totalCumulatCass > 0 ? new Decimal(vnaSistemReal).div(totalCumulatCass) : new Decimal(1);
+  const casDeductibilaDec = ratioCas.times(casRes.value);
   // B-13: the art. 174 alin. (6) difference up to the 6 SM floor is OWED but never deductible — art. 118
   // alin. (2) lit. b) deducts the contributions „datorate potrivit prevederilor titlului V” „cu
   // excepția diferenței de contribuție de asigurări sociale de sănătate prevăzută la art. 174 alin. (6)”,
   // and alin. (2^3) prorates over the contribution „calculată potrivit art. 174 alin. (1)”. Deducting
   // the whole floor overstates the deduction in the 0 < VNA < 6 SM band and understates the tax.
-  const cassDeductibila = Math.max(0, ratioCass * (cassValue - cassNonDeductibila));
+  const cassRaw = ratioCass.times(subBani(cassValue, cassNonDeductibila));
+  // decimal.js-light has no static `Decimal.max`; and the comparison keeps the Decimal, not a float.
+  const cassDeductibilaDec = cassRaw.isNegative() ? new Decimal(0) : cassRaw;
+  // A deduction is NOT one of the three sums CF art. 66 alin. (1) governs, so `roundArt66` must not touch it:
+  // rounding a deduction changes the taxable base, and art. 66 rounds sums due, never bases (the A-3 boundary
+  // in docs/ai/phases/10_money_precision.md). With a single income source each ratio is exactly 1, so these
+  // products are already whole bani. If a second source ever makes one fractional, the engine REFUSES rather
+  // than inventing a rounding rule the law does not state.
+  const casDeductibila = exactBani(casDeductibilaDec);
+  const cassDeductibila = exactBani(cassDeductibilaDec);
+  if (casDeductibila === null || cassDeductibila === null) {
+    return rr(
+      'Deducerile CAS/CASS prorotate (art. 118 alin. (2^2) și (2^3)) nu sunt numere întregi de bani; '
+      + 'art. 66 alin. (1) rotunjește sumele datorate, nu deducerile sau bazele, deci nu se aplică nicio rotunjire aici.',
+      lines,
+    );
+  }
   lines.push({ label: 'CAS deductibilă (art. 118 alin. (2^2))', value: casDeductibila });
   lines.push({ label: 'CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))', value: cassDeductibila });
 
   // alin. (2^4): „Nivelul contribuției de asigurări sociale și al contribuției de asigurări sociale de
   // sănătate deductibile … nu poate depăși nivelul venitului net anual recalculat.” Without this cap a
   // low-net year could drive the base negative and hide a loss behind a negative tax.
-  const deduceriCalculat = casDeductibila + cassDeductibila;
-  const plafonDeduceri = Math.max(0, vnaRecalculat);
-  const deduceriRetinute = Math.min(deduceriCalculat, plafonDeduceri);
+  const deduceriCalculat = sumBani([casDeductibila, cassDeductibila]);
+  const plafonDeduceri: Bani = vnaRecalculat > 0 ? vnaRecalculat : lei(0);
+  const deduceriRetinute: Bani = deduceriCalculat < plafonDeduceri ? deduceriCalculat : plafonDeduceri;
   if (deduceriRetinute < deduceriCalculat) {
-    lines.push({ label: 'Deduceri blocate de plafonul art. 118 alin. (2^4)', value: deduceriCalculat - deduceriRetinute });
+    lines.push({ label: 'Deduceri blocate de plafonul art. 118 alin. (2^4)', value: subBani(deduceriCalculat, deduceriRetinute) });
   }
 
-  const taxable = vnaRecalculat - deduceriRetinute;
+  const taxable = subBani(vnaRecalculat, deduceriRetinute);
   lines.push({ label: 'Venit net anual impozabil (art. 118 alin. (2) lit. b))', value: taxable });
 
   if (taxable <= 0) {
@@ -267,17 +300,17 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     // total stays the contributions actually owed — but a loss year must not be reported as a plain 0.
     let lossCarryForward: FiscalLossCarryForward | undefined;
     if (vnaRecalculat < 0) {
-      lines.push({ label: 'Pierdere fiscală pe sursă (art. 118 alin. (2) lit. a))', value: -vnaRecalculat });
+      lines.push({ label: 'Pierdere fiscală pe sursă (art. 118 alin. (2) lit. a))', value: subBani(lei(0), vnaRecalculat) });
       lossCarryForward = {
-        amount: -vnaRecalculat,
+        amount: subBani(lei(0), vnaRecalculat),
         years: 5,
         capPercent: 70,
         sameSourceOnly: true,
         rule: 'CF art. 118 alin. (4): „Pierderea fiscală anuală înregistrată pe fiecare sursă din activități independente … determinată în sistem real, se reportează și se compensează de către contribuabil în limita a 70% din veniturile nete anuale, obținute din aceeași sursă de venit în următorii 5 ani fiscali consecutivi.” Alin. (5): reportul se face cronologic pe 5 ani consecutivi, dreptul este personal și netransmisibil, iar pierderea necompensată la expirarea perioadei este pierdere definitivă.',
       };
     }
-    const total = casRes.value + cassValue;
-    lines.push({ label: 'Impozit pe venit (fără bază impozabilă)', value: 0 });
+    const total = sumBani([casRes.value, cassValue]);
+    lines.push({ label: 'Impozit pe venit (fără bază impozabilă)', value: lei(0) });
     lines.push({ label: 'Total taxe', value: total });
     const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, calculationLines: lines, output: { total } });
     const computed: TaxEstimateResult = {
@@ -294,7 +327,9 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   const incomeTaxRes = calculatorRegistry['calc-income-tax'](incomeTaxRule, { base: taxable });
   if ('reviewRequired' in incomeTaxRes) return rr(incomeTaxRes.reason, lines);
   lines.push({ label: 'Impozit pe venit (rată de bază 10%)', value: incomeTaxRes.value });
-  const total = casRes.value + cassValue + incomeTaxRes.value;
+  // Art. 66 was already applied to each of the three sums, inside their calculators. Summing the rounded
+  // integers is exact, and it is why no second rounding can happen anywhere downstream.
+  const total = sumBani([casRes.value, cassValue, incomeTaxRes.value]);
   lines.push({ label: 'Total taxe', value: total });
   const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, calculationLines: lines, output: { total } });
   return {

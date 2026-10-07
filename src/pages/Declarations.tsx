@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { leiInputValue, parseLeiInput } from '../domain/money';
 import { useStore } from '../data/store';
 import { fmtRON, fmtDate, DECL_STATUS_LABEL, statusBadge } from '../data/types';
 import type { Declaration, DeclStatus } from '../data/types';
@@ -22,8 +23,9 @@ function DeclForm({ initial, onSave, onClose }: {
   const [f, setF] = useState({
     an: initial?.an ?? 2025,
     luna: initial?.luna ?? 9,
-    venituri: initial ? String(initial.venituri) : '',
-    cheltuieli: initial ? String(initial.cheltuieli) : '',
+    // `leiInputValue`, not `String(...)`: stored money is integer bani; an input is a screen.
+    venituri: initial ? leiInputValue(initial.venituri) : '',
+    cheltuieli: initial ? leiInputValue(initial.cheltuieli) : '',
     status: initial?.status ?? 'inregistrata',
     dataInregistrare: initial?.dataInregistrare ?? new Date().toISOString().slice(0, 10),
   });
@@ -34,12 +36,14 @@ function DeclForm({ initial, onSave, onClose }: {
   const submit = () => {
     const e: Record<string, string> = {};
     if (!f.dataInregistrare) e.dataInregistrare = 'Data este obligatorie';
-    const v = parseFloat(String(f.venituri).replace(',', '.'));
-    const c = parseFloat(String(f.cheltuieli).replace(',', '.'));
-    if (!isFinite(v) || v < 0) e.venituri = 'Introduceți o valoare validă';
-    if (!isFinite(c) || c < 0) e.cheltuieli = 'Introduceți o valoare validă';
+    // Phase 10: form in lei, storage in bani; `parseLeiInput` refuses sub-ban precision rather than rounding.
+    const v = parseLeiInput(String(f.venituri));
+    const c = parseLeiInput(String(f.cheltuieli));
+    if (v === null || v < 0) e.venituri = 'Introduceți o valoare validă';
+    if (c === null || c < 0) e.cheltuieli = 'Introduceți o valoare validă';
     setErrors(e);
     if (Object.keys(e).length) return;
+    if (v === null || c === null) return; // unreachable; narrows without a cast
     onSave({
       an: f.an, luna: f.luna, venituri: v, cheltuieli: c,
       status: f.status as DeclStatus, dataInregistrare: f.dataInregistrare,

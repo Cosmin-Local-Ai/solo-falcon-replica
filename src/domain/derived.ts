@@ -10,6 +10,7 @@ import type { AppData } from '../data/types';
 import { selectMonthly, selectYtd, inPeriod, revenueFiscalDate, expenseFiscalDate, type MonthlyTotals, type YtdTotals } from './aggregation';
 import { selectProjectionV1, type ProjectionV1 } from './projection';
 import type { FiscalRule } from './fiscal/rules';
+import { sumBani, type Bani } from './money';
 import type {
   PfaOtherIncomeFlag,
   PfaPensionStatus,
@@ -49,8 +50,8 @@ type HasRecordFields = {
   id: string;
   date: string;
   status: string;
-  valoareFaraTva: number;
-  tva: number;
+  valoareFaraTva: Bani;
+  tva: Bani;
   tip: string;
   nr: string;
 };
@@ -69,7 +70,7 @@ function toLines<T extends HasRecordFields>(
     return {
       id: r.id,
       date,
-      total: r.valoareFaraTva + r.tva,
+      total: sumBani([r.valoareFaraTva, r.tva]),
       status: r.status,
       counted: r.status === 'inregistrata' && inPeriod(date, asOfDate, fiscalYear),
       document: { tip: r.tip, nr: r.nr },
@@ -103,12 +104,12 @@ export interface TaxInputsReference {
   /** CF art. 174 alin. (7) lit. a) input — salary income realised in `fiscalYear`, in lei.
    * `null` means "not recorded" (a payload written before Phase 6); `undefined` would make
    * the canonical key unstable. CASS only — never an input to CAS (CF art. 150 alin. (2)). */
-  salaryIncomeLei: number | null;
+  salaryIncomeLei: Bani | null;
   pensionStatus: PfaPensionStatus;
   otherIncome: PfaOtherIncomeFlag[];
   socialInsuranceStatus: PfaSocialInsuranceStatus;
   vatExempt: boolean;
-  cashFloorLei: number;
+  cashFloorLei: Bani;
   fiscalYear: number;
   /** Exact PFA start date (ISO `YYYY-MM-DD`) or null. Read by the engine only for CF art. 118 alin. (3). */
   pfaStartDate: string | null;

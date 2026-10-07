@@ -1,10 +1,14 @@
-import type { FiscalRule } from './rules';
+import type { FiscalRule, FiscalParameter } from './rules';
+import { applyRateDecimal, lei, leiText, roundArt66, subBani, type Bani } from '../money';
 
 export type ReviewRequired = { reviewRequired: true; reason: string };
 
 export type CalculatorResult =
   | {
-      value: number;
+      /** The amount this rule computes as DUE, in integer bani. For the three sums art. 66 alin. (1)
+       * governs (income tax, CAS, CASS) this is already rounded exactly once, by `roundArt66` — no caller may
+       * round it again, and no caller may round a base to get here. */
+      value: Bani;
       breakdown: string[];
       /** Part of `value` that CF art. 118 alin. (2) lit. b) does NOT allow into the income-tax base.
        * Today exactly one contribution has such a part: the CF art. 174 alin. (6) CASS difference
@@ -16,7 +20,7 @@ export type CalculatorResult =
        * 10 Art. I, MO 1125/11.11.2024, eff. 01-01-2025). Art. 118 alin. (2^3) then prorates the
        * deductible CASS over „contribuția … calculată potrivit art. 174 alin. (1)”, which is the 10% on
        * the art. 68 net income — not the top-up to the 6 SM floor. Absent or 0 = fully deductible. */
-      nonDeductible?: number;
+      nonDeductible?: Bani;
     }
   | ReviewRequired;
 
@@ -25,7 +29,7 @@ export type CalculatorInput = {
    * statutory floor — it is never itself the CAS base (see `calcCas`). For CASS it
    * IS the base (venitul net anual, art. 68 sistem real), before deducting CAS —
    * see `calcCass`. */
-  base?: number;
+  base?: Bani;
   /**
    * CAS — CF art. 150 alin. (1): a natural person earning independent-activity income
    * who is a pensioner or is insured in their own social insurance system owes NO CAS
@@ -62,7 +66,7 @@ export type CalculatorInput = {
    * compares against the 6 SM floor. Absent means "not known", which is reported, not
    * assumed. Never an input to CAS (art. 150 alin. (2) covers only lit. b^1)).
    */
-  salaryIncomeLei?: number;
+  salaryIncomeLei?: Bani;
   /**
    * CF art. 148 alin. (2): the CAS base is "venitul ales de contribuabil". An
    * explicitly chosen base is honoured, but never below the applicable statutory
@@ -71,7 +75,7 @@ export type CalculatorInput = {
    * income. Absent means "no election made", so the statutory minimum (the floor
    * itself) is the headline figure.
    */
-  chosenBase?: number;
+  chosenBase?: Bani;
 };
 
 export type CalculatorFunction = (
@@ -91,15 +95,44 @@ function paramNumber(rule: FiscalRule, id: string): number {
   return v;
 }
 
+/**
+ * Phase 10: the unit-aware funnel. `FiscalParameter.value` is `number | string` shared by lei, percent,
+ * date, count, days and text, so the type alone cannot say which unit a number is in — `unit` is the only
+ * machine-readable marker in the rule store. This is the one place that question gets answered: a `lei`
+ * parameter is read as integer **bani** (the rule package stores it that way), and reading a percent,
+ * date or count through here is a hard error rather than a silently mis-scaled amount.
+ *
+ * Rates deliberately do NOT come through here: they stay unscaled integer percents (25, 10) and are
+ * applied by `applyRateDecimal`, so a rate never inherits a money scale by accident.
+ */
+function paramBani(rule: FiscalRule, id: string): Bani {
+  const p = rule.parameters.find((x: FiscalParameter) => x.id === id);
+  if (!p || typeof p.value !== 'number') {
+    throw new Error(`Missing numeric parameter '${id}' for rule ${rule.ruleId}`);
+  }
+  if (p.unit !== 'lei') {
+    throw new Error(
+      `Parameter '${id}' of rule ${rule.ruleId} has unit '${p.unit}', not 'lei' — refusing to read it as money`,
+    );
+  }
+  if (!Number.isInteger(p.value)) {
+    throw new Error(
+      `Parameter '${id}' of rule ${rule.ruleId} is not an integer number of bani (${p.value})`,
+    );
+  }
+  return p.value as Bani;
+}
+
 function calcWageReference(rule: FiscalRule): CalculatorResult {
-  const value = paramValue(rule, 'reference') ?? paramValue(rule, 'monthly');
-  if (typeof value !== 'number') {
+  const has = rule.parameters.some((p) => p.id === 'reference' || p.id === 'monthly');
+  if (!has) {
     return {
       reviewRequired: true,
       reason: `Rule ${rule.ruleId} has no numeric 'reference' or 'monthly' parameter`,
     };
   }
-  return { value, breakdown: [`value: ${value} lei`] };
+  const value = paramBani(rule, rule.parameters.some((p) => p.id === 'reference') ? 'reference' : 'monthly');
+  return { value, breakdown: [`value: ${leiText(value)} lei`] };
 }
 
 // CF art. 148 alin. (2): the CAS base is "venitul ales de contribuabil, care nu
@@ -110,19 +143,19 @@ function calcWageReference(rule: FiscalRule): CalculatorResult {
 // CF art. 148 alin. (1): below 12 SM the obligation never arises, so CAS is 0 —
 // NOT the 12 SM figure.
 function calcCas(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
-  const rate = paramNumber(rule, 'rate') / 100;
-  const tier1Base = paramNumber(rule, 'min_base'); // 12 SM floor
-  const tier2Base = paramNumber(rule, 'tier2_base'); // 24 SM floor
-  const tier1Cas = paramNumber(rule, 'tier1_cas');
-  const tier2Cas = paramNumber(rule, 'tier2_cas');
-  const realized = input?.base ?? 0;
+  const ratePercent = paramNumber(rule, 'rate'); // unscaled integer percent — never a money amount
+  const tier1Base = paramBani(rule, 'min_base'); // 12 SM floor
+  const tier2Base = paramBani(rule, 'tier2_base'); // 24 SM floor
+  const tier1Cas = paramBani(rule, 'tier1_cas');
+  const tier2Cas = paramBani(rule, 'tier2_cas');
+  const realized = input?.base ?? lei(0);
 
   if (input?.pensionStatus === 'da') {
     return {
-      value: 0,
+      value: lei(0),
       breakdown: [
         'pensionar sau asigurat in propriul sistem de asigurari sociale — exceptie CF art. 150 alin. (1)',
-        `venit realizat: ${realized} lei`,
+        `venit realizat: ${leiText(realized)} lei`,
         'CAS = 0 lei (exceptia nu depinde de cuantumul venitului si nu este optionala)',
       ],
     };
@@ -130,11 +163,11 @@ function calcCas(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
 
   if (realized < tier1Base) {
     return {
-      value: 0,
+      value: lei(0),
       breakdown: [
-        `venit realizat: ${realized} lei`,
-        `sub 12 SM anual (${tier1Base} lei) — conditia din CF art. 148 alin. (1) nu este indeplinita`,
-        `CAS = 0 lei (CF art. 148 alin. (4) permite optiunea voluntara la o baza >= ${tier1Base} lei; neimplementata in aceasta faza)`,
+        `venit realizat: ${leiText(realized)} lei`,
+        `sub 12 SM anual (${leiText(tier1Base)} lei) — conditia din CF art. 148 alin. (1) nu este indeplinita`,
+        `CAS = 0 lei (CF art. 148 alin. (4) permite optiunea voluntara la o baza >= ${leiText(tier1Base)} lei; neimplementata in aceasta faza)`,
       ],
     };
   }
@@ -143,19 +176,22 @@ function calcCas(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
   const floor = inTier2 ? tier2Base : tier1Base;
   const floorCas = inTier2 ? tier2Cas : tier1Cas;
   const chosen = input?.chosenBase;
-  const base = chosen === undefined ? floor : Math.max(chosen, floor);
-  const cas = base * rate;
+  // Not Math.max: that returns a plain `number` and would drop the Bani brand. Same comparison, kept typed.
+  const base = chosen === undefined ? floor : chosen > floor ? chosen : floor;
+  // CF art. 66 alin. (1) — EXTENDED to CAS by this app's policy (Titlul V states no rounding rule). The base
+  // stays exact integer bani; only the contribution owed is rounded, and it is rounded here, once.
+  const cas = roundArt66(applyRateDecimal(base, ratePercent));
   const breakdown = [
-    `venit realizat: ${realized} lei`,
-    `prag aplicabil (CF art. 148 alin. (2) lit. ${inTier2 ? 'b' : 'a'}): ${floor} lei`,
-    `baza de calcul = venitul ales: ${base} lei`,
-    `CAS = ${base} x ${rate} = ${cas} lei`,
-    `OPTIUNE INFORMATIONALA: minimul legal in acest prag este ${floorCas} lei (baza ${floor} lei); CF art. 148 alin. (2) nu prevede nicio plafonare superioara, deci o baza mai mare poate fi aleasa voluntar doar pentru o pensie mai mare`,
-    `CAS la pragul de 12 SM = ${tier1Cas} lei; la pragul de 24 SM = ${tier2Cas} lei; fara plafon superior`,
+    `venit realizat: ${leiText(realized)} lei`,
+    `prag aplicabil (CF art. 148 alin. (2) lit. ${inTier2 ? 'b' : 'a'}): ${leiText(floor)} lei`,
+    `baza de calcul = venitul ales: ${leiText(base)} lei`,
+    `CAS = ${leiText(base)} x ${ratePercent / 100} = ${leiText(cas)} lei`,
+    `OPTIUNE INFORMATIONALA: minimul legal in acest prag este ${leiText(floorCas)} lei (baza ${leiText(floor)} lei); CF art. 148 alin. (2) nu prevede nicio plafonare superioara, deci o baza mai mare poate fi aleasa voluntar doar pentru o pensie mai mare`,
+    `CAS la pragul de 12 SM = ${leiText(tier1Cas)} lei; la pragul de 24 SM = ${leiText(tier2Cas)} lei; fara plafon superior`,
   ];
   if (chosen !== undefined && chosen < floor) {
     breakdown.push(
-      `baza aleasa ${chosen} lei este sub pragul legal de ${floor} lei si a fost ridicata la acest prag — CF art. 148 alin. (2) prevede un MINIM, nu o plafonare`,
+      `baza aleasa ${leiText(chosen)} lei este sub pragul legal de ${leiText(floor)} lei si a fost ridicata la acest prag — CF art. 148 alin. (2) prevede un MINIM, nu o plafonare`,
     );
   }
   return { value: cas, breakdown };
@@ -185,19 +221,22 @@ function calcCas(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
 // are DERIVED as rate × base, never declared as separate parameters (one legal figure, one
 // source of truth).
 function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
-  const rate = paramNumber(rule, 'rate') / 100;
-  const floorBase = paramNumber(rule, 'min_base'); // 6 SM — CF art. 174 alin. (6) top-up floor
-  const maxBase = paramNumber(rule, 'max_annual_base'); // 72 SM — CF art. 170 alin. (1) ceiling
-  const vna = input?.base ?? 0;
-  const floorCass = floorBase * rate; // derived: 2,430 lei for 2026
-  const ceilingCass = maxBase * rate; // derived: 29,160 lei for 2026
+  const ratePercent = paramNumber(rule, 'rate'); // unscaled integer percent
+  const floorBase = paramBani(rule, 'min_base'); // 6 SM — CF art. 174 alin. (6) top-up floor
+  const maxBase = paramBani(rule, 'max_annual_base'); // 72 SM — CF art. 170 alin. (1) ceiling
+  const vna = input?.base ?? lei(0);
+  // Derived, never declared as separate parameters (one legal figure, one source of truth) — and rounded
+  // by the same single art. 66 call as every other sum due, so the floor figure and the computed figure
+  // cannot disagree about how rounding works.
+  const floorCass = roundArt66(applyRateDecimal(floorBase, ratePercent)); // 2,430 lei for 2026
+  const ceilingCass = roundArt66(applyRateDecimal(maxBase, ratePercent)); // 29,160 lei for 2026
 
   // CF art. 174 alin. (2): a fiscal loss or a net income equal to zero owes NO CASS.
   if (vna <= 0) {
     return {
-      value: 0,
+      value: lei(0),
       breakdown: [
-        `venit net anual (VNA): ${vna} lei`,
+        `venit net anual (VNA): ${leiText(vna)} lei`,
         'VNA egal cu zero sau pierdere fiscala — nu se datoreaza CASS: CF art. 174 alin. (2); pierderile fiscale nu intra nici in baza de calcul (art. 170 alin. (1))',
         `OPTIUNE NEMODELATA: aceeasi persoana poate opta pentru plata CASS potrivit CF art. 180 alin. (1) — optiune cu termen, iar baza din art. 180 alin. (2) nu este verificata`,
         'CASS = 0 lei (pragul de 6 SM din art. 174 alin. (6) NU se aplica automat aici)',
@@ -209,15 +248,15 @@ function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
     // Checked BEFORE the salary relief: art. 174 alin. (7) lit. c) has no monetary
     // threshold, so it is certain in exactly the case where lit. a) cannot be evaluated.
     if (input?.pensionStatus === 'da') {
-      const cass = vna * rate;
+      const cass = roundArt66(applyRateDecimal(vna, ratePercent));
       return {
         value: cass,
         breakdown: [
-          `venit net anual (VNA): ${vna} lei`,
-          `VNA sub pragul de 6 SM (${floorBase} lei): art. 174 alin. (6) ar cere o diferenta de contributie pana la ${floorCass} lei`,
+          `venit net anual (VNA): ${leiText(vna)} lei`,
+          `VNA sub pragul de 6 SM (${leiText(floorBase)} lei): art. 174 alin. (6) ar cere o diferenta de contributie pana la ${leiText(floorCass)} lei`,
           'exceptie: venituri din pensii (art. 99) REALIZATE in anul fiscal — CF art. 174 alin. (7) lit. c); fara prag valoric, nu e un simplu statut',
           'lit. c) elimina DOAR diferenta de la art. 174 alin. (6) — contributia de 10% pe VNA ramane datorata (art. 170 alin. (1)); pensia NU scuteste de CASS, spre deosebire de CAS unde art. 150 alin. (1) scuteste integral',
-          `CASS = ${vna} x ${rate} = ${cass} lei`,
+          `CASS = ${leiText(vna)} x ${ratePercent / 100} = ${leiText(cass)} lei`,
         ],
       };
     }
@@ -234,19 +273,19 @@ function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
         return {
           reviewRequired: true,
           reason:
-            `VNA ${vna} lei este sub pragul de 6 SM (${floorBase} lei), dar diferenta de contributie din CF art. 174 alin. (6) nu se datoreaza daca veniturile din salarii si asimilate ale anului fiscal sunt cel putin egale cu 6 salarii minime brute (art. 174 alin. (7) lit. a)). Profilul are salaryStatus = da dar nu contine cuantumul salarial — nu se poate stabili.`,
+            `VNA ${leiText(vna)} lei este sub pragul de 6 SM (${leiText(floorBase)} lei), dar diferenta de contributie din CF art. 174 alin. (6) nu se datoreaza daca veniturile din salarii si asimilate ale anului fiscal sunt cel putin egale cu 6 salarii minime brute (art. 174 alin. (7) lit. a)). Profilul are salaryStatus = da dar nu contine cuantumul salarial — nu se poate stabili.`,
         };
       }
       if (salary >= floorBase) {
-        const cass = vna * rate;
+        const cass = roundArt66(applyRateDecimal(vna, ratePercent));
         return {
           value: cass,
           breakdown: [
-            `venit net anual (VNA): ${vna} lei`,
-            `VNA sub pragul de 6 SM (${floorBase} lei): art. 174 alin. (6) ar cere o diferenta de contributie pana la ${floorCass} lei`,
-            `exceptie: venituri din salarii si asimilate realizate in anul fiscal = ${salary} lei, cel putin egal cu 6 salarii minime brute (${floorBase} lei) — CF art. 174 alin. (7) lit. a)`,
+            `venit net anual (VNA): ${leiText(vna)} lei`,
+            `VNA sub pragul de 6 SM (${leiText(floorBase)} lei): art. 174 alin. (6) ar cere o diferenta de contributie pana la ${leiText(floorCass)} lei`,
+            `exceptie: venituri din salarii si asimilate realizate in anul fiscal = ${leiText(salary)} lei, cel putin egal cu 6 salarii minime brute (${leiText(floorBase)} lei) — CF art. 174 alin. (7) lit. a)`,
             'lit. a) elimina DOAR diferenta de la art. 174 alin. (6) — contributia de 10% pe VNA ramane datorata (art. 174 alin. (1), art. 170 alin. (1))',
-            `CASS = ${vna} x ${rate} = ${cass} lei (fara diferenta de contributie; intreaga contributie este deductibila per art. 118 alin. (2) lit. b))`,
+            `CASS = ${leiText(vna)} x ${ratePercent / 100} = ${leiText(cass)} lei (fara diferenta de contributie; intreaga contributie este deductibila per art. 118 alin. (2) lit. b))`,
           ],
         };
       }
@@ -261,54 +300,58 @@ function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
     // (6)”, and alin. (2^3) prorates over the contribution „calculată potrivit art. 174 alin. (1)”.
     // So the deductible part is `due`, while the whole `floorCass` stays payable. Reported as
     // `nonDeductible` so the income-tax base composes correctly instead of absorbing the difference.
-    const due = vna * rate; // art. 174 alin. (1) / art. 170 alin. (1): 10% x venitul net anual
-    const difference = floorCass - due; // art. 174 alin. (6): differenta de contributie — neimputabila
+    const due = roundArt66(applyRateDecimal(vna, ratePercent)); // art. 174 alin. (1) / art. 170 alin. (1): 10% x VNA
+    // Derived by subtraction from the already-rounded total, so `value - nonDeductible === due` holds
+    // exactly. Rounding the two parts independently could have left them one ban apart.
+    const difference = subBani(floorCass, due); // art. 174 alin. (6): differenta de contributie — neimputabila
     return {
       value: floorCass,
       nonDeductible: difference,
       breakdown: [
-        `venit net anual (VNA): ${vna} lei`,
-        `baza de calcul = pragul de 6 SM: ${floorBase} lei — CF art. 174 alin. (6) (NU art. 170 alin. (2)-(3), care vizeaza doar art. 155 alin. (1) lit. c)-h))`,
-        `CASS = ${floorBase} x ${rate} = ${floorCass} lei — o diferenta de contributie pana la baza de 6 SM, nu inlocuirea bazei`,
+        `venit net anual (VNA): ${leiText(vna)} lei`,
+        `baza de calcul = pragul de 6 SM: ${leiText(floorBase)} lei — CF art. 174 alin. (6) (NU art. 170 alin. (2)-(3), care vizeaza doar art. 155 alin. (1) lit. c)-h))`,
+        `CASS = ${leiText(floorBase)} x ${ratePercent / 100} = ${leiText(floorCass)} lei — o diferenta de contributie pana la baza de 6 SM, nu inlocuirea bazei`,
         'CF art. 118 alin. (2) lit. b): diferenta de la art. 174 alin. (6) NU se scade din baza impozabila (reparație de coerență, nu de calcul)',
-        `CASS deductibila din baza impozabila = ${vna} x ${rate} = ${due} lei (art. 174 alin. (1)); diferenta neimputabila = ${difference} lei (art. 174 alin. (6), exclusa expres de art. 118 alin. (2) lit. b))`,
+        `CASS deductibila din baza impozabila = ${leiText(vna)} x ${ratePercent / 100} = ${leiText(due)} lei (art. 174 alin. (1)); diferenta neimputabila = ${leiText(difference)} lei (art. 174 alin. (6), exclusa expres de art. 118 alin. (2) lit. b))`,
         ...(input?.salaryStatus === 'da'
           ? [
-              `conditia din art. 174 alin. (7) lit. a) nu este indeplinita: venituri din salarii ${input.salaryIncomeLei} lei < 6 salarii minime brute (${floorBase} lei), deci diferenta ramane datorata`,
+              `conditia din art. 174 alin. (7) lit. a) nu este indeplinita: venituri din salarii ${leiText(input.salaryIncomeLei!)} lei < 6 salarii minime brute (${leiText(floorBase)} lei), deci diferenta ramane datorata`,
             ]
           : []),
       ],
     };
   }
 
-  const base = Math.min(vna, maxBase);
-  const cass = base * rate;
+  // Not Math.min: it returns a plain `number` and would drop the Bani brand.
+  const base = vna < maxBase ? vna : maxBase;
+  const cass = roundArt66(applyRateDecimal(base, ratePercent));
   const breakdown = [
-    `venit net anual (VNA): ${vna} lei`,
-    `baza de calcul: ${base} lei`,
-    `CASS = ${base} x ${rate} = ${cass} lei`,
+    `venit net anual (VNA): ${leiText(vna)} lei`,
+    `baza de calcul: ${leiText(base)} lei`,
+    `CASS = ${leiText(base)} x ${ratePercent / 100} = ${leiText(cass)} lei`,
   ];
   if (vna > maxBase) {
     breakdown.push(
-      `VNA depaseste plafonul de 72 SM (${maxBase} lei) — baza se plafoneaza: CF art. 170 alin. (1) "nu poate fi mai mare decât"`,
-      `CASS la plafon = ${ceilingCass} lei, derivata din ${maxBase} x ${rate} (nu exista un parametru separat pentru acest numar)`,
+      `VNA depaseste plafonul de 72 SM (${leiText(maxBase)} lei) — baza se plafoneaza: CF art. 170 alin. (1) "nu poate fi mai mare decât"`,
+      `CASS la plafon = ${leiText(ceilingCass)} lei, derivata din ${leiText(maxBase)} x ${ratePercent / 100} (nu exista un parametru separat pentru acest numar)`,
     );
   }
   return { value: cass, breakdown };
 }
 
 function calcIncomeTax(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
-  const baseRate = paramNumber(rule, 'base_rate') / 100;
+  const baseRatePercent = paramNumber(rule, 'base_rate'); // unscaled integer percent
   const base = input?.base;
   if (typeof base !== 'number') {
     return { reviewRequired: true, reason: 'No base provided for income tax calculation' };
   }
-  const tax = base * baseRate;
+  // CF art. 66 alin. (1) proper — this is the sum the article actually governs. One rounding, here.
+  const tax = roundArt66(applyRateDecimal(base, baseRatePercent));
   return {
     value: tax,
     breakdown: [
-      `base: ${base} lei`,
-      `income tax = ${base} x ${baseRate} = ${tax} lei (10% base rate)`,
+      `base: ${leiText(base)} lei`,
+      `income tax = ${leiText(base)} x ${baseRatePercent / 100} = ${leiText(tax)} lei (10% base rate)`,
       // The 16% "surcharge" note was removed (Phase 5 — the cleanup named in defect B-4's "Fixed in"
       // cell): CF art. 115 alin. (1) lit. b)
       // applies 16% only to art. 114 alin. (2) lit. h)/i) "alte venituri", and art. 114 alin. (1)
@@ -321,8 +364,8 @@ function calcIncomeTax(rule: FiscalRule, input?: CalculatorInput): CalculatorRes
 }
 
 function calcVatThreshold(rule: FiscalRule): CalculatorResult {
-  const threshold = paramNumber(rule, 'threshold');
-  return { value: threshold, breakdown: [`VAT threshold: ${threshold} lei`] };
+  const threshold = paramBani(rule, 'threshold');
+  return { value: threshold, breakdown: [`VAT threshold: ${leiText(threshold)} lei`] };
 }
 
 function calcDeadline(rule: FiscalRule): CalculatorResult {
@@ -333,7 +376,7 @@ function calcDeadline(rule: FiscalRule): CalculatorResult {
       reason: `Rule ${rule.ruleId} has no date parameter 'deadline'`,
     };
   }
-  return { value: 0, breakdown: [`deadline: ${deadline}`] };
+  return { value: lei(0), breakdown: [`deadline: ${deadline}`] };
 }
 
 export function computeFiscal(

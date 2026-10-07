@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { leiInputValue, parseLeiInput } from '../domain/money';
 import { useStore } from '../data/store';
 import { fmtRON, fmtDate, total, REV_STATUS_LABEL, statusBadge } from '../data/types';
 import type { Revenue } from '../data/types';
@@ -28,8 +29,10 @@ function RevenueForm({ initial, onSave, onClose }: {
     date: initial?.date ?? new Date().toISOString().slice(0, 10),
     client: initial?.client ?? '',
     cui: initial?.cui ?? '',
-    valoare: initial ? String(initial.valoareFaraTva) : '',
-    tva: initial ? String(initial.tva) : '',
+    // `leiInputValue`, not `String(...)`: the stored amount is integer bani, and an input is a screen.
+    // `String(450000)` would show a user 450 000 for 4 500 lei.
+    valoare: initial ? leiInputValue(initial.valoareFaraTva) : '',
+    tva: initial ? leiInputValue(initial.tva) : '',
     status: initial?.status ?? 'inregistrata',
     statusDetail: initial?.statusDetail ?? '',
   });
@@ -42,12 +45,18 @@ function RevenueForm({ initial, onSave, onClose }: {
     if (!f.nr.trim()) e.nr = 'Numărul documentului este obligatoriu';
     if (!f.date) e.date = 'Data este obligatorie';
     if (!f.client.trim()) e.client = 'Clientul este obligatoriu';
-    const v = parseFloat(f.valoare.replace(',', '.'));
-    const t = parseFloat(f.tva.replace(',', '.'));
-    if (!isFinite(v) || v < 0) e.valoare = 'Introduceți o valoare validă';
-    if (!isFinite(t) || t < 0) e.tva = 'Introduceți un TVA valid';
+    // Phase 10: the form speaks lei, storage speaks bani. `parseLeiInput` is the one boundary, and it
+    // REFUSES sub-ban precision (`85.555`) instead of rounding it — rounding on the way into a ledger is the
+    // silent money change this phase forbids. The existing messages are unchanged.
+    const v = parseLeiInput(f.valoare);
+    const t = parseLeiInput(f.tva);
+    if (v === null || v < 0) e.valoare = 'Introduceți o valoare validă';
+    if (t === null || t < 0) e.tva = 'Introduceți un TVA valid';
     setErrors(e);
     if (Object.keys(e).length) return;
+    // Unreachable — the two checks above already recorded an error for a null. It exists so the compiler
+    // knows the values are non-null below, without a cast that could hide a real null.
+    if (v === null || t === null) return;
     onSave({
       tip: f.tip as Revenue['tip'], nr: f.nr, date: f.date, client: f.client, cui: f.cui,
       valoareFaraTva: v, tva: t, status: f.status as Revenue['status'],

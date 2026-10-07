@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { leiInputValue, parseLeiInput } from '../domain/money';
 import { useStore } from '../data/store';
 import { fmtRON, fmtDate, total, EXP_STATUS_LABEL, statusBadge } from '../data/types';
 import type { Expense } from '../data/types';
@@ -26,8 +27,9 @@ function ExpenseForm({ initial, onSave, onClose }: {
     date: initial?.date ?? new Date().toISOString().slice(0, 10),
     furnizor: initial?.furnizor ?? '',
     cui: initial?.cui ?? '',
-    valoare: initial ? String(initial.valoareFaraTva) : '',
-    tva: initial ? String(initial.tva) : '',
+    // `leiInputValue`, not `String(...)`: stored money is integer bani; an input is a screen.
+    valoare: initial ? leiInputValue(initial.valoareFaraTva) : '',
+    tva: initial ? leiInputValue(initial.tva) : '',
     status: initial?.status ?? 'inregistrata',
     statusDetail: initial?.statusDetail ?? '',
   });
@@ -40,12 +42,14 @@ function ExpenseForm({ initial, onSave, onClose }: {
     if (!f.nr.trim()) e.nr = 'Numărul documentului este obligatoriu';
     if (!f.date) e.date = 'Data este obligatorie';
     if (!f.furnizor.trim()) e.furnizor = 'Furnizorul este obligatoriu';
-    const v = parseFloat(f.valoare.replace(',', '.'));
-    const t = parseFloat(f.tva.replace(',', '.'));
-    if (!isFinite(v) || v < 0) e.valoare = 'Introduceți o valoare validă';
-    if (!isFinite(t) || t < 0) e.tva = 'Introduceți un TVA valid';
+    // Phase 10: form in lei, storage in bani; `parseLeiInput` refuses sub-ban precision rather than rounding.
+    const v = parseLeiInput(f.valoare);
+    const t = parseLeiInput(f.tva);
+    if (v === null || v < 0) e.valoare = 'Introduceți o valoare validă';
+    if (t === null || t < 0) e.tva = 'Introduceți un TVA valid';
     setErrors(e);
     if (Object.keys(e).length) return;
+    if (v === null || t === null) return; // unreachable; narrows without a cast
     onSave({
       tip: f.tip as Expense['tip'], nr: f.nr, date: f.date, furnizor: f.furnizor, cui: f.cui,
       valoareFaraTva: v, tva: t, status: f.status as Expense['status'],

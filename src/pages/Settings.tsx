@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { leiInputValue, parseLeiInput } from '../domain/money';
 import { useStore } from '../data/store';
 import { Card, Badge, Modal } from '../components/ui';
 import {
@@ -84,14 +85,16 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     fiscalYear: String(profile.fiscalYear),
     pfaStartDate: profile.pfaStartDate ?? '',
     salaryStatus: profile.salaryStatus,
-    salaryIncomeLei: profile.salaryIncomeLei === undefined ? '' : String(profile.salaryIncomeLei),
+    // `leiInputValue`, not `String(...)`: the stored amount is integer bani and an input is a screen.
+    // The `undefined` branch stays a separate case — an empty field means "not recorded", which is not 0.
+    salaryIncomeLei: profile.salaryIncomeLei === undefined ? '' : leiInputValue(profile.salaryIncomeLei),
     pensionStatus: profile.pensionStatus,
     socialInsuranceStatus: profile.socialInsuranceStatus,
     vatExempt: profile.vatExempt ? 'da' : 'nu',
     // Optional: an empty field means "the app does not know the date", which is not
     // the same as "there is no VAT deadline" — see VAT_REGISTRATION_DEADLINE_2026.
     vatExceedanceDate: profile.vatExceedanceDate ?? '',
-    cashFloorLei: String(profile.cashFloorLei),
+    cashFloorLei: leiInputValue(profile.cashFloorLei),
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const regimeOptions = selectableRegimes();
@@ -156,16 +159,18 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     // art. 174 alin. (7) lit. a) is a numeric condition, so when a salary exists the
     // amount is mandatory — without it the engine cannot decide the 6 SM test and
     // calcCass() must halt instead of guessing.
-    const salary = fiscal.salaryIncomeLei.trim() === '' ? undefined : Number(fiscal.salaryIncomeLei);
+    // Three states, not two: `undefined` = the field is empty ("not recorded"), `null` = what was typed
+    // cannot be stored (not a number, or a fraction of a ban). Collapsing them would turn "unknown" into 0.
+    const salary = fiscal.salaryIncomeLei.trim() === '' ? undefined : parseLeiInput(fiscal.salaryIncomeLei);
     if (fiscal.salaryStatus === 'da') {
       if (salary === undefined) {
         e.salaryIncomeLei = 'Venitul brut anual din salarii este necesar pentru pragul de 6 salarii minime.';
-      } else if (!Number.isFinite(salary) || salary < 0) {
+      } else if (salary === null || salary < 0) {
         e.salaryIncomeLei = 'Valoare invalidă (lei, ≥ 0).';
       }
     }
-    const cash = Number(fiscal.cashFloorLei);
-    if (!Number.isFinite(cash) || cash < 0) e.cashFloorLei = 'Valoare invalidă (lei, ≥ 0).';
+    const cash = parseLeiInput(fiscal.cashFloorLei);
+    if (cash === null || cash < 0) e.cashFloorLei = 'Valoare invalidă (lei, ≥ 0).';
     if (!isSelectableRegime(fiscal.regime)) {
       e.regime = 'Regimul salvat nu poate fi calculat; alege un regim valabil pentru un PFA.';
     }

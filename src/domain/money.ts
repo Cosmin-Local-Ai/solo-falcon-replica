@@ -234,3 +234,39 @@ export function parseLeiInput(text: string): Bani | null {
   const { bani, exact } = baniFromLei(value);
   return exact ? bani : null;
 }
+
+/**
+ * Bani as the shortest exact lei string, for **prose** — calculator breakdown notes, review reasons,
+ * migration reports. Not for a screen: a screen amount goes through `formatBani*`, which groups.
+ *
+ * Why this exists: the breakdown notes in `fiscal/calculators.ts` interpolate amounts into sentences
+ * („CASS la plafon = 29160 lei, derivata din 291600 x 0.1”), and one of those sentences is pinned by a
+ * test (`fiscal/fiscal.test.ts:259`). Once the stored number is bani, interpolating it directly would
+ * print `29160000` inside a Romanian sentence about leu — the "raw bani must never reach a human" rule,
+ * applied to prose. `Decimal.div(100)` is exact, so `29160000` renders back as `29160` and `749450` as
+ * `7494.5`: the sentences keep the wording they have always had.
+ */
+export function leiText(amount: Bani): string {
+  assertIntegralBani(amount, 'leiText');
+  return new Decimal(amount).div(BANIS_PER_LEI).toString();
+}
+
+/** Exact integer subtraction of two bani amounts. No rounding: a difference of integers is an integer. */
+export function subBani(a: Bani, b: Bani): Bani {
+  assertIntegralBani(a, 'subBani');
+  assertIntegralBani(b, 'subBani');
+  return (a - b) as Bani;
+}
+
+/**
+ * Exact pairwise addition of two bani amounts — the accumulator form of `sumBani`.
+ *
+ * `+=` cannot be used on a `Bani`: `Bani + Bani` widens to plain `number` and silently drops the brand,
+ * which is precisely the leak this type exists to catch. Integers plus integers is exact, so this adds no
+ * rounding and no error budget.
+ */
+export function addBani(a: Bani, b: Bani): Bani {
+  assertIntegralBani(a, 'addBani');
+  assertIntegralBani(b, 'addBani');
+  return (a + b) as Bani;
+}

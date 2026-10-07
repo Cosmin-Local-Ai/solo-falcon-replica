@@ -3,10 +3,10 @@ import { isoCalendarDateProblem } from '../domain/date';
 import { parsePfaProfile } from '../domain/schema';
 import type { PfaProfile } from '../domain/models';
 import type { Bani } from '../domain/money';
+import type { MoneyPrecisionNotice } from './migration';
 import type { RuleRelease } from '../domain/fiscal/rules';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import type {
-  BankAccount,
   Client,
   CompanyDocument,
   Declaration,
@@ -259,6 +259,13 @@ export interface PersistedAppData {
   statements?: TaxStatement[];
   snapshots?: TaxCalculationSnapshot[];
   settings: SettingsState;
+  /**
+   * Phase 10: the report produced by the `money-bani` step when a stored value could not be converted to
+   * an integer number of bani losslessly. Declared here rather than left on the object because **zod strips
+   * undeclared keys**: an undeclared report would be erased on the next load, which is the "surface, not
+   * vanish" rule failing silently. Absent means "nothing had to be decided".
+   */
+  moneyNotices?: MoneyPrecisionNotice[];
 }
 
 export const persistedAppDataSchema = z.object({
@@ -278,6 +285,19 @@ export const persistedAppDataSchema = z.object({
   statements: z.array(taxStatementSchema).optional(),
   snapshots: z.array(taxCalculationSnapshotSchema).optional(),
   settings: settingsSchema,
+  // Phase 10. `converted` is omitted (never null) when the value could not be represented at all.
+  moneyNotices: z
+    .array(
+      z.object({
+        collection: z.enum(['revenues', 'expenses', 'declarations', 'profile', 'snapshot']),
+        id: z.string(),
+        field: z.string(),
+        original: z.number(),
+        converted: bani(z.number()).optional(),
+        reason: z.enum(['sub-ban-precision', 'non-finite']),
+      }),
+    )
+    .optional(),
 });
 
 /**
