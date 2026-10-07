@@ -10,6 +10,11 @@ actually happened is the useful part.** The delta is §3. Register: **B-25 close
 
 **Measured at the end of the phase (clean tree): `tsc` 0; 48 files / 760 unit tests; build 0; 36 e2e.**
 
+**Corrected 2026-10-08 (brief 13): that sentence describes the runs somebody took, not the suite.** The suite was
+intermittently red the whole time. At `d0b0ad7` the Orchestrator measured **1 failed / 759 passed in 1 of 4** full-suite
+runs; the same failure reproduces on demand under CPU pressure (§7). "Four checks green" is therefore not a property of
+this tree and must not be quoted as one. §7 records the defect, the measured cause and what closed it.
+
 Why the split: the trade-off was requested by the Worker and accepted by the orchestrator explicitly. Option
 (c) — persist in bani but keep the domain in lei behind a conversion boundary — was rejected outright, because
 a permanent lei↔bani boundary is exactly the drift mechanism this phase exists to remove. Option (a) — convert
@@ -351,7 +356,8 @@ deleted was itself a defect.
 ## 3. WHAT ACTUALLY SHIPPED, AND WHERE §2 WAS WRONG
 
 Measured on the final tree, by the person reporting it: `npx tsc --noEmit` **0 errors**; `npm run test` **47 files /
-745 tests, all passing**; `npm run build` **exit 0**; `npm run test:e2e` **34 passed**. Baseline before the phase was
+745 tests, all passing on the runs measured** (see §7 — the suite was later proved intermittently red, so this records
+an observation, not a guarantee); `npm run build` **exit 0**; `npm run test:e2e` **34 passed**. Baseline before the phase was
 44 files / 685 tests and 34 e2e, so the suite grew by 60 tests and none was deleted or weakened.
 
 ### 3.1 The §2.8 acceptance list, item by item
@@ -359,7 +365,7 @@ Measured on the final tree, by the person reporting it: `npx tsc --noEmit` **0 e
 | # | Criterion | Result |
 |---|---|---|
 | 1 | `tsc --noEmit` → 0 | **yes**, repo-wide including tests |
-| 2 | `npm run test` all pass, count ≥ baseline | **yes**, 760 ≥ 685 |
+| 2 | `npm run test` all pass, count ≥ baseline | **count yes** (760 ≥ 685); **"all pass" no** — the suite is intermittently red, see §7 |
 | 3 | `npm run build` → 0 | **yes** |
 | 4 | `npm run test:e2e` → 34 passed | **yes**, 36 (the two extra are §6) |
 | 5 | a persisted `142.5` lei loads as `14250` bani with no report | **yes**, pinned in `src/data/migration.money.test.ts` |
@@ -491,3 +497,66 @@ this component could lie.
 of the migration, written back to localStorage, still present on a second load where no migration runs, absent when
 nothing had to be decided), `src/App.test.tsx` (2), `src/data/migration.money.test.ts` (1 — the NaN notice JSON
 round-trip), `e2e/settings.spec.ts` (2 — the banner on screen, and the saved bytes at version 5).
+
+---
+
+## 7. THE SUITE WAS INTERMITTENTLY RED — what it was, and what it was NOT (brief 13, 2026-10-08)
+
+Phase 10 shipped `MoneyPrecisionNotice` and the `moneyNotices` field that rides through save/load. After that,
+`src/pages/Dashboard.test.tsx` began failing at random in the full suite. This section records what was actually
+measured, because the first diagnosis of it — including the one written into the brief — was wrong.
+
+**The symptom.** `Dashboard page > shows the computed estimate in the cockpit for a PFA profile on the lawful regime`
+(and, in other runs, its sibling `computes the tax estimate for the default PFA regime … (B-14)`) failed with:
+
+```text
+Error: expect(element).toHaveTextContent()
+Expected element to have text content:  /20\.435/
+Received:  Impozit estimat—de pus deoparte
+```
+
+**The hypothesis that was tested and disproved.** The brief's prime suspect was shared mutable state — `localStorage`,
+the quarantine key, or a seeded payload surviving from a sibling test or sibling file. That is not it, and the
+measurement that kills it is simple: **the failure reproduces with `Dashboard.test.tsx` running alone.** Under CPU
+pressure, `npx vitest run src/pages/Dashboard.test.tsx` — one file, one worker, nothing else in the process — failed
+**3 of 8** runs. Vitest also isolates each file's module graph and gives each its own jsdom, so there is no channel
+for the leakage the hypothesis needs. Two more facts point the same way: the received text is the **loading sentinel**
+`—`, never another test's figure; and the failing test is not always the same one.
+
+**The cause.** `useLatestTaxEstimate` (`src/data/derived.ts:47-80`) resolves the engine through
+`computeTaxEstimate(...).then(setEstimate)` with `estimate` initialised to `null`, so `useDashboardData` hands
+`LOADING_TAX` (`src/data/dashboardAdapter.tsx:13`) to the page on the first render. Measured in the test environment:
+the cockpit card reads `—` synchronously after `render()`, **still `—` after one microtask**, and `46.570,00 RON` only
+after the next **macrotask** — the React scheduler's. The test waited for the wrong thing: `findByText('Impozit
+estimat')` waits for the **label**, which is present on the first paint, so it resolved immediately and the one-shot
+`toHaveTextContent` that followed raced that macrotask. It lost whenever the machine was busy. Nothing was shared;
+the assertion was never waiting for the value it checked.
+
+**The fix, and why it is not the weakening the hard rule forbids.** The assertions are unchanged — same element, same
+matcher, same exact figures (`/20\.435/`, `/46\.570/`). What was added is the missing wait for the figure
+(`waitFor(() => expect(card).toHaveTextContent(…))` in `src/pages/Dashboard.test.tsx`). It asserts a **specific
+figure**, not the absence of the dash; it settles in **2 ms**, so no timeout is widened and none is load-bearing; and
+a wrong figure, or one that never arrives, still fails. One assertion in the same file was also **strengthened**: the
+B-14 refusal test asserted `—` before anything had resolved, so it passed against the loading sentinel and could not
+fail — it now awaits the refusal reason first, so the dash it checks is the refusal marker.
+
+**Evidence, after the fix.** Isolated file under pressure: **10 of 10** green (was 3 failures in 8). Full suite under
+`taskset -c 0,1`: **10 of 10** green (it failed 2 in 6 before). Full suite at default concurrency: **10 of 10**, 760
+tests each. `tsc` 0, build 0, e2e 36 unchanged.
+
+**What was deliberately NOT fixed here, and is now in the register.** The product keeps its async first paint,
+because brief 13 forbade product changes — so the root cause is filed rather than silently absorbed:
+
+- **B-27** — an async boundary with no I/O behind it: `computeTaxEstimate` is `async` but awaits nothing, and the hook
+  treats it as deferred work. That is the root cause of this flake; the test fix treats the symptom at the correct
+  layer until someone removes the boundary on purpose.
+- **B-28** — the cockpit renders the **same** `—` for „still computing" and for „the engine refused to compute", and
+  `—` is this app's established refusal marker. A user cannot tell a pending calculation from a refusal. That
+  ambiguity is also why one assertion here could be vacuous for as long as it was.
+
+**Two documentation errors corrected in the same pass.** This file claimed four green checks (§head, §3, §3.1 row 2)
+as a property of the tree; it was true of the runs measured and false as a claim about the suite — corrected above.
+And `docs/ai/STATE.md` did carry a **B-17** row, contrary to the brief's account, but the row was malformed into five
+cells in a four-column table, with the strikethrough spanning columns and a duplicated sentence fragment — so the
+register rendered B-17's evidence in the wrong column. The row is now four cells, struck through where it should be,
+with the fragment removed and the closure evidence intact.
