@@ -245,3 +245,132 @@ All three were caught because the researcher was told a claim they could not che
 `CONFIRMED`. The `Q-HOLIDAY-SET` answer is now primary-verified, and the route that worked —
 **`?isFormaDeBaza=True` on the forma de bază doc id** — is itself reusable for any act whose consolidated body
 renders as a shell.
+
+---
+
+# Continuation — the truncated remainder (resumed session, 2m 28s)
+
+The session was resumed with only the truncation point and told to add no new research. It recovered the rest
+from its own context. **Nothing here is reconstructed.**
+
+## §Q2(b) conclusion, completed
+
+> → Extensions have come both ways: automatically by ANAF notice (26 mai 2025) **and** by explicit instrument of
+> equal rank (OUG 15/2019, MO 204/14.03.2019). There is **no general automatic statutory rule found** covering
+> fixed fiscal dates. The mechanism actually observed is **ad hoc and year-specific**, not a standing rule the app
+> can derive.
+
+That last clause is the real answer to `Q-ROLLOVER-FIXED-DATE`: **there is no rule to implement.** There is a
+pattern of one-off interventions.
+
+## §Q2(c) — App consequence, both branches
+
+**Branch A — treat the fixed date as immovable** (conservative; matches OUG 15/2019's own premise):
+- Always **display the statutory date as written in the act** (e.g. „25 mai 2026"), never overwrite it.
+- If it falls on Sâmbătă / Duminică / an art. 139 alin. (1) holiday, render a **separate, clearly non-authoritative
+  advisory row**: „prima zi lucrătoare următoare = <date> — prelungire practicată de ANAF (comunicat DGFP Brașov,
+  26 mai 2025); **fără temei primar identificat**".
+- **Penalties, dobânzi and decădere stay anchored to the statutory date** unless an override is loaded.
+
+**Branch B — apply CPC art. 181 alin. (2) via CPF art. 75** (the assumption `research/16` leaned on):
+- Only defensible for **computed periods** („în termen de 30 de zile", „5 zile lucrătoare"), where „ultima zi a
+  unui termen" is literally true.
+- For a **fixed calendar date** it is an **interpretive extension, not a reading of the text**. If the product
+  ships it, it must be **labelled as an assumption in the UI, not presented as a citation**.
+
+**What the engine must NOT do, in either branch:**
+
+1. Do **not** silently roll a fixed statutory date and present the rolled date as the legal deadline.
+2. Do **not** compute penalties or interest against a self-rolled date.
+3. Do **not** apply art. 139 alin. (4) HG bridge days to a private PFA — budgetary sector only.
+4. Do **not** apply CPC art. 181 alin. (2) to the e-Factura term (OUG 120/2021 art. 10 alin. (7)), which expressly
+   routes to **Reg. 1182/71** — whose **art. 3(5) points the *opposite* way (NOT CHECKED)**.
+5. Do **not** hardcode the rollover as universal; maintain an **override table** of explicit prorogări
+   (OUG / HG / OG / ANAF ordin / comunicat), each with instrument + MO or doc number + date, applied **only to the
+   year and obligation named**.
+6. Do **not** deduplicate away a holiday that coincides with a fixed date (2026: 1 iunie = a doua zi de Rusalii)
+   **without surfacing the collision**.
+
+**Orchestrator note on rule 5:** an override table is the same shape as the `FiscalRule` package Phase 9b insisted
+on — dated, sourced, per-obligation — and it is the *opposite* of the hardcoded date arrays that let twelve
+fabricated deadlines ship. It is also, importantly, **empty right now**: 2026 has no prorogare, so nothing ships
+today depends on it.
+
+## Pending bills
+
+- **PENDING — not law.** Propunere legislativă **b209/08.04.2026** (Senat; doc **26L334**, expunere de motive
+  `senat.ro/legis/PDF/2026/26L334EM.PDF`) — amends **Legea 189/2021** and **art. 139 alin. (1) Codul muncii** to
+  make **10 mai** a legal non-working holiday. **Senatul a respins** (profit.ro — PARTLY CONFIRMED, press).
+  **CES aviz NEFAVORABIL, Nr. 3011/29.04.2026** (`ces.ro` — CONFIRMED that the aviz exists). Status at retrieval:
+  **pending at Camera Deputaților**. If adopted it would add a **fixed** date to alin. (1).
+- **Rollover rule / CPC art. 181 alin. (2): no pending change found** — explicitly flagged as *absence of a search
+  hit, not proof of absence*.
+
+## Sources — kept (primary)
+
+Legea 53/2003 forma de bază — `DetaliiDocument/128646?isFormaDeBaza=True`, the only route that rendered the body
+(167,029 chars); gave art. 137, 138, 139, 145 verbatim. `DetaliiDocument` docs **265498** (Legea 52/2023),
+**183741** (220/2016), **198708** (64/2018), **182520** (176/2016), **216612** (153/2019), **293478** (HG 2/2025).
+`FormaPrintabila/00000G1NVJX3N457UL60YKIYMW3SQJ59` (HG 1307/2023 full text).
+`static.anaf.ro/static/10/Anaf/legislatie/OUG_15_2019.pdf`. `static.anaf.ro/static/3/Brasov/20250519135324_com_du2025.pdf`.
+`static.anaf.ro/static/3/Cluj/…25_mai_2026.pdf` (CJR_DEC-10308), `static.anaf.ro/static/3/Iasi/…d212.pdf`,
+`…/Brosura_Declaratia_Unica_212_2025.pdf`. `senat.ro/legis/PDF/2026/26L334EM.PDF`, CES aviz 3011/29.04.2026.
+Easter cross-check set: `en.orthodoxwiki.org/Church_calendar`, `publicholidays.ro/ro/pentecost/`, `labs.llc/easter/`,
+`zilelibere.eu`, `athonapp.com` — mutually consistent for 2026/2027/2028.
+
+## Sources — dropped, with reasons
+
+- Docs **309239 / 304538 / 268296 / 290667** and both `FormaPrintabila` ids — **828 / 153 char shells, no body**.
+- `cauta.ro`, `legeaz.net`, `coduri.juridice.ro`, `rubinian.com`, `monitoruljuridic.ro`, `legislm.ro`,
+  `infodosar.ro` — **mirrors, not primary**; kept only as leads, labelled PARTLY CONFIRMED. `infodosar.ro` returned
+  DB-error pages; `monitoruljuridic.ro` is login-gated.
+- **`moneyline.ro` — asserts the 25-mai rollover as a standing rule with no citation.** Dropped as authority,
+  **kept only as evidence the belief is widespread.** This is the trap Branch A exists to avoid: a practitioner
+  restating an assumption as a rule is exactly how `pfa_estimated_declaration` and the +15-day fabrication got in.
+- `inteles.ro`, `smartemp.ro` — SEO holiday calendars, no legal value; used only to corroborate 2026 weekdays.
+- `portalhr.ro`, `mediafax.ro`, `libertatea.ro`, `profit.ro`, `business24.ro`, `startupcafe.ro`,
+  `infotva.manager.ro`, `rescontconsulting.ro` — press/consultancy restatements. `libertatea.ro` and `profit.ro`
+  kept only as **PARTLY CONFIRMED single-source signals** (no punte 2026; Senat respins 10 mai).
+- `cdep.ro/comisii/munca/pdf/2023/rp767_22.pdf` — committee report; shows only that a 2023 draft's wider holiday
+  list was rejected. Not law.
+
+## Gaps / next steps, as reported
+
+1. **Current consolidated art. 139 alin. (1) and alin. (3) verbatim at the 2026 consolidation — NOT CHECKED.**
+   No Portal Legislativ consolidation id for Codul muncii renders a body. Next: harvest the `FormaPrintabila` token
+   from the `DetaliiDocumentAfis` DOM, or read the printed consolidated article out of the MO PDF of the *latest*
+   amending act.
+2. **Author of art. 139 alin. (3)** (3-hour reduction in Vinerea precedentă) — NOT CHECKED; only established that
+   it pre-existed Legea 153/2019.
+3. **Legea 37/2020** — NOT CHECKED.
+4. **HG for 2026 and 2027** — NOT CHECKED at primary; the negative is search-level only. Next: query the Portal
+   Legislativ HG register directly.
+5. **Reg. 1182/71 art. 3(5)** — NOT CHECKED, EUR-Lex not fetched. **Highest-value open item: it governs the
+   e-Factura term and may *forbid* rollover there.**
+6. **CPC art. 180 alin. (2) / 181 alin. (2) primary body** — mirror-only this pass; NOT CHECKED against
+   Legea 134/2010, even though `research/16` read doc **304485** without trouble.
+7. **ANAF's counting rule for „5 zile lucrătoare"** — whether Saturday is skipped — NOT CHECKED.
+8. **Historical fixed-date rollover instances** (15 martie 2015 = Duminică, 15 martie 2021 = Sâmbătă) — NOT CHECKED;
+   would materially strengthen or refute Branch B.
+9. **CF art. 122 alin. (3) current text** — NOT CHECKED *this pass*, and the researcher flagged its own „15 March"
+   premise as stale. **Already closed elsewhere: `research/17` §Q1 read alin. (3) verbatim from doc 312601 — the
+   date is 25 mai.** Cross-pass resolution, no further work needed.
+10. **Non-Christian cult holiday dates** — NOT CHECKED; delegated by the act, no statutory dates exist.
+11. **File not written** — no filesystem-write tool in the session. Confirms `Q-RESEARCHER-WRITE`.
+
+---
+
+## Final orchestrator note on this pass
+
+**`Q-ROLLOVER-FIXED-DATE` is answered in the only honest form available: there is no rule.** The observed mechanism
+is ad hoc and year-specific. That converts an implementation question into a **data question** — an override table
+of dated, sourced prorogări — which is the same discipline Phase 9b imposed on every other date, and which is
+currently **empty** because 2026 has no prorogare.
+
+**One gap from this pass threatens a question already marked CLOSED.** `research/16` §Q3 encoded
+`due = min(emission + 5 wd, cf_319_16 + 5 wd)` *with rollover per Reg. 1182/71 art. 3 alin. (4)*. This pass
+surfaced **art. 3(5)**, which on its face says a period is **not** extended because its last day is a holiday.
+Both alineate are in the same article, and the e-Factura term is expressed *în zile lucrătoare*, so art. 3 alin.
+(3) already excludes weekends and holidays from the count — which may make alin. (4) redundant and alin. (5)
+non-conflicting. **That reading is a hypothesis, not a finding.** It is the one thing that must be read from
+primary text before the e-Factura SLA is scoped.
