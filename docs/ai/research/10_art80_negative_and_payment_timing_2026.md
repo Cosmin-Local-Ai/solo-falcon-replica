@@ -139,6 +139,12 @@ contraventions) **must be re-verified against the current CPF consolidation befo
 The specific fine amounts for lit. o)/p) were **not** captured. This app renders citations to users;
 a stale citation is worse than a missing one.
 
+> **Superseded in part on 2026-10-07 by `research/11` §1.** A **current** CPF consolidation exists at Portal
+> Legislativ doc **304520** (828 amendment notes, latest 18-12-2025), and `research/11` §5 reads CPF art. 82
+> alin. (6) lit. c) from it. The blanket prohibition is therefore lifted **for provisions read from 304520**.
+> Doc 172697 remains stale and unusable, and art. 173 alin. (1) / art. 336 alin. (1) lit. o)/p) are still
+> unverified in their current form — the fine amounts were never captured.
+
 **C-2 — CF art. 124 is not "accesorii".** It is *„Venituri din bunuri sau drepturi care sunt deținute în
 comun"* (Titlul IV, Cap. V). Accesorii are governed by the CPF, not by CF art. 124. The Cod fiscal itself
 contains **no** `"majorări de întârziere"` text. This corrects a claim made in the commissioning prompt;
