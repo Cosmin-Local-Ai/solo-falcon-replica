@@ -17,7 +17,7 @@ function makeThreshold(overrides: Partial<FiscalThreshold> = {}): FiscalThreshol
     ruleRelease: 'PFA-2026-1.0.0',
     source: 'OUG 157/2017 art. 42',
     status: 'ok',
-    fiscalBase: 'gross-revenue',
+    fiscalBase: 'net-income',
     breachMeaning: 'pierdere drept PFA',
     ...overrides,
   };
@@ -69,5 +69,27 @@ describe('ThresholdSection (Step 32 — Romanian, no raw enums)', () => {
     expect(screen.getByText('Depășit', { selector: '.badge' })).toBeInTheDocument();
     expect(screen.queryByText('breached')).not.toBeInTheDocument();
     expect(screen.getByText('La depășire: părăsirea regimului PFA')).toBeInTheDocument();
+  });
+
+  it('renders an unmeasured threshold as review_required, not as a fake 0', () => {
+    render(
+      <ThresholdSection
+        thresholds={[
+          makeThreshold({
+            currentValue: null,
+            distance: 0,
+            status: 'review_required',
+            reviewReason: 'Baza „net-income” nu a fost furnizată; pragul nu poate fi evaluat.',
+          }),
+        ]}
+      />,
+    );
+    // Loud, Romanian, and never collapsed into `ok`.
+    expect(screen.getByText('De verificat', { selector: '.badge' })).toBeInTheDocument();
+    expect(screen.queryByText('În limite')).not.toBeInTheDocument();
+    expect(screen.queryByText('review_required')).not.toBeInTheDocument();
+    // No invented amount is displayed for an unmeasured base.
+    expect(screen.queryByText('0,00 lei')).not.toBeInTheDocument();
+    expect(screen.getByText(/nu a fost furnizată/)).toBeInTheDocument();
   });
 });

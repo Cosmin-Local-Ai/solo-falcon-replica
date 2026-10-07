@@ -14,13 +14,25 @@ import type { AppData, Expense, Revenue } from '../data/types';
  * - `asOfDate` (ISO 'YYYY-MM-DD') is the inclusive upper bound of the period.
  */
 
+/**
+ * Year-to-date amounts, in lei. Each field is ONE named amount concept; the VAT-inclusive
+ * and VAT-exclusive families are distinct quantities and must never be substituted for
+ * each other.
+ *
+ * `net` is `revenue - expenses` on VAT-INCLUSIVE operands — a cash profit figure. It is
+ * NOT the fiscal `venitul net din activitate` that CAS/CASS are owed on; that quantity is
+ * owned by the tax engine (`src/domain/tax.ts` → `TaxAmountBases.venitulNetDinActivitate`).
+ */
 export interface YtdTotals {
+  /** Cash collected: `valoareFaraTva + tva`. */
   revenue: number;
+  /** Cash paid: `valoareFaraTva + tva`. */
   expenses: number;
+  /** `revenue - expenses`, both VAT-inclusive. Cash profit — not a fiscal contribution base. */
   net: number;
-  /** Total revenues without VAT (valoareFaraTva only), lei. */
+  /** **Cifră de afaceri**: `valoareFaraTva` only. The base CF art. 310 alin. (1) measures. */
   revenueNet: number;
-  /** Total expenses without VAT (valoareFaraTva only), lei. */
+  /** Deductible expense excluding VAT: `valoareFaraTva` only. */
   expenseNet: number;
 }
 
@@ -35,12 +47,17 @@ export interface MonthlyTotals {
  * Aggregated, presentation-ready view: completeness gaps, near deadlines,
  * threshold breaches, and the tax-reserve position as of `asOf`.
  */
-/** Threshold status as surfaced in the dashboard snapshot. */
+/**
+ * Threshold status as surfaced in the dashboard snapshot.
+ * `current` is `null` when the threshold could not be measured (its required base was
+ * unavailable) — see `FiscalThreshold.currentValue`.
+ */
 export interface Threshold {
   id: string;
   label: string;
-  current: number;
+  current: number | null;
   limit: number;
+  /** `current / limit`, or 0 when unmeasured / uncapped. */
   ratio: number;
   breached: boolean;
   /** Which threshold family this belongs to, when known. */

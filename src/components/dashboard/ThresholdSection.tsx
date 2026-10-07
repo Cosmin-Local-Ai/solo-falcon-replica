@@ -14,11 +14,14 @@ import { Card, CardHeader, CardTitle, CardDescription } from '../ui/card';
  * percentage.
  */
 
-/** Status → badge class (green / amber / red). */
+/** Status → badge class (green / amber / red / neutral). */
 const STATUS_BADGE: Record<FiscalThreshold['status'], string> = {
   ok: 'badge-success',
   warning: 'badge-warning',
   breached: 'badge-danger',
+  // An unmeasured threshold is not a safe threshold — it gets its own neutral badge rather
+  // than being folded into `ok`.
+  'review_required': 'badge-neutral',
 };
 
 /** Status → Romanian badge text (raw enum values are never rendered). */
@@ -26,6 +29,7 @@ const STATUS_LABEL: Record<FiscalThreshold['status'], string> = {
   ok: 'În limite',
   warning: 'Atenție',
   breached: 'Depășit',
+  'review_required': 'De verificat',
 };
 
 /** Romanian labels for raw affected-domain keys (never render raw keys). */
@@ -50,10 +54,11 @@ function labelFor(t: FiscalThreshold): string {
 
 /**
  * Progress percentage from currentValue/thresholdValue only.
- * Capped at 100%, floored at 0; guarded for thresholdValue === 0.
+ * Capped at 100%, floored at 0; guarded for thresholdValue === 0 and for an unmeasured
+ * threshold (`currentValue === null`), which renders an empty bar rather than a fake 0%.
  */
-function progressPercent(currentValue: number, thresholdValue: number): number {
-  if (thresholdValue === 0) return 0;
+function progressPercent(currentValue: number | null, thresholdValue: number): number {
+  if (thresholdValue === 0 || currentValue === null) return 0;
   const pct = (currentValue / thresholdValue) * 100;
   if (!Number.isFinite(pct)) return 0;
   return Math.min(100, Math.max(0, pct));
@@ -84,16 +89,20 @@ export default function ThresholdSection({ thresholds }: ThresholdSectionProps) 
             </div>
             <div className="kv-row">
               <span>
-                Curent: <strong>{formatLei(t.currentValue)}</strong>
+                Curent: <strong>{t.currentValue === null ? '—' : formatLei(t.currentValue)}</strong>
               </span>
               <span>
                 Prag: <strong>{formatLei(t.thresholdValue)}</strong>
               </span>
               <span>
-                Distanță: <strong>{formatLei(t.distance)}</strong>
+                Distanță: <strong>{t.currentValue === null ? '—' : formatLei(t.distance)}</strong>
               </span>
             </div>
-            <p className="hint">La depășire: {t.breachMeaning}</p>
+            {t.reviewReason ? (
+              <p className="hint">{t.reviewReason}</p>
+            ) : (
+              <p className="hint">La depășire: {t.breachMeaning}</p>
+            )}
             <div className="bar-track">
               <div
                 className={`bar-fill ${t.status}`}

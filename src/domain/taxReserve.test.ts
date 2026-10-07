@@ -30,6 +30,7 @@ function makeComputedEstimate(total: number): TaxEstimateResult {
     lines: [{ label: 'total', value: total }],
     output: { total },
     snapshot: makeSnapshot(total),
+    bases: { venitulBrut: total, cheltuieliDeductibile: 0, venitulNetDinActivitate: total },
   };
 }
 

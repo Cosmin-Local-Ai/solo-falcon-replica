@@ -6,17 +6,30 @@ import {
   statusFor,
   statusForRatioRule,
   withRatioRuleStatus,
+  THRESHOLD_SPECS,
   type FiscalThreshold,
   type RatioRule,
   type RatioRuleStatus,
   type ThresholdQuery,
 } from './thresholds';
 
+/**
+ * Supply the same amount for every base. The status-math tests below are about distance and
+ * the warning band, not about which base a spec reads, so they hold the bases equal rather
+ * than encoding a legal claim.
+ */
+const allBases = (value: number) => ({
+  'revenue-incl-vat': value,
+  'revenue-excl-vat': value,
+  'expense-incl-vat': value,
+  'expense-excl-vat': value,
+  'net-income': value,
+});
+
 const QUERY: ThresholdQuery = {
   taxYear: 2026,
   asOfDate: '2026-03-15',
-  currentValue: 100000,
-  fiscalBase: 'gross-revenue',
+  bases: allBases(100000),
   ruleRelease: 'PFA_2026_RELEASE',
 };
 
@@ -85,7 +98,7 @@ describe('computeThresholds', () => {
   });
 
   it('below threshold → negative distance', () => {
-    const q: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', currentValue: 10000, fiscalBase: 'gross-revenue', ruleRelease: '2026-01-01' };
+    const q: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', bases: allBases(10000), ruleRelease: '2026-01-01' };
     const r = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q);
     // 10000 < 48600 (CAS_MIN_BASE) → distance = 10000 - 48600 = -38600
     const casMin = r.find(t => t.thresholdId === 'CAS_MIN_BASE')!;
@@ -94,7 +107,7 @@ describe('computeThresholds', () => {
   });
 
   it('exactly at threshold → zero distance', () => {
-    const q: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', currentValue: 48600, fiscalBase: 'gross-revenue', ruleRelease: '2026-01-01' };
+    const q: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', bases: allBases(48600), ruleRelease: '2026-01-01' };
     const r = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q);
     const casMin = r.find(t => t.thresholdId === 'CAS_MIN_BASE')!;
     expect(casMin.distance).toBe(0);
@@ -105,8 +118,7 @@ describe('computeThresholds', () => {
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, {
       taxYear: 2025,
       asOfDate: '2025-06-15',
-      currentValue: 100000,
-      fiscalBase: 'gross-revenue',
+      bases: allBases(100000),
       ruleRelease: '2025-01-01',
     });
     expect(result).toBeDefined();
@@ -120,15 +132,15 @@ describe('computeThresholds', () => {
   });
 
   it('daysUntilWarning is deterministic', () => {
-    const q1: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', currentValue: 100000, fiscalBase: 'gross-revenue', ruleRelease: '2026-01-01' };
-    const q2: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', currentValue: 100000, fiscalBase: 'gross-revenue', ruleRelease: '2026-01-01' };
+    const q1: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', bases: allBases(100000), ruleRelease: '2026-01-01' };
+    const q2: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', bases: allBases(100000), ruleRelease: '2026-01-01' };
     const r1 = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q1);
     const r2 = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q2);
     expect(r1).toEqual(r2);
   });
 
   it('just above threshold → positive distance', () => {
-    const q: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', currentValue: 48601, fiscalBase: 'gross-revenue', ruleRelease: '2026-01-01' };
+    const q: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', bases: allBases(48601), ruleRelease: '2026-01-01' };
     const r = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q);
     const casMin = r.find(t => t.thresholdId === 'CAS_MIN_BASE')!;
     expect(casMin.distance).toBeGreaterThan(0);
@@ -138,8 +150,7 @@ describe('computeThresholds', () => {
     const q: ThresholdQuery = {
       taxYear: 2026,
       asOfDate: '2026-03-15',
-      currentValue: 300000,
-      fiscalBase: 'gross-revenue',
+      bases: allBases(300000),
       ruleRelease: 'PFA_2026_RELEASE',
     };
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q);
@@ -152,8 +163,7 @@ describe('computeThresholds', () => {
     const q: ThresholdQuery = {
       taxYear: 2026,
       asOfDate: '2026-03-15',
-      currentValue: 400000,
-      fiscalBase: 'gross-revenue',
+      bases: allBases(400000),
       ruleRelease: 'PFA_2026_RELEASE',
     };
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q);
@@ -174,8 +184,7 @@ describe('computeThresholds', () => {
     const q: ThresholdQuery = {
       taxYear: 2026,
       asOfDate: '2026-03-15',
-      currentValue: 53460, // 48600 + 4860 → distance exactly +warningDistance
-      fiscalBase: 'gross-revenue',
+      bases: allBases(53460), // 48600 + 4860 → distance exactly +warningDistance
       ruleRelease: 'PFA_2026_RELEASE',
     };
     const casMin = byId(computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q), 'CAS_MIN_BASE');
@@ -183,7 +192,7 @@ describe('computeThresholds', () => {
     expect(casMin.status).toBe('warning');
 
     const casMin2 = byId(
-      computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...q, currentValue: 53461 }),
+      computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...q, bases: allBases(53461) }),
       'CAS_MIN_BASE',
     );
     expect(casMin2.distance).toBe(4861);
@@ -194,8 +203,7 @@ describe('computeThresholds', () => {
     const q: ThresholdQuery = {
       taxYear: 2026,
       asOfDate: '2026-03-15',
-      currentValue: 262440, // 291600 - 29160 → distance exactly -warningDistance
-      fiscalBase: 'gross-revenue',
+      bases: allBases(262440), // 291600 - 29160 → distance exactly -warningDistance
       ruleRelease: 'PFA_2026_RELEASE',
     };
     const cassMax = byId(computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q), 'CASS_MAX_BASE');
@@ -203,7 +211,7 @@ describe('computeThresholds', () => {
     expect(cassMax.status).toBe('warning');
 
     const cassMax2 = byId(
-      computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...q, currentValue: 262439 }),
+      computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...q, bases: allBases(262439) }),
       'CASS_MAX_BASE',
     );
     expect(cassMax2.distance).toBe(-29161);
@@ -214,8 +222,7 @@ describe('computeThresholds', () => {
     const q: ThresholdQuery = {
       taxYear: 2026,
       asOfDate: '2026-03-15',
-      currentValue: 355500, // 395000 - 39500 → distance exactly -warningDistance
-      fiscalBase: 'gross-revenue',
+      bases: allBases(355500), // 395000 - 39500 → distance exactly -warningDistance
       ruleRelease: 'PFA_2026_RELEASE',
     };
     const vat = byId(computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q), 'VAT_REGISTRATION');
@@ -223,7 +230,7 @@ describe('computeThresholds', () => {
     expect(vat.status).toBe('warning');
 
     const vat2 = byId(
-      computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...q, currentValue: 355499 }),
+      computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...q, bases: allBases(355499) }),
       'VAT_REGISTRATION',
     );
     expect(vat2.distance).toBe(-39501);
@@ -232,11 +239,25 @@ describe('computeThresholds', () => {
 
   // --- Step 29: fiscal base, breachMeaning, and validation ---
 
-  it('every threshold carries the query fiscalBase', () => {
+  it('every threshold carries the base its spec declares, not the caller\'s single base', () => {
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, QUERY);
     for (const t of result) {
-      expect(t.fiscalBase).toBe('gross-revenue');
+      const spec = THRESHOLD_SPECS.find((s) => s.thresholdId === t.thresholdId)!;
+      expect(t.fiscalBase).toBe(spec.requiredFiscalBase);
     }
+    // The three contribution rows are contribution bases; VAT is a turnover base.
+    expect(byId(result, 'CAS_MIN_BASE').fiscalBase).toBe('net-income');
+    expect(byId(result, 'CASS_MIN_BASE').fiscalBase).toBe('net-income');
+    expect(byId(result, 'CASS_MAX_BASE').fiscalBase).toBe('net-income');
+    expect(byId(result, 'VAT_REGISTRATION').fiscalBase).toBe('revenue-excl-vat');
+  });
+
+  it('every spec cites the provision that defines its BASE, not just its value', () => {
+    for (const spec of THRESHOLD_SPECS) {
+      expect(spec.baseSourceArticle.length).toBeGreaterThan(0);
+    }
+    expect(byId(computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, QUERY), 'VAT_REGISTRATION').fiscalBase)
+      .toBe('revenue-excl-vat');
   });
 
   it('every threshold has a non-empty breachMeaning', () => {
@@ -267,28 +288,57 @@ describe('computeThresholds', () => {
     expect(vat.breachMeaning).toContain('obligația de înregistrare');
   });
 
-  it('mismatched fiscal base → all specs skipped (empty result)', () => {
+  // The old behaviour here was `toHaveLength(0)`: a base mismatch silently DELETED the
+  // threshold card. That is the trap this phase exists to close, so the assertion is now the
+  // opposite — an unsupplied base must produce a loud `review_required` row, never a gap.
+  it('unsupplied base → loud review_required row, never a dropped threshold', () => {
     const q: ThresholdQuery = {
       taxYear: 2026,
       asOfDate: '2026-03-15',
-      currentValue: 100000,
-      fiscalBase: 'net-income',
+      bases: { 'revenue-incl-vat': 100000, 'revenue-excl-vat': 100000 },
       ruleRelease: 'PFA_2026_RELEASE',
     };
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q);
-    expect(result).toHaveLength(0);
+    // All four specs still return a row — nothing vanished.
+    expect(result).toHaveLength(4);
+    const casMin = byId(result, 'CAS_MIN_BASE');
+    expect(casMin.status).toBe('review_required');
+    expect(casMin.currentValue).toBeNull();
+    expect(casMin.reviewReason).toBeTruthy();
+    // The VAT row, whose base WAS supplied, is still measured normally.
+    expect(byId(result, 'VAT_REGISTRATION').status).not.toBe('review_required');
+    expect(byId(result, 'VAT_REGISTRATION').currentValue).toBe(100000);
   });
 
-  it('gross-expenses base → all specs skipped (empty result)', () => {
-    const q: ThresholdQuery = {
+  it('no base supplied at all → every spec is review_required, none dropped', () => {
+    const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, {
       taxYear: 2026,
       asOfDate: '2026-03-15',
-      currentValue: 100000,
-      fiscalBase: 'gross-expenses',
+      bases: {},
       ruleRelease: 'PFA_2026_RELEASE',
-    };
-    const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q);
-    expect(result).toHaveLength(0);
+    });
+    expect(result).toHaveLength(THRESHOLD_SPECS.length);
+    for (const t of result) {
+      expect(t.status).toBe('review_required');
+      expect(t.currentValue).toBeNull();
+    }
+  });
+
+  it('a spec is never silently dropped by a base mismatch (silent-skip guard)', () => {
+    // Whatever bases we hand over, the row count equals the spec count. This is the test
+    // that fails if someone reintroduces `continue` on a base mismatch.
+    for (const bases of [allBases(100000), {}, { 'net-income': 1 }, { 'revenue-excl-vat': 1 }]) {
+      const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, {
+        taxYear: 2026,
+        asOfDate: '2026-03-15',
+        bases,
+        ruleRelease: 'PFA_2026_RELEASE',
+      });
+      expect(result).toHaveLength(THRESHOLD_SPECS.length);
+      expect(result.map((t) => t.thresholdId).sort()).toEqual(
+        THRESHOLD_SPECS.map((s) => s.thresholdId).sort(),
+      );
+    }
   });
 });
 

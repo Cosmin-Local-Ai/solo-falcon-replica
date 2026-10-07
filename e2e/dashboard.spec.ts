@@ -186,8 +186,15 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(thresholds.getByText('Prag de înregistrare Vat')).toBeVisible();
     await expect(thresholds.getByText('Prag: 395.000,00 lei')).toBeVisible();
 
-    // All four rows show the same current revenue (9.317,00 lei YTD).
-    await expect(thresholds.getByText(/Curent: 9\.317,00 lei/)).toHaveCount(4);
+    // Phase 8: the four rows no longer share one number. The three contribution rows are
+    // measured on the engine's venitul net din activitate (7.700,00 - 205,50 = 7.494,50 lei),
+    // per CF art. 148 alin. (1)-(2) / art. 170 alin. (1) / art. 174 alin. (6); the VAT row is
+    // measured on VAT-exclusive turnover (4.500 + 3.200 = 7.700,00 lei), per art. 310 alin. (1).
+    await expect(thresholds.getByText(/Curent: 7\.494,50 lei/)).toHaveCount(3);
+    await expect(thresholds.getByText(/Curent: 7\.700,00 lei/)).toHaveCount(1);
+    // The VAT-inclusive figure all four rows used to share is gone from this section. (It is
+    // still correct — and still shown — as the "Venituri PFA (an)" cockpit card.)
+    await expect(thresholds.getByText(/Curent: 9\.317,00 lei/)).toHaveCount(0);
 
     // Status badges: 2 breached (min CAS, min CASS), 2 within limits.
     await expect(thresholds.getByText('Depășit', { exact: true })).toHaveCount(2);
@@ -661,5 +668,33 @@ test.describe('Dashboard — impozit_pe_cit on a PFA is a data-integrity failure
     await expect(reason).toContainText('art. 13 alin. (1)');
     await expect(reason).toContainText('art. 120');
     await expect(reason).toContainText('abrogată');
+  });
+
+  test('when the engine refuses, the contribution thresholds turn review_required instead of vanishing', async ({ page }) => {
+    // The B-14 describe has no beforeEach — the regime override must be applied per test.
+    await page.addInitScript(
+      ([key, dataset]: [string, unknown]) => {
+        localStorage.setItem(key, JSON.stringify({ ...dataset, profile: { ...dataset.profile, regime: 'impozit_pe_cit' } }));
+      },
+      [STORAGE_KEY, computedDataset()],
+    );
+    await page.goto('/dashboard');
+
+    const thresholds = page
+      .locator('section.card')
+      .filter({ has: page.locator('h3', { hasText: 'Praguri' }) });
+
+    // The silent-skip trap: a base the caller cannot supply used to delete the card. All four
+    // rows must still be here — three of them loud, not missing.
+    await expect(thresholds.locator('.item-row')).toHaveCount(4);
+    await expect(thresholds.getByText('De verificat', { exact: true })).toHaveCount(3);
+    await expect(thresholds.getByText(/nu a fost furnizată/)).toHaveCount(3);
+    // No invented amount is shown for a base that could not be measured.
+    await expect(thresholds.getByText(/Curent: 0\.000,00 lei/)).toHaveCount(0);
+
+    // The VAT row needs no engine: cifră de afaceri 50.000 + 80.000 = 130.000,00 lei stays
+    // measured even while the contribution rows are unmeasurable.
+    await expect(thresholds.getByText(/Curent: 130\.000,00 lei/)).toHaveCount(1);
+    await expect(thresholds.getByText('Prag: 395.000,00 lei')).toBeVisible();
   });
 });

@@ -35,12 +35,36 @@ export interface FiscalLossCarryForward {
   rule: string;
 }
 
+/**
+ * The amounts the engine actually computed on, in lei. Named explicitly so no consumer has
+ * to guess which candidate quantity a figure is — this is the value thresholds and any
+ * future report must read instead of re-deriving an amount from `lines` labels.
+ */
+export interface TaxAmountBases {
+  /**
+   * Venit brut — the revenue base the engine selected: `revenuesNet` (VAT-exclusive) for a
+   * VAT payer, `revenues` (VAT-inclusive) otherwise. See CF art. 68 alin. (2)-(3).
+   */
+  venitulBrut: number;
+  /** Cheltuieli deductibile — the expense base selected by the same VAT rule. */
+  cheltuieliDeductibile: number;
+  /**
+   * Venit net din activitate = `venitulBrut - cheltuieliDeductibile`. This IS the base CAS is
+   * chosen on (CF art. 148 alin. (1)-(2)) and the base CASS is owed on (CF art. 170 alin. (1),
+   * art. 174 alin. (2) și (6)) — the exact value passed as `base` to `calcCas` and `calcCass`.
+   * It is NOT `YtdTotals.net`, which subtracts VAT-inclusive operands.
+   */
+  venitulNetDinActivitate: number;
+}
+
 export type TaxEstimateResult =
   | {
       status: 'computed';
       lines: CalculationLine[];
       output: CalculationOutput;
       snapshot: TaxCalculationSnapshot;
+      /** The bases the computation ran on, typed (not recoverable only from `lines` labels). */
+      bases: TaxAmountBases;
       lossCarryForward?: FiscalLossCarryForward;
     }
   | { status: 'review_required'; reason: string; lines: CalculationLine[] };
@@ -219,7 +243,13 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     lines.push({ label: 'Impozit pe venit (fără bază impozabilă)', value: 0 });
     lines.push({ label: 'Total taxe', value: total });
     const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, calculationLines: lines, output: { total } });
-    const computed: TaxEstimateResult = { status: 'computed', lines, output: { total }, snapshot: snap };
+    const computed: TaxEstimateResult = {
+      status: 'computed',
+      lines,
+      output: { total },
+      snapshot: snap,
+      bases: { venitulBrut: gross, cheltuieliDeductibile: deductibleBase, venitulNetDinActivitate: net },
+    };
     if (lossCarryForward) computed.lossCarryForward = lossCarryForward;
     return computed;
   }
@@ -230,5 +260,11 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   const total = casRes.value + cassValue + incomeTaxRes.value;
   lines.push({ label: 'Total taxe', value: total });
   const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, calculationLines: lines, output: { total } });
-  return { status: 'computed', lines, output: { total }, snapshot: snap };
+  return {
+    status: 'computed',
+    lines,
+    output: { total },
+    snapshot: snap,
+    bases: { venitulBrut: gross, cheltuieliDeductibile: deductibleBase, venitulNetDinActivitate: net },
+  };
 }

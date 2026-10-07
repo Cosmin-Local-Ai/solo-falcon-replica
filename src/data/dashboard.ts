@@ -9,7 +9,11 @@ import {
 import { assessCompleteness, type CompletenessReport } from '../domain/completeness';
 import { selectProjectionV1, type ProjectionV1 } from '../domain/projection';
 import { computeTaxEstimate, type TaxEstimateResult } from '../domain/tax';
-import { computeThresholds, type FiscalThreshold } from '../domain/thresholds';
+import {
+  computeThresholds,
+  type FiscalThreshold,
+  type ThresholdBases,
+} from '../domain/thresholds';
 import { computeDeadlines, filterUpcoming, type Deadline } from '../domain/deadlines';
 import {
   computeTaxReserve,
@@ -94,13 +98,39 @@ export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEsti
   });
 }
 
-export function getThresholdStatuses(data: AppData, asOfDate: string): FiscalThreshold[] {
+/**
+ * Assemble the amount map `computeThresholds` reads. Each key is one named amount concept,
+ * so a threshold can never borrow a neighbouring quantity by accident.
+ *
+ * The contribution base (`net-income`) is a legal quantity owned by the tax engine: CF
+ * art. 148 alin. (1)-(2) for CAS and art. 170 alin. (1) / art. 174 alin. (2), (6) for CASS.
+ * It is deliberately NOT taken from `YtdTotals.net`, which subtracts VAT-inclusive operands
+ * and therefore is a different number. When the engine declined to compute, there is no
+ * contribution base to report and the three contribution rows come back `review_required`.
+ */
+export function buildThresholdBases(ytd: YtdTotals, tax: TaxEstimateResult): ThresholdBases {
+  const bases: ThresholdBases = {
+    'revenue-incl-vat': ytd.revenue,
+    'revenue-excl-vat': ytd.revenueNet,
+    'expense-incl-vat': ytd.expenses,
+    'expense-excl-vat': ytd.expenseNet,
+  };
+  if (tax.status === 'computed') {
+    bases['net-income'] = tax.bases.venitulNetDinActivitate;
+  }
+  return bases;
+}
+
+export function getThresholdStatuses(
+  data: AppData,
+  asOfDate: string,
+  tax: TaxEstimateResult,
+): FiscalThreshold[] {
   const ytd = selectYtd(data, asOfDate);
   return computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, {
     taxYear: data.profile.fiscalYear,
     asOfDate,
-    currentValue: ytd.revenue,
-    fiscalBase: 'gross-revenue',
+    bases: buildThresholdBases(ytd, tax),
     ruleRelease: PFA_2026_RELEASE.ruleIds[0],
   });
 }
@@ -192,13 +222,9 @@ function buildSnapshot(
   const completeness = assessCompleteness(data);
   const deadlines = computeDeadlines(PFA_2026_SYSTEM_REAL_PACKAGE, { taxYear, asOfDate });
   const ytd = selectYtd(data, asOfDate);
-  const thresholds = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, {
-    taxYear,
-    asOfDate,
-    currentValue: ytd.revenue,
-    fiscalBase: 'gross-revenue',
-    ruleRelease: PFA_2026_RELEASE.ruleIds[0],
-  });
+  // Single source for both the snapshot rows and `DashboardData.thresholds` — the inline
+  // duplicate that used to live here is what let the two paths drift.
+  const thresholds = getThresholdStatuses(data, asOfDate, tax);
   const reserve = computeTaxReserve(tax, createTaxReserveState(null), {
     asOfDate,
     fiscalYear: taxYear,
@@ -221,8 +247,11 @@ function buildSnapshot(
       label: t.affectedDomain,
       current: t.currentValue,
       limit: t.thresholdValue,
-      ratio: t.thresholdValue === 0 ? 0 : t.currentValue / t.thresholdValue,
-      breached: t.distance > 0,
+      ratio:
+        t.thresholdValue === 0 || t.currentValue === null
+          ? 0
+          : t.currentValue / t.thresholdValue,
+      breached: t.currentValue !== null && t.distance > 0,
       type: t.affectedTax === 'vat' ? 'vat' : 'income',
       affectedTax: t.affectedTax,
     })),
@@ -245,7 +274,7 @@ export function buildDashboardData(data: AppData, tax: TaxEstimateResult, instan
     taxYear: data.profile.fiscalYear,
     snapshot,
     tax,
-    thresholds: getThresholdStatuses(data, asOfDate),
+    thresholds: getThresholdStatuses(data, asOfDate, tax),
     deadlines: getUpcomingDeadlines(data, asOfDate),
     completeness: getDataCompleteness(data),
     actions: getActionItems(data, instant),

@@ -10,8 +10,13 @@ import {
   getTaxEstimate,
   getActionItems,
   getLegislationState,
+  getThresholdStatuses,
+  buildThresholdBases,
   buildDashboardData,
 } from './dashboard';
+import { seedData } from './seed';
+import { selectYtd } from '../domain/aggregation';
+import { THRESHOLD_SPECS } from '../domain/thresholds';
 
 const AS_OF = '2026-10-01';
 
@@ -216,6 +221,107 @@ describe('buildDashboardData (sync composer)', () => {
     expect(Array.isArray(dashboard.insights)).toBe(true);
     expect(dashboard.completeness).toHaveProperty('checks');
     expect(dashboard.pendingCounts.revenuesInAsteptare).toBe(0);
+  });
+});
+
+// Phase 8 — amount semantics. These run against the REAL app seed (`seedData`), because the
+// acceptance criteria are about the figures the dashboard actually shows, not synthetic inputs.
+// Seeded `inregistrata` amounts: revenues 4500+945 and 3200+672; expenses 120+25.2 and 85.5+17.96.
+describe('threshold bases (Phase 8 — amount semantics, on seeded data)', () => {
+  const AS_OF_SEED = '2026-12-31';
+
+  it('VAT_REGISTRATION is measured on VAT-exclusive turnover, which differs from the VAT-inclusive figure', async () => {
+    const tax = await getTaxEstimate(seedData, AS_OF_SEED);
+    const rows = getThresholdStatuses(seedData, AS_OF_SEED, tax);
+    const ytd = selectYtd(seedData, AS_OF_SEED);
+    const vat = rows.find((t) => t.thresholdId === 'VAT_REGISTRATION')!;
+
+    expect(vat.fiscalBase).toBe('revenue-excl-vat');
+    expect(vat.currentValue).toBe(7700); // 4500 + 3200, valoareFaraTva only
+    // The figure it used to be measured on — and it is a different number, because the seed
+    // carries non-zero TVA. This is the assertion that would fail before Phase 8.
+    expect(ytd.revenue).toBe(9317);
+    expect(vat.currentValue).not.toBe(ytd.revenue);
+    expect(vat.thresholdValue).toBe(395000);
+  });
+
+  it('the three contribution rows are measured on the engine contribution base, never on gross revenue', async () => {
+    const tax = await getTaxEstimate(seedData, AS_OF_SEED);
+    const rows = getThresholdStatuses(seedData, AS_OF_SEED, tax);
+    const ytd = selectYtd(seedData, AS_OF_SEED);
+    const contribution = rows.filter((t) => t.affectedTax === 'cas' || t.affectedTax === 'cass');
+
+    expect(contribution.map((t) => t.thresholdId).sort()).toEqual([
+      'CASS_MAX_BASE',
+      'CASS_MIN_BASE',
+      'CAS_MIN_BASE',
+    ]);
+    for (const t of contribution) {
+      expect(t.fiscalBase).toBe('net-income');
+      expect(t.currentValue).toBe(7494.5); // 7700 - 205.5, net of VAT
+      // No contribution row may compare a contribution base to a turnover figure.
+      expect(t.currentValue).not.toBe(ytd.revenue);
+      // `YtdTotals.net` is VAT-INCLUSIVE profit (9068.34) and is NOT the fiscal VNA (7494.50).
+      expect(t.currentValue).not.toBe(ytd.net);
+    }
+  });
+
+  it('the contribution base is the engine value, not a re-derived aggregate', async () => {
+    const tax = await getTaxEstimate(seedData, AS_OF_SEED);
+    expect(tax.status).toBe('computed');
+    if (tax.status !== 'computed') return;
+    expect(buildThresholdBases(selectYtd(seedData, AS_OF_SEED), tax)['net-income']).toBe(
+      tax.bases.venitulNetDinActivitate,
+    );
+  });
+
+  it('the production caller supplies a base for every spec — no card is dropped', async () => {
+    const tax = await getTaxEstimate(seedData, AS_OF_SEED);
+    const rows = getThresholdStatuses(seedData, AS_OF_SEED, tax);
+    // This is the guard against the silent-skip trap firing in the app: every spec must come
+    // back measured, on the base its spec declares.
+    expect(rows).toHaveLength(THRESHOLD_SPECS.length);
+    for (const spec of THRESHOLD_SPECS) {
+      const row = rows.find((t) => t.thresholdId === spec.thresholdId)!;
+      expect(row, `${spec.thresholdId} was dropped`).toBeDefined();
+      expect(row.fiscalBase).toBe(spec.requiredFiscalBase);
+      expect(row.status).not.toBe('review_required');
+      expect(row.currentValue).not.toBeNull();
+    }
+  });
+
+  it('when the engine declines, contribution rows become review_required rather than claiming a base', () => {
+    const rows = getThresholdStatuses(seedData, AS_OF_SEED, {
+      status: 'review_required',
+      reason: 'test',
+      lines: [],
+    });
+    expect(rows).toHaveLength(THRESHOLD_SPECS.length); // still four, none vanished
+    for (const id of ['CAS_MIN_BASE', 'CASS_MIN_BASE', 'CASS_MAX_BASE']) {
+      const row = rows.find((t) => t.thresholdId === id)!;
+      expect(row.status).toBe('review_required');
+      expect(row.currentValue).toBeNull();
+    }
+    // VAT turnover is still measurable without the engine, so it stays measured.
+    expect(rows.find((t) => t.thresholdId === 'VAT_REGISTRATION')!.currentValue).toBe(7700);
+  });
+
+  it('acceptance 6: the seeded taxable base is identical before and after the semantics change', async () => {
+    const tax = await getTaxEstimate(seedData, AS_OF_SEED);
+    expect(tax.status).toBe('computed');
+    if (tax.status !== 'computed') return;
+    // Measured on HEAD before Phase 8 and re-measured after: byte-identical.
+    expect(tax.bases).toEqual({
+      venitulBrut: 7700,
+      cheltuieliDeductibile: 205.5,
+      venitulNetDinActivitate: 7494.5,
+    });
+    const line = (l: string) => tax.lines.find((x) => x.label === l)!.value;
+    expect(line('Venit brut')).toBe(7700);
+    expect(line('Cheltuieli deductibile')).toBe(205.5);
+    expect(line('Venit net din activitate')).toBe(7494.5);
+    expect(line('Venit net anual impozabil (art. 118 alin. (2) lit. b))')).toBeCloseTo(6745.05, 6);
+    expect(tax.output.total).toBeCloseTo(3104.505, 6);
   });
 });
 

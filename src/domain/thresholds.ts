@@ -4,31 +4,69 @@ import { selectApplicableRules } from './fiscal/select';
 export type ThresholdType = 'min-base' | 'max-base' | 'registration' | 'income';
 
 /**
- * The fiscal base a threshold is evaluated against.
+ * The amount a threshold is legally measured against. Each member names ONE
+ * amount concept so a threshold can never silently borrow a neighbouring one.
  *
- * - `gross-revenue`:  Gross (TVA-inclusive) YTD revenue (`YtdTotals.revenue`).
- * - `gross-expenses`: Gross (TVA-inclusive) YTD expenses (`YtdTotals.expenses`).
- * - `net-income`:     YTD profit/loss (`YtdTotals.net`).
+ * Revenue / expense bases (from `selectYtd`, `src/domain/aggregation.ts`):
+ * - `revenue-incl-vat`: cash actually collected, `valoareFaraTva + tva` (`YtdTotals.revenue`).
+ * - `revenue-excl-vat`: **cifră de afaceri** — `valoareFaraTva` only (`YtdTotals.revenueNet`).
+ *   This is the base CF art. 310 alin. (1) measures the 395.000-lei plafon against.
+ * - `expense-incl-vat`: `valoareFaraTva + tva` (`YtdTotals.expenses`).
+ * - `expense-excl-vat`: `valoareFaraTva` only (`YtdTotals.expenseNet`).
  *
- * Each threshold spec declares which fiscal base it legally applies to via
- * `requiredFiscalBase`. The query must supply a matching base; mismatched
- * specs are skipped in `computeThresholds`.
+ * Contribution base:
+ * - `net-income`: **venitul net din activitate** — the base CAS is chosen on
+ *   (CF art. 148 alin. (1)-(2)) and the base CASS is owed on (CF art. 170 alin. (1),
+ *   art. 174 alin. (2) and (6)). Supplied ONLY by the tax engine
+ *   (`src/domain/tax.ts`, the `net` behind the `'Venit net din activitate'` line),
+ *   never by `selectYtd`. `YtdTotals.net` is `revenue - expenses` on VAT-INCLUSIVE
+ *   operands and is NOT this quantity — do not wire it here.
+ *
+ * A spec whose required base the caller cannot supply yields a
+ * `review_required` row, never a silently dropped row. See `computeThresholds`.
  */
-export type FiscalBase = 'gross-revenue' | 'gross-expenses' | 'net-income';
+export type FiscalBase =
+  | 'revenue-incl-vat'
+  | 'revenue-excl-vat'
+  | 'expense-incl-vat'
+  | 'expense-excl-vat'
+  | 'net-income';
+
+/**
+ * Threshold status. `review_required` means the threshold itself is citable but the
+ * amount it must be measured against was not available, so no verdict can be given.
+ * It is deliberately NOT collapsed into `ok` — an unmeasured threshold must not look safe.
+ */
+export type ThresholdStatus = 'ok' | 'warning' | 'breached' | 'review_required';
+
+/** Every amount a caller can supply, keyed by the base it represents. Absent = unknown. */
+export interface ThresholdBases {
+  'revenue-incl-vat'?: number;
+  'revenue-excl-vat'?: number;
+  'expense-incl-vat'?: number;
+  'expense-excl-vat'?: number;
+  'net-income'?: number;
+}
 
 export interface FiscalThreshold {
   thresholdId: string;
   type: ThresholdType;
-  currentValue: number;
+  /** The amount measured, or `null` when the required base was unavailable. */
+  currentValue: number | null;
   thresholdValue: number;
-  distance: number; // currentValue - thresholdValue (negative = below threshold)
+  distance: number; // currentValue - thresholdValue (negative = below threshold); 0 when unmeasured
   affectedDomain: string; // e.g. 'pfa-revenue'
   affectedTax: string; // e.g. 'cas', 'cass', 'vat'
   effectiveDate: string;
-  warningDistance: number; // distance at which warning triggers
+  /**
+   * Distance at which `warning` triggers. This is a **presentation band chosen by the app
+   * (10% of the threshold), NOT a statutory figure** — it carries no citation and must not
+   * acquire one.
+   */
+  warningDistance: number;
   ruleRelease: string;
   source: string;
-  status: 'ok' | 'warning' | 'breached';
+  status: ThresholdStatus;
   /** The fiscal base this threshold was evaluated against. */
   fiscalBase: FiscalBase;
   /**
@@ -39,18 +77,23 @@ export interface FiscalThreshold {
    * - `income`: above the income threshold → additional tax obligation triggered.
    */
   breachMeaning: string;
+  /** Present only when `status === 'review_required'`: why no verdict could be given. */
+  reviewReason?: string;
 }
 
 export interface ThresholdQuery {
   taxYear: number;
   asOfDate: string;
-  currentValue: number;
-  /** The fiscal base `currentValue` represents. Must match each spec's `requiredFiscalBase`. */
-  fiscalBase: FiscalBase;
+  /**
+   * Every amount the caller can supply, keyed by the base it represents. One query can
+   * therefore serve specs that need different bases; a spec whose base is absent becomes a
+   * `review_required` row rather than disappearing.
+   */
+  bases: ThresholdBases;
   ruleRelease: string; // releaseId
 }
 
-interface ThresholdSpec {
+export interface ThresholdSpec {
   thresholdId: string;
   type: ThresholdType;
   ruleId: string;
@@ -58,14 +101,24 @@ interface ThresholdSpec {
   affectedDomain: string;
   affectedTax: string;
   /**
-   * The fiscal base this threshold legally applies to.
-   * `computeThresholds` skips specs whose `requiredFiscalBase` does not
-   * match the query's `fiscalBase`.
+   * The fiscal base this threshold legally applies to. `computeThresholds` evaluates the
+   * spec against `query.bases[requiredFiscalBase]`; if that base is absent the spec yields
+   * a `review_required` row instead of being skipped.
    */
   requiredFiscalBase: FiscalBase;
+  /**
+   * The provision that defines the BASE (not merely the threshold value). Asserted by
+   * `thresholds.test.ts` so a row can never travel without the article that names its base.
+   */
+  baseSourceArticle: string;
 }
 
-const THRESHOLD_SPECS: ThresholdSpec[] = [
+/**
+ * Exported read-only so tests can prove every spec's `requiredFiscalBase` is actually
+ * supplied by the production caller — the guard against a spec being dropped by a
+ * base mismatch.
+ */
+export const THRESHOLD_SPECS: readonly ThresholdSpec[] = [
   {
     thresholdId: 'CAS_MIN_BASE',
     type: 'min-base',
@@ -75,7 +128,10 @@ const THRESHOLD_SPECS: ThresholdSpec[] = [
     paramId: 'min_base',
     affectedDomain: 'pfa-revenue',
     affectedTax: 'cas',
-    requiredFiscalBase: 'gross-revenue',
+    // CAS is chosen on the contribution base, not on turnover: CF art. 148 alin. (1)-(2)
+    // measures the 12 SM / 24 SM floors against "venitul net anual realizat".
+    requiredFiscalBase: 'net-income',
+    baseSourceArticle: 'Cod fiscal art. 148 alin. (1)-(2) lit. a) (baza: venitul net anual realizat)',
   },
   // CAS_MAX_BASE was removed in Phase 3. CF art. 148 alin. (2) sets FLOORS — "venitul ales
   // de contribuabil, care nu poate fi mai mic decât" 12 SM / 24 SM — and contains no ceiling
@@ -93,7 +149,10 @@ const THRESHOLD_SPECS: ThresholdSpec[] = [
     paramId: 'min_base',
     affectedDomain: 'pfa-revenue',
     affectedTax: 'cass',
-    requiredFiscalBase: 'gross-revenue',
+    // CF art. 174 alin. (6) tops up the contribution to 6 SM by reference to VNA, and
+    // art. 174 alin. (2) switches CASS off when VNA is zero — both measure the CASS base.
+    requiredFiscalBase: 'net-income',
+    baseSourceArticle: 'Cod fiscal art. 174 alin. (6) coroborat cu art. 170 alin. (1) (baza: venitul net anual)',
   },
   {
     thresholdId: 'CASS_MAX_BASE',
@@ -102,7 +161,9 @@ const THRESHOLD_SPECS: ThresholdSpec[] = [
     paramId: 'max_annual_base',
     affectedDomain: 'pfa-revenue',
     affectedTax: 'cass',
-    requiredFiscalBase: 'gross-revenue',
+    // CF art. 170 alin. (1): the 72 SM ceiling caps the *base de calcul*, i.e. VNA — not turnover.
+    requiredFiscalBase: 'net-income',
+    baseSourceArticle: 'Cod fiscal art. 170 alin. (1) (plafon de 72 SM din venitul net anual)',
   },
   {
     thresholdId: 'VAT_REGISTRATION',
@@ -111,7 +172,13 @@ const THRESHOLD_SPECS: ThresholdSpec[] = [
     paramId: 'threshold',
     affectedDomain: 'pfa-revenue',
     affectedTax: 'vat',
-    requiredFiscalBase: 'gross-revenue',
+    // The plafon is a VAT-EXCLUSIVE turnover test. See the art. 310 alin. (2) caveat in
+    // docs/ai/phases/02_fiscal_baseline.md: "exclusiv taxa" attaches grammatically to the
+    // *ieșire din evidență* case, and alin. (2) also excludes fixed-asset deliveries; the
+    // VAT-exclusive reading holds because no provision anywhere measures the plafon
+    // TVA-inclusiv — not because alin. (2) is a global definition.
+    requiredFiscalBase: 'revenue-excl-vat',
+    baseSourceArticle: 'Cod fiscal art. 310 alin. (1) (cifră de afaceri, exclusiv taxa)',
   },
 ];
 
@@ -119,7 +186,7 @@ export function statusFor(
   type: ThresholdType,
   distance: number,
   warningDistance: number,
-): FiscalThreshold['status'] {
+): Exclude<ThresholdStatus, 'review_required'> {
   if (type === 'registration') {
     // current >= threshold means VAT registration is required
     if (distance >= 0) return 'breached';
@@ -169,21 +236,46 @@ export function computeThresholds(
 
   const results: FiscalThreshold[] = [];
   for (const spec of THRESHOLD_SPECS) {
-    // Skip specs whose required fiscal base does not match the query's base.
-    if (spec.requiredFiscalBase !== query.fiscalBase) continue;
     const rule = applicable.find((r) => r.ruleId === spec.ruleId);
     if (!rule) continue;
     const param = rule.parameters.find((p) => p.id === spec.paramId);
     if (!param || typeof param.value !== 'number') continue;
 
     const thresholdValue = param.value;
-    const distance = query.currentValue - thresholdValue;
+    // Presentation band only — 10% of the threshold, chosen by the app. Not a statutory
+    // figure and deliberately never given a citation.
     const warningDistance = thresholdValue * 0.1;
+
+    const currentValue = query.bases[spec.requiredFiscalBase];
+    if (currentValue === undefined) {
+      // A base mismatch used to `continue`, silently deleting a threshold card. It is now a
+      // loud row: the threshold is citable, but it cannot be measured, so no verdict is faked.
+      results.push({
+        thresholdId: spec.thresholdId,
+        type: spec.type,
+        currentValue: null,
+        thresholdValue,
+        distance: 0,
+        affectedDomain: spec.affectedDomain,
+        affectedTax: spec.affectedTax,
+        effectiveDate: rule.effectiveFrom,
+        warningDistance,
+        ruleRelease: query.ruleRelease,
+        source: `${rule.sourceAct} ${rule.sourceArticle}`,
+        status: 'review_required',
+        fiscalBase: spec.requiredFiscalBase,
+        breachMeaning: breachMeaningFor(spec.type),
+        reviewReason: `Baza „${spec.requiredFiscalBase}” nu a fost furnizată; pragul nu poate fi evaluat.`,
+      });
+      continue;
+    }
+
+    const distance = currentValue - thresholdValue;
 
     results.push({
       thresholdId: spec.thresholdId,
       type: spec.type,
-      currentValue: query.currentValue,
+      currentValue,
       thresholdValue,
       distance,
       affectedDomain: spec.affectedDomain,
@@ -193,7 +285,7 @@ export function computeThresholds(
       ruleRelease: query.ruleRelease,
       source: `${rule.sourceAct} ${rule.sourceArticle}`,
       status: statusFor(spec.type, distance, warningDistance),
-      fiscalBase: query.fiscalBase,
+      fiscalBase: spec.requiredFiscalBase,
       breachMeaning: breachMeaningFor(spec.type),
     });
   }

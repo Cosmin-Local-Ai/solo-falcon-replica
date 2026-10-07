@@ -402,7 +402,7 @@ numbering stays readable.
     caller, so the app still does not persist snapshots; no restore flow for quarantined data; fiscal-loss
     persistence (B-16's tail) still open; the 24 SM tier-floor threshold surface reassigned to Phase 7/9
     was not built; `settings.cotaTva` is still read by nothing.
-- **Blocked by:** nothing — **complete**. Phase 8 (financial amount semantics) is the next phase.
+- **Blocked by:** nothing — **complete**. Phase 8 (financial amount semantics) is **also complete** (2026-10-06); Phase 9 is next.
 
 ### Phase 8 — Financial amount semantics
 
@@ -488,6 +488,30 @@ numbering stays readable.
     snapshots yet, so do not assume stored snapshots exist at runtime.
 - **Full brief for the Worker: `docs/ai/briefs/08_amount_semantics.md`** (kept in the repo, not `/tmp`,
   so it survives a restart).
+- **Completed 2026-10-06** (`phases/08_amount_semantics.md`):
+  - **The design constraint was solved, not worked around:** `ThresholdQuery` no longer carries one
+    `(currentValue, fiscalBase)` pair but a **`bases: ThresholdBases` map**, so **one** `computeThresholds`
+    call serves all four specs. `getThresholdStatuses(data, asOfDate, tax)` gained the estimate, and
+    `buildSnapshot` now **reuses it** instead of duplicating the call inline (that duplicate is how the two
+    paths could drift).
+  - **Bases:** `VAT_REGISTRATION` → `revenue-excl-vat` (**7 700**, not the VAT-inclusive 9 317); the three
+    contribution rows → `net-income` = the engine's VNA **7 494,50** — **not** `YtdTotals.net`
+    (**9 068,34**), which the old `FiscalBase` doc comment wrongly named the contribution base. Every spec
+    now carries a `baseSourceArticle`, asserted by test.
+  - **Trap closed:** the base-mismatch `continue` is gone; an unsupplied base emits a `review_required` row
+    with a reason, and widening the status union made the UI badge/label maps **compile errors** until they
+    handled it. Tests now fail if any spec is dropped by a base mismatch, including one that runs the real
+    production caller.
+  - **Numbers:** tsc 0 · build 0 · **41 files / 587 unit tests** (was 41 / 578) · **33 e2e** (was 32).
+    The seeded taxable base is **unchanged** — 6 745,05 → total 3 104,505, measured on both sides of the
+    diff, and pinned by a test.
+  - **Not taken up, recorded rather than hidden:** the 24 SM tier-floor surface (needs a new
+    `ThresholdType` + UI cases and a citation not in evidence); **B-17 rounding stays Phase 10** — the basis
+    change exposes a second half-cent (total **3 104,505 lei**, rendered `3.104,51` and `1.034,84`/month);
+    date semantics (Phase 9); `settings.cotaTva` is still read by nothing. **New defect B-20:** the snapshot
+    flags a threshold `breached` only when `distance > 0`, which is wrong for `min-base` rows, so the
+    insights engine never alerts on a breached minimum base.
+- **Blocked by:** nothing — **complete**. Phase 9 (date semantics) is the next phase.
 
 ### Phase 9 — Date semantics
 

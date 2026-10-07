@@ -85,6 +85,7 @@ function taxComputed(total: number): TaxEstimateResult {
     lines: [],
     output: { total },
     snapshot: undefined as unknown as TaxCalculationSnapshot,
+    bases: { venitulBrut: total, cheltuieliDeductibile: 0, venitulNetDinActivitate: total },
   };
 }
 
