@@ -751,3 +751,98 @@ T1's true size, from the Scouts: ~15 source files + ~22 `fmtRON` call sites in 9
 literals across 20 test files** + e2e expectations + the two in-test formatter mirrors. Options put: (a) full T1
 now, (b) land T2/T3/T4/T5 green and hand T1 back as an executable spec, (c) storage-only T1 with a permanent
 conversion boundary. **Recommendation given: (b).** I have not started T1 and will not until the answer lands.
+
+---
+
+## 6. SCOPE CHANGED TO (a) — FULL T1 NOW. THIS IS THE RESUME POINT.
+
+**Orchestrator reversed its own (b) acceptance: "take (a). Full T1, now. The user has decided to finish Phase 10
+in this pass rather than defer the representation change."** Record this in `DECISIONS:` explicitly: I recommended
+(b), the **user overrode to (a)**, the orchestrator relayed it. Do not imply it was my choice or theirs alone.
+
+### Commits so far (all green)
+- `f6d7cd8` — brief 12 (baseline HEAD at phase start)
+- `a232576` — **`src/domain/money.ts` + `src/domain/money.test.ts`** (the seed module; +20 tests)
+- `c2b33ea` — **`docs/ai/phases/10_money_precision.md`** — the complete T1 spec. **§2.1 file inventory ·
+  §2.2 v4→v5 migration design · §2.3 snapshot/hash hazard · §2.4 test-literal plan · §2.5 formatter mirrors ·
+  §2.6 acceptance.** READ THAT SECTION INSTEAD OF RE-DERIVING THE PLAN.
+- Baseline at `f6d7cd8`: tsc 0 · 44 files / 685 tests · build 0 · e2e 34. After `a232576`: tsc 0 ·
+  **45 files / 705 tests**.
+
+### The rule that survives the scope change
+**The phase ends green at all four checks, or reverted to the last green commit with an honest report.** Not
+"green except e2e", not "tsc clean but tests red". If context runs low: **stop at the last green commit and say
+exactly how far you got.** Partial-but-green is a good outcome; complete-but-red is a failure.
+**NEVER restore green by deleting, weakening, skipping or `.todo`-ing an assertion.** Every assertion whose
+*value* changes must be justified in the commit message by art. 66 or by the unit conversion — if I cannot say
+why the old value was wrong, I changed behaviour instead of fixing it: stop and flag.
+Red intermediate commits tolerated **only** if the next commit restores green and the message says what is
+temporarily red and why. Commit often.
+**If the snapshot-hash problem or the migration edge case has an unclear right answer → `ask_question`, do not
+invent a rule.** Those two are where a plausible guess does real damage.
+
+### Execution queue (bottom-up, tsc-driven). Status: NOTHING STARTED yet.
+1. ☐ **Types/schemas** — change the type, then `npx tsc --noEmit`, and **work the error list** rather than
+   hunting by eye. That is faster and complete. Order: `fiscal/rules.ts` `FiscalParameter.value` ·
+   `fiscal/calculators.ts` `CalculatorInput.base` · `aggregation.ts` `YtdTotals` · `snapshots/types.ts`
+   `CalculationLine.value` · `models.ts` `PfaProfile.cashFloorLei` · persisted schemas (`data/schema.ts`,
+   `domain/schema.ts`) · `data/types.ts` fields · `seed.ts`.
+2. ☐ **v4→v5 migration step** (`money-bani`, from 4 → to 5, `CURRENT_DATA_VERSION = 5`). Spec in phase doc §2.2.
+3. ☐ **Snapshot/hash hazard** — re-derive `inputsHash`, preserve `preMigrationInputsHash`. Phase doc §2.3.
+   **The single most likely place for a silent break. Do not skip.**
+4. ☐ **Display last** — the ~22 `fmtRON` sites in 9 components → `formatBaniRON`; T4: no money arithmetic in
+   JSX, incl. the `rows.reduce` at `Documents.tsx:462` and the CSV `toFixed(2)` at `Documents.tsx:417`.
+5. ☐ **Test literals** — ~200 across 20 files + e2e, **with a script**, then read the diff of every test file
+   and confirm each change is a unit conversion, not a re-pointed expectation. Use a `lei(n)` helper.
+6. ☐ **Delete the two test-internal formatter mirrors** and **replace** them with assertions on real app output
+   (rendered screen text + actual CSV bytes). Pin B-17 through both paths to one value.
+7. ☐ **Register honesty**: never write "Phase 10 complete". Close B-17/B-18/B-20/B-16 **only if genuinely
+   closed** — B-18 and B-20 in `STATE.md` describe *different, already-closed* defects (see §1 above), so do NOT
+   write "B-18 closed"/"B-20 closed"; close **B-17** (real) and open new rows for the rest. B-16 (fiscal-loss
+   persistence) is NOT closed by this phase.
+8. ☐ Measure all four numbers at final HEAD with a clean tree.
+
+### Exact declaration text for step 1 (read just before compaction, verbatim)
+`src/domain/fiscal/rules.ts` — `FiscalParameter` is:
+```ts
+export type FiscalParameter = {
+  id: string;
+  label: string;
+  value: number | string;
+  unit: 'lei' | 'percent' | 'date' | 'count' | 'days' | 'text';
+  description?: string;
+};
+```
+`unit` is the **only machine-readable money marker** and nothing renders it. `value: number | string` is shared
+by lei/percent/date/count/days/text, so it **cannot simply become `Bani`** — the options are (i) keep
+`number | string` and convert at the `paramNumber` funnel (`calculators.ts:86`), or (ii) split the type on
+`unit`. **Decision taken: (i)** — `paramNumber` becomes the unit-aware funnel; `unit:'lei'` values in
+`package2026.ts` become integer bani, `unit:'percent'` values stay unscaled integers. This keeps one rule-store
+type and puts the unit decision in one function.
+
+`src/domain/snapshots/types.ts` — `CalculationInput.revenues: number` / `.expenses: number` (comments say
+"valoareFaraTva, lei" — **update the comments too**), `CalculationLine.value: number`,
+`CalculationOutput.total: number`. `CalculationLine` also carries `reviewRequired?: boolean` + `reason?: string`
+(B-19) — **the amount must stay exactly what the engine computed; the marker is on the LINE, not a change to the
+number.** Do not "fix" an unverified line by rounding it.
+
+### Facts already verified that must not be re-derived
+- `roundArt66` takes the **unrounded Decimal sum**; `formatBani` does **no rounding**. Keep this separation — it
+  is what makes T1 safe.
+- Seeded chain after art. 66: income tax `674,505 → 675` lei, CASS `2 430` unchanged, total `3 104,505 → 3 105`
+  lei, monthly `1 034,835 → 1 035` lei. So e2e `3.104,51 RON → 3.105,00 RON`, `1.034,84 → 1.035,00`.
+- `baniFromLei` is the migration's **unit conversion**, never `roundArt66` (art. 66 would turn a stored `85.5`
+  lei revenue into `86` lei).
+- `71.4 * 100 === 7140.000000000001` (a real seed value, `expenses.e3.tva`); `baniFromLei(71.4)` → `7140`,
+  `exact:true`.
+- The migration step **must not throw** — a throw quarantines the payload and the save effect overwrites the
+  main key with seed. Surface unconvertible values as `review_required`.
+- **Never write `null` into an optional persisted money field — omit the key** (no persisted field is
+  `.nullable()`; `.optional()` rejects `null`).
+- **Do NOT add `.int()` to the load gate** — parse runs before migration and would quarantine real data.
+- The brief's `PIN` exemption **does not exist**; the real exemption is a `new Date('…')` **with an argument**
+  or fake timers. Never weaken `src/test/wallClockGuard.test.ts`.
+- `totalDue` has **zero matches in non-test `src/`** — T3's field name does not exist in current source. Find the
+  real total field before "fixing" it.
+- No `Math.round` exists in `FinancialChart.tsx`; the brief's B-18 description is false. Real float accumulation
+  is `aggregation.ts:224-232` and `projection.ts:67,73`.
