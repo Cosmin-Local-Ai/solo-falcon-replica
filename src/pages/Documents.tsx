@@ -410,9 +410,14 @@ function StatementsTab() {
 
 // ---------- Reports tab: RJIP cashflow registers ----------
 
-/** Exported so the money rendering of an exported register can be pinned directly (B-17 class defect). */
+/**
+ * Exported so the money rendering of an exported register can be pinned directly (B-17 class defect).
+ *
+ * Takes only the rows. The fiscal year belongs to the **filename** (`RJIP_${year}.csv`) and the toast, not to
+ * the register body — the header row is fixed by the register format, so there is nowhere for a year to go
+ * inside the file. It used to take a `year` parameter it never read.
+ */
 export function rjipCsv(
-  year: number,
   rows: { data: string; descriere: string; venit: Bani; cheltuiala: Bani }[],
 ): string {
   const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
@@ -476,7 +481,7 @@ function ReportsTab() {
       toast('info', `Niciun flux de trezorerie pentru ${year}`);
       return;
     }
-    downloadText(rjipCsv(year, rows), `RJIP_${year}.csv`);
+    downloadText(rjipCsv(rows), `RJIP_${year}.csv`);
     toast('success', `RJIP ${year} a fost generat (${rows.length} rânduri)`);
   }
 

@@ -14,7 +14,7 @@ describe('RJIP CSV export — money is rendered, not dumped', () => {
   ];
 
   it('writes lei with two decimals, never the raw ban count', () => {
-    const csv = rjipCsv(2026, rows);
+    const csv = rjipCsv(rows);
     expect(csv).toContain('142,50');
     expect(csv).toContain('85,50');
     expect(csv).not.toContain('14250');
@@ -22,22 +22,22 @@ describe('RJIP CSV export — money is rendered, not dumped', () => {
   });
 
   it('keeps the semicolon separator, the comma decimal and the BOM Excel needs', () => {
-    const lines = rjipCsv(2026, rows).split('\r\n');
+    const lines = rjipCsv(rows).split('\r\n');
     expect(lines[0]).toBe('\uFEFFData;Descriere;Venit (RON);Cheltuiala (RON)');
     expect(lines).toHaveLength(3);
     expect(lines[1]!.split(';')).toHaveLength(4);
   });
 
   it('escapes a description that contains a quote', () => {
-    const csv = rjipCsv(2026, [{ ...rows[0], descriere: 'Factură "A" – Client' }]);
+    const csv = rjipCsv([{ ...rows[0], descriere: 'Factură "A" – Client' }]);
     expect(csv).toContain('"Factură ""A"" – Client"');
   });
 
   it('sums a large register without float drift before rendering', () => {
     const many = Array.from({ length: 10_000 }, () => rows[0]);
-    const csv = rjipCsv(2026, many);
+    const csv = rjipCsv(many);
     // 10 000 × 142,50 lei = 1 425 000,00 lei exactly. In float lei this is where the cents start to lie.
-    const cells = rjipCsv(2026, many)
+    const cells = rjipCsv(many)
       .split('\r\n')
       .slice(1)
       .map((line) => line.split(';').slice(2));

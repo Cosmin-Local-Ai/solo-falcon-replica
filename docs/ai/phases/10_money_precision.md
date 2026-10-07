@@ -68,7 +68,8 @@ sum due. This boundary is an inference about where the line falls and is marked 
 
 ---
 
-## 2. T1 — INTEGER BANI. **SPEC, NOT EXECUTED.** (register: **B-25**)
+## 2. T1 — INTEGER BANI. (register: **B-25**) — *the spec as written before execution; where it and §3
+disagree, §3 is what shipped.*
 
 Target: money that is **persisted, aggregated and displayed** is an integer number of **bani** (`Bani` from
 `src/domain/money.ts`). Money mid-calculation (a rate applied to a base) is a `decimal.js-light` value,
@@ -414,3 +415,38 @@ fractional-bani intermediate becomes money), `leiInputValue` / `parseLeiInput` (
   hazard is documented on the field and in `e2e/settings.spec.ts`.
 - Nothing pins the "a migration step threw → quarantine with `migration failed:`" path. No payload can currently
   make a step throw, so it is unreachable rather than untested-by-accident; it stays a gap, not a Phase 10 deliverable.
+
+---
+
+## 4. THE FOUR REGISTER ROWS THIS PHASE OWNS — and what actually closed
+
+The brief named four rows. **Three of the four IDs do not point at the defects the brief describes.** I checked
+each row in `docs/ai/STATE.md` before touching it rather than writing the closure the brief asked for, because
+closing a row that is already closed for an unrelated reason silently rewrites that other defect's history.
+
+| Brief's row | What the brief claims | What the register actually holds | What this phase did |
+|---|---|---|---|
+| **B-17** | two display paths disagree by a half-cent (674,51 vs 674,50) | **matches** — "no rounding policy anywhere in the fiscal domain; the cent a user sees is decided by IEEE-754", seeded tax 674,505 lei | **CLOSED.** Three causes, all removed: no rule in the domain (`roundArt66` is now the only rounding, with art. 66 quoted above it); two formatters that disagreed (`src/lib/format.ts` deleted, one named `bani → lei` conversion); and a **third** path the brief did not list — `toFixed` in the RJIP CSV export, which after T1 exported raw bani at 100× the truth. `src/domain/money.test.ts:174` pins the previously-disagreeing money to one value, and `src/pages/Documents.rjip.test.ts` pins the exported bytes. |
+| **B-18** | float accumulation plus `Math.round` in the chart layer | **does not match** — B-18 is the regime-gate fall-through, **already FIXED in Phase 6** | **B-18 is not this phase's and is left exactly as it was.** The chart-layer defect the brief describes had **no register row at all**, and `Math.round` was never in `FinancialChart.tsx`. What was there — a private `Intl.NumberFormat` (a sixth formatter) and float accumulation in the axis — is fixed under T4, and recorded as part of B-17 rather than as a fake B-18 closure. |
+| **B-20** | the `totalDue` type is a lie | **does not match** — B-20 is the `min-base` threshold polarity bug, **already CLOSED in Phase 9** | **B-20 is untouched.** There is no field named `totalDue` anywhere in `src/` (zero matches outside tests). The real total is `total = sumBani([cas, cass, incomeTax])` at `src/domain/tax.ts:332` — computed from already-rounded integer lines, so the defect the brief describes does not exist in current source and there was nothing to fix or cast. |
+| **B-16** | a rounding rule asserted with no legal basis | **does not match** — B-16 is fiscal-loss persistence, **PART FIXED in Phase 5**, still open on persisting the record and reading prior-year losses back | **NOT closed by this phase** — persisting losses is not in this brief's tasks. The legal-basis half is handled where it belongs: art. 66 alin. (1) is quoted verbatim above and in the `money.ts` header, with the Titlul V application marked as **our extension by analogy**, not as a Titlul V requirement. |
+
+Two rows the brief does not mention, both real:
+
+- **B-25** — opened by the previous Phase 10 worker as the tracker for the T1 it deliberately deferred. **Closed**
+  by executing it. The row's own text is the deferral decision, so closing it is the honest bookkeeping.
+- **B-26** — **opened by this phase.** `convertMoneyToBani` produces one `MoneyPrecisionNotice` per field it could
+  not represent exactly, and the report is persisted — but `toAppData` drops it and no screen renders it, so the
+  first write after a load erases it. Acceptance criterion 6 ("a value that cannot be converted must surface, not
+  vanish") is therefore **half-met by design**. That is a defect, and it is filed rather than argued away.
+
+---
+
+## 5. THIS DOCUMENT SUPERSEDES THE FROZEN ARCHIVE
+
+**Where this file and the frozen `docs/ai/steps/*` archive disagree, this file is correct and the archive is not.**
+The clearest example: `docs/ai/steps/08_stack_setup.md:32` lists `decimal.js-light ^2.5.1` among the stack as
+"exact decimal arithmetic", as if it were in use. It was declared at `package.json:16` and **never imported by a
+single line of source** until Phase 10 — `docs/ai/steps/01_real_baseline.md:100` row 18 records the same thing as
+"documented but not implemented". The archive is left unedited on purpose: it is a record of what was believed at
+the time, and correcting it in place would destroy that. The correction lives here.
