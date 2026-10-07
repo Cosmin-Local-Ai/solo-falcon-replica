@@ -1358,3 +1358,88 @@ vat-exceedance-date → money-bani`; `CURRENT_DATA_VERSION = DATA_VERSION_MONEY_
 4. Measure all four with a clean tree.
 5. Advisories to consider: nested ternary in `projection.ts` actualCount; **unused `asOfDate` param in
    projection.ts** (check whether my edit orphaned it).
+
+---
+
+## 12. STATE AT SIXTH COMPACTION — PHASE 10 IS DONE. READ THIS FIRST.
+
+### MEASURED, clean tree, all four (2026-10-08)
+- `npx tsc --noEmit` → **0 errors repo-wide**.
+- `npm run test` → **47 files / 745 tests, all passing**.
+- `npm run build` → **built** (only the pre-existing >500 kB chunk advisory).
+- `npm run test:e2e` → **34 passed**.
+- HEAD `3182114` docs(phase10): T5 complete. Tree clean. `wip/phase10-t1-bani` still points at `023e520`.
+
+### What happened after §11 (the §11 "STILL TO DO" list is fully consumed)
+1. `dcc374d` — the 7 chain failures: `money-bani` added as the 5th step. Two tests had to be **re-scoped,
+   not re-numbered** (see §11 for why): "byte-identical fiscal inputs" now claims only identity-shaped keys,
+   and "does not rewrite a snapshot it had nothing to add to" now asserts `preMigrationInputsHash` preserved
+   + `inputsHash` re-derived. I did **not** paste the new hash literal.
+2. `1fe9217` — the new tests §11 item 1 asked for. `src/domain/money.test.ts` (41 cases) and
+   `src/data/migration.money.test.ts` (17 cases) now pin: the 50-bani tie rounds DOWN (where `Math.round`
+   is wrong), `lei()` refuses sub-ban literals, `sumBani` is permutation-independent, `allocateBani` sums
+   exactly to its total, the B-17 disagreement pinned to one value, `142,5 → 14250` with NO notice,
+   `674,504 → 67450` WITH a notice naming collection+id+field, `NaN` carried unchanged and never zeroed.
+   Also fixed a real bug found while writing the test: `formatBaniAxis` emitted an **unpadded fraction**
+   ("12,5" for 1250 bani).
+3. `09b7c65` — e2e. Deleted the formatter mirror at `e2e/dashboard.spec.ts:577-579`; expectations now come
+   from the display strings. **All §11 negative controls still render unchanged** (24.615, 2.430, 12.150,
+   24.300, 29.160, 46.570, 20.435, 4860/4861, −29160/−29161, −39500/−39501, 60000→12150, 97199→12150,
+   97200→24300). The seeded total moved `3.104,51 → 3.105,00 RON` because art. 66 now applies — derivation
+   in `dashboard.test.ts` (see §11 item 10).
+4. `f1ab8c2` — **a real bug, not a test fix**: `rjipCsv` built money cells with `value.toFixed(2)` on a value
+   that is now `Bani`, so a 142,50 lei invoice exported as **"14250,00"** — a 100× error in the cashflow
+   register handed to the tax office. Found by auditing acceptance criterion 8, not by a failing test:
+   nothing in the suite read the exported bytes. Same block had three `toLocaleString('ro-RO')` calls (a
+   sixth formatter) and `rows.reduce((s, r) => s + r.venit, 0)` (unbranded `0` start, widens every addend).
+   New `src/pages/Documents.rjip.test.ts` (4 tests) pins the exported bytes.
+5. `3182114` — T5 finished: phase doc §4 (the four register rows) and §5 (archive supersession), §2 header
+   de-"SPEC, NOT EXECUTED"-ed, and `rjipCsv`'s dead `year` parameter removed.
+
+### T1–T5, each with the evidence that it is actually done
+- **T1 one representation** — `Bani` branded integer; persisted, aggregated, displayed; `decimal.js-light`
+  carries every mid-calculation rate; one named `bani → lei` conversion. Migration rule and the sub-ban
+  decision are stated in phase doc §2.2 and pinned by `migration.money.test.ts`. Nothing unconvertible is
+  zeroed.
+- **T2 one rounding function** — `roundArt66` is the only rounding on money; ≤50 bani down, >50 up, quoted
+  verbatim with the **EXTENSION** label (Titlul IV rule applied by analogy to Titlul V, not a Titlul V
+  requirement) in both `money.ts:28` and phase doc §"The law, verbatim". `src/lib/format.ts` deleted; the
+  only `new Intl.NumberFormat` left in the repo is inside `money.test.ts`, deliberately, to pin the old
+  disagreement.
+- **T3 `totalDue` tells the truth** — **there is no field named `totalDue` in `src/`** (zero matches outside
+  tests). The real total is `const total = sumBani([casRes.value, cassValue, incomeTaxRes.value])` at
+  `src/domain/tax.ts:332`, computed from already-rounded integer lines. No cast was used. Recorded honestly
+  in phase doc §4 rather than claimed as a closure.
+- **T4 no money arithmetic in JSX** — audited by grep, not by memory: `toFixed|toLocaleString|Math.round`
+  and money-field arithmetic in `src/components` + `src/pages` now return **only comments**. Every remaining
+  `Number(` in the view layer is a year, month or select value.
+- **T5 the phase doc** — representation, migration rule, rounding policy with extension label, the four
+  register rows and what closed them, what was deliberately not touched (§3.6), and the one-line supersession
+  of `docs/ai/steps/*` including the false `decimal.js-light` claim.
+
+### Still open, filed rather than argued
+- **B-26** — `convertMoneyToBani` produces a `MoneyPrecisionNotice` per unrepresentable field and it is
+  persisted, but `toAppData` drops it and no screen renders it, so the first write after a load erases it.
+  Acceptance criterion 6 is **half-met by design**. This is the one thing I would do next if Phase 10 is
+  reopened.
+- Persisted **key names** still read `salaryIncomeLei` / `cashFloorLei` while the values are bani. Deliberate:
+  zod strips unknown keys, so renaming would reject every pre-v5 payload and quarantine it. Documented on the
+  field and in `e2e/settings.spec.ts`.
+- Nothing pins "a migration step threw → quarantine with `migration failed:`". No payload can currently make a
+  step throw, so it is unreachable rather than untested-by-accident.
+- **B-16 stays open** (loss persistence) — not this brief's task. **B-18 and B-20 were never touched**: they
+  are closed Phase 6 / Phase 9 rows about other defects.
+
+### Advisories from §11, resolved
+- `projection.ts` nested ternary at `actualCount` — **not a bug**, and it is commented: `asOfMonth` there is
+  the `YYYY-MM` string, so `.slice(5,7)` is right, and the value must agree with the loop's own predicate or
+  the share arrays are the wrong length.
+- "unused `asOfDate` in projection.ts" — **stale**. `asOfDate` feeds `elapsedMonths`, `selectYtd`,
+  `selectMonthly` and `periodActual`.
+- The one non-hint pi-lens finding on `Documents.tsx` was `'year' is declared but its value is never read` on
+  `rjipCsv` — **pre-existing**, not caused by the money work. Removed the parameter instead of leaving a lying
+  signature; the year belongs to the filename and toast, not the register body.
+
+### If a next worker is handed this phase
+There is no resume point — the phase is complete and green. The only work worth doing is **B-26**: carry the
+notice report through `toAppData` and render it, then close criterion 6.
