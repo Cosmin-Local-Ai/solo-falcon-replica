@@ -35,9 +35,13 @@ const validProfile: PfaProfile = {
   updatedAt: '2026-09-28T10:00:00.000Z',
 };
 
+// B-23 standing rule: no test may read the wall clock. `createDefaultProfile` takes an injectable
+// `instant`, so pin it — unpinned, `pfaStartYear` / `fiscalYear` / `updatedAt` follow the machine date.
+const PINNED_INSTANT = new Date('2026-06-01T12:00:00Z');
+
 describe('createDefaultProfile', () => {
   it('produces safe defaults', () => {
-    const p = createDefaultProfile();
+    const p = createDefaultProfile({}, PINNED_INSTANT);
     expect(p.id).toBe('profile-1');
     expect(p.regime).toBe('impozit_pe_venit');
     expect(p.salaryStatus).toBe('nu');
@@ -45,12 +49,15 @@ describe('createDefaultProfile', () => {
     expect(p.otherIncome).toEqual([]);
     expect(p.vatExempt).toBe(false);
     expect(p.cashFloorLei).toBe(0);
+    // Deterministic only because `instant` is pinned above. This is the assertion B-23 exists to protect.
+    expect(p.fiscalYear).toBe(2026);
+    expect(p.pfaStartYear).toBe(2026);
     expect(p.identity.nume).toBe('');
     expect(p.identity.cui).toBe('');
   });
 
   it('applies overrides on top of defaults', () => {
-    const p = createDefaultProfile({ regime: 'impozit_pe_cit', caen: '6201', cashFloorLei: 5000 });
+    const p = createDefaultProfile({ regime: 'impozit_pe_cit', caen: '6201', cashFloorLei: 5000 }, PINNED_INSTANT);
     expect(p.regime).toBe('impozit_pe_cit');
     expect(p.caen).toBe('6201');
     expect(p.cashFloorLei).toBe(5000);

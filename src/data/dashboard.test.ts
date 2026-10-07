@@ -20,6 +20,10 @@ import { selectYtd } from '../domain/aggregation';
 import { THRESHOLD_SPECS } from '../domain/thresholds';
 
 const AS_OF = '2026-10-01';
+// B-23 standing rule: no test may read the wall clock. `buildDashboardData` and `getActionItems` take an
+// injectable `instant`; without it their `asOfDate` comes from `now()`. Pinned to the same local day as
+// AS_OF (Romania is UTC+3 on 2026-10-01), so the pinned instant and the pinned as-of date agree.
+const AS_OF_INSTANT = new Date('2026-10-01T12:00:00+03:00');
 
 function identity(): PfaIdentity {
   return {
@@ -212,7 +216,7 @@ describe('buildDashboardData (sync composer)', () => {
   it('composes the full dashboard from data + tax', async () => {
     const data = makeData({ revenues: [revenue()], expenses: [expense()] });
     const tax = await getTaxEstimate(data, AS_OF);
-    const dashboard = buildDashboardData(data, tax);
+    const dashboard = buildDashboardData(data, tax, AS_OF_INSTANT);
 
     expect(dashboard.taxYear).toBe(2026);
     expect(dashboard.snapshot.pfaRevenue).toBe(1190);
@@ -328,7 +332,7 @@ describe('threshold bases (Phase 8 — amount semantics, on seeded data)', () =>
 
 describe('getActionItems (sync)', () => {
   it('returns an array of well-formed action items', () => {
-    const items = getActionItems(makeData({ revenues: [revenue()] }));
+    const items = getActionItems(makeData({ revenues: [revenue()] }), AS_OF_INSTANT);
     expect(Array.isArray(items)).toBe(true);
     for (const item of items) {
       expect(typeof item.id).toBe('string');
