@@ -5,8 +5,8 @@ import { PFA_2026_RELEASE } from './release2026';
 import { selectApplicableRules } from './select';
 
 describe('PFA 2026 system-real package', () => {
-  it('contains exactly 8 rules', () => {
-    expect(PFA_2026_SYSTEM_REAL_PACKAGE).toHaveLength(8);
+  it('contains exactly 9 rules', () => {
+    expect(PFA_2026_SYSTEM_REAL_PACKAGE).toHaveLength(9);
   });
 
   it('every rule has 16 defined fields and valid provenance', () => {
@@ -47,15 +47,27 @@ describe('PFA 2026 system-real package', () => {
       expect(ids.has(id), `release references unknown rule ${id}`).toBe(true);
     }
   });
+
+  // Phase 9b: the mirror of the test above. A rule that exists in the package but is not listed in
+  // the release is never selected, so a deadline it would produce silently does not exist — which is
+  // exactly the failure mode this phase is about. VAT_REGISTRATION_DEADLINE_2026 must be activated.
+  it('every rule in the package is activated by the release', () => {
+    for (const rule of PFA_2026_SYSTEM_REAL_PACKAGE) {
+      expect(
+        PFA_2026_RELEASE.ruleIds,
+        `rule ${rule.ruleId} is not in PFA_2026_RELEASE.ruleIds`,
+      ).toContain(rule.ruleId);
+    }
+  });
 });
 
 describe('selectApplicableRules', () => {
-  it('returns 7 rules for a date in H1 2026 (H2 wage rule not yet effective)', () => {
+  it('returns 8 rules for a date in H1 2026 (H2 wage rule not yet effective)', () => {
     const selected = selectApplicableRules(PFA_2026_SYSTEM_REAL_PACKAGE, {
       taxYear: 2026,
       asOfDate: '2026-03-15',
     });
-    expect(selected).toHaveLength(7);
+    expect(selected).toHaveLength(8);
   });
 
   it('excludes the H1 minimum wage rule after 2026-06-30', () => {
@@ -66,7 +78,7 @@ describe('selectApplicableRules', () => {
     const ids = selected.map((r) => r.ruleId);
     expect(ids).not.toContain('GENERAL_MINIMUM_WAGE_2026_H1');
     expect(ids).toContain('GENERAL_MINIMUM_WAGE_2026_H2');
-    expect(selected).toHaveLength(7);
+    expect(selected).toHaveLength(8);
   });
 
   it('returns nothing for a year without rules', () => {
@@ -346,6 +358,17 @@ describe('calculators', () => {
   it('deadline calculator returns the 2027-05-25 deadline', () => {
     const result = calculatorRegistry['calc-deadline'](byId('PFA_DEADLINE_2026'));
     expect(result).toMatchObject({ value: 0 });
+  });
+
+  // KNOWN LIMITATION, flagged for Phase 10 (brief 10 §3.5 forbids touching the calculators).
+  // `calcDeadline` reads only a fixed `deadline` parameter, so it cannot express an event-relative
+  // rule and answers reviewRequired for VAT_REGISTRATION_DEADLINE_2026. There is no production
+  // impact — `computeDeadlines` reads `parameters` directly and never routes deadline rules through
+  // the calculator registry — but the calculator must be extended before any deadline rule can feed
+  // the money path. This test pins the current behaviour so the gap cannot be forgotten.
+  it('deadline calculator cannot express an event-relative rule (Phase 10 follow-up)', () => {
+    const result = calculatorRegistry['calc-deadline'](byId('VAT_REGISTRATION_DEADLINE_2026'));
+    expect(result).toMatchObject({ reviewRequired: true });
   });
 });
 

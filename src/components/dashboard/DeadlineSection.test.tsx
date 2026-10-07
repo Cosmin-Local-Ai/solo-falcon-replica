@@ -7,13 +7,13 @@ const AS_OF = '2026-03-01';
 
 function makeDeadline(overrides: Partial<Deadline> = {}): Deadline {
   return {
-    deadlineId: 'dl-1',
+    deadlineId: 'PFA_DEADLINE_2026',
     taxYear: 2026,
-    eventType: 'cas_quarterly',
+    eventType: 'd212_filing',
     date: '2026-03-25',
-    dateFormula: 'last day of the quarter',
-    appliesTo: 'PFA — contribuție socială de asigurări sociale de sănătate',
-    legalSource: { act: 'OUG 157/2017', article: 'art. 42' },
+    dateFormula: 'rule PFA_DEADLINE_2026: fixed 2027-05-25 + 0 days',
+    appliesTo: 'pfa',
+    legalSource: { act: 'Cod fiscal (consolidat)', article: 'art. 122 alin. (3)' },
     effectiveFrom: '2026-01-01',
     effectiveTo: null,
     status: 'active',
@@ -26,7 +26,8 @@ describe('DeadlineSection (Step 32 — Romanian, no raw enums)', () => {
     render(<DeadlineSection deadlines={[makeDeadline()]} asOfDate={AS_OF} />);
     expect(screen.getByText('Termene limită')).toBeInTheDocument();
     expect(screen.getByText('Termene limită viitoare de depunere, la data de 01.03.2026')).toBeInTheDocument();
-    expect(screen.getByText('CAS trimestrial')).toBeInTheDocument();
+    expect(screen.getByText('Depunere D212')).toBeInTheDocument();
+    expect(screen.getByText('PFA')).toBeInTheDocument();
     expect(screen.getByText(/25\.03\.2026 \(24 zile rămase\)/)).toBeInTheDocument();
   });
 
@@ -59,5 +60,44 @@ describe('DeadlineSection (Step 32 — Romanian, no raw enums)', () => {
     render(<DeadlineSection deadlines={[makeDeadline()]} asOfDate={AS_OF} />);
     expect(screen.getByText('Activ', { selector: '.badge' })).toBeInTheDocument();
     expect(screen.queryByText('active')).not.toBeInTheDocument();
+  });
+
+  // Phase 9b (brief 10 §2b): the VAT registration deadline's offset_days is 0, so the deadline IS the
+  // exceedance date. Once resolved it can only be due today or overdue — it must never be rendered as
+  // "N zile rămase", and a dateless one must never render at all.
+  it('does not render a resolved VAT registration deadline as remaining days', () => {
+    render(
+      <DeadlineSection
+        deadlines={[
+          makeDeadline({
+            deadlineId: 'VAT_REGISTRATION_DEADLINE_2026',
+            eventType: 'vat_registration',
+            appliesTo: 'vat-registered-pfa',
+            date: AS_OF,
+          }),
+        ]}
+        asOfDate={AS_OF}
+      />,
+    );
+    expect(screen.getByText('Niciun termen limită viitor')).toBeInTheDocument();
+    expect(screen.queryByText('Înregistrare TVA')).not.toBeInTheDocument();
+  });
+
+  it('does not render a dateless VAT registration deadline', () => {
+    render(
+      <DeadlineSection
+        deadlines={[
+          makeDeadline({
+            deadlineId: 'VAT_REGISTRATION_DEADLINE_2026',
+            eventType: 'vat_registration',
+            appliesTo: 'vat-registered-pfa',
+            date: null,
+            status: 'not_applicable',
+          }),
+        ]}
+        asOfDate={AS_OF}
+      />,
+    );
+    expect(screen.getByText('Niciun termen limită viitor')).toBeInTheDocument();
   });
 });

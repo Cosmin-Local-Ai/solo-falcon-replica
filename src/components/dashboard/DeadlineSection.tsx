@@ -33,19 +33,18 @@ const APPLIES_TO_LABEL: Record<string, string> = {
   'vat-registered-pfa': 'PFA înregistrat în scop de TVA',
 };
 
-/** Human-readable label derived from the event type (presentation only). */
+/** Human-readable label derived from the event type (presentation only).
+ *
+ * Phase 9b removed the four cases whose obligations do not exist in fiscal year 2026 —
+ * `cas_quarterly`, `cass_quarterly`, `income_tax_advance` and `pfa_estimated_declaration`. See the
+ * `DeadlineEventType` doc comment in src/domain/deadlines.ts for the abrogation evidence. The switch
+ * is exhaustive over `DeadlineEventType`, so a label can no longer exist for an event type that has
+ * no rule behind it.
+ */
 function labelFor(d: Deadline): string {
   switch (d.eventType) {
     case 'd212_filing':
       return 'Depunere D212';
-    case 'cas_quarterly':
-      return 'CAS trimestrial';
-    case 'cass_quarterly':
-      return 'CASS trimestrial';
-    case 'income_tax_advance':
-      return 'Avans impozit pe venit';
-    case 'pfa_estimated_declaration':
-      return 'Declarație estimativă PFA';
     case 'vat_registration':
       return 'Înregistrare TVA';
   }

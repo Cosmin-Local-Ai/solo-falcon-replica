@@ -245,17 +245,76 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     effectiveTo: null,
     parameters: [
       { id: 'deadline', label: 'Single deadline', value: '2027-05-25', unit: 'date' },
+      // Phase 9b: what the deadline IS, and who it binds, is rule data — `computeDeadlines` no longer
+      // hardcodes either. `event_type` must be a member of `DEADLINE_EVENT_TYPES`
+      // (src/domain/deadlines.ts) or the rule emits nothing. No `event` parameter ⇒ fixed-date rule.
+      { id: 'event_type', label: 'Deadline event type', value: 'd212_filing', unit: 'text' },
+      { id: 'applies_to', label: 'Applies to', value: 'pfa', unit: 'text' },
     ],
     calculatorId: 'calc-deadline',
     // CF art. 122 alin. (3) — "…până la data de 25 mai inclusiv a anului următor celui de realizare a
     // veniturilor." NOT alin. (1), which only enumerates when the obligation arises. The 2027-05-25
     // value is correct. OUG 8/2026 art. 8 is a 3% bonificație for filing/paying by 15 April 2026 for
-    // the 2025 year — an early-filing incentive, not a deadline change.
+    // the 2025 year — an early-filing incentive, not a deadline change. Do NOT encode 15 April 2026 as
+    // a deadline: it looks exactly like a quarterly instalment date and is the single most likely
+    // source of a recurrence of that error (docs/ai/research/12_quarterly_payment_deadlines_2026.md §8).
     // GAP U-3 (MEDIUM): which act last amended art. 122 alin. (3) is not pinned (ANAF consolidation is
-    // annotative). GAP U-4 (UNVERIFIED): quarterly instalment payment dates (art. 123 alin. (2)-(4),
-    // art. 147/151 CAS, art. 174 alin. (1)-(3) CASS) are not established — needed by Phase 9.
+    // annotative).
+    // GAP U-4 IS CLOSED (2026-10-07, docs/ai/research/12_quarterly_payment_deadlines_2026.md): there are
+    // NO quarterly payment deadlines for a PFA în sistem real in 2026. Income tax, CAS and CASS are all
+    // declared AND paid by 25 May of the following year — art. 68 alin. (9)-(10), art. 151 alin. (1) and
+    // art. 174 alin. (15) each route to art. 122 alin. (3). The advance-payment article (art. 120/120^1)
+    // is Abrogat from 01-01-2025 (OUG 128/2024 pct. 11 Art. I, MO 1125/11.11.2024) and CAS art. 160 has
+    // been Abrogat since 01-01-2018. Phase 9b therefore DELETED the four quarterly event types rather
+    // than re-citing them: the obligation does not exist, so no article could be found for it.
+    // Payment citation corrected in Phase 9b: art. 123 alin. (1) is the RATE provision ("Impozitul
+    // ANUAL datorat … prin aplicarea cotei de 10%…"), not the payment provision — payment is
+    // art. 68 alin. (10) → art. 122 alin. (3).
     sourceAct: 'Cod fiscal (consolidat)',
-    sourceArticle: 'art. 122 alin. (3); payment art. 123 alin. (1)',
+    sourceArticle: 'art. 122 alin. (3); payment art. 68 alin. (10)',
+    sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/312601',
+  },
+  {
+    ...PROVENANCE_2026,
+    ruleId: 'VAT_REGISTRATION_DEADLINE_2026',
+    name: 'VAT registration deadline 2026',
+    taxRegime: 'deadlines',
+    effectiveFrom: '2026-01-01',
+    effectiveTo: null,
+    parameters: [
+      // Event-relative rule: the deadline is RESOLVED FROM AN EVENT, not from a date on the calendar.
+      // `offset_days` = 0 is the whole point — CF art. 316 alin. (1) lit. b) requires the request
+      // "cel târziu la data depășirii plafonului", so the deadline IS the exceedance date. There is no
+      // grace period to add, and `isoDaysAfter(date, 0)` is the identity: resolved date === event date.
+      // Consequence for the UI, asserted in src/domain/deadlines.test.ts: a resolved VAT registration
+      // deadline can only ever classify as `past` or `due_today`, never `upcoming`, so `filterUpcoming`
+      // never shows it in the "Termene limită" card. That is correct — once the date has passed the
+      // registration obligation is overdue, and "N zile rămase" would be a lie. Do not bend the filter.
+      { id: 'event_type', label: 'Deadline event type', value: 'vat_registration', unit: 'text' },
+      { id: 'event', label: 'Event that starts the clock', value: 'vat_exceedance', unit: 'text' },
+      { id: 'offset_days', label: 'Days from event to deadline (0 = the deadline IS the event date)', value: 0, unit: 'days' },
+      { id: 'applies_to', label: 'Applies to', value: 'vat-registered-pfa', unit: 'text' },
+    ],
+    calculatorId: 'calc-deadline',
+    // CF art. 316 alin. (1) lit. b) — the plătibil must request TVA registration "cel târziu la data
+    // depășirii plafonului"; alin. (1^1) lit. b) makes the registration effective FROM that same day.
+    // Both by ORDONANȚA nr. 22 din 28.08.2025 (an OG, not an OUG), pct. 18-19 Art. I, MO 806/29.08.2025,
+    // in force 01-09-2025. The ceiling is art. 310 alin. (1) — 395.000 lei — owned by VAT_THRESHOLD_2026
+    // above; it is deliberately NOT duplicated here (one figure, one source).
+    // The old code's `month_end(exceedance_month) + 30 days` at "art. 338" never existed in any period
+    // (docs/ai/research/11_pfa_first_year_and_vat_registration_deadlines_2026.md §6).
+    // NOT ENCODED, on purpose: (a) the historical rule for periods up to 31-08-2025 — `month_end + 10
+    // days` at a 300.000-lei ceiling — is corroborated only by secondary sources (an ANAF page and the
+    // Senate expunere de motive for PL 204/2026), and this app is pinned to fiscal year 2026; it is a
+    // requirement for any future historical ruleset, not a 2026 rule. (b) PL 204/2026 (a BILL proposing
+    // "cel mult 3 zile lucrătoare de la data depășirii plafonului") is not law. Re-check both before the
+    // 2027 ruleset.
+    // NOTE for Phase 10: `calcDeadline` reads only a fixed `deadline` parameter, so it answers
+    // REVIEW_REQUIRED for this event-relative rule. Nothing in src/ calls it for deadline rules —
+    // computeDeadlines reads `parameters` directly — so there is no production impact, but the
+    // calculator cannot express an event-relative deadline until Phase 10 extends it.
+    sourceAct: 'Cod fiscal — Ordonanța nr. 22/2025, Art. I pct. 18-19 (MO 806/29.08.2025)',
+    sourceArticle: 'art. 316 alin. (1) lit. b) ("cel târziu la data depășirii plafonului"); efect înregistrare art. 316 alin. (1^1) lit. b); plafon art. 310 alin. (1)',
     sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/312601',
   },
 ];

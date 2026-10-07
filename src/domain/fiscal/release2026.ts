@@ -15,6 +15,7 @@ export const PFA_2026_RELEASE: RuleRelease = {
     'INCOME_TAX_2026',
     'VAT_THRESHOLD_2026',
     'PFA_DEADLINE_2026',
+    'VAT_REGISTRATION_DEADLINE_2026',
   ],
   status: 'SAFE_ACTIVATION',
   effectiveFrom: '2026-01-01',

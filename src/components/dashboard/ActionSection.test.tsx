@@ -4,8 +4,11 @@ import ActionSection from './ActionSection';
 import type { ActionItem } from '../../data/dashboard';
 
 function makeActions(): ActionItem[] {
+  // `label` is the deadline's `appliesTo` key, which ActionSection maps to Romanian. Phase 9b removed
+  // the quarterly keys (`cas_quarterly` etc.) because those obligations do not exist in 2026 — see the
+  // `DeadlineEventType` doc comment in src/domain/deadlines.ts.
   return [
-    { id: 'deadline-cas-q1', label: 'cas_quarterly', source: 'deadline' },
+    { id: 'deadline-PFA_DEADLINE_2026', label: 'pfa', source: 'deadline' },
     { id: 'completeness-profile', label: 'profile', source: 'completeness' },
     { id: 'completeness-statements', label: 'statements', source: 'completeness' },
     { id: 'tax-review', label: 'Revizuire estimări fiscale', source: 'tax' },
@@ -15,7 +18,7 @@ function makeActions(): ActionItem[] {
 describe('ActionSection (Step 31 — ActionItem-driven)', () => {
   it('renders every real action item, in the data layer order', () => {
     render(<ActionSection actions={makeActions()} />);
-    expect(screen.getByText('CAS trimestrial')).toBeInTheDocument();
+    expect(screen.getByText('PFA')).toBeInTheDocument();
     expect(screen.getByText('Revizuire estimări fiscale')).toBeInTheDocument();
     expect(screen.getByText('4 item de rezolvat')).toBeInTheDocument();
   });

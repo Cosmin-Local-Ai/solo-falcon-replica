@@ -201,23 +201,51 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(thresholds.getByText('În limite', { exact: true })).toHaveCount(2);
   });
 
-  test('Termene limită: renders the 6 upcoming filing deadlines with dates and status', async ({ page }) => {
+  // Phase 9b: exactly ONE upcoming deadline. The four quarterly/estimated event types were deleted
+  // because the obligations do not exist in fiscal year 2026 — a PFA în sistem real has NO quarterly
+  // plată: income tax, CAS and CASS are each declared AND paid by 25 May of the following year
+  // (CF art. 68 alin. (10), art. 151 alin. (1) and art. 174 alin. (15), all routing to art. 122
+  // alin. (3)). The advance-payment article (art. 120/120^1) is `Abrogat.` from 01-01-2025 and CAS
+  // art. 160 has been `Abrogat.` since 01-01-2018. The VAT registration deadline is rule-driven but
+  // dateless here: no profile records a TVA exceedance date, and with offset_days = 0 its deadline IS
+  // the exceedance date, so it can never classify as upcoming anyway.
+  test('Termene limită: renders the single upcoming filing deadline (D212)', async ({ page }) => {
     await page.goto('/dashboard');
 
     const deadlines = sectionWith(page, 'Termene limită');
-    await expect(deadlines.locator('.item-row')).toHaveCount(6);
+    await expect(deadlines.locator('.item-row')).toHaveCount(1);
 
     await expect(deadlines.getByText('Depunere D212')).toBeVisible();
     await expect(deadlines.getByText('25.05.2027')).toBeVisible();
-    await expect(deadlines.getByText('CAS trimestrial')).toHaveCount(2);
-    await expect(deadlines.getByText('15.10.2026')).toHaveCount(2); // CAS + CASS Q3
-    await expect(deadlines.getByText('15.01.2027')).toHaveCount(2); // CAS + CASS Q4
-    await expect(deadlines.getByText('CASS trimestrial')).toHaveCount(2);
-    await expect(deadlines.getByText('Avans impozit pe venit')).toBeVisible();
-    await expect(deadlines.getByText('25.12.2026')).toBeVisible();
+    await expect(deadlines.getByText('PFA', { exact: true })).toBeVisible();
 
     // All listed deadlines are active.
-    await expect(deadlines.getByText('Activ', { exact: true })).toHaveCount(6);
+    await expect(deadlines.getByText('Activ', { exact: true })).toHaveCount(1);
+
+    // The deleted obligations must not reappear under any label…
+    for (const label of [
+      'CAS trimestrial',
+      'CASS trimestrial',
+      'Avans impozit pe venit',
+      'Declarație estimativă PFA',
+      'Înregistrare TVA',
+    ]) {
+      await expect(deadlines.getByText(label)).toHaveCount(0);
+    }
+    // …or under any of the dates they used to render, including the quarterly instalment dates and
+    // the 15 April 2026 date that belongs to a 3% bonificație for the 2025 year, not to a deadline.
+    for (const date of [
+      '15.04.2026',
+      '15.07.2026',
+      '15.10.2026',
+      '15.01.2027',
+      '25.03.2026',
+      '25.06.2026',
+      '25.09.2026',
+      '25.12.2026',
+    ]) {
+      await expect(deadlines.getByText(date)).toHaveCount(0);
+    }
   });
 
   test('Completitudine date: renders 9 checks, 8 satisfied and the missing tax estimate', async ({ page }) => {
@@ -248,16 +276,17 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(completeness.getByText('Lipsă', { exact: true })).toHaveCount(1);
   });
 
-  test('Ce trebuie să faci: renders the 8 pending action items', async ({ page }) => {
+  test('Ce trebuie să faci: renders the 3 pending action items', async ({ page }) => {
     await page.goto('/dashboard');
 
     const actions = sectionWith(page, 'Ce trebuie să faci');
-    await expect(actions.getByText('8 item de rezolvat')).toBeVisible();
+    await expect(actions.getByText('3 item de rezolvat')).toBeVisible();
     // ActionSection renders one .action-label per item (not .item-row).
-    await expect(actions.locator('.action-label')).toHaveCount(8);
+    await expect(actions.locator('.action-label')).toHaveCount(3);
 
-    // 6 deadline actions (one per upcoming filing), 1 completeness, 1 tax review.
-    await expect(actions.getByText('Termen limită', { exact: true })).toHaveCount(6);
+    // 1 deadline action (D212 only — Phase 9b deleted the four non-existent quarterly obligations),
+    // 1 completeness, 1 tax review.
+    await expect(actions.getByText('Termen limită', { exact: true })).toHaveCount(1);
     await expect(actions.getByText('Completitudine', { exact: true })).toBeVisible();
     await expect(actions.getByText('Revizuire estimări fiscale')).toBeVisible();
   });
@@ -269,14 +298,17 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(legislation.getByText('Nicio modificare viitoare verificată.')).toBeVisible();
   });
 
-  test('Observații: renders all 13 insights with severity badges', async ({ page }) => {
+  test('Observații: renders all 4 insights with severity badges', async ({ page }) => {
     await page.goto('/dashboard');
 
     const insights = sectionWith(page, 'Observații', 'h2');
 
-    // 7 overdue deadlines (danger), 2 upcoming deadlines (warning).
-    await expect(insights.getByText('Termen depășit: PFA')).toHaveCount(7);
-    await expect(insights.getByText('Termen apropiat: PFA')).toHaveCount(2);
+    // Phase 9b: no deadline insights at all. The snapshot carries two deadline rows — D212 at
+    // 25.05.2027, which is more than 30 days out and therefore produces no alert, and the VAT
+    // registration row, which is dateless and is skipped. The 7 danger + 2 warning deadline alerts
+    // this test used to assert were all fabricated quarterly instalments.
+    await expect(insights.getByText('Termen depășit: PFA')).toHaveCount(0);
+    await expect(insights.getByText('Termen apropiat: PFA')).toHaveCount(0);
 
     // Completeness + tax insights. The tax insight is now the COMPUTED variant, not the
     // review_required one, because the seed regime computes (B-14).
@@ -294,10 +326,10 @@ test.describe('Dashboard — section content (seed data)', () => {
     // so they reach Observații as ONE canonical CASS/CAS alert (canonicalCassCas collapses them).
     await expect(insights.getByText('Prag depășit:')).toHaveCount(1);
 
-    // Severity badges: 8 Urgent (7 overdue deadlines + 1 threshold breach), 4 Atenție (2 deadlines +
-    // completeness + reserve), 1 Info (tax).
-    await expect(insights.getByText('Urgent', { exact: true })).toHaveCount(8);
-    await expect(insights.getByText('Atenție', { exact: true })).toHaveCount(4);
+    // Severity badges: 1 Urgent (the collapsed CASS/CAS floor breach), 2 Atenție (completeness +
+    // reserve), 1 Info (tax). Phase 9b removed the 8 deadline alerts that used to dominate this list.
+    await expect(insights.getByText('Urgent', { exact: true })).toHaveCount(1);
+    await expect(insights.getByText('Atenție', { exact: true })).toHaveCount(2);
     await expect(insights.getByText('Info', { exact: true })).toHaveCount(1);
   });
 });
@@ -374,15 +406,20 @@ test.describe('Dashboard — empty state', () => {
   });
 });
 
-// --- Phase 9, item 3: an event-relative deadline resolved from the profile ---------------------
-// `computeDeadlines` used to be called with only `{ taxYear, asOfDate }`, so the one event-relative
-// deadline a real profile can resolve (`pfa_estimated_declaration`) stayed `date: null` and never
-// reached the UI. This test proves the wiring end to end, and that the PFA start date does NOT
-// fabricate a VAT registration deadline (each event-relative rule reads only its own event).
-test.describe('Dashboard — PFA start date resolves an event-relative deadline', () => {
-  test('renders the estimated-declaration deadline, and no invented VAT deadline', async ({ page }) => {
-    // The other suites run with asOf = today, so the start date is derived from the browser clock:
-    // start = today + 5 days → deadline = start + 15 days = today + 10 days, always upcoming.
+// --- Phase 9b: a PFA start date resolves NO deadline at all ------------------------------------
+// Phase 9 wired the profile's PFA start date into the deadline engine to render a "declarație
+// estimativă" 15 days after the start date. That obligation does not exist: its basis (CF art. 120)
+// is `Abrogat.` from 01-01-2025 (OUG 128/2024 pct. 11 Art. I, MO 1125/11.11.2024), and the CPF
+// art. 82 alin. (6) lit. c) 30-day `declarație de înregistrare fiscală` excludes precisely the
+// persons who register at registrul comerțului — which OUG 44/2008 art. 7 alin. (1) makes mandatory
+// for a PFA, while art. 13 alin. (3) of that act makes the ONRC certificate itself the act of fiscal
+// taking-into-evidence. A PFA opened at any point in 2026 files its first Declarația Unică by
+// 25 May 2027 (CF art. 122 alin. (3), which extends the term to the alin. (2) case verbatim).
+// So the start date must be inert end to end: the card shows the D212 deadline and nothing else.
+test.describe('Dashboard — a PFA start date resolves no deadline', () => {
+  test('renders only the D212 deadline, with no start-date-derived and no invented VAT deadline', async ({ page }) => {
+    // The start date is deliberately a *future* one (today + 5 days), which is the case that used to
+    // produce a start-date-derived deadline. It must now change nothing, whatever the clock says.
     await page.addInitScript(
       ([key]: [string]) => {
         const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -453,7 +490,10 @@ test.describe('Dashboard — PFA start date resolves an event-relative deadline'
     const deadlines = page
       .locator('section.card')
       .filter({ has: page.locator('h3', { hasText: 'Termene limită' }) });
-    await expect(deadlines.getByText('Declarație estimativă PFA')).toBeVisible();
+    // The start date (today + 5 days) resolves nothing: exactly one row, the rule-driven D212.
+    await expect(deadlines.locator('.item-row')).toHaveCount(1);
+    await expect(deadlines.getByText('Depunere D212')).toBeVisible();
+    await expect(deadlines.getByText('Declarație estimativă PFA')).toHaveCount(0);
     // The PFA start date must not resolve the VAT registration deadline: that event never happened.
     await expect(deadlines.getByText('Înregistrare TVA')).toHaveCount(0);
   });

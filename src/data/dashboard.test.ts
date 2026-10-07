@@ -394,28 +394,42 @@ describe('snapshot.thresholds[].breached (B-20)', () => {
   });
 });
 
-// --- Phase 9, item 3: the profile's PFA start date reaches the deadline engine ----------------
-// `computeDeadlines` was called with only `{ taxYear, asOfDate }`, so the one event-relative
-// deadline a real profile can resolve stayed `date: null` and never reached the UI.
-describe('pfaStartDate reaches the deadline engine', () => {
-  it('resolves the PFA estimated declaration to a real date', () => {
-    const data = makeData({ profile: profile({ pfaStartDate: '2026-11-01' }) });
-    const upcoming = getUpcomingDeadlines(data, '2026-11-05');
-    const pfa = upcoming.find((d) => d.deadlineId === 'PFA_ESTIMATED_DECLARATION');
-    expect(pfa).toBeDefined();
-    expect(pfa!.date).toBe('2026-11-16'); // start_date + 15 days
+// --- Phase 9b: a PFA start date resolves NO deadline (brief 10 §2c) ---------------------------
+// Phase 9 wired `pfaStartDate` into the deadline engine to resolve a "declarație estimativă" 15 days
+// after the start date. That obligation does not exist in 2026: its basis (CF art. 120) is `Abrogat.`
+// from 01-01-2025 (OUG 128/2024 pct. 11 Art. I, MO 1125/11.11.2024), and the CPF art. 82 alin. (6)
+// lit. c) 30-day `declarație de înregistrare fiscală` excludes precisely the persons who register at
+// registrul comerțului — which OUG 44/2008 art. 7 alin. (1) makes mandatory for a PFA, while art. 13
+// alin. (3) of that act makes the ONRC certificate itself the act of fiscal taking-into-evidence.
+// A first D.212 for a PFA opened at any point in 2026 is due by 25 May 2027: CF art. 122 alin. (3)
+// extends the term to the alin. (2) start-of-activity case verbatim. The field stays on the query and
+// these tests pin the silence: it must resolve nothing.
+describe('a PFA start date resolves no deadline', () => {
+  it('produces exactly the same upcoming deadlines with and without a start date', () => {
+    const withStart = getUpcomingDeadlines(
+      makeData({ profile: profile({ pfaStartDate: '2026-11-01' }) }),
+      '2026-11-05',
+    );
+    const withoutStart = getUpcomingDeadlines(makeData(), '2026-11-05');
+    expect(withStart).toEqual(withoutStart);
   });
 
-  it('degrades safely when the profile has no start date', () => {
-    const data = makeData(); // profile() carries no pfaStartDate
-    expect(data.profile.pfaStartDate).toBeUndefined();
-    const upcoming = getUpcomingDeadlines(data, '2026-11-05');
-    expect(upcoming.some((d) => d.deadlineId === 'PFA_ESTIMATED_DECLARATION')).toBe(false);
+  it('resolves nothing but the D212 filing deadline, whatever the start date', () => {
+    for (const pfaStartDate of ['2026-01-01', '2026-11-01', '2026-12-20']) {
+      const upcoming = getUpcomingDeadlines(
+        makeData({ profile: profile({ pfaStartDate }) }),
+        '2026-11-05',
+      );
+      expect(upcoming.map((d) => d.deadlineId)).toEqual(['PFA_DEADLINE_2026']);
+      expect(upcoming.map((d) => d.date)).toEqual(['2027-05-25']);
+    }
   });
 
-  it('never resolves the VAT registration deadline from a PFA start date', () => {
-    const data = makeData({ profile: profile({ pfaStartDate: '2026-11-01' }) });
-    const upcoming = getUpcomingDeadlines(data, '2026-11-05');
-    expect(upcoming.some((d) => d.deadlineId === 'VAT_REGISTRATION')).toBe(false);
+  it('never surfaces a VAT registration deadline, because no profile records an exceedance date', () => {
+    const upcoming = getUpcomingDeadlines(
+      makeData({ profile: profile({ pfaStartDate: '2026-11-01' }) }),
+      '2026-11-05',
+    );
+    expect(upcoming.some((d) => d.eventType === 'vat_registration')).toBe(false);
   });
 });

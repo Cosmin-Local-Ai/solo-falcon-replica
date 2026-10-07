@@ -44,16 +44,18 @@ function formatDate(iso: string): string {
 }
 
 // ── Romanian label maps (never render raw keys) ────────────
+//
+// Phase 9b removed `cas_quarterly`, `cass_quarterly` and `pfa_estimated_declaration` — those
+// obligations do not exist in fiscal year 2026 (see the `DeadlineEventType` doc comment in
+// src/domain/deadlines.ts). `new_pfa` keeps its key but no longer reads "Declarație estimativă
+// PFA": that label named an obligation abrogated on 01-01-2025, and no rule emits `new_pfa` today.
 const DEADLINE_LABELS: Record<string, string> = {
   pfa: 'PFA',
-  new_pfa: 'Declarație estimativă PFA',
+  new_pfa: 'PFA nou',
   'vat-registered-pfa': 'Înregistrare în scop de TVA',
-  cas_quarterly: 'CAS trimestrial',
-  cass_quarterly: 'CASS trimestrial',
   cas_annual: 'CAS anual',
   cass_annual: 'CASS anual',
   vat_periodic: 'TVA periodic',
-  pfa_estimated_declaration: 'Declarație estimativă PFA',
   vat_registration: 'Înregistrare în scop de TVA',
 };
 

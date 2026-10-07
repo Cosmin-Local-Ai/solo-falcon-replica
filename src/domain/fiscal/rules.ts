@@ -12,7 +12,11 @@ export type FiscalParameter = {
   id: string;
   label: string;
   value: number | string;
-  unit: 'lei' | 'percent' | 'date' | 'count';
+  // Phase 9b: `days` and `text` exist so a rule can carry its FORMULA as data instead of having it
+  // written in code. `days` is a day-count offset (the deadline rules' `offset_days`); `text` is a
+  // short machine-readable token (a deadline rule's `event_type` / `event` / `applies_to`).
+  // Nothing renders `unit`; it is metadata for humans and for validation.
+  unit: 'lei' | 'percent' | 'date' | 'count' | 'days' | 'text';
   description?: string;
 };
 

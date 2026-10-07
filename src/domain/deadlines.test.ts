@@ -1,18 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEADLINE_EVENT_TYPES,
   classifyDeadline,
   computeDeadlines,
   daysRemaining,
   filterUpcoming,
   getApplicableDeadlines,
-  isApplicable,
 } from './deadlines';
-import type { Deadline } from './deadlines';
+import type { Deadline, DeadlineEventType } from './deadlines';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal/package2026';
 import type { FiscalRule } from './fiscal/rules';
 
 const rules = PFA_2026_SYSTEM_REAL_PACKAGE;
 const baseQuery = { taxYear: 2026, asOfDate: '2026-06-01' };
+
+/**
+ * The four obligations Phase 9b deleted. They are not `DeadlineEventType` members any more, so these
+ * strings can only ever appear here — never in the type, never in a rule, never in the UI. Every
+ * test that loops over them is a regression guard: if someone re-adds one, `computeDeadlines` will
+ * start emitting it and these assertions go red.
+ */
+const DELETED_EVENT_TYPES = [
+  'income_tax_advance',
+  'cas_quarterly',
+  'cass_quarterly',
+  'pfa_estimated_declaration',
+] as const;
 
 const makeRule = (overrides: Partial<FiscalRule> = {}): FiscalRule => ({
   ruleId: 'PFA_DEADLINE_2026',
@@ -25,148 +38,258 @@ const makeRule = (overrides: Partial<FiscalRule> = {}): FiscalRule => ({
   effectiveTo: null,
   parameters: [
     { id: 'deadline', label: 'Single deadline', value: '2027-05-25', unit: 'date' },
+    { id: 'event_type', label: 'Deadline event type', value: 'd212_filing', unit: 'text' },
+    { id: 'applies_to', label: 'Applies to', value: 'pfa', unit: 'text' },
   ],
   calculatorId: 'calc-deadline',
-  sourceAct: 'ANAF 2026',
-  sourceArticle: 'art. 122(3)',
-  sourceUrl: 'https://www.anaf.ro',
+  sourceAct: 'Cod fiscal (consolidat)',
+  sourceArticle: 'art. 122 alin. (3)',
+  sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/312601',
   verifiedAt: '2026-01-01',
   status: 'ACTIVE',
   version: 1,
   ...overrides,
 });
 
-describe('computeDeadlines', () => {
-  it('returns 15 deadlines for taxYear 2026 without eventDate', () => {
-    const result = computeDeadlines(rules, baseQuery);
-    expect(result).toHaveLength(15);
+describe('DEADLINE_EVENT_TYPES', () => {
+  it('is exactly the two event types that have a legal basis in 2026', () => {
+    expect(DEADLINE_EVENT_TYPES).toEqual(['d212_filing', 'vat_registration']);
   });
 
-  it('produces dates that sort into a non-decreasing chronological order', () => {
-    const dated = getApplicableDeadlines(rules, baseQuery);
-    expect(dated.length).toBeGreaterThan(0);
-    const dates = dated.map((d) => d.date as string);
-    // Every dated deadline carries a valid ISO date.
-    for (const d of dates) {
-      expect(d).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  it('contains none of the four deleted event types', () => {
+    for (const dead of DELETED_EVENT_TYPES) {
+      expect(DEADLINE_EVENT_TYPES as readonly string[]).not.toContain(dead);
     }
-    // Sorting ascending yields a stable, non-decreasing chronological order.
-    const sorted = [...dates].sort();
-    for (let i = 1; i < sorted.length; i++) {
-      expect(sorted[i] >= sorted[i - 1]).toBe(true);
+  });
+});
+
+describe('computeDeadlines — rule-driven, no literals', () => {
+  it('emits exactly the deadlines the 2026 package declares', () => {
+    const result = computeDeadlines(rules, baseQuery);
+    expect(result.map((d) => d.deadlineId).sort()).toEqual([
+      'PFA_DEADLINE_2026',
+      'VAT_REGISTRATION_DEADLINE_2026',
+    ]);
+  });
+
+  it('emits nothing for the four deleted event types, for any query', () => {
+    const queries = [
+      baseQuery,
+      { ...baseQuery, pfaStartDate: '2026-03-01' },
+      { ...baseQuery, vatExceedanceDate: '2026-03-15' },
+      { ...baseQuery, pfaStartDate: '2026-03-01', vatExceedanceDate: '2026-03-15' },
+      { taxYear: 2026, asOfDate: '2026-01-15' },
+      { taxYear: 2026, asOfDate: '2026-12-31' },
+    ];
+    for (const q of queries) {
+      const emitted = computeDeadlines(rules, q);
+      for (const dead of DELETED_EVENT_TYPES) {
+        expect(emitted.filter((d) => (d.eventType as string) === dead)).toHaveLength(0);
+      }
+      // Every emitted event type is a declared one.
+      for (const d of emitted) {
+        expect(DEADLINE_EVENT_TYPES).toContain(d.eventType);
+      }
     }
-    // The chronological span covers the full 2026 fiscal year plus the
-    // carry-over into 2027 (Q4 CAS/CASS on Jan 15, D212 filing on May 25)
-    // — never a date outside that range.
-    // (ISO dates compare correctly as strings.)
-    expect(sorted[0] >= '2026-01-01').toBe(true);
-    expect(sorted[sorted.length - 1] <= '2027-05-25').toBe(true);
   });
 
-  it('resolves D212 date from the rule (2027-05-25)', () => {
-    const result = computeDeadlines(rules, baseQuery);
-    const d212 = result.find((d) => d.eventType === 'd212_filing');
-    expect(d212?.date).toBe('2027-05-25');
-    expect(d212?.status).toBe('active');
-    expect(d212?.effectiveFrom).toBe('2026-01-01');
+  it('emits NO deadline at all for a year with no deadline rule (no hardcoded fallback)', () => {
+    // Under the old engine this returned twelve quarterly dates fabricated from arrays inside
+    // computeDeadlines. A rule-driven engine can only answer with what the package declares.
+    for (const year of [1999, 2025, 2027]) {
+      const result = computeDeadlines(rules, { taxYear: year, asOfDate: `${year}-06-01` });
+      expect(result).toHaveLength(0);
+    }
   });
 
-  it('computes CAS quarterly dates', () => {
-    const result = computeDeadlines(rules, baseQuery);
-    const cas = result.filter((d) => d.eventType === 'cas_quarterly');
-    expect(cas.map((d) => d.date)).toEqual([
-      '2026-04-15',
-      '2026-07-15',
-      '2026-10-15',
-      '2027-01-15',
-    ]);
-  });
-
-  it('computes CASS quarterly dates', () => {
-    const result = computeDeadlines(rules, baseQuery);
-    const cass = result.filter((d) => d.eventType === 'cass_quarterly');
-    expect(cass.map((d) => d.date)).toEqual([
-      '2026-04-15',
-      '2026-07-15',
-      '2026-10-15',
-      '2027-01-15',
-    ]);
-  });
-
-  it('computes income tax advance dates', () => {
-    const result = computeDeadlines(rules, baseQuery);
-    const adv = result.filter((d) => d.eventType === 'income_tax_advance');
-    expect(adv.map((d) => d.date)).toEqual([
-      '2026-03-25',
-      '2026-06-25',
-      '2026-09-25',
-      '2026-12-25',
-    ]);
-  });
-
-  it('respects tax-year applicability (no 2026 deadlines for taxYear 2027)', () => {
-    const result = computeDeadlines(rules, { taxYear: 2027, asOfDate: '2027-06-01' });
-    expect(result.filter((d) => d.taxYear === 2026)).toHaveLength(0);
-  });
-
-  it('computes event-relative deadlines when each event date is given', () => {
-    const result = computeDeadlines(rules, {
-      taxYear: 2026,
-      asOfDate: '2026-06-01',
-      pfaStartDate: '2026-03-01',
-      vatExceedanceMonth: '2026-03-15',
-    });
-    const pfa = result.find((d) => d.eventType === 'pfa_estimated_declaration');
-    expect(pfa?.date).toBe('2026-03-16');
-    const vat = result.find((d) => d.eventType === 'vat_registration');
-    expect(vat?.date).toBe('2026-04-30');
-  });
-
-  // Phase 9 (D-P9-7): each event-relative rule reads ONLY its own event. A PFA start date must not
-  // fabricate a VAT registration deadline for an exceedance that never happened.
-  it('does not resolve vat_registration from a PFA start date', () => {
-    const result = computeDeadlines(rules, {
-      taxYear: 2026,
-      asOfDate: '2026-06-01',
-      pfaStartDate: '2026-03-01',
-    });
-    expect(result.find((d) => d.eventType === 'pfa_estimated_declaration')?.date).toBe('2026-03-16');
-    const vat = result.find((d) => d.eventType === 'vat_registration');
-    expect(vat?.date).toBeNull();
-    expect(vat?.status).toBe('not_applicable');
-  });
-
-  it('does not resolve pfa_estimated_declaration from a VAT exceedance month', () => {
-    const result = computeDeadlines(rules, {
-      taxYear: 2026,
-      asOfDate: '2026-06-01',
-      vatExceedanceMonth: '2026-03-15',
-    });
-    expect(result.find((d) => d.eventType === 'vat_registration')?.date).toBe('2026-04-30');
-    const pfa = result.find((d) => d.eventType === 'pfa_estimated_declaration');
-    expect(pfa?.date).toBeNull();
-    expect(pfa?.status).toBe('not_applicable');
-  });
-
-  it('leaves event-relative dates null without event dates', () => {
-    const result = computeDeadlines(rules, baseQuery);
-    const pfa = result.find((d) => d.eventType === 'pfa_estimated_declaration');
-    expect(pfa?.date).toBeNull();
-    const vat = result.find((d) => d.eventType === 'vat_registration');
-    expect(vat?.date).toBeNull();
-  });
-
-  it('omits d212 when no deadlines rule is applicable', () => {
-    const noDeadlineRules = rules.filter((r) => r.taxRegime !== 'deadlines');
-    const result = computeDeadlines(noDeadlineRules, baseQuery);
+  it('drops a deadline when its rule is removed from the package', () => {
+    const withoutD212 = rules.filter((r) => r.ruleId !== 'PFA_DEADLINE_2026');
+    const result = computeDeadlines(withoutD212, baseQuery);
     expect(result.find((d) => d.eventType === 'd212_filing')).toBeUndefined();
-    expect(result).toHaveLength(14);
+    expect(result.map((d) => d.deadlineId)).toEqual(['VAT_REGISTRATION_DEADLINE_2026']);
+  });
+
+  it('carries legalSource verbatim from the rule, not from a literal in the engine', () => {
+    const mutated = [
+      makeRule({ sourceAct: 'ACT_FROM_RULE', sourceArticle: 'ARTICOL_FROM_RULE' }),
+    ];
+    const [d212] = computeDeadlines(mutated, baseQuery);
+    expect(d212.legalSource).toEqual({ act: 'ACT_FROM_RULE', article: 'ARTICOL_FROM_RULE' });
+
+    // And the real package's citation is the corrected one: payment is art. 68 alin. (10), because
+    // art. 123 alin. (1) is the RATE provision, not the payment provision.
+    const real = computeDeadlines(rules, baseQuery).find((d) => d.eventType === 'd212_filing')!;
+    expect(real.legalSource.article).toContain('art. 122 alin. (3)');
+    expect(real.legalSource.article).toContain('art. 68 alin. (10)');
+    expect(real.legalSource.article).not.toContain('art. 123 alin. (1)');
+  });
+
+  it('resolves the D212 filing deadline from the rule', () => {
+    const d212 = computeDeadlines(rules, baseQuery).find((d) => d.eventType === 'd212_filing')!;
+    expect(d212.deadlineId).toBe('PFA_DEADLINE_2026');
+    expect(d212.date).toBe('2027-05-25');
+    expect(d212.status).toBe('active');
+    expect(d212.appliesTo).toBe('pfa');
+    expect(d212.effectiveFrom).toBe('2026-01-01');
+    expect(d212.effectiveTo).toBeNull();
   });
 
   it('is deterministic (two calls return equal results)', () => {
     const a = computeDeadlines(rules, baseQuery);
     const b = computeDeadlines(rules, baseQuery);
     expect(b).toEqual(a);
+  });
+
+  it('respects tax-year applicability (no 2026 deadlines for taxYear 2027)', () => {
+    const result = computeDeadlines(rules, { taxYear: 2027, asOfDate: '2027-06-01' });
+    expect(result.filter((d) => d.taxYear === 2026)).toHaveLength(0);
+  });
+});
+
+describe('VAT registration deadline (CF art. 316 alin. (1) lit. b))', () => {
+  it('is the exceedance date itself — offset_days is 0, so the deadline IS the event', () => {
+    const result = computeDeadlines(rules, {
+      ...baseQuery,
+      vatExceedanceDate: '2026-03-15',
+    });
+    const vat = result.find((d) => d.eventType === 'vat_registration')!;
+    expect(vat.deadlineId).toBe('VAT_REGISTRATION_DEADLINE_2026');
+    expect(vat.date).toBe('2026-03-15');
+    expect(vat.status).toBe('active');
+    expect(vat.appliesTo).toBe('vat-registered-pfa');
+  });
+
+  it('never reports days remaining for a resolved VAT deadline: past or due_today, never upcoming', () => {
+    // offset_days = 0 means deadline === exceedance date, so once the exceedance is known the term is
+    // already due. `filterUpcoming` therefore never surfaces it in the Termene limită card — correct,
+    // because past that date the registration obligation is OVERDUE and "N zile rămase" would lie.
+    const exceedance = '2026-03-15';
+    const onDay = computeDeadlines(rules, { ...baseQuery, vatExceedanceDate: exceedance })
+      .find((d) => d.eventType === 'vat_registration')!;
+    expect(classifyDeadline(onDay, exceedance)).toBe('due_today');
+
+    const dayAfter = computeDeadlines(rules, { ...baseQuery, vatExceedanceDate: exceedance })
+      .find((d) => d.eventType === 'vat_registration')!;
+    expect(classifyDeadline(dayAfter, '2026-03-16')).toBe('past');
+
+    expect(filterUpcoming([onDay], exceedance)).toHaveLength(0);
+    expect(filterUpcoming([dayAfter], '2026-03-16')).toHaveLength(0);
+  });
+
+  it('stays dateless and not_applicable when no exceedance date is supplied', () => {
+    const vat = computeDeadlines(rules, baseQuery).find((d) => d.eventType === 'vat_registration')!;
+    expect(vat.date).toBeNull();
+    expect(vat.status).toBe('not_applicable');
+    expect(vat.dateFormula).toContain('vat_exceedance + 0 days');
+  });
+
+  it('cites OG 22/2025 and art. 316, and does not duplicate the 395.000 lei ceiling', () => {
+    const vat = computeDeadlines(rules, baseQuery).find((d) => d.eventType === 'vat_registration')!;
+    expect(vat.legalSource.article).toContain('art. 316 alin. (1) lit. b)');
+    expect(vat.legalSource.act).toContain('Ordonanța nr. 22/2025');
+    // The ceiling belongs to VAT_THRESHOLD_2026 — one figure, one source.
+    const params = rules.find((r) => r.ruleId === 'VAT_REGISTRATION_DEADLINE_2026')!.parameters;
+    expect(params.some((p) => p.value === 395000)).toBe(false);
+  });
+});
+
+describe('a PFA start date resolves no deadline at all', () => {
+  // Brief 10 §2c: there is no `fiscal_registration` obligation for a PFA. CPF (Legea nr. 207/2015)
+  // art. 82 alin. (6) lit. c) excludes from the 30-day declarație de înregistrare fiscală the persons
+  // who register at registrul comerțului, and OUG 44/2008 art. 7 alin. (1) makes that registration
+  // mandatory for a PFA — while art. 13 alin. (3) of the same act makes the ONRC certificate itself
+  // the act of fiscal taking-into-evidence. So a start date must be inert.
+  it('produces results identical to a query with no start date', () => {
+    const withStart = computeDeadlines(rules, { ...baseQuery, pfaStartDate: '2026-03-01' });
+    const withoutStart = computeDeadlines(rules, baseQuery);
+    expect(withStart).toEqual(withoutStart);
+  });
+
+  it('never resolves a date from the start date, whatever the start date is', () => {
+    for (const start of ['2026-01-01', '2026-03-01', '2026-11-15', '2026-12-31']) {
+      const result = computeDeadlines(rules, { ...baseQuery, pfaStartDate: start });
+      const dated = result.filter((d) => d.date !== null);
+      // Only the D212 filing deadline is dated, and it is dated by the rule, not by the start date.
+      expect(dated.map((d) => d.date)).toEqual(['2027-05-25']);
+      for (const d of result) {
+        expect(d.dateFormula).not.toContain('pfa_start');
+      }
+    }
+  });
+
+  it('a rule that tries to bind pfa_start cannot resolve — there is no such event key', () => {
+    const rogue = makeRule({
+      ruleId: 'ROGUE_START_RULE',
+      parameters: [
+        { id: 'event_type', label: 'Deadline event type', value: 'd212_filing', unit: 'text' },
+        { id: 'applies_to', label: 'Applies to', value: 'pfa', unit: 'text' },
+        { id: 'event', label: 'Event', value: 'pfa_start', unit: 'text' },
+        { id: 'offset_days', label: 'Offset', value: 30, unit: 'days' },
+      ],
+    });
+    const [deadline] = computeDeadlines([rogue], { ...baseQuery, pfaStartDate: '2026-03-01' });
+    expect(deadline.date).toBeNull();
+    expect(deadline.status).toBe('not_applicable');
+  });
+});
+
+describe('malformed deadline rules emit nothing', () => {
+  it('unknown event_type', () => {
+    const rule = makeRule({
+      parameters: [
+        { id: 'deadline', label: 'd', value: '2027-05-25', unit: 'date' },
+        { id: 'event_type', label: 'et', value: 'cas_quarterly', unit: 'text' },
+        { id: 'applies_to', label: 'a', value: 'pfa', unit: 'text' },
+      ],
+    });
+    expect(computeDeadlines([rule], baseQuery)).toHaveLength(0);
+  });
+
+  it('missing event_type', () => {
+    const rule = makeRule({
+      parameters: [
+        { id: 'deadline', label: 'd', value: '2027-05-25', unit: 'date' },
+        { id: 'applies_to', label: 'a', value: 'pfa', unit: 'text' },
+      ],
+    });
+    expect(computeDeadlines([rule], baseQuery)).toHaveLength(0);
+  });
+
+  it('missing applies_to', () => {
+    const rule = makeRule({
+      parameters: [
+        { id: 'deadline', label: 'd', value: '2027-05-25', unit: 'date' },
+        { id: 'event_type', label: 'et', value: 'd212_filing', unit: 'text' },
+      ],
+    });
+    expect(computeDeadlines([rule], baseQuery)).toHaveLength(0);
+  });
+
+  it('event-relative rule with no numeric offset_days', () => {
+    const rule = makeRule({
+      parameters: [
+        { id: 'event_type', label: 'et', value: 'vat_registration', unit: 'text' },
+        { id: 'applies_to', label: 'a', value: 'vat-registered-pfa', unit: 'text' },
+        { id: 'event', label: 'e', value: 'vat_exceedance', unit: 'text' },
+      ],
+    });
+    expect(computeDeadlines([rule], { ...baseQuery, vatExceedanceDate: '2026-03-15' })).toHaveLength(0);
+  });
+
+  it('fixed-date rule with an unparsable deadline', () => {
+    const rule = makeRule({
+      parameters: [
+        { id: 'deadline', label: 'd', value: '25 mai 2027', unit: 'text' },
+        { id: 'event_type', label: 'et', value: 'd212_filing', unit: 'text' },
+        { id: 'applies_to', label: 'a', value: 'pfa', unit: 'text' },
+      ],
+    });
+    expect(computeDeadlines([rule], baseQuery)).toHaveLength(0);
+  });
+
+  it('rules outside the deadlines regime are ignored', () => {
+    const rule = makeRule({ taxRegime: 'income-tax' });
+    expect(computeDeadlines([rule], baseQuery)).toHaveLength(0);
   });
 });
 
@@ -215,81 +338,41 @@ describe('daysRemaining', () => {
     // 2027 is not a leap year: Mar 1 follows Feb 28.
     expect(daysRemaining('2027-03-01', '2027-02-28')).toBe(1);
   });
-
-  it('computes deadlines for taxYear 2025 without d212 (no 2025 rule in package)', () => {
-    const result = computeDeadlines(rules, { taxYear: 2025, asOfDate: '2026-03-15' });
-    // 12 always-active dated deadlines + 2 event-relative nulls; d212 is rule-gated.
-    expect(result).toHaveLength(14);
-    expect(result.find((d) => d.eventType === 'd212_filing')).toBeUndefined();
-    expect(result.filter((d) => d.date !== null)).toHaveLength(12);
-    // All dated deadlines carry the requested tax year.
-    for (const d of result) {
-      expect(d.taxYear).toBe(2025);
-    }
-  });
-
-  it('computes taxYear-1999 deadlines without d212 (no matching rule)', () => {
-    const result = computeDeadlines(rules, { taxYear: 1999, asOfDate: '2026-03-15' });
-    expect(result).toHaveLength(14);
-    expect(result.find((d) => d.eventType === 'd212_filing')).toBeUndefined();
-    // Quarterly dates are computed for the requested tax year, including the
-    // Q4 carry-over into the following year.
-    const cas = result.filter((d) => d.eventType === 'cas_quarterly');
-    expect(cas.map((d) => d.date)).toEqual(['1999-04-15', '1999-07-15', '1999-10-15', '2000-01-15']);
-  });
 });
 
 describe('deadline helpers', () => {
-  const makeDeadline = (date: string | null): Deadline => ({
+  const makeDeadline = (date: string | null, eventType: DeadlineEventType = 'd212_filing'): Deadline => ({
     deadlineId: 'TEST_DEADLINE',
     taxYear: 2026,
-    eventType: 'cas_quarterly',
+    eventType,
     date,
     dateFormula: 'test',
     appliesTo: 'pfa',
-    legalSource: { act: 'Cod. fiscal', article: 'art. 160' },
+    legalSource: { act: 'Cod fiscal (consolidat)', article: 'art. 122 alin. (3)' },
     effectiveFrom: null,
     effectiveTo: null,
     status: 'active',
-  });
-
-  it('isApplicable returns true for a rule with a valid date', () => {
-    expect(isApplicable(makeRule(), baseQuery)).toBe(true);
-  });
-
-  it('isApplicable returns false when the rule produces no date', () => {
-    // No deadline parameter → no d212 deadline emitted.
-    expect(isApplicable(makeRule({ parameters: [] }), baseQuery)).toBe(false);
-    // asOfDate before effectiveFrom → rule not applicable.
-    expect(isApplicable(makeRule({ effectiveFrom: '2027-01-01' }), baseQuery)).toBe(false);
   });
 
   it('getApplicableDeadlines returns only deadlines with non-null dates', () => {
     const all = computeDeadlines(rules, baseQuery);
     const applicable = getApplicableDeadlines(rules, baseQuery);
     expect(applicable.every((d) => d.date !== null)).toBe(true);
-    expect(applicable).toHaveLength(13); // 15 total minus 2 event-relative nulls
+    expect(applicable.map((d) => d.deadlineId)).toEqual(['PFA_DEADLINE_2026']);
     expect(applicable).toEqual(all.filter((d) => d.date !== null));
   });
 
-  it('getApplicableDeadlines includes event-relative deadlines when both event dates are given', () => {
-    const query = { ...baseQuery, pfaStartDate: '2026-03-01', vatExceedanceMonth: '2026-03-15' };
-    const applicable = getApplicableDeadlines(rules, query);
+  it('getApplicableDeadlines includes the VAT deadline once the exceedance date is known', () => {
+    const applicable = getApplicableDeadlines(rules, { ...baseQuery, vatExceedanceDate: '2026-03-15' });
     expect(applicable.every((d) => d.date !== null)).toBe(true);
-    expect(applicable).toHaveLength(15);
+    expect(applicable).toHaveLength(2);
   });
 
   it('filterUpcoming returns only upcoming (future-dated) deadlines', () => {
     const all = computeDeadlines(rules, baseQuery);
     const upcoming = filterUpcoming(all, baseQuery.asOfDate);
-    expect(upcoming).toHaveLength(10);
+    expect(upcoming.map((d) => d.date)).toEqual(['2027-05-25']);
     expect(upcoming.every((d) => classifyDeadline(d, baseQuery.asOfDate) === 'upcoming')).toBe(true);
-    expect(upcoming.map((d) => d.date)).toEqual([
-      '2027-05-25', // d212
-      '2026-07-15', '2026-10-15', '2027-01-15', // CAS
-      '2026-07-15', '2026-10-15', '2027-01-15', // CASS
-      '2026-06-25', '2026-09-25', '2026-12-25', // income advance
-    ]);
   });
 
   it('filterUpcoming excludes past, due-today, and null-dated deadlines', () => {
@@ -308,11 +391,11 @@ describe('classifyDeadline (Step 29 boundary tests)', () => {
   const makeDeadline = (date: string | null): Deadline => ({
     deadlineId: 'TEST_DEADLINE',
     taxYear: 2026,
-    eventType: 'cas_quarterly',
+    eventType: 'd212_filing',
     date,
     dateFormula: 'test',
     appliesTo: 'pfa',
-    legalSource: { act: 'Cod. fiscal', article: 'art. 160' },
+    legalSource: { act: 'Cod fiscal (consolidat)', article: 'art. 122 alin. (3)' },
     effectiveFrom: null,
     effectiveTo: null,
     status: 'active',
@@ -335,6 +418,10 @@ describe('classifyDeadline (Step 29 boundary tests)', () => {
   it('returns "due_today" when the deadline date equals the asOfDate (days === 0)', () => {
     const deadline = makeDeadline('2026-06-01');
     expect(classifyDeadline(deadline, '2026-06-01')).toBe('due_today');
+  });
+
+  it('returns null for a dateless deadline', () => {
+    expect(classifyDeadline(makeDeadline(null), '2026-06-01')).toBeNull();
   });
 
   it('classifies the three zones consistently around the boundary', () => {
