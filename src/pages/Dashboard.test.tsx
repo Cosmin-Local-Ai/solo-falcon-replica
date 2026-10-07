@@ -4,7 +4,7 @@ import { StoreProvider } from '../data/store';
 import { seedData } from '../data/seed';
 import type { AppData, Revenue } from '../data/types';
 import Dashboard from './Dashboard';
-import { lei } from '../domain/money';
+import { lei, type Bani } from '../domain/money';
 
 const STORAGE_KEY = 'pfa-app-data-v2';
 
@@ -16,8 +16,10 @@ const validRevenue: Revenue = {
   date: '2026-02-10',
   client: 'Client A SRL',
   cui: 'RO12345678',
-  valoareFaraTva: lei(50_000),
-  tva: lei(9_500),
+  // Deliberately NOT wrapped in lei(): writePayload() writes a versionless payload straight to
+  // localStorage, so the v4->v5 money step scales it. Wrapping here would double the conversion.
+  valoareFaraTva: 50_000 as Bani,
+  tva: 9_500 as Bani,
   status: 'inregistrata',
 };
 
@@ -126,8 +128,8 @@ describe('Dashboard page', () => {
           date: '2026-01-15',
           client: 'Client X SRL',
           cui: 'RO12345678',
-          valoareFaraTva: lei(78_000),
-          tva: lei(16_380),
+          valoareFaraTva: 78_000 as Bani,
+          tva: 16_380 as Bani,
           status: 'inregistrata',
         },
         {
@@ -137,8 +139,9 @@ describe('Dashboard page', () => {
           date: '2026-02-20',
           client: 'Client Y SRL',
           cui: 'RO12345678',
-          valoareFaraTva: lei(52_000),
-          tva: lei(10_920),
+          // raw lei scale — see the note on validRevenue (this payload is migrated on load)
+          valoareFaraTva: 52_000 as Bani,
+          tva: 10_920 as Bani,
           status: 'inregistrata',
         },
       ],

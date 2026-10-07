@@ -205,6 +205,15 @@ export function formatBaniOrDash(amount: Bani | null | undefined): string {
 }
 
 /**
+ * The currency-suffixed form of the guard above — this is what a money cell on a screen should call,
+ * because the app's money strings carry `RON` and a bare `13.000,00` would leave the unit ambiguous.
+ */
+export function formatBaniRONOrDash(amount: Bani | null | undefined): string {
+  if (amount === null || amount === undefined || !Number.isSafeInteger(amount)) return '—';
+  return formatBaniRON(amount);
+}
+
+/**
  * Bani as a plain machine-readable lei string for an `<input value>`: `2430000` → `'24300'`,
  * `8550` → `'85.50'`. Exact — no rounding, no locale grouping, `.` as the decimal separator.
  *

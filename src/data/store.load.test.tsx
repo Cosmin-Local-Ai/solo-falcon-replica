@@ -6,7 +6,8 @@ import { seedData } from './seed';
 import type { AppData, Revenue } from './types';
 import type { RuleRelease } from '../domain/fiscal/rules';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
-import { lei } from '../domain/money';
+import { lei, type Bani } from '../domain/money';
+import { computeInputsHash } from '../domain/snapshots/hash';
 
 let storeRef: ReturnType<typeof useStore> | null = null;
 function Probe() {
@@ -90,16 +91,18 @@ describe('loadInitial — valid persisted data loads (not seed)', () => {
     expect(storeRef!.profile).toEqual(seedData.profile);
   });
 
-  it('preserves valid snapshots so getSnapshot resolves', () => {
+  it('preserves valid snapshots so getSnapshot resolves', async () => {
+    // A RAW persisted v4 payload: its money fields still hold lei, so they are deliberately NOT
+    // wrapped in lei() — the v4->v5 money step is what scales them.
     const snapshot: TaxCalculationSnapshot = {
       calculationId: 'calc-2026',
       taxYear: 2026,
       calculatedAt: '2026-09-01T00:00:00.000Z',
       ruleRelease: validRelease,
-      inputSnapshot: { profile: seedData.profile, revenues: lei(1000), expenses: lei(0) },
+      inputSnapshot: { profile: seedData.profile, revenues: 1000 as Bani, expenses: 0 as Bani },
       inputsHash: 'abc123',
-      calculationLines: [{ label: 'Baza impozabilă', value: lei(1000) }],
-      output: { total: lei(100) },
+      calculationLines: [{ label: 'Baza impozabilă', value: 1000 as Bani }],
+      output: { total: 100 as Bani },
       status: 'computed',
     };
     writePayload({ snapshots: [snapshot] });
@@ -108,7 +111,21 @@ describe('loadInitial — valid persisted data loads (not seed)', () => {
         <Probe />
       </StoreProvider>,
     );
-    expect(storeRef!.getSnapshot('calc-2026')).toEqual(snapshot);
+    const loaded = storeRef!.getSnapshot('calc-2026');
+    expect(loaded).not.toBeNull();
+    // The snapshot survives the migration with its identity intact...
+    expect(loaded!.calculationId).toBe('calc-2026');
+    expect(loaded!.status).toBe('computed');
+    // ...its money converted once...
+    expect(loaded!.inputSnapshot.revenues).toBe(lei(1000));
+    expect(loaded!.calculationLines[0].value).toBe(lei(1000));
+    expect(loaded!.output.total).toBe(lei(100));
+    // ...and its hash RE-DERIVED, because the inputs it hashes changed. The pre-migration hash is
+    // kept alongside it so an audit can still reproduce the old digest.
+    expect(loaded!.preMigrationInputsHash).toBe('abc123');
+    expect(loaded!.inputsHash).not.toBe('abc123');
+    // The invariant that matters: the stored digest describes the STORED inputs.
+    expect(await computeInputsHash(loaded!.inputSnapshot)).toBe(loaded!.inputsHash);
   });
 });
 

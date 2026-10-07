@@ -313,11 +313,12 @@ describe('threshold bases (Phase 8 — amount semantics, on seeded data)', () =>
     expect(rows.find((t) => t.thresholdId === 'VAT_REGISTRATION')!.currentValue).toBe(lei(7700));
   });
 
-  it('acceptance 6: the seeded taxable base is identical before and after the semantics change', async () => {
+  it('acceptance 6: the seeded taxable base is identical before and after the semantics change (Phase 10 moved only the art. 66 lines)', async () => {
     const tax = await getTaxEstimate(seedData, AS_OF_SEED);
     expect(tax.status).toBe('computed');
     if (tax.status !== 'computed') return;
-    // Measured on HEAD before Phase 8 and re-measured after: byte-identical.
+    // Measured on HEAD before Phase 8 and re-measured after: byte-identical. Phase 10 leaves these
+    // three BASES untouched — art. 66 rounds sums DUE, never a base or a deduction input.
     expect(tax.bases).toEqual({
       venitulBrut: lei(7700),
       cheltuieliDeductibile: lei(205.5),
@@ -327,8 +328,18 @@ describe('threshold bases (Phase 8 — amount semantics, on seeded data)', () =>
     expect(line('Venit brut')).toBe(lei(7700));
     expect(line('Cheltuieli deductibile')).toBe(lei(205.5));
     expect(line('Venit net din activitate')).toBe(lei(7494.5));
-    expect(line('Venit net anual impozabil (art. 118 alin. (2) lit. b))')).toBeCloseTo(6745.05, 6);
-    expect(tax.output.total).toBeCloseTo(3104.505, 6);
+    // Phase 10 DOES move the deduction and everything downstream of it, because the deduction is a
+    // sum DUE and is therefore rounded once by art. 66:
+    //   CASS deductibilă 749.45 lei -> 45 bani < 50 -> neglected -> 749.00
+    //   base = 7494.50 - 749.00 = 6745.50 (was 6745.05; the base is plain integer arithmetic on the
+    //   already-rounded line, it is not itself rounded)
+    expect(line('CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))')).toBe(lei(749));
+    expect(line('Venit net anual impozabil (art. 118 alin. (2) lit. b))')).toBe(lei(6745.5));
+    //   income tax = 6745.50 x 10% = 674.55 -> 55 bani >= 50 -> rounded UP to 675.00
+    expect(line('Impozit pe venit (rată de bază 10%)')).toBe(lei(675));
+    //   total = CASS owed 2430 + income tax 675 = 3105.00 (was 3104.505) — this is the figure the
+    //   e2e suite shows as `3.105,00 RON`.
+    expect(tax.output.total).toBe(lei(3105));
   });
 });
 

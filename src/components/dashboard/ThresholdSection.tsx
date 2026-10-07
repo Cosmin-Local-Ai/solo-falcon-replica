@@ -1,5 +1,5 @@
 import type { FiscalThreshold } from '../../domain/thresholds';
-import { formatLei } from '../../lib/format';
+import { formatBaniLei } from '../../domain/money';
 import { Card, CardHeader, CardTitle, CardDescription } from '../ui/card';
 
 /**
@@ -93,13 +93,13 @@ export default function ThresholdSection({ thresholds }: ThresholdSectionProps) 
             </div>
             <div className="kv-row">
               <span>
-                Curent: <strong>{t.currentValue === null ? '—' : formatLei(t.currentValue)}</strong>
+                Curent: <strong>{t.currentValue === null ? '—' : formatBaniLei(t.currentValue)}</strong>
               </span>
               <span>
-                Prag: <strong>{formatLei(t.thresholdValue)}</strong>
+                Prag: <strong>{formatBaniLei(t.thresholdValue)}</strong>
               </span>
               <span>
-                Distanță: <strong>{t.currentValue === null ? '—' : formatLei(t.distance)}</strong>
+                Distanță: <strong>{t.currentValue === null ? '—' : formatBaniLei(t.distance)}</strong>
               </span>
             </div>
             {t.reviewReason ? (

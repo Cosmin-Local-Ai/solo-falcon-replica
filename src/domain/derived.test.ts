@@ -5,7 +5,7 @@ import { selectFinancialDerived, selectTaxDerived } from './derived';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal/package2026';
 import { selectApplicableRules } from './fiscal/select';
 import type { FiscalRule } from './fiscal/rules';
-import { lei } from './money';
+import { addBani, lei, subBani } from './money';
 
 const AS_OF = '2026-10-01';
 
@@ -113,7 +113,7 @@ describe('selectFinancialDerived (Step 14)', () => {
     expect(view.ytd.expenses).toBe(lei(595));
     expect(view.ytd.net).toBe(lei(595));
     expect(view.monthly.get('2026-03')?.revenue).toBe(lei(1190));
-    expect(view.monthly.get('2026-04')?.expenses).toBe(595);
+    expect(view.monthly.get('2026-04')?.expenses).toBe(lei(595));
     expect(view.projection).toHaveProperty('annualProjected');
     expect(view.projection).toHaveProperty('runRate');
   });
@@ -124,8 +124,10 @@ describe('selectFinancialDerived (Step 14)', () => {
       makeData({ revenues: [revenue(), revenue({ id: 'rev-2', nr: 'FCT-002', date: '2026-05-20', valoareFaraTva: lei(800), tva: lei(152) })] }),
       AS_OF,
     );
-    expect(after.ytd.revenue).toBe(before.ytd.revenue + 952);
-    expect(after.ytd.net).toBe(before.ytd.net + 952);
+    // addBani/subBani: `Bani + number` widens to an unbranded number, and the delta has to be
+    // stated in the same unit the totals are stored in (bani), not in lei.
+    expect(after.ytd.revenue).toBe(addBani(before.ytd.revenue, lei(952)));
+    expect(after.ytd.net).toBe(addBani(before.ytd.net, lei(952)));
     expect(after.lines.revenues).toHaveLength(2);
   });
 
@@ -135,8 +137,8 @@ describe('selectFinancialDerived (Step 14)', () => {
       makeData({ expenses: [expense(), expense({ id: 'exp-2', nr: 'FCT-PRO-002', date: '2026-06-11', valoareFaraTva: lei(300), tva: lei(57) })] }),
       AS_OF,
     );
-    expect(after.ytd.expenses).toBe(before.ytd.expenses + 357);
-    expect(after.ytd.net).toBe(before.ytd.net - 357);
+    expect(after.ytd.expenses).toBe(addBani(before.ytd.expenses, lei(357)));
+    expect(after.ytd.net).toBe(subBani(before.ytd.net, lei(357)));
     expect(after.lines.expenses).toHaveLength(2);
   });
 
@@ -144,8 +146,8 @@ describe('selectFinancialDerived (Step 14)', () => {
     const data = makeData({ expenses: [expense(), expense({ id: 'exp-2', valoareFaraTva: lei(200), tva: lei(38) })] });
     const before = selectFinancialDerived(data, AS_OF);
     const after = selectFinancialDerived({ ...data, expenses: [data.expenses[0]] }, AS_OF);
-    expect(after.ytd.expenses).toBe(before.ytd.expenses - 238);
-    expect(after.ytd.net).toBe(before.ytd.net + 238);
+    expect(after.ytd.expenses).toBe(subBani(before.ytd.expenses, lei(238)));
+    expect(after.ytd.net).toBe(addBani(before.ytd.net, lei(238)));
     expect(after.lines.expenses).toHaveLength(1);
   });
 

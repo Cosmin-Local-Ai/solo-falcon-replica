@@ -11,7 +11,7 @@ import {
 import { useStore } from '../data/store';
 import { useDashboardData } from '../data/dashboardAdapter';
 import { getProjectedFinancialSeries } from '../data/dashboard';
-import { formatBaniAxis, formatBaniOrDash, formatBaniRON, isBani, type Bani } from '../domain/money';
+import { formatBaniAxis, formatBaniRON, formatBaniRONOrDash, isBani, type Bani } from '../domain/money';
 
 
 type Range = 'monthly' | 'ytd' | 'year';
@@ -90,7 +90,7 @@ export function FinancialChartTooltip({
       <div className="chart-tooltip-period">{label}</div>
       {items.map((item) => (
         <div key={item.metric}>
-          {item.metric} · {item.state}: {formatBaniOrDash(item.value)}
+          {item.metric} · {item.state}: {formatBaniRONOrDash(item.value)}
         </div>
       ))}
     </div>

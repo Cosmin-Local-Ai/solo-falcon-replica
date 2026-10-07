@@ -1261,3 +1261,100 @@ Still-open judgement items (NOT ×100 pairs, so the script will not fix them):
    `docs/ai/STATE.md` (does not exist yet); close **B-17** only if genuinely closed; **NEVER write B-18/B-20
    closed**; **B-16 is NOT closed by this phase**.
 5. Measure all four at final HEAD with a clean tree.
+
+---
+
+## 11. STATE AT FIFTH COMPACTION — 7 FAILS LEFT, ALL IN ONE FILE. READ §7-§10 TOO.
+
+### Safety net / commits
+- HEAD `02daa29` fix(money): projection shares sized wrong + per-month net did not add up.
+  Before: `a6e084b` (insights/taxReserve/tax), `56bc36e` (§10 notes), `023e520` (display layer),
+  `9f524de`, `c9f60ac`, `87fc202` = **last commit green at all four checks**.
+- **UNCOMMITTED right now** (safe, all green-per-file): aggregation.test.ts, derived.test.ts,
+  data/derived.test.tsx, thresholds.test.ts, ThresholdSection.tsx, **src/lib/format.ts DELETED**,
+  FinancialChart.tsx, money.ts (+formatBaniRONOrDash), dashboard.test.ts, store.profileBackfill.test.tsx,
+  Dashboard.test.tsx, store.load.test.tsx. Commit before compaction if it matters.
+- `wip/phase10-t1-bani` was re-pointed at `023e520`; re-point again before any reset.
+
+### MEASURED
+- `npx tsc --noEmit` → **0 errors repo-wide**.
+- `npm run test` → **7 failed / 700 passed** — ALL 7 in `src/data/store.migration.chain.test.tsx`.
+- `npm run build` / `npm run test:e2e` → **still not re-run**. e2e is certainly red.
+
+### THE RULE THAT COST THE MOST TIME — WRITE IT LARGE
+**A test that writes a RAW localStorage payload must keep money in the OLD LEI scale.** The chain runs
+on load and scales it once. Wrapping such a fixture in `lei()` = a DOUBLE conversion (×10 000 overall).
+Symptom: `expected 300000000 to be 30000`, or a rendered total wildly off.
+Mis-wrapped by the script and reverted to raw (`N as Bani` with a comment, or a bare number):
+`pages/Dashboard.test.tsx` `validRevenue` (50_000 / 9_500) + its two inline revenues (78_000/16_380,
+52_000/10_920); `store.profileBackfill.test.tsx` `salaryIncomeLei: 30000`; `store.load.test.tsx`
+snapshot fixture (1000 / 0 / 100).
+Conversely: fixtures passed DIRECTLY to domain functions are `lei(...)`. Only `writePayload`/
+`localStorage.setItem`/`prePhase7Payload` fixtures stay raw.
+
+### DONE since §10 (all verified per-file, tests green in each)
+1. `insights.test.ts` — the taxReserve fixtures were already in the old **cents** scale, which is
+   numerically IDENTICAL to bani (1 ban = 1 cent): only `*Cents` → `*Bani` + types moved, no value.
+2. `taxReserve.test.ts` 19/19 — pure unit re-expression. Monthly reserve = cash-planning share via
+   `divBani`, so expectations use `toBeCloseTo(..., 0)` = within half a ban.
+3. `tax.test.ts` 56/56 — the real art. 66 changes, derived in comments:
+   CASS 71281×10% = 7128.10 → 10 bani < 50 → neglected → 7128.00; **base = 71281 − 12150 − 7128 = 52003**
+   (exact integer arithmetic on already-rounded lines — the base is NEVER itself rounded);
+   income 52003×10% = 5200.30 → 30 < 50 → 5200.00; total = sum of rounded lines = 24478.00.
+   Test NAME `no rounding, raw float` was an assertion about behaviour → renamed to state art. 66.
+4. `projection.test.ts` 21/21 + **two REAL BUGS fixed in `projection.ts`** (see commit 02daa29).
+5. `aggregation.test.ts` 38/38 — `before.revenue + 238` was a lei delta on bani totals → `addBani(..., lei(238))`.
+   Import line had lost its semicolon from an earlier script; fixed.
+6. `derived.test.ts` 26/26, `data/derived.test.tsx` 4/4 — same lei-delta-on-bani class (NOT the "real value
+   change" §9 guessed). The data/derived harness prints stored amounts verbatim, so its numbers are BANI.
+7. `thresholds.test.ts` 52/52 — `distance` expectations were lei differences: `lei(100_000) - lei(48_600)`.
+8. **`src/lib/format.ts` DELETED** (the 6th formatter, `formatLei`). Its only consumer
+   `ThresholdSection.tsx` (3 sites) now uses `formatBaniLei` from domain/money.
+9. **`formatBaniRONOrDash` ADDED to money.ts** — the tooltip had lost its `RON` suffix because
+   `formatBaniOrDash` is suffix-free. Kept `formatBaniOrDash` (its own test pins `0,00`) and used the
+   suffixed guard in `FinancialChart.tsx`. `FinancialChart.test.tsx` 11/11.
+10. `dashboard.test.ts` 31/31 — seeded acceptance 6 re-measured, derivation written in the test:
+    CASS deductibilă 749.45 → 45 bani < 50 → **749.00**; base 7494.50 − 749.00 = **6745.50** (was 6745.05);
+    income 6745.50×10% = 674.55 → 55 ≥ 50 → **rounded UP to 675.00**; total 2430 + 675 = **3105.00**
+    (was 3104.505) — this is the e2e `3.105,00 RON`. The three BASES (7700 / 205.5 / 7494.5) are unchanged.
+11. `Dashboard.test.tsx` 5/5 — raw payloads unwrapped (see the rule above). **Negative controls 20.435 and
+    46.570 both still render unchanged** — good evidence the engine arithmetic did not drift.
+12. `store.load.test.tsx` 19/19 — snapshot expectation now pins the migration contract:
+    `preMigrationInputsHash === 'abc123'`, `inputsHash !== 'abc123'`, money converted once, and
+    `computeInputsHash(loaded.inputSnapshot) === loaded.inputsHash`. Import from
+    **`../domain/snapshots/hash`** (NOT `snapshot.ts`; there is also `hashSync.ts`).
+
+### THE LAST 7 — `src/data/store.migration.chain.test.tsx` (RESUME HERE)
+All 7 are the chain gaining a 5th step (`money-bani`, 4→5). Exact sites and fixes:
+- `:201` `stepsApplied` → add `'money-bani'`; and `toVersion` must become `CURRENT_DATA_VERSION`
+  (it asserts `DATA_VERSION_VAT_DATE`, which is now mid-chain).
+- `:222` `stepsApplied` → `['vat-exceedance-date','money-bani']`; `toVersion` → `CURRENT_DATA_VERSION`.
+  (`profile` still equals `seedData.profile`: cashFloorLei 0 → 0.)
+- `:235` full-chain `stepsApplied` → add `'money-bani'`.
+- `:394` load-path `migration.stepsApplied` → add `'money-bani'`.
+- One test asserts the step PAIRS `[[0,1],[1,2],[2,3],…]` → add `[4,5]`.
+- `leaves the fiscal inputs inside a snapshot byte-identical` (`:361`, `150000000 vs 1500000`) — the
+  `legacy` snapshot fixture is a RAW payload, so money IS converted. Re-scope the claim honestly: only
+  **identity-shaped** keys stay byte-identical; `inputSnapshot.revenues/expenses`, `calculationLines[].value`
+  and `output.total` are converted once. Write the reason in the commit message.
+- `does not rewrite a snapshot it had nothing to add to` (hash `b845695…` vs `7f960fa…`) — the money step
+  DOES rewrite every snapshot's money, so the hash changes. Re-scope: the invariant is now
+  `preMigrationInputsHash` preserved + `inputsHash` re-derived. Do NOT just paste the new hash.
+Chain constants: `DATA_VERSION_BASE → profile-materialization → identity-absorption → payment-dates →
+vat-exceedance-date → money-bani`; `CURRENT_DATA_VERSION = DATA_VERSION_MONEY_BANI = 5`.
+
+### STILL TO DO after that (order)
+1. **New tests the brief requires** (nothing pins them yet): `roundBani`/`roundArt66` 50-bani tie direction;
+   `lei()` rejects sub-ban; `sumBani` order-independence; `allocateBani` sums exactly; art. 66 regression pin;
+   migration `142.5 → 14250` exact with NO notice, `674.504 → 67450` WITH sub-ban-precision notice, `NaN`
+   carried unchanged + notice (never 0), snapshot hash re-derive (partly done in store.load), and the
+   "step threw → quarantine with `migration failed:`" path.
+2. **Delete the e2e formatter mirror** `e2e/dashboard.spec.ts:577-579`; convert e2e expectations
+   (`3.104,51 → 3.105,00 RON`, `1.034,84 → 1.035,00`); then RUN `npm run test:e2e`.
+   NEGATIVE CONTROLS that must not change: 24_615, 2430, 12_150, 24_300, 29_160, 2_430, 4_230, 3_800,
+   46.570, 20.435, 4860/4861, -29160/-29161, -39500/-39501, 60000→12150 / 97199→12150 / 97200→24300.
+3. **Docs/register**: update `docs/ai/phases/10_money_precision.md`; **open B-25** in `docs/ai/STATE.md`;
+   close **B-17** only if genuinely closed; **NEVER B-18/B-20**; **B-16 NOT closed here**.
+4. Measure all four with a clean tree.
+5. Advisories to consider: nested ternary in `projection.ts` actualCount; **unused `asOfDate` param in
+   projection.ts** (check whether my edit orphaned it).

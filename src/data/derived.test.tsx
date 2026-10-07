@@ -94,8 +94,10 @@ describe('useFinancialDerived (Step 14)', () => {
     act(() => {
       screen.getByText('add-revenue').click();
     });
-    expect(Number(screen.getByTestId('ytd-revenue').textContent)).toBe(beforeRevenue + 1190);
-    expect(Number(screen.getByTestId('ytd-net').textContent)).toBe(beforeNet + 1190);
+    // This test-local harness prints the stored amount verbatim, so the numbers read here are BANI
+    // (a numeric probe, not app UI — no screen ever shows this). Deltas must therefore be in bani.
+    expect(Number(screen.getByTestId('ytd-revenue').textContent)).toBe(beforeRevenue + 119_000);
+    expect(Number(screen.getByTestId('ytd-net').textContent)).toBe(beforeNet + 119_000);
   });
 
   it('recomputes automatically when an expense is added', () => {
@@ -110,8 +112,8 @@ describe('useFinancialDerived (Step 14)', () => {
     act(() => {
       screen.getByText('add-expense').click();
     });
-    expect(Number(screen.getByTestId('ytd-expenses').textContent)).toBe(beforeExpenses + 238);
-    expect(Number(screen.getByTestId('ytd-net').textContent)).toBe(beforeNet - 238);
+    expect(Number(screen.getByTestId('ytd-expenses').textContent)).toBe(beforeExpenses + 23_800);
+    expect(Number(screen.getByTestId('ytd-net').textContent)).toBe(beforeNet - 23_800);
     expect(Number(screen.getByTestId('expense-lines').textContent)).toBe(beforeLines + 1);
   });
 });

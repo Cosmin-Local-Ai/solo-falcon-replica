@@ -182,14 +182,18 @@ describe('Phase 6 profile fields are accepted when present', () => {
         profile: {
           ...(legacyPayload() as { profile: Record<string, unknown> }).profile,
           pfaStartDate: '2026-04-01',
-          salaryIncomeLei: lei(30000),
+          // This is a RAW persisted payload written straight to localStorage, so it is deliberately
+          // still in the OLD lei scale — the v4->v5 money step is what scales it. Wrapping it in lei()
+          // here would be a double conversion (30000 -> 3 000 000 -> 300 000 000).
+          salaryIncomeLei: 30000,
         },
       }),
     );
     load();
     expect(storeRef!.dataOrigin).toBe('persisted');
     expect(storeRef!.profile.pfaStartDate).toBe('2026-04-01');
-    expect(storeRef!.profile.salaryIncomeLei).toBe(30000);
+    // migrated: 30 000 lei -> 3 000 000 bani
+  expect(storeRef!.profile.salaryIncomeLei).toBe(lei(30000));
     expect(storeRef!.revenues).toHaveLength(2);
   });
 

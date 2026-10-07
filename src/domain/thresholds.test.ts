@@ -53,7 +53,7 @@ describe('computeThresholds', () => {
     expect(casMin.type).toBe('min-base');
     expect(casMin.affectedTax).toBe('cas');
     expect(casMin.thresholdValue).toBe(lei(48600));
-    expect(casMin.distance).toBe(100000 - 48600);
+    expect(casMin.distance).toBe(lei(100_000) - lei(48_600));
   });
 
   it('has no CAS max-base row — CF art. 148 alin. (2) sets floors, not a ceiling', () => {
@@ -160,7 +160,7 @@ describe('computeThresholds', () => {
     };
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q);
     const cassMax = byId(result, 'CASS_MAX_BASE');
-    expect(cassMax.distance).toBe(300000 - 291600);
+    expect(cassMax.distance).toBe(lei(300_000) - lei(291_600));
     expect(cassMax.status).toBe('breached');
   });
 
@@ -173,7 +173,7 @@ describe('computeThresholds', () => {
     };
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q);
     const vat = byId(result, 'VAT_REGISTRATION');
-    expect(vat.distance).toBe(400000 - 395000);
+    expect(vat.distance).toBe(lei(400_000) - lei(395_000));
     expect(vat.status).toBe('breached');
   });
 

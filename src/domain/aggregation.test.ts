@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AppData, Expense, Revenue, SettingsState } from '../data/types';
 import type { PfaIdentity, PfaProfile } from './models';
 import { inPeriod, selectMonthly, selectYtd, revenueFiscalDate, expenseFiscalDate, auditFiscalDates } from './aggregation';
-import { lei, type Bani } from './money'
+import { addBani, lei, subBani, type Bani } from './money';
 
 function identity(): PfaIdentity {
   return {
@@ -136,7 +136,7 @@ describe('selectYtd', () => {
     expect(ytd.revenueNet).toBe(lei(100));
     expect(ytd.expenses).toBe(lei(55));
     expect(ytd.expenseNet).toBe(lei(50));
-    expect(ytd.net).toBe(55);
+    expect(ytd.net).toBe(lei(55));
   });
 
   it('respects the fiscalYear boundary (profile.fiscalYear, calendar year)', () => {
@@ -221,7 +221,7 @@ describe('selectYtd', () => {
     expect(ytd.revenueNet).toBe(lei(100));
     expect(ytd.expenses).toBe(lei(50));
     expect(ytd.expenseNet).toBe(lei(50));
-    expect(ytd.net).toBe(50);
+    expect(ytd.net).toBe(lei(50));
   });
 
   it('returns all-zero YTD when asOfDate is before the fiscal year start', () => {
@@ -350,8 +350,9 @@ describe('source-data reactivity', () => {
       }),
       '2026-12-31',
     );
-    expect(after.revenue).toBe(before.revenue + 238);
-    expect(after.net).toBe(before.net + 238);
+    // addBani/subBani, not `+`: Bani + Bani widens to number and drops the brand.
+    expect(after.revenue).toBe(addBani(before.revenue, lei(238)));
+    expect(after.net).toBe(addBani(before.net, lei(238)));
   });
 
   it('removing a record changes aggregates', () => {
@@ -360,7 +361,7 @@ describe('source-data reactivity', () => {
     });
     const before = selectYtd(data, '2026-12-31');
     const after = selectYtd({ ...data, revenues: [data.revenues[0]] }, '2026-12-31');
-    expect(after.revenue).toBe(before.revenue - 238);
+    expect(after.revenue).toBe(subBani(before.revenue, lei(238)));
   });
 });
 
