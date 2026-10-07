@@ -321,6 +321,11 @@ export function divBani(total: Bani, parts: number): Bani {
  * would change the input of the next calculation.
  */
 export function toBaniNearest(value: Decimal | number): Bani {
+  // Checked before the Decimal constructor: decimal.js-light rejects NaN with its own opaque
+  // DecimalError, and an amount that cannot be money deserves this message, not a library's.
+  if (!(value instanceof Decimal) && !Number.isFinite(value)) {
+    throw new RangeError(`toBaniNearest needs a finite value, got ${value}`);
+  }
   const d = value instanceof Decimal ? value : new Decimal(value);
   // decimal.js-light exposes no `isFinite` (instance or static) in its typings; `toNumber()` is the exact
   // conversion this function is about to perform, so it is the honest place to catch NaN/Infinity.
@@ -370,6 +375,8 @@ export function formatBaniAxis(value: number): string {
   const wholeLei = magnitude.div(BANIS_PER_LEI).toDecimalPlaces(0, Decimal.ROUND_FLOOR);
   const fractionBani = magnitude.minus(wholeLei.times(BANIS_PER_LEI));
   const grouped = wholeLei.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  const fraction = fractionBani.isZero() ? '' : `,${fractionBani.toString()}`;
+  // The fraction is a count of BANI, so it must always occupy two digits: 12 605 bani is 126,05 lei,
+  // and an unpadded '126,5' would be read as 126 lei 50 bani — a 45-ban error on the label.
+  const fraction = fractionBani.isZero() ? '' : `,${fractionBani.toString().padStart(2, '0')}`;
   return `${d.isNegative() ? '-' : ''}${grouped}${fraction}`;
 }
