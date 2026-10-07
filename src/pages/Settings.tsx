@@ -179,6 +179,11 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       toast('error', 'Verifică datele din formular');
       return;
     }
+    // Both money fields above already recorded an error when they could not be parsed, so a null
+    // cannot reach here. Guarding explicitly instead of casting keeps the narrowing honest: if a
+    // future edit adds a path that skips validation, this stops compiling rather than writing
+    // `null` into a `Bani` field.
+    if (salary === null || cash === null) return;
     updateProfile({
       regime: fiscal.regime,
       pfaStartYear: year,
