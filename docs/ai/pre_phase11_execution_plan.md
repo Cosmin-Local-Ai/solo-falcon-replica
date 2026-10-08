@@ -84,6 +84,7 @@ So the Researcher **is** required here (reversing the earlier call). What resear
 **Consequence for scheduling:** this is larger than the brief assumed. Split it into two sequential Workers — **2a** Researcher + the deductibility rule set (domain only, no UI), then **2b** the category vocabulary, persistence/migration, classification wiring into `estimateBasis.ts`, and the minimal UI. Still one Worker at a time.
 
 **Out of scope:** building a VAT treatment system, and any per-record "is this business-related" interrogation of the user.
+
 ### 3.2 TASK 3 — persist tax-reserve
 - Persist on `AppData` using the existing store/migration architecture. Two read sites, **both** must change: `dashboard.ts:169` **and `dashboard.ts:263`** — the original brief names only one; fixing one leaves the bug live.
 - `reservedAmount: Bani | null`; `null` means "no reserve recorded" and renders as such — never 0.
