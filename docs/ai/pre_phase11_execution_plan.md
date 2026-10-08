@@ -18,7 +18,7 @@ This is not a restatement of the briefs. It is the decision of **how** each task
 
 **TASK 1 is DONE** (`beb4b56` → `8572be9` → `c49d88f`). The annual estimate is fed the run-rate projection; the excl-VAT pair is annualised from its own totals, never scaled from gross; `elapsedMonths === 0` yields explicit actuals-only. YTD summary untouched. `phases/12_projection_annual_estimate.md`.
 
-Remaining: TASKS 2-8, plus a small hygiene task (TASK 9).
+Remaining: TASKS 2-8 (TASK 2 split into 2a/2b), plus a small hygiene task (TASK 9).
 
 ---
 
@@ -30,7 +30,7 @@ Order now:
 
 | # | Task | Why here | Researcher? |
 |---|---|---|---|
-| **2** | Expense deductibility | Largest remaining correctness hole: 100 % of expenses are deductible today. | **No** — see §3.2 |
+| **2** | Expense deductibility | Largest remaining correctness hole: 100 % of expenses are deductible today. | **Yes** — the deductibility framework, see §3.1 |
 | **3** | Persist tax-reserve | Small, independent, and it deletes a warning that can never clear. Cheap win. | No |
 | **4** | Threshold semantics + applicability | Produces false "Urgent" alerts at **every** income level today. Now that the basis is annual, this is the right moment. | **Yes** — CAS 12-SM floor only |
 | **5** | Pension / CASS input model | Legal-fact precision; feeds Task 4's CASS messaging, so after it. | **Yes** |
@@ -60,15 +60,30 @@ These are additions to the global contract, learned from Phases 1-10.
 ## 3. Task-by-task decisions
 
 ### 3.1 TASK 2 — expense deductibility
-**Decision: user-declared tri-state, defaulting to unclassified. No legal taxonomy invented.**
+**Decision: the law classifies the expense, not the user. The user is asked only about the residue the law cannot reach.**
 
-- `Expense` gains a deductibility field: `deductible | non_deductible | unverified`, **default `unverified`**. Existing records migrate to `unverified`, not to deductible.
-- The engine's deductible total becomes the sum of **confirmed-deductible** expenses. The unclassified amount is surfaced as its own line, so the estimate is explainable and visibly incomplete rather than silently optimistic.
-- **No Researcher pass.** This is the deliberate refusal: any "which categories are deductible in Romania" research would end in us encoding a legal taxonomy we cannot verify per-record. The honest model is *the user declares, the app computes on declarations, and the unclassified remainder is shown*. If a future audit supplies verified per-category rules, they become a **new rule release** (Task 6), not a code change.
-- VAT stays separate: deductibility is an income-tax property of the expense; it never touches the VAT basis.
-- Minimum UI: one control on the expense form + a count of unclassified expenses. Nothing else.
-- Migration: additive field with a default; bump the persisted schema version; **no** destructive reset.
+My first version of this section said "no Researcher, the user declares". That was wrong, and it conflated two different unknowns:
 
+| Unknown | What it is | Can research settle it? |
+|---|---|---|
+| **Which kinds of expense are deductible, which are expressly not, which carry a statutory cap or percentage** | a question of **law** | **Yes.** Primary sources: Codul fiscal — the venituri independente chapter's definition of deductible cheltuieli and its cross-reference to the general deductibility/limitation article, plus the list of expressly non-deductible cheltuieli. |
+| **Whether *this* OMV invoice was for the delivery van or the owner's personal car** | a **fact about the user's transaction** | No. No source answers it. This is the only genuine residue. |
+
+So the Researcher **is** required here (reversing the earlier call). What research cannot do is tell us what an individual purchase was for — and that is not what the user should be doing accounting for either.
+
+**Design:**
+
+1. **Controlled category vocabulary on `Expense`.** Today it carries free-text `categoria`, which is why nothing can be derived from it. Replace with a controlled vocabulary; keep the free text as a note.
+2. **A deductibility rule set in the rule store** — not a generic rule engine. Each rule maps `category + context → deductible | non_deductible | capped(percentage) | undetermined`, and carries the same provenance every other rule carries (`sourceAct`, `sourceArticle`, `sourceUrl`, `verifiedAt`, `status`, `version`). This is what makes Task 6 pay for itself: a corrected or newly verified per-category rule is a **new rule release**, and classification improves with no user action.
+3. **Classification is automatic** for every category the rules cover. The estimate's breakdown names each category **and the rule that justified it**, so "explain the deductible total" is answered by data, not by a guess.
+4. **Only the undetermined residue surfaces**, as a count with one action ("N cheltuieli fără încadrare — alege categoria"), never a form per expense and never a checklist the user must clear.
+5. **Capped categories are not user chores.** Where the law fixes a treatment, the app applies it and says so. Where the treatment depends on a fact the app does not have (a vehicle usage log, a protocol ceiling measured against net revenue), that line is `undetermined` **with the missing fact named** — it does not become a data-entry task.
+6. **Never silently deductible.** An undetermined expense is excluded from the deductible total and shown as its own line. This is the conservative direction *for the user*: an over-generous deduction is their fiscal liability, not ours.
+7. **Migration:** existing expenses keep their text; they become `undetermined` **only where no rule maps their category**. The goal is that most map automatically, so the residue is small from day one.
+
+**Consequence for scheduling:** this is larger than the brief assumed. Split it into two sequential Workers — **2a** Researcher + the deductibility rule set (domain only, no UI), then **2b** the category vocabulary, persistence/migration, classification wiring into `estimateBasis.ts`, and the minimal UI. Still one Worker at a time.
+
+**Out of scope:** building a VAT treatment system, and any per-record "is this business-related" interrogation of the user.
 ### 3.2 TASK 3 — persist tax-reserve
 - Persist on `AppData` using the existing store/migration architecture. Two read sites, **both** must change: `dashboard.ts:169` **and `dashboard.ts:263`** — the original brief names only one; fixing one leaves the bug live.
 - `reservedAmount: Bani | null`; `null` means "no reserve recorded" and renders as such — never 0.
