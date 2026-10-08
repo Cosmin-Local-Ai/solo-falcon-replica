@@ -9,6 +9,13 @@ import {
 } from '../domain/aggregation';
 import { assessCompleteness, type CompletenessReport } from '../domain/completeness';
 import { selectProjectionV1, type ProjectionV1 } from '../domain/projection';
+import {
+  amountsForEstimate,
+  attachEstimateBasis,
+  selectTaxEstimateBasis,
+  withEstimateBasis,
+  type TaxEstimateWithBasis,
+} from '../domain/estimateBasis';
 import { computeTaxEstimate, type TaxEstimateResult } from '../domain/tax';
 import {
   computeThresholds,
@@ -41,7 +48,11 @@ export interface DashboardSnapshotView extends DashboardSnapshot {
 export interface DashboardData {
   taxYear: number;
   snapshot: DashboardSnapshotView;
-  tax: TaxEstimateResult;
+  /**
+   * The engine's result plus the basis that produced it (`estimateBasis.ts`). A consumer can tell
+   * actuals-to-date from run-rate projected without inferring it from a label.
+   */
+  tax: TaxEstimateWithBasis;
   thresholds: FiscalThreshold[];
   deadlines: Deadline[];
   completeness: CompletenessReport;
@@ -85,19 +96,35 @@ export function getPendingCounts(data: AppData): PendingCounts {
   };
 }
 
-export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEstimateResult> {
+/**
+ * The annual tax estimate.
+ *
+ * Task 1 (pre-Phase-11): the engine is no longer fed raw YTD totals. It is fed the annual figures
+ * from the projection model (`domain/projection.ts`, `run-rate-v1`) whenever that model has a run
+ * rate to project with, and the choice is recorded on the result as `basis`. When the model has no
+ * run rate — an `asOfDate` before the fiscal year start, where its own denominator is 0 — the
+ * engine runs on actuals-to-date and the basis says so, instead of annualising a zero into a
+ * plausible-looking number.
+ *
+ * The YTD financial summary is a separate path (`getFinancialSummary`) and is deliberately not
+ * touched here.
+ */
+export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEstimateWithBasis> {
   const ytd = selectYtd(data, asOfDate);
+  const projection = selectProjectionV1(data, asOfDate);
+  const basis = selectTaxEstimateBasis(projection, ytd);
+  const amounts = amountsForEstimate(basis);
   const derived = selectTaxDerived(data, PFA_2026_SYSTEM_REAL_PACKAGE);
   return computeTaxEstimate({
     inputs: derived.inputs,
     profile: data.profile,
-    revenues: ytd.revenue,
-    expenses: ytd.expenses,
-    revenuesNet: ytd.revenueNet,
-    expensesNet: ytd.expenseNet,
+    revenues: amounts.revenues,
+    expenses: amounts.expenses,
+    revenuesNet: amounts.revenuesNet,
+    expensesNet: amounts.expensesNet,
     ruleRelease: PFA_2026_RELEASE,
     rules: PFA_2026_SYSTEM_REAL_PACKAGE,
-  });
+  }).then((result) => attachEstimateBasis(result, basis));
 }
 
 /**
@@ -311,19 +338,26 @@ function buildSnapshot(
   };
 }
 
-export function buildDashboardData(data: AppData, tax: TaxEstimateResult, instant: Date = now()): DashboardData {
+export function buildDashboardData(
+  data: AppData,
+  tax: TaxEstimateResult | TaxEstimateWithBasis,
+  instant: Date = now(),
+): DashboardData {
+  // Normalise once, here, so every consumer of `DashboardData.tax` can read a basis. A result that
+  // never had one is labelled `unknown` rather than assumed projected or assumed actual.
+  const estimate = withEstimateBasis(tax);
   const asOfDate = isoToday(instant);
-  const snapshot = buildSnapshot(data, asOfDate, tax);
+  const snapshot = buildSnapshot(data, asOfDate, estimate);
   return {
     taxYear: data.profile.fiscalYear,
     snapshot,
-    tax,
-    thresholds: getThresholdStatuses(data, asOfDate, tax),
+    tax: estimate,
+    thresholds: getThresholdStatuses(data, asOfDate, estimate),
     deadlines: getUpcomingDeadlines(data, asOfDate),
     completeness: getDataCompleteness(data),
     actions: getActionItems(data, instant),
-    reserve: getTaxReserve(data, asOfDate, tax),
-    insights: getInsights(data, snapshot, tax),
+    reserve: getTaxReserve(data, asOfDate, estimate),
+    insights: getInsights(data, snapshot, estimate),
     pendingCounts: getPendingCounts(data),
     legislation: getLegislationState(data),
   };

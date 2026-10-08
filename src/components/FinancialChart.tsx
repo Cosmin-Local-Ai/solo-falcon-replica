@@ -11,6 +11,7 @@ import {
 import { useStore } from '../data/store';
 import { useDashboardData } from '../data/dashboardAdapter';
 import { getProjectedFinancialSeries } from '../data/dashboard';
+import { estimateFigureLabel } from '../domain/estimateBasis';
 import { formatBaniAxis, formatBaniRON, formatBaniRONOrDash, isBani, type Bani } from '../domain/money';
 
 
@@ -236,7 +237,9 @@ export default function FinancialChart() {
 
         {tax.status === 'computed' ? (
           <p className="chart-tax-note">
-            Estimare impozit YTD: <strong className="mono">{formatBaniRON(tax.output.total)}</strong>
+            {/* Task 1: `YTD` is only said when the amount really is actuals-to-date. */}
+            {estimateFigureLabel(tax.basis)}:{' '}
+            <strong className="mono">{formatBaniRON(tax.output.total)}</strong>
           </p>
         ) : (
           <p className="chart-tax-note">Estimare impozit: revizuire necesară — {tax.reason}</p>

@@ -18,6 +18,12 @@ import { allocateBani, subBani, toBaniNearest, type Bani } from './money';
  *
  * Every projected value is explicitly tagged: series entries carry
  * `kind: 'projected'`, and annual totals live under `annualProjected`.
+ *
+ * Task 1 (pre-Phase-11) added ONE thing and changed nothing else: the same rule, with the same
+ * denominator, applied to the two VAT-exclusive YTD totals (`revenueNet` / `expenseNet`) that
+ * `selectYtd` already returns and that the tax engine consumes. That is still `run-rate-v1` — no
+ * second method, no new annualisation rule. See `annualProjectedExclVat` below for why those two
+ * are annualised from their own totals rather than derived from the VAT-inclusive pair.
  */
 
 export interface ProjectionPeriod {
@@ -49,6 +55,23 @@ export interface Totals {
   net: Bani;
 }
 
+/**
+ * The run-rate annualisation of the **VAT-exclusive** YTD totals — `YtdTotals.revenueNet`
+ * (cifră de afaceri, `valoareFaraTva` only) and `YtdTotals.expenseNet`.
+ *
+ * These are the two operands the tax engine selects for every profile that is not `vatExempt`
+ * (`tax.ts`: `gross = vatExempt ? revenues : revenuesNet`), so without them the model can only
+ * annualise the operands the default profile never uses.
+ *
+ * They are annualised **from their own YTD totals**, never derived from the VAT-inclusive pair:
+ * deriving them would assume a constant VAT rate across the whole year, which is a fiscal
+ * assumption this model does not have and no rule in the package supports.
+ */
+export interface ProjectionExclVat {
+  revenueNet: Bani;
+  expenseNet: Bani;
+}
+
 export interface ProjectionMonth extends Totals {
   month: string; // 'YYYY-MM'
   kind: 'actual' | 'projected';
@@ -58,6 +81,8 @@ export interface ProjectionV1 {
   periodActual: ProjectionPeriod;
   runRate: RunRate;
   annualProjected: Totals;
+  /** VAT-exclusive annual projection — the operands a non-`vatExempt` profile's engine run consumes. */
+  annualProjectedExclVat: ProjectionExclVat;
   series: ProjectionMonth[];
   method: 'run-rate-v1';
   elapsedMonths: number; // actual denominator used (after the lower bound)
@@ -82,6 +107,8 @@ export function selectProjectionV1(data: AppData, asOfDate: string): ProjectionV
     revenue: denom > 0 ? new Decimal(ytd.revenue).div(denom) : zero,
     expenses: denom > 0 ? new Decimal(ytd.expenses).div(denom) : zero,
     net: denom > 0 ? new Decimal(ytd.net).div(denom) : zero,
+    revenueNet: denom > 0 ? new Decimal(ytd.revenueNet).div(denom) : zero,
+    expenseNet: denom > 0 ? new Decimal(ytd.expenseNet).div(denom) : zero,
   };
   const runRate: RunRate = {
     revenuePerMonth: rate.revenue.toNumber(),
@@ -96,6 +123,14 @@ export function selectProjectionV1(data: AppData, asOfDate: string): ProjectionV
     expenses: annualExpenses,
     // Derived, not independently rounded — see the note above the projected shares.
     net: subBani(annualRevenue, annualExpenses),
+  };
+
+  // The VAT-exclusive pair: the identical rule (`rate × 12`, made whole by `toBaniNearest`) applied
+  // to `ytd.revenueNet` / `ytd.expenseNet`. There is no `net` here on purpose — the engine owns
+  // `venitulNetDinActivitate`, and this model must not pre-empt it.
+  const annualProjectedExclVat: ProjectionExclVat = {
+    revenueNet: toBaniNearest(rate.revenueNet.times(12)),
+    expenseNet: toBaniNearest(rate.expenseNet.times(12)),
   };
 
   const monthly = selectMonthly(data, asOfDate);
@@ -148,6 +183,7 @@ export function selectProjectionV1(data: AppData, asOfDate: string): ProjectionV
     elapsedMonths: denom,
     runRate,
     annualProjected,
+    annualProjectedExclVat,
     series,
     method: 'run-rate-v1',
   };

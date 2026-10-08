@@ -14,7 +14,13 @@ import {
 import { selectApplicableRules } from '../domain/fiscal/select';
 import { PFA_2026_RELEASE, PFA_2026_SYSTEM_REAL_PACKAGE } from '../domain/fiscal';
 import { localDateISO, now } from '../domain/date';
-import { computeTaxEstimate, type TaxEstimateResult } from '../domain/tax';
+import {
+  amountsForEstimate,
+  attachEstimateBasis,
+  selectTaxEstimateBasis,
+  type TaxEstimateWithBasis,
+} from '../domain/estimateBasis';
+import { computeTaxEstimate } from '../domain/tax';
 
 function todayISO(instant: Date = now()): string {
   return localDateISO(instant);
@@ -42,14 +48,20 @@ export function useTaxDerived(asOfDate: string = todayISO()): TaxDerivedView {
 }
 
 /** Latest tax estimate derived from the current financial data:
- *  profile + YTD totals + active rule release → Step 15 engine.
- *  Recomputes automatically when the store or asOfDate changes. */
+ *  profile + the annual projection (falling back to actuals-to-date when the projection model has
+ *  no run rate) + active rule release → Step 15 engine.
+ *  Recomputes automatically when the store or asOfDate changes.
+ *
+ *  This is the LIVE path the dashboard renders through, and it must feed the engine the same
+ *  quantity `data/dashboard.ts getTaxEstimate` does — both go through `estimateBasis.ts`, so
+ *  they cannot drift apart.
+ */
 export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
-  estimate: TaxEstimateResult | null;
+  estimate: TaxEstimateWithBasis | null;
   loading: boolean;
 } {
   const store = useStore();
-  const [estimate, setEstimate] = useState<TaxEstimateResult | null>(null);
+  const [estimate, setEstimate] = useState<TaxEstimateWithBasis | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -63,18 +75,20 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
         asOfDate,
       }),
     );
+    const basis = selectTaxEstimateBasis(derived.projection, derived.ytd);
+    const amounts = amountsForEstimate(basis);
     computeTaxEstimate({
       inputs: taxInputs.inputs,
       profile: store.profile,
-      revenues: derived.ytd.revenue,
-      expenses: derived.ytd.expenses,
-      revenuesNet: derived.ytd.revenueNet,
-      expensesNet: derived.ytd.expenseNet,
+      revenues: amounts.revenues,
+      expenses: amounts.expenses,
+      revenuesNet: amounts.revenuesNet,
+      expensesNet: amounts.expensesNet,
       ruleRelease: PFA_2026_RELEASE,
       rules: PFA_2026_SYSTEM_REAL_PACKAGE,
     }).then((result) => {
       if (!cancelled) {
-        setEstimate(result);
+        setEstimate(attachEstimateBasis(result, basis));
         setLoading(false);
       }
     });

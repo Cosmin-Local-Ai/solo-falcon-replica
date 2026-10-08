@@ -4,6 +4,7 @@ import { getFinancialSummary } from '../data/dashboard';
 import { identityGreeting } from '../domain/profile';
 import { fmtDate } from '../data/types';
 import { formatBaniRON } from '../domain/money';
+import { estimateBasisExplanation, estimateBasisLabel } from '../domain/estimateBasis';
 import FinancialChart from '../components/FinancialChart';
 import FinancialSummary from '../components/FinancialSummary';
 import TaxReserve from '../components/TaxReserve';
@@ -97,7 +98,11 @@ export default function DashboardPage() {
           <SectionCard title="Estimare impozit">
             <div className="stack">
               <div className="row between">
-                <span className="muted">ESTIMARE · An fiscal {snapshot.taxYear}</span>
+                {/* Task 1: the label carries the basis, so an annual run-rate figure can never be read as
+                    money already collected. `estimateBasisLabel` says YTD only for actuals. */}
+                <span className="muted">
+                  {estimateBasisLabel(tax.basis)} · An fiscal {snapshot.taxYear}
+                </span>
                 <span className="muted">
                   Date complete: {completeness.satisfiedCount}/{completeness.totalCount}
                 </span>
@@ -107,6 +112,8 @@ export default function DashboardPage() {
                 Impozit estimat de pus deoparte. Pune deoparte{' '}
                 <strong className="mono">{formatBaniRON(reserve.recommendedMonthlyReserve)}</strong> pe lună.
               </p>
+              {/* A run-rate projection is an assumption, not a forecast; the wording says so. */}
+              <p className="hint">{estimateBasisExplanation(tax.basis)}</p>
             </div>
           </SectionCard>
 
