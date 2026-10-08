@@ -1,8 +1,9 @@
 # WORKING NOTES - TASK 1 (projection feeds the annual tax estimate)
 
-SCRATCH/WORKING FILE, not the deliverable. The deliverable is
-docs/ai/phases/12_projection_annual_estimate.md (NOT YET WRITTEN - an e2e comment already
-references it, so it MUST be created).
+**STATUS: TASK 1 COMPLETE.** The deliverable is `docs/ai/phases/12_projection_annual_estimate.md`
+(13 sections, all figures measured). This file is kept as the working record - the scout findings in
+section 1 are the projection model's semantics as found, which the phase doc summarises. The TODO list
+in section 6 is finished; it is left in place as the audit trail of what was checked.
 
 Repo: /home/agent/workspace/solo-falcon-replica. HEAD at start: 53ca9c4.
 CHECKPOINT COMMIT beb4b56 = everything in section 4 is committed and safe (scratch test deleted).

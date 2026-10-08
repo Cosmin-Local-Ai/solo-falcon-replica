@@ -232,7 +232,7 @@ test.describe('Dashboard — section content (seed data)', () => {
     // measured on VAT-exclusive turnover (4.500 + 3.200 = 7.700,00 lei), per art. 310 alin. (1).
     // The four contribution rows measure the engine's `net-income` base, which since Task 1 is the
     // ANNUAL projected VNA (8.993,40 lei), not the YTD one (7.494,50 lei). The VAT row below is
-    // deliberately still YTD — see docs/ai/phases/12_projection_annual_estimate.md §5.
+    // deliberately still YTD — see docs/ai/phases/12_projection_annual_estimate.md §6.
     await expect(thresholds.getByText(/Curent: 8\.993,40 lei/)).toHaveCount(4);
     await expect(thresholds.getByText(/Curent: 7\.700,00 lei/)).toHaveCount(1);
     // The VAT-inclusive figure all the rows used to share is gone from this section. (It is
