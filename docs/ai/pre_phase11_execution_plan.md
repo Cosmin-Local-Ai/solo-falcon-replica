@@ -1,0 +1,147 @@
+# Pre-Phase-11 execution plan — how these eight tasks will actually be run
+
+**Orchestrator decision record. 2026-10-08. HEAD after TASK 1: `c49d88f`.**
+Inputs: two independent external audits of `ac84f37`, plus the orchestrator's own measurements across Phases 1-10.
+
+This is not a restatement of the briefs. It is the decision of **how** each task is done, what is refused, and in what order they run.
+
+---
+
+## 0. Baseline as it now stands (measured, not claimed)
+
+| check | value |
+|---|---|
+| `npx tsc --noEmit` | 0 |
+| `npm run test` | **49 files / 784 tests** |
+| `npm run build` | exit 0 (one 757 kB chunk — known, not addressed this round) |
+| `npm run test:e2e` | 36 passed |
+
+**TASK 1 is DONE** (`beb4b56` → `8572be9` → `c49d88f`). The annual estimate is fed the run-rate projection; the excl-VAT pair is annualised from its own totals, never scaled from gross; `elapsedMonths === 0` yields explicit actuals-only. YTD summary untouched. `phases/12_projection_annual_estimate.md`.
+
+Remaining: TASKS 2-8, plus a small hygiene task (TASK 9).
+
+---
+
+## 1. Order, and why it differs from both briefs
+
+The second audit asked for threshold semantics **first**. I am **not** doing that — TASK 1 had to go first, because the threshold rows measure the tax engine's contribution base, and once the estimate became annual, the thresholds silently started measuring an annual quantity. Doing thresholds before the basis would have fixed the semantics against the wrong number.
+
+Order now:
+
+| # | Task | Why here | Researcher? |
+|---|---|---|---|
+| **2** | Expense deductibility | Largest remaining correctness hole: 100 % of expenses are deductible today. | **No** — see §3.2 |
+| **3** | Persist tax-reserve | Small, independent, and it deletes a warning that can never clear. Cheap win. | No |
+| **4** | Threshold semantics + applicability | Produces false "Urgent" alerts at **every** income level today. Now that the basis is annual, this is the right moment. | **Yes** — CAS 12-SM floor only |
+| **5** | Pension / CASS input model | Legal-fact precision; feeds Task 4's CASS messaging, so after it. | **Yes** |
+| **6** | Rule-release immutability | The one thing neither audit will let slip. Independent of 1-5. | No |
+| **7** | User-facing language layer | Cross-cutting; must come after the domain semantics (4) and the severity model's inputs exist. | No |
+| **8** | Prioritisation, severity, rendering | Depends on 4 (semantics), 7 (copy), 3 (reserve clears). Last of the eight. | No |
+| **9** | Provenance + seed + layout hygiene | Small, mechanical, must not contaminate the eight. | No |
+
+Strictly sequential, one Worker each. Scouts in parallel inside a task.
+
+---
+
+## 2. Standing rules for every Worker in this round
+
+These are additions to the global contract, learned from Phases 1-10.
+
+1. **Date stamps come from the tool, never typed.** `date +%F` or `git log -1 --format=%cd --date=short`. The second audit caught ~40 `STATE.md` lines dated 2026-10-08 against a last commit of 7 Oct. It is provenance hygiene, not tampering, and it is now a rule.
+2. **The e2e re-pin protocol.** When a pinned currency figure changes because the basis is now correct: compute the new value **by hand before running**, put the arithmetic in a comment, and record old → new in `DECISIONS:`. Deleting an assertion, loosening a matcher or widening a timeout is a failed task, not a fixed one. I diff the test files.
+3. **Determinism by pinned clock, not pinned literal.** An annual run-rate figure is legitimately date-dependent. Pin the clock (`page.clock.setFixedTime` / `vi.useFakeTimers({toFake:['Date']})`), never the resulting literal. This is defect B-23's class.
+4. **No blanket snapshot-hash migration.** The digest covers the stored `inputSnapshot` bytes. Only add a targeted, id-scoped legacy tier (the pattern in `src/data/migration.ts` — note: singular, `migrations.ts` does not exist) when stored bytes actually change. A blanket re-hash silently destroys every user's tamper evidence.
+5. **Scout model override is mandatory, not a fallback.** The default scout model exits without output (~27 s, or 12m32s and nothing). The working override is `llama-cpp/qwen3.8-flash-next-iq3_s`. Every brief in this round states it up front. Report it in `BLOCKERS:` — do not silently self-inspect instead.
+6. **One assembler, two call sites.** The tax operands are built in `src/domain/estimateBasis.ts` and consumed at exactly two places (`data/dashboard.ts getTaxEstimate`, `data/derived.ts useLatestTaxEstimate`). Any new quantity enters **inside the assembler or upstream of it**. Introducing it at a call site makes the live path and the test path drift — that is how the flake happened.
+7. **Uncertainty is a first-class value.** `REVIEW_REQUIRED` internally, plain Romanian externally (Task 7). Never a plausible-looking number where the law or the data does not support one.
+
+---
+
+## 3. Task-by-task decisions
+
+### 3.1 TASK 2 — expense deductibility
+**Decision: user-declared tri-state, defaulting to unclassified. No legal taxonomy invented.**
+
+- `Expense` gains a deductibility field: `deductible | non_deductible | unverified`, **default `unverified`**. Existing records migrate to `unverified`, not to deductible.
+- The engine's deductible total becomes the sum of **confirmed-deductible** expenses. The unclassified amount is surfaced as its own line, so the estimate is explainable and visibly incomplete rather than silently optimistic.
+- **No Researcher pass.** This is the deliberate refusal: any "which categories are deductible in Romania" research would end in us encoding a legal taxonomy we cannot verify per-record. The honest model is *the user declares, the app computes on declarations, and the unclassified remainder is shown*. If a future audit supplies verified per-category rules, they become a **new rule release** (Task 6), not a code change.
+- VAT stays separate: deductibility is an income-tax property of the expense; it never touches the VAT basis.
+- Minimum UI: one control on the expense form + a count of unclassified expenses. Nothing else.
+- Migration: additive field with a default; bump the persisted schema version; **no** destructive reset.
+
+### 3.2 TASK 3 — persist tax-reserve
+- Persist on `AppData` using the existing store/migration architecture. Two read sites, **both** must change: `dashboard.ts:169` **and `dashboard.ts:263`** — the original brief names only one; fixing one leaves the bug live.
+- `reservedAmount: Bani | null`; `null` means "no reserve recorded" and renders as such — never 0.
+- The reserve **must not** feed the tax calculation.
+- Acceptance includes a reload test: enter → reload → same value.
+
+### 3.3 TASK 4 — threshold semantics
+**Decision: replace the single `breached` flag with a typed kind + separate user severity. Delete `breachMeaning`.**
+
+- Kinds: `registration` · `tier_transition` · `over_limit` · `informational`. Below a contribution **floor** is `tier_transition` or `informational`, never a breach.
+- `breachMeaningFor` and the "dezcalificare din regim" / "schimbare de regim" strings are **deleted**, not reworded.
+- Applicability is computed from the profile/fiscal context: CASS rows respect the salary/pension/top-up exceptions; `VAT_REGISTRATION` is applicable only when the user's VAT state makes it matter.
+- The 10 % warning distance stays an **application policy**, labelled as such, never a statutory fact.
+- User severity is a separate dimension from legal/calculation status.
+- **Researcher: one narrow question only** — the legal consequence, if any, of net income below the CAS 12-SM floor for a 2026 PFA on sistem real, from primary sources. Everything else here is engineering semantics, not law.
+- Note the asymmetry Task 1 left behind and this task owns: the four contribution rows now measure **annual projected** VNA while `VAT_REGISTRATION` measures **YTD** turnover. That is intentional and must be labelled, not unified.
+
+### 3.4 TASK 5 — pension / CASS input model
+- A bare `pensionStatus` boolean is too broad. Replace with the fact the law actually keys on, per the Researcher's answer (pension **income** and whether it applies in the fiscal year).
+- The CASS exception must remove **only** the applicable top-up/adjustment — never CASS entirely.
+- `REVIEW_REQUIRED` where the data cannot establish the treatment.
+- **Researcher required**: primary-source basis for the pension treatment of CASS for independent activities, 2026.
+
+### 3.5 TASK 6 — rule-release immutability (the one not to let slip)
+**Decision: content-address the rule set; do not redesign the release model.**
+
+- A snapshot today freezes release *metadata*, not parameter values, and `releaseId` / `createdAt: '2026-01-01'` never changed across the Phase 3-5 formula corrections. That is the defect.
+- Fix: a **content hash over the effective rule set** embedded in the snapshot; real `createdAt`; per-rule `version` bumped when the legal/formula content materially changes (not a display number).
+- Lifecycle documented and enforced: `PROPOSED → VALIDATED → STAGED → SCHEDULED → ACTIVE → SUPERSEDED`. A revision gets a **new identity**, never an in-place edit of an ACTIVE rule.
+- Superseded releases stay readable for historical snapshot interpretation.
+- Find and name every place permanently hard-wired to `PFA_2026_RELEASE` / `PFA_2026_SYSTEM_REAL_PACKAGE` instead of selecting by taxYear/effective date/state. **Do not build future-year automation** — make the boundary correct.
+- Fixtures: R1 active → R2 active later → an R1 snapshot still reproduces → a new calculation uses R2.
+
+### 3.6 TASK 7 — user-facing language (its own Worker, as the audit insists)
+- One central copy layer; no sentences scattered in components.
+- Never render an enum: `review_required`, `computed`, `breached`, `min-base`, `not_applicable` are internal.
+- Legal uncertainty = **"Notă de interpretare"** + one plain sentence on what the law does not state and what the app does.
+- Breakdown collapsed behind **"Cum am ajuns la această sumă"**; sources behind **"Surse și note de interpretare"**. Never hover-only.
+- `Settings` currently prints the literal `review_required` plus statute paragraphs — in scope.
+
+### 3.7 TASK 8 — prioritisation and severity
+- Shared attention model: `severity` · `state` · `source` · `title` · `description` · `target`. **Four dimensions, never collapsed into one field.**
+- Real work must appear: the seed holds a pending revenue, a rejected revenue, a rejected expense and a pending declaration — **none** currently surface.
+- Completed items leave attention surfaces; empty sections collapse rather than show a large empty card; no duplicate card + action for the same issue.
+- Legislation: never say "no legislative changes" when the monitor holds no verified data. Say monitoring is unavailable/inactive. The published-vs-effective minimum-wage example (HG 146/2026, 1 July 2026) already in the rule store should surface **with** whether it affects this user.
+- Tax estimate must visually distinguish computed / review-required / unavailable.
+
+### 3.8 TASK 9 — hygiene (small, mechanical, separate)
+- Date stamps from git (see §2.1).
+- **3 `legalteka.ro` URLs remain against 6 `legislatie.just.ro`** — replace secondary with primary, or downgrade the citation honestly.
+- Seed: 2020 start, SRL identity, SRL company documents, own-CUI colliding with a customer CUI, seed declarations contradicting seed transactions.
+- Mobile chart overflow at 390 px (renders 657 px, clipped); two card systems with mixed h2/h3 and inconsistent padding.
+- Heading/padding consistency; the "Revenue figures disagree" report (9.317 incl-VAT strip vs 7.700 threshold) is **correct by design** — different bases — and is a **labelling** fix for Task 7, not a bug.
+
+---
+
+## 4. Where the two audits contradict each other — resolved here
+
+| Conflict | Audit A | Audit B | Decision |
+|---|---|---|---|
+| Completeness card | "weighted percentage with a bar" | "Do **not** use a percentage/score" | **No score.** Show only what is missing, each with a link to fix it. A score implies a completeness certainty the data does not support, and it invites gaming. |
+| List length | "cap at about 5" | "maximum 3 per section" | **3** on the single top-level attention surface; up to **5** in a supporting section, ranked. |
+| Thresholds first | threshold semantics first | projection first | **Projection first** (done), thresholds next — see §1. |
+| "Ești la zi" | unreachable due to the circular taxEstimate check | hide empty sections | Both: remove the circular check **and** collapse the section when nothing is outstanding. |
+
+---
+
+## 5. Explicitly out of scope this round
+
+Single-bundle 757 kB chunking · e-Factura (Phase 11+) · D430 · e-Tachigraphe · VIES/ANAF live checks · banking integrations · a generic rule engine · future-year legislation automation · any test-suite rewrite.
+
+---
+
+## 6. Known infra defect carried into every brief
+
+The scout profile's default model exits without producing output. Working override: `llama-cpp/qwen3.8-flash-next-iq3_s`. This has now cost a full 12m32s scout run. It is a **BLOCKER-class** condition in the contract: retry once with the override, and if that fails, stop and report — never substitute silent self-inspection.
