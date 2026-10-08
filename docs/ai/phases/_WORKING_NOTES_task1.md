@@ -5,6 +5,8 @@ docs/ai/phases/12_projection_annual_estimate.md (NOT YET WRITTEN - an e2e commen
 references it, so it MUST be created).
 
 Repo: /home/agent/workspace/solo-falcon-replica. HEAD at start: 53ca9c4.
+CHECKPOINT COMMIT beb4b56 = everything in section 4 is committed and safe (scratch test deleted).
+If in doubt, `git diff beb4b56 --stat` shows what is still to do.
 Brief: docs/ai/briefs/14_task1_projection_estimate.md
 
 ## 0. The task

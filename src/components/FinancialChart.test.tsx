@@ -75,7 +75,25 @@ beforeEach(() => {
   mockUseStore.mockReturnValue({} as never);
   mockUseDashboardData.mockReturnValue({
     snapshot: { asOf: AS_OF },
-    tax: { status: 'computed', output: { total: lei(1234.56) } },
+    tax: {
+      status: 'computed',
+      output: { total: lei(1234.56) },
+      // Task 1: the note's wording is driven by the RECORDED BASIS, not by a literal in the component.
+      // This fixture is an actuals-to-date estimate, so the 'YTD' wording asserted below is the honest
+      // wording for it. The projected case is asserted separately.
+      basis: {
+        kind: 'actuals-only',
+        method: null,
+        elapsedMonths: 0,
+        actual: {
+          revenues: lei(20000),
+          expenses: lei(8000),
+          revenuesNet: lei(18000),
+          expensesNet: lei(7000),
+        },
+        reason: 'fixture: această dată nu are rată de desfășurare',
+      },
+    },
   });
 });
 
@@ -169,6 +187,47 @@ describe('FinancialChart', () => {
     renderChart();
     expect(screen.getByText(/Estimare impozit YTD/)).toBeInTheDocument();
     expect(screen.getByText(/1.234,56 RON/)).toBeInTheDocument();
+  });
+
+  it('names the run-rate basis on the tax note when the estimate was projected', () => {
+    mockUseDashboardData.mockReturnValue({
+      snapshot: { asOf: AS_OF },
+      tax: {
+        status: 'computed',
+        output: { total: lei(1234.56) },
+        basis: {
+          kind: 'annual-projected',
+          method: 'run-rate-v1',
+          elapsedMonths: 5.5,
+          actual: {
+            revenues: lei(20000),
+            expenses: lei(8000),
+            revenuesNet: lei(18000),
+            expensesNet: lei(7000),
+          },
+          projected: {
+            revenues: lei(43636),
+            expenses: lei(17454),
+            revenuesNet: lei(39272),
+            expensesNet: lei(15272),
+          },
+        },
+      },
+    });
+    renderChart();
+    expect(screen.getByText(/Estimare impozit anuală \(rată de desfășurare\)/)).toBeInTheDocument();
+    // The wording rule under test: an annual run-rate figure must never be labelled YTD.
+    expect(screen.queryByText(/Estimare impozit YTD/)).not.toBeInTheDocument();
+  });
+
+  it('labels a basis-less estimate neutrally instead of claiming YTD', () => {
+    mockUseDashboardData.mockReturnValue({
+      snapshot: { asOf: AS_OF },
+      tax: { status: 'computed', output: { total: lei(1234.56) } },
+    });
+    renderChart();
+    expect(screen.getByText(/Estimare impozit:/)).toBeInTheDocument();
+    expect(screen.queryByText(/Estimare impozit YTD/)).not.toBeInTheDocument();
   });
 
   it('shows the review-required tax note when the tax estimate is not computed', () => {

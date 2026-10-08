@@ -311,3 +311,53 @@ describe('selectProjectionV1', () => {
     expect(p.series.every((m) => m.revenue === 0 && m.expenses === 0 && m.net === 0)).toBe(true);
   });
 });
+
+/**
+ * Task 1 (pre-Phase-11): the VAT-exclusive pair.
+ *
+ * selectProjectionV1 used to annualise only the VAT-inclusive trio, which is NOT what the tax engine
+ * consumes for a profile that is not vatExempt (tax.ts: gross = vatExempt ? revenues : revenuesNet).
+ * These tests pin that the pair is annualised by the SAME rule with the SAME denominator, and - the
+ * part that matters fiscally - that it is annualised from its OWN YTD totals rather than scaled down
+ * from the VAT-inclusive pair, which would assume a constant VAT rate across the whole year.
+ */
+describe('selectProjectionV1 - annualProjectedExclVat', () => {
+  it('applies the identical run-rate rule to the VAT-exclusive totals', () => {
+    const p = selectProjectionV1(midYearData(), '2026-09-15'); // elapsed 8,5
+    // revenueNet YTD lei(900) -> 900 x 12 / 8,5 = 127.058,82 bani -> toBaniNearest -> 127.059
+    // expenseNet  YTD lei(71)  ->   71 x 12 / 8,5 =  10.023,53 bani -> toBaniNearest ->  10.024
+    expect(p.annualProjectedExclVat).toEqual({ revenueNet: lei(1270.59), expenseNet: lei(100.24) });
+  });
+
+  it('is annualised from its own totals, not scaled from the VAT-inclusive pair', () => {
+    // Same net turnover, different VAT. The gross pair must move with the VAT while the net pair does
+    // not: that is what "annualised from its own totals" means, and it is what keeps a constant-VAT-rate
+    // assumption out of a model that has no such rule.
+    const lowVat = makeData({ revenues: [revenue('2026-03-10', lei(100), lei(19))] });
+    const highVat = makeData({ revenues: [revenue('2026-03-10', lei(100), lei(50))] });
+    const a = selectProjectionV1(lowVat, '2026-03-31'); // elapsed 3
+    const b = selectProjectionV1(highVat, '2026-03-31');
+    expect(a.annualProjected.revenue).not.toBe(b.annualProjected.revenue);
+    expect(a.annualProjectedExclVat.revenueNet).toBe(b.annualProjectedExclVat.revenueNet);
+    expect(a.annualProjectedExclVat.revenueNet).toBe(lei(400)); // 100 x 12 / 3
+  });
+
+  it('at 12 elapsed months it is the identity on the YTD actuals', () => {
+    const p = selectProjectionV1(midYearData(), '2026-12-31');
+    expect(p.elapsedMonths).toBe(12);
+    expect(p.annualProjectedExclVat).toEqual({ revenueNet: lei(900), expenseNet: lei(71) });
+  });
+
+  it('before the fiscal year start it is zero, matching the zero denominator', () => {
+    const p = selectProjectionV1(midYearData(), '2025-12-31');
+    expect(p.elapsedMonths).toBe(0);
+    expect(p.annualProjectedExclVat).toEqual({ revenueNet: lei(0), expenseNet: lei(0) });
+  });
+
+  it('carries no net field of its own', () => {
+    // The engine owns venitulNetDinActivitate. Adding a second "net" here would put a competing
+    // definition of net income in the domain, and one of them would eventually be wrong.
+    const keys = Object.keys(selectProjectionV1(midYearData(), '2026-09-15').annualProjectedExclVat).sort();
+    expect(keys).toEqual(['expenseNet', 'revenueNet']);
+  });
+});

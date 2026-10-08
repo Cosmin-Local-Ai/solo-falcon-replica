@@ -17,6 +17,8 @@ import {
 } from './dashboard';
 import { seedData } from './seed';
 import { selectYtd } from '../domain/aggregation';
+import { computeInputsHashSync } from '../domain/snapshots/hashSync';
+import { backfillSnapshotIdentity } from './migration';
 import { THRESHOLD_SPECS } from '../domain/thresholds';
 import { lei } from '../domain/money';
 
@@ -557,5 +559,72 @@ describe('the VAT exceedance date reaches the deadline engine (P-PROFILE-VAT-DAT
     const view = buildDashboardData(data, await getTaxEstimate(data, AS_OF), AS_OF_INSTANT);
     const resolved = view.snapshot.deadlines.find((d) => d.id === 'VAT_REGISTRATION_DEADLINE_2026');
     expect(resolved?.date).toBe('2026-01-10');
+  });
+});
+
+/**
+ * Task 1 (pre-Phase-11) - the annual estimate is fed the projection, and the record says so.
+ *
+ * getTaxEstimate is the test-facing twin of the live path (derived.ts useLatestTaxEstimate); both go
+ * through estimateBasis.ts, so pinning the operands here pins the quantity the dashboard renders.
+ */
+describe('getTaxEstimate - the projected basis enters the engine and the snapshot records it', () => {
+  it('feeds the run-rate operands and reports both the actuals and the projection', async () => {
+    const est = await getTaxEstimate(seedData, '2026-10-31');
+    if (est.status !== 'computed') throw new Error('expected a computed estimate');
+    if (est.basis.kind !== 'annual-projected') throw new Error('expected an annual-projected basis');
+
+    // Seed YTD (every record is September 2026, only 'inregistrata' counts):
+    // revenueNet 7.700,00 lei / expenseNet 205,50 lei. 2026-10-31 -> 10 elapsed months -> x 12/10.
+    expect(est.basis.elapsedMonths).toBe(10);
+    expect(est.basis.actual.revenuesNet).toBe(lei(7700));
+    expect(est.basis.actual.expensesNet).toBe(lei(205.5));
+    expect(est.basis.projected.revenuesNet).toBe(lei(9240));
+    expect(est.basis.projected.expensesNet).toBe(lei(246.6));
+    // The engine ran on the projected pair and says so in its own bases:
+    expect(est.bases.venitulBrut).toBe(lei(9240));
+    expect(est.bases.cheltuieliDeductibile).toBe(lei(246.6));
+    expect(est.bases.venitulNetDinActivitate).toBe(lei(8993.4));
+    // CASS owed 2.430 (art. 174 alin. (6) difference to the 6 SM floor; only 10% x VNA = 899,34 ->
+    // art. 66 -> 899,00 is deductible) + impozit 10% x 8.094,40 = 809,44 -> art. 66 -> 809,00.
+    expect(est.output.total).toBe(lei(3239));
+  });
+
+  it('the estimate tracks the basis: another date is another run rate and another record', async () => {
+    const oct = await getTaxEstimate(seedData, '2026-10-31');
+    const sep = await getTaxEstimate(seedData, '2026-09-30');
+    if (oct.status !== 'computed' || sep.status !== 'computed') throw new Error('expected both to compute');
+    if (sep.basis.kind !== 'annual-projected') throw new Error('expected an annual-projected basis');
+
+    expect(sep.basis.elapsedMonths).toBe(9);
+    expect(sep.output.total).toBe(lei(3329)); // shorter year -> higher run rate -> higher annual figure
+    expect(oct.output.total).toBe(lei(3239));
+    // The snapshot digests the operands that entered the engine, so the two runs are distinguishable in
+    // the persisted record, not only on screen.
+    expect(sep.snapshot.inputsHash).not.toBe(oct.snapshot.inputsHash);
+    // And each record is self-verifying: the digest matches the operands it stores.
+    expect(computeInputsHashSync(oct.snapshot.inputSnapshot)).toBe(oct.snapshot.inputsHash);
+    expect(computeInputsHashSync(sep.snapshot.inputSnapshot)).toBe(sep.snapshot.inputsHash);
+  });
+
+  it('at year end the projection is the identity, reproducing the pre-Task-1 figure exactly', async () => {
+    const est = await getTaxEstimate(seedData, '2026-12-31');
+    if (est.status !== 'computed') throw new Error('expected a computed estimate');
+    expect(est.bases.venitulBrut).toBe(lei(7700));
+    expect(est.bases.cheltuieliDeductibile).toBe(lei(205.5));
+    expect(est.output.total).toBe(lei(3105));
+  });
+
+  it('a post-Task-1 snapshot needs no hash migration: the guards leave an untouched digest alone', async () => {
+    // Phase 10 established the rule this pins: a migration step re-derives inputsHash ONLY when it
+    // actually changed the bytes inside inputSnapshot. Task 1 changes what FUTURE snapshots contain, not
+    // a single stored byte, so no new step is required - and adding one would be a blanket re-hash that
+    // rewrites what every stored record claims it ever contained.
+    const est = await getTaxEstimate(seedData, '2026-10-31');
+    if (est.status !== 'computed') throw new Error('expected a computed estimate');
+    const backfilled = backfillSnapshotIdentity(est.snapshot);
+    expect(backfilled).toBe(est.snapshot); // nothing to add -> the same object, digest intact
+    expect(backfilled.preMigrationInputsHash).toBeUndefined();
+    expect(computeInputsHashSync(backfilled.inputSnapshot)).toBe(backfilled.inputsHash);
   });
 });

@@ -1,4 +1,4 @@
-import { test, expect, describe, beforeEach, afterEach } from 'vitest';
+import { test, expect, describe, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import { StoreProvider } from '../data/store';
 import { seedData } from '../data/seed';
@@ -54,7 +54,7 @@ function renderDashboard() {
  * engine through `computeTaxEstimate(...).then(setEstimate)`, so the card paints the loading
  * sentinel `—` on mount and the computed number one React-scheduler macrotask later. Measured on
  * this suite: the card reads `—` synchronously after `render()` and still `—` after a microtask;
- * `46.570,00 RON` appears only after the next macrotask.
+ * the computed figure appears only after the next macrotask.
  *
  * This file used to wait for the LABEL (`findByText('Impozit estimat')`) and then assert the value
  * once. The label is present on the first paint, so that was never a wait for the value — the
@@ -71,13 +71,34 @@ async function expectTaxFigure(card: Element | null, figure: RegExp): Promise<vo
   await waitFor(() => expect(card).toHaveTextContent(figure));
 }
 
+/**
+ * Task 1 (pre-Phase-11): the cockpit figure is now an ANNUAL run-rate projection, so it depends on the
+ * date the dashboard is read — the same reason `e2e/dashboard.spec.ts` pins the browser clock. Before
+ * Task 1 these two figures were clock-invariant (a YTD total for Feb 2026 does not move as the year
+ * advances); now they move every day, so pinning the instant is what keeps the assertion meaningful.
+ *
+ * `src/test/wallClockGuard.test.ts` sanctions exactly two ways to do this: inject an instant, or
+ * install fake timers. The page reaches the clock through `now()` in `domain/date.ts` via the hook
+ * default argument, which the page itself does not pass down, so the sanctioned mechanism here is fake
+ * timers — with `toFake: ['Date']` ONLY, leaving setTimeout/Promise real so the macrotask wait
+ * documented on `expectTaxFigure` still behaves exactly as documented.
+ *
+ * 2026-10-31T10:00:00Z is 13:00 Europe/Bucharest, so the Romanian calendar date cannot shift across a
+ * midnight boundary, and it makes the projection denominator a whole 10 months: every operand below
+ * is YTD × 12/10 = YTD × 1,2.
+ */
+const FIXED_INSTANT = new Date('2026-10-31T10:00:00Z');
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(FIXED_INSTANT);
   localStorage.clear();
 });
 
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  vi.useRealTimers();
 });
 
 describe('Dashboard page', () => {
@@ -128,9 +149,12 @@ describe('Dashboard page', () => {
     const card = (await screen.findByText('Impozit estimat', { exact: true })).closest('.stat-card');
     expect(card).not.toBeNull();
     // The seed profile is on the only regime a PFA can have in 2026, so the default user gets a number,
-    // not an em dash. Verified against the engine for this dataset (revenue 50,000 net, no expenses):
-    // CAS 12,150 (12 SM x 25%) + CASS 5,000 (10% x 50,000) + 10% x (50,000 - 17,150) = 20,435 lei.
-    await expectTaxFigure(card, /20\.435/);
+    // not an em dash. Task 1 feeds the engine the ANNUAL projection: at the pinned instant the model's
+    // denominator is 10 elapsed months, so the single revenue (50.000 lei net YTD, no expenses) enters
+    // as 60.000 lei. CAS 12.150 (25% × 12 SM — VNA is still inside [12 SM, 24 SM)) + CASS 6.000
+    // (10% × 60.000) + 10% × (60.000 − 18.150) = 4.185 → 22.335 lei.
+    // (On the raw YTD operand the same dataset gave 20.435 lei: 12.150 + 5.000 + 3.285.)
+    await expectTaxFigure(card, /22\.335/);
   });
 
   test('shows the computed estimate in the cockpit for a PFA profile on the lawful regime', async () => {
@@ -174,11 +198,13 @@ describe('Dashboard page', () => {
 
     const card = (await screen.findByText('Impozit estimat', { exact: true })).closest('.stat-card');
     expect(card).not.toBeNull();
-    // Verified against the tax engine for this dataset: computed 46.570 lei (CAS 24,300 = 24 SM x 25%,
-    // CASS 13,000 = 10% x 130,000, tax 9,270 = 10% x 92,700). The figure is IDENTICAL to the one this
-    // dataset produced under the old impozit_pe_cit gate — B-14 moved which regime the engine accepts,
-    // it did not move the Titlul IV arithmetic (art. 118 alin. (2^2)/(2^3) are a no-op for one source).
-    await expectTaxFigure(card, /46\.570/);
+    // Verified against the tax engine for this dataset AT THE PINNED INSTANT: the two revenues are
+    // 130.000 lei net YTD, which the run-rate model annualises to 156.000 lei (× 12/10), giving
+    // CAS 24.300 (24 SM × 25%) + CASS 15.600 (10% × 156.000) + 10% × (156.000 − 39.900) = 11.610
+    // → 51.510 lei. On the raw YTD operand this dataset gave 46.570 lei (24.300 + 13.000 + 9.270) —
+    // the same figure it produced under the old impozit_pe_cit gate, because B-14 moved which regime
+    // the engine accepts, not the Titlul IV arithmetic. Task 1 moved the OPERAND'S BASIS, not the law.
+    await expectTaxFigure(card, /51\.510/);
   });
 
   test('a profile recorded as impozit_pe_cit is a data-integrity failure, not a different base (B-14)', async () => {

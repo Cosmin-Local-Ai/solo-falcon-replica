@@ -178,8 +178,8 @@ export function formatElapsedMonths(months: number): string {
  * forecast of fact, so the label names the assumption and states how many months it rests on.
  * `YTD` is only ever said when the numbers really are actuals-to-date.
  */
-export function estimateBasisLabel(basis: TaxEstimateBasis | null): string {
-  if (basis === null || basis.kind === 'unknown') return 'Estimare impozit';
+export function estimateBasisLabel(basis: TaxEstimateBasis | null | undefined): string {
+  if (!basis || basis.kind === 'unknown') return 'Estimare impozit';
   if (basis.kind === 'actuals-only') return 'Înregistrat până acum (neannualizat)';
   return (
     'Estimare anuală pe rată de desfășurare (' +
@@ -191,9 +191,13 @@ export function estimateBasisLabel(basis: TaxEstimateBasis | null): string {
 /**
  * The short label for one figure. `YTD` is said only when the figure really is actuals-to-date, so
  * an annual run-rate figure can never be read as money already collected or paid.
+ *
+ * These three wording functions accept `undefined` as well as `null`: a result that never had a basis
+ * attached (a hand-built fixture, the loading sentinel) is a real case, and the honest answer for it
+ * is the neutral label — never a crash, and never a guess about actual vs projected.
  */
-export function estimateFigureLabel(basis: TaxEstimateBasis | null): string {
-  if (basis === null || basis.kind === 'unknown') return 'Estimare impozit';
+export function estimateFigureLabel(basis: TaxEstimateBasis | null | undefined): string {
+  if (!basis || basis.kind === 'unknown') return 'Estimare impozit';
   if (basis.kind === 'actuals-only') return 'Estimare impozit YTD';
   return 'Estimare impozit anuală (rată de desfășurare)';
 }
@@ -203,8 +207,8 @@ export function estimateFigureLabel(basis: TaxEstimateBasis | null): string {
  * run-rate assumption carries: the projection is the rest of the year assumed to repeat the months
  * already recorded, and it moves as the year advances.
  */
-export function estimateBasisExplanation(basis: TaxEstimateBasis | null): string {
-  if (basis === null || basis.kind === 'unknown') {
+export function estimateBasisExplanation(basis: TaxEstimateBasis | null | undefined): string {
+  if (!basis || basis.kind === 'unknown') {
     return 'Baza acestei estimări nu este înregistrată, deci valorile nu pot fi prezentate nici ca realizate, nici ca proiectate.';
   }
   if (basis.kind === 'actuals-only') {

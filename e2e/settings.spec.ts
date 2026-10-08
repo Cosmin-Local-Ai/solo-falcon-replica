@@ -203,6 +203,19 @@ test.describe('pre-Phase-6 payload survives the new profile fields', () => {
   });
 });
 
+/**
+ * Task 1 (pre-Phase-11): the estimate below is an ANNUAL run-rate projection, so it depends on the date
+ * the dashboard is read. Pinning the browser clock is what keeps these two figures deterministic instead
+ * of pinning a literal that is wrong the day after it is written (the B-23 failure class).
+ * 2026-10-31 makes the projection model's denominator a whole 10 elapsed months, so every operand is
+ * YTD x 12/10 = YTD x 1,2. Same instant as e2e/dashboard.spec.ts pins.
+ */
+const FIXED_AS_OF = new Date('2026-10-31T12:00:00');
+
+async function fixClock(page: Page): Promise<void> {
+  await page.clock.setFixedTime(FIXED_AS_OF);
+}
+
 test.describe('salaried PFA below the 6 SM floor — CF art. 174 alin. (6) + alin. (7) lit. a)', () => {
   /**
    * Net income 20.000 lei (< 6 SM = 24.300 lei in 2026), so art. 174 alin. (6) would ask for a
@@ -217,23 +230,30 @@ test.describe('salaried PFA below the 6 SM floor — CF art. 174 alin. (6) + ali
   });
 
   test('salary at least 6 SM: no difference owed, CASS stays 10% × net, estimate computes', async ({ page }) => {
+    await fixClock(page);
     await seed(page, salaried(30_000));
     await page.goto('/dashboard');
 
     const card = page.locator('.stat-card').filter({ hasText: 'Impozit estimat' });
-    // CAS 0 (net < 12 SM) + CASS 2.000 (10% × 20.000, art. 174 alin. (1)) + 10% × 18.000 = 1.800.
-    await expect(card.getByText(/3\.800/)).toBeVisible();
+    // Task 1: the engine receives the ANNUAL projection, so the fixture's 20.000 lei of net income
+    // (30.000 revenue − 10.000 expense, both February 2026) enters as 24.000 lei (x 12/10).
+    // CAS 0 (net < 12 SM) + CASS 2.400 (10% × 24.000, art. 174 alin. (1)) + 10% × 21.600 = 2.160.
+    // On the raw YTD operand this was 3.800 lei (2.000 + 1.800).
+    await expect(card.getByText(/4\.560/)).toBeVisible();
     await expect(card.locator('.value')).not.toHaveText('—');
   });
 
   test('salary below 6 SM: the alin. (6) difference is owed and is not deductible', async ({ page }) => {
+    await fixClock(page);
     await seed(page, salaried(20_000));
     await page.goto('/dashboard');
 
     const card = page.locator('.stat-card').filter({ hasText: 'Impozit estimat' });
-    // CASS 2.430 (10% × 6 SM), of which only 2.000 is deductible (art. 118 alin. (2) lit. b)),
-    // so the taxable base is unchanged at 18.000 and the total is 430 lei higher.
-    await expect(card.getByText(/4\.230/)).toBeVisible();
+    // Projected net 24.000 lei (x 12/10): CASS owed 2.430 (10% × 6 SM floor), of which only 2.400
+    // (10% × VNA) is deductible (art. 118 alin. (2) lit. b)), so the base is unchanged at 21.600 and
+    // the total is exactly 30 lei higher — the non-deductible difference, not a re-based calculation.
+    // On the raw YTD operand this was 4.230 lei (2.430 + 1.800), 430 lei above 3.800.
+    await expect(card.getByText(/4\.590/)).toBeVisible();
     await expect(card.locator('.value')).not.toHaveText('—');
   });
 });

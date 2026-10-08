@@ -729,9 +729,14 @@ test.describe('Dashboard — Grafic financiar & KPI table (seeded FY2025)', () =
 /**
  * A PFA profile on CF art. 123 alin. (1) / art. 118 sistem real (the only regime a PFA can have in
  * 2026 — see the regime gate in src/domain/tax.ts) with two registered revenues in Q1 2026. The tax
- * engine returns a *computed* estimate of exactly 46.570 lei for this dataset (CAS 24.300 = 24 SM x
- * 25%, CASS 13.000 = 10% x 130.000, tax 9.270 = 10% x 92.700), so the cockpit, the tax hero and the
- * Rezervă fiscală section show real values instead of the review_required em dash.
+ * engine returns a *computed* estimate, so the cockpit, the tax hero and the Rezervă fiscală section
+ * show real values instead of the review_required em dash.
+ *
+ * Task 1 moved the OPERAND, not the arithmetic. The fixture's 130.000 lei are September-and-earlier
+ * actuals; at the pinned clock the projection model annualises them to 156.000 lei (x 12/10), and the
+ * engine runs on that: CAS 24.300 = 24 SM x 25%, CASS 15.600 = 10% x 156.000,
+ * tax 11.610 = 10% x (156.000 - 39.900) -> 51.510 lei. On the raw YTD operand the same fixture gave
+ * 46.570 lei (24.300 + 13.000 + 9.270) — the figure this file pinned before Task 1.
  *
  * Before Phase 5 this fixture used regime `impozit_pe_cit` — a regime a persoană fizică cannot have
  * (CF art. 13 alin. (1), art. 14, art. 15; the art. 120 option is Abrogat from 01.01.2025). The
@@ -783,6 +788,10 @@ test.describe('Dashboard — computed tax state (PFA sistem real seed)', () => {
     page.locator('section').filter({ has: page.getByRole('heading', { name: title, exact: true }) }).first();
 
   test.beforeEach(async ({ page }) => {
+    // Task 1: this fixture's figure is an annual run-rate projection, so the clock is pinned exactly as
+    // in the seed describes above. At 2026-10-31 the model's denominator is 10 elapsed months, so the
+    // fixture's 130.000 lei of registered revenue enters the engine as 156.000 lei.
+    await fixClock(page);
     // addInitScript so the store loads the dataset on first load (a
     // post-load evaluate + navigation is racy under parallel execution).
     await page.addInitScript(
@@ -793,12 +802,12 @@ test.describe('Dashboard — computed tax state (PFA sistem real seed)', () => {
     );
   });
 
-  test('tax hero shows the computed estimate (46.570 lei)', async ({ page }) => {
+  test('tax hero shows the computed estimate (51.510 lei)', async ({ page }) => {
     await page.goto('/dashboard');
 
     const hero = sectionWith(page, 'Estimare impozit');
     // The computed value is rendered in the hero (not the em-dash empty state).
-    await expect(hero.getByText(/46\.570/)).toBeVisible();
+    await expect(hero.getByText(/51\.510/)).toBeVisible();
   });
 
   test('Rezervă fiscală section shows the computed estimate and monthly reserve', async ({ page }) => {
@@ -806,14 +815,14 @@ test.describe('Dashboard — computed tax state (PFA sistem real seed)', () => {
 
     const section = sectionWith(page, 'Rezervă fiscală');
     // The section renders the computed estimate (not the no-estimate empty state).
-    await expect(section.getByText(/46\.570/).first()).toBeVisible();
+    await expect(section.getByText(/51\.510/).first()).toBeVisible();
   });
 
   test('cockpit tax cell shows the computed estimate', async ({ page }) => {
     await page.goto('/dashboard');
 
     const cell = page.locator('.stat-card').filter({ hasText: 'Impozit estimat' });
-    await expect(cell.getByText(/46\.570/)).toBeVisible();
+    await expect(cell.getByText(/51\.510/)).toBeVisible();
   });
 });
 
