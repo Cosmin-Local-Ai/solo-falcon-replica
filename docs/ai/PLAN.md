@@ -672,6 +672,7 @@ doc. They are **not** new phases and no phase boundary was invented for them:
 | TASK 4 | a threshold said what a crossing means in law; the „dezcalificare" claim deleted (`8750402`) | `phases/18_threshold_semantics.md` |
 | TASK 5 | one boolean answered three legal questions; the CASS relief keyed on status (`649e0f1`) | `phases/19_pension_cass_input_model.md` |
 | **TASK 6** | **a snapshot pinned release *metadata*, not the rules that produced it** | `phases/20_rule_release_immutability.md` |
+| **TASK 7** | **no copy layer existed; sentences were inline and `Settings.tsx` rendered the literal `review_required`** | `phases/21_language_layer.md` |
 
 **TASK 6 — the recorded decision and its shape (2026-10-09).** The decision was already made and was not
 reopened: **content-address the rule set; do not redesign the release model.** `releaseId` and
@@ -690,3 +691,21 @@ rules can no longer be reconstructed. All 15 hard-wired `PFA_2026_*` call sites 
 year with no registered release gets an explicit refusal. **No money figure moved**: deductible
 120,00 / 144,00, VNA 9.096,00, clock 3.249,00, reserve 1.083,00 all unchanged; `61 files / 1071 tests`,
 `tsc` 0, `build` 0, `e2e` 36 (one assertion re-pinned 8 → 9).
+
+**TASK 7 — the recorded decision and its shape (2026-10-09).** The copy layer is a **UI-layer** home,
+`src/ui/copy/`, and deliberately not inside `src/domain`: a domain sentence is a computed legal fact with a
+citation attached, and `domain/thresholds.language.test.ts` already pins that wording where it is produced.
+Addressing is `copy.<surface>.<key>`; parameterised sentences are functions, never `%s` templates. The layer
+is enforced by `src/ui/copy/copy.guard.test.ts` — AST-based (the `typescript` dev dependency), fed by Vite's
+raw glob because there is no `@types/node` — which rejects a sentence-shaped literal in `src/components/**`
+or `src/pages/**`, rejects a `snake_case` token rendered as text, rejects a sentence spelled twice inside the
+layer, and requires every allow-list entry to still match a real violation. **The allow-list is empty.** It
+found two duplicates on its first run and both were single-sourced. `checkLabels.ts` and the four `checkLabel`
+fallback maps were deleted rather than migrated: a label map that falls back to the raw token is exactly how
+an enum reaches the screen. One `InterpretationNote` component now carries every uncertainty (the eight TASK 5
+sites, the art. 68 alin. (6) pre-cap/post-cap choice, the 10 % warning band), and one `Disclosure` component
+(native `<details>`) carries the breakdown and the sources — never a hover. `currentReserveBani` was **not**
+widened to `Bani \| null`: no UI path reads it, and the card already renders the nullable
+`TaxReserveRecommendation.reservedAmount`. **No money figure moved** — deductible 120,00 / 144,00, VNA
+9.096,00, clock 3.249,00, reserve 1.083,00, hero 51.510 lei; `62 files / 1076 tests`, `tsc` 0, `build` 0,
+`e2e` 36 with two re-pins, both replaced not deleted.
