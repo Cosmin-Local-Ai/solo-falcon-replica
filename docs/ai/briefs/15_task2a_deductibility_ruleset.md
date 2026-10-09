@@ -75,6 +75,10 @@ NEXT HANDOFF:
 
 The Researcher has produced `docs/ai/research/21_expense_deductibility_framework_2026.md`. **That document is your input.** Read it fully before anything else. Where it says UNVERIFIED, you must not invent a rule.
 
+**The legal basis is CF art. 68 — not art. 21, not art. 123.** Title IV contains **zero** references to art. 21; the corporate rule is art. 25 alin. (1), and art. 68 borrows only four named Titlul II concepts. Encoding any other corporate limit for a PFA is a fabrication. Art. 68 alin. (7) is the express non-deductible list and alin. (5) is the capped-items list with its own cap base at alin. (6).
+
+**Three defects this research opened, which your rule set must not contradict:** **B-29** art. 68^3 *cazare* is a flat 30 % of gross with **no expense engine at all** from FY2026 — your rules must make the app refuse for that CAEN family, not compute a wrong number; **B-30** the deductible amount is net of *actually deductible* VAT (the 50 % vehicle VAT cap, pro-rata, art. 297 alin. (7) all leave VAT in the cost); **B-31** purchases of depreciable goods are **never** a direct expense (art. 68 alin. (7) lit. h)) and the art. 28 threshold moved to 5.000 lei under OUG 8/2026.
+
 ## WHAT IS TRUE IN THE TREE (measured by the Orchestrator at `aa3c1ce`)
 - Baseline: `npx tsc --noEmit` 0 · `npm run test` **49 files / 784 tests** · `npm run build` 0 · `npm run test:e2e` **36 passed**.
 - `Expense` is declared at **`src/data/types.ts:39`** (not `src/domain/types.ts`, which does not exist). It carries a **free-text `categoria`**, which is why nothing can be derived from it today.

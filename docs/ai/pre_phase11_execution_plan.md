@@ -1,6 +1,6 @@
 # Pre-Phase-11 execution plan — how these eight tasks will actually be run
 
-**Orchestrator decision record. 2026-10-08. HEAD after TASK 1: `c49d88f`.**
+**Orchestrator decision record. 2026-10-09 (date from `date +%F`; an earlier draft said 10-08, which is the typed-date error §2.1 forbids). HEAD after TASK 1: `c49d88f`.**
 Inputs: two independent external audits of `ac84f37`, plus the orchestrator's own measurements across Phases 1-10.
 
 This is not a restatement of the briefs. It is the decision of **how** each task is done, what is refused, and in what order they run.
@@ -84,6 +84,20 @@ So the Researcher **is** required here (reversing the earlier call). What resear
 **Consequence for scheduling:** this is larger than the brief assumed. Split it into two sequential Workers — **2a** Researcher + the deductibility rule set (domain only, no UI), then **2b** the category vocabulary, persistence/migration, classification wiring into `estimateBasis.ts`, and the minimal UI. Still one Worker at a time.
 
 **Out of scope:** building a VAT treatment system, and any per-record "is this business-related" interrogation of the user.
+
+#### 3.1.1 Legal basis as actually verified — `research/21_expense_deductibility_framework_2026.md`
+
+The Researcher's findings **overturned the premise of this task**, and the correction matters:
+
+- The governing article for a PFA on sistem real is **CF art. 68**, not art. 123 and not art. 21. Art. 68 is self-contained: its own conditions (alin. (4)), its own capped items (alin. (5)), its own cap base (alin. (6)) and its own **express non-deductible list (alin. (7))**.
+- **Title IV (art. 61-133) contains zero references to art. 21.** Art. 21 in the 2026 consolidation is about IFRS taxpayers; the corporate general rule is **art. 25 alin. (1)**. Art. 68 borrows only four *named* Titlul II concepts (depreciation/art. 28, art. 28 alin. (4), art. 28 alin. (20), the destination list at art. 25 alin. (3) lit. b), and the reference rate at art. 27 alin. (7) lit. b)). **Any other corporate limit applied to a PFA is a fabrication.**
+- The **50 % vehicle rule does exist for a PFA** — art. 68 alin. (7) lit. k), with a one-car-per-person limit (alin. (5) lit. j)) and a **foaie de parcurs** condition for full deduction. Depreciation sits outside the cap.
+- **CAS/CASS are not art. 68 expenses**; they are deducted later at the *venitul net anual impozabil* stage, art. 118 alin. (2) lit. b), capped by alin. (2^4). **This confirms what `tax.ts` already does**, and art. 118 alin. (2) lit. b) expressly excludes the art. 174 alin. (6) CASS difference from deduction — which independently **validates B-13**.
+- 2026 changes that reach this regime: **Legea 239/2025** (new **art. 68^3** — flat 30 % for *cazare*, from 2026 incomes) and **OUG 8/2026** (new capped letters g^1, g^2, s; art. 28 threshold 2.500 → **5.000 lei**). **OG 22/2025 is VAT-only** and **Legea 141/2025 did not touch art. 68 or art. 118** (verified by scanning all 18 amendment notes on art. 68).
+
+Three new defect rows were opened from this and must not be lost: **B-29** (art. 68^3 cazare not modelled — a hospitality PFA currently gets the wrong regime), **B-30** (the deductible amount must be net of *actually deductible* VAT; non-deductible VAT is added back), **B-31** (no asset/depreciation model, so a capital purchase is deducted as an ordinary expense contrary to art. 68 alin. (7) lit. h)).
+
+TASK 2a therefore has a duty beyond classification: **where the law says there is no expense engine at all (art. 68^3), the app must refuse rather than compute a plausible number.**
 
 ### 3.2 TASK 3 — persist tax-reserve
 - Persist on `AppData` using the existing store/migration architecture. Two read sites, **both** must change: `dashboard.ts:169` **and `dashboard.ts:263`** — the original brief names only one; fixing one leaves the bug live.
