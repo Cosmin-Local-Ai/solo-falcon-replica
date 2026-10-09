@@ -15,9 +15,8 @@ import { selectApplicableRules } from '../domain/fiscal/select';
 import { PFA_2026_RELEASE, PFA_2026_SYSTEM_REAL_PACKAGE } from '../domain/fiscal';
 import { localDateISO, now } from '../domain/date';
 import {
-  amountsForEstimate,
   attachEstimateBasis,
-  selectTaxEstimateBasis,
+  selectEstimateOperands,
   type TaxEstimateWithBasis,
 } from '../domain/estimateBasis';
 import { computeTaxEstimate } from '../domain/tax';
@@ -48,13 +47,19 @@ export function useTaxDerived(asOfDate: string = todayISO()): TaxDerivedView {
 }
 
 /** Latest tax estimate derived from the current financial data:
- *  profile + the annual projection (falling back to actuals-to-date when the projection model has
- *  no run rate) + active rule release → Step 15 engine.
+ *  profile + the deductible expense subset (CF art. 68) + the annual projection of that subset
+ *  (falling back to actuals-to-date when the projection model has no run rate) + active rule release
+ *  → Step 15 engine.
  *  Recomputes automatically when the store or asOfDate changes.
  *
- *  This is the LIVE path the dashboard renders through, and it must feed the engine the same
- *  quantity `data/dashboard.ts getTaxEstimate` does — both go through `estimateBasis.ts`, so
- *  they cannot drift apart.
+ *  This is the LIVE path the dashboard renders, and it must feed the engine the same quantity
+ *  `data/dashboard.ts getTaxEstimate` does — both go through `estimateBasis.ts selectEstimateOperands`,
+ *  so they cannot drift apart. TASK 2b moved the deductible-subset decision into that assembler for
+ *  exactly this reason: applying it here instead would have made the rendered figure and the tested
+ *  figure two different quantities (the Phase 10 flake class).
+ *
+ *  The financial view (`useFinancialDerived`) still reports every recorded expense: what the user paid
+ *  and what the law lets them deduct are different questions, and only the second one is filtered.
  */
 export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
   estimate: TaxEstimateWithBasis | null;
@@ -67,7 +72,15 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    const derived = selectFinancialDerived(store, asOfDate);
+    const operands = selectEstimateOperands(store, asOfDate, PFA_2026_SYSTEM_REAL_PACKAGE);
+    if (operands.kind === 'refused') {
+      // Art. 68^3 (defect B-29): there is no expense engine for this activity, so the engine is never
+      // called and no number is rendered. The refusal arrives as `review_required` naming the rule.
+      setEstimate(attachEstimateBasis(operands.result, operands.basis));
+      setLoading(false);
+      return;
+    }
+    const { basis, amounts } = operands;
     const taxInputs = selectTaxDerived(
       store,
       selectApplicableRules(PFA_2026_SYSTEM_REAL_PACKAGE, {
@@ -75,8 +88,6 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
         asOfDate,
       }),
     );
-    const basis = selectTaxEstimateBasis(derived.projection, derived.ytd);
-    const amounts = amountsForEstimate(basis);
     computeTaxEstimate({
       inputs: taxInputs.inputs,
       profile: store.profile,

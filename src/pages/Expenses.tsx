@@ -3,6 +3,10 @@ import { formatBaniRON, leiInputValue, parseLeiInput } from '../domain/money';
 import { useStore } from '../data/store';
 import { fmtDate, sumTotals, total, EXP_STATUS_LABEL, statusBadge } from '../data/types';
 import type { Expense } from '../data/types';
+import { EXPENSE_CATEGORIES } from '../domain/fiscal/deductibility';
+import { selectDeductibleExpenses } from '../domain/estimateBasis';
+import { PFA_2026_SYSTEM_REAL_PACKAGE } from '../domain/fiscal';
+import { localDateISO, now } from '../domain/date';
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
 
 // Canonical route hash keys (English) mapped to the Romanian data statuses.
@@ -32,6 +36,12 @@ function ExpenseForm({ initial, onSave, onClose }: {
     tva: initial ? leiInputValue(initial.tva) : '',
     status: initial?.status ?? 'inregistrata',
     statusDetail: initial?.statusDetail ?? '',
+    // TASK 2b: '' means "no category", which is a legal state, not a half-filled field. It is stored as
+    // an ABSENT field, never as null — a null would fail the load gate on the next read and quarantine
+    // the payload. The option labels are the rule-set tokens on purpose: the Romanian wording of a
+    // legal category belongs to the language layer (TASK 7), and inventing 35 legal labels here would
+    // put unverified copy in front of a tax decision.
+    category: initial?.category ?? '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -54,6 +64,7 @@ function ExpenseForm({ initial, onSave, onClose }: {
       tip: f.tip as Expense['tip'], nr: f.nr, date: f.date, furnizor: f.furnizor, cui: f.cui,
       valoareFaraTva: v, tva: t, status: f.status as Expense['status'],
       statusDetail: f.statusDetail || undefined,
+      category: f.category === '' ? undefined : (f.category as Expense['category']),
     });
   };
 
@@ -110,6 +121,14 @@ function ExpenseForm({ initial, onSave, onClose }: {
             <option value="respinsa">Respinsă</option>
           </select>
         </div>
+        <div className="field">
+          <label>Categorie deductibilitate (CF art. 68)</label>
+          <select value={f.category} onChange={e => set('category', e.target.value)}>
+            <option value="">— fără categorie —</option>
+            {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <span className="text-sm muted">Fără categorie, cheltuiala este neclasificată și exclusă din calculul impozitului.</span>
+        </div>
         {f.status !== 'inregistrata' && (
           <div className="field full">
             <label>Detaliu status</label>
@@ -127,7 +146,8 @@ interface ExpensesProps {
 }
 
 export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
-  const { expenses, addExpense, updateExpense, deleteExpense, toast } = useStore();
+  const store = useStore();
+  const { expenses, addExpense, updateExpense, deleteExpense, toast } = store;
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>(
     initialTab && TABS.some(t => t.key === initialTab) ? initialTab : 'registered'
   );
@@ -157,6 +177,20 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
     expenses.filter(e => e.status === statusFor(k)).length;
   const sum = sumTotals(rows);
 
+  // TASK 2b — the residue the law cannot decide, counted where it can be acted on.
+  // This is the SAME selector the tax estimate runs (`estimateBasis.ts selectDeductibleExpenses`), so
+  // the number on this screen and the total the engine used cannot disagree: same status/period filter,
+  // same classification. A count built from `expenses.filter(e => !e.category)` would have been a
+  // different population — out-of-period and rejected records included.
+  const classification = useMemo(
+    () => selectDeductibleExpenses(store, localDateISO(now()), PFA_2026_SYSTEM_REAL_PACKAGE),
+    [store],
+  );
+  const unclassifiedIds = classification.excluded
+    .filter(x => x.reason === 'undetermined')
+    .map(x => x.id);
+  const firstUnclassified = expenses.find(e => unclassifiedIds.includes(e.id));
+
   return (
     <div>
       <div className="page-header">
@@ -174,6 +208,22 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
           <button className="btn btn-primary" onClick={() => setEditing('new')}>+ Adaugă cheltuială</button>
         </div>
       </div>
+
+      {unclassifiedIds.length > 0 && (
+        <div className="banner banner-warn" role="status">
+          <strong>{unclassifiedIds.length}</strong>
+          {' '}{unclassifiedIds.length === 1 ? 'cheltuială este neclasificată' : 'cheltuieli sunt neclasificate'} în acest an fiscal și nu intră în cheltuielile deductibile (CF art. 68 alin. (4) și (7)).
+          {firstUnclassified && (
+            <button
+              className="btn btn-sm"
+              style={{ marginLeft: 10 }}
+              onClick={() => setEditing(firstUnclassified)}
+            >
+              Clasifică
+            </button>
+          )}
+        </div>
+      )}
 
       <Card>
         <div style={{ padding: '0 18px' }}>

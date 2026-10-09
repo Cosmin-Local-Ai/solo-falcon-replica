@@ -89,7 +89,15 @@ const REVENUES = [
   { id: 'p6-r1', tip: 'factura', nr: 'FCT-2026-001', date: '2026-02-10', client: 'Client A SRL', cui: 'RO12345678', valoareFaraTva: 30_000, tva: 5_700, status: 'inregistrata' },
 ];
 const EXPENSES = [
-  { id: 'p6-e1', tip: 'factura', nr: 'CH-2026-001', date: '2026-02-20', furnizor: 'Biroux SRL', cui: 'RO11111111', valoareFaraTva: 10_000, tva: 1_900, status: 'inregistrata' },
+  // TASK 2b: this is a FIXTURE, not migrated user data, so it carries an explicit category — Biroux SRL
+  // is an office-supplies invoice, `business_space_upkeep`, deductibilă. Left uncategorised it would
+  // classify as `undetermined` and drop out of the base, which would push the projected VNA from
+  // 24.000 to 36.000 lei, past the 6 SM CASS floor — and the two tests below would then compute the
+  // SAME number, silently deleting the art. 174 alin. (6) difference this spec exists to pin.
+  // That the chain preserves a category already on a legacy payload is pinned in
+  // src/data/store.migration.chain.test.tsx; that a payload WITHOUT one survives intact and deducts
+  // nothing is pinned in src/data/dashboard.test.ts and src/domain/estimateBasis.deductibility.test.ts.
+  { id: 'p6-e1', tip: 'factura', nr: 'CH-2026-001', date: '2026-02-20', furnizor: 'Biroux SRL', cui: 'RO11111111', valoareFaraTva: 10_000, tva: 1_900, status: 'inregistrata', category: 'business_space_upkeep' },
 ];
 
 function seed(page: Page, dataset: unknown) {
@@ -192,6 +200,16 @@ test.describe('pre-Phase-6 payload survives the new profile fields', () => {
 
     await page.goto('/expenses');
     await expect(page.locator('tbody tr')).toHaveCount(1);
+
+    // TASK 2b: `category` is the field most likely to be lost silently — zod STRIPS undeclared keys, so
+    // a category declared on the TS type but not on `expenseSchema` would vanish on this very load and
+    // nothing else in the app would notice. The row opens the editor, and the control there carries the
+    // stored token after the reload; a categorised fixture raises no unclassified banner.
+    await expect(page.getByText(/neclasificat/)).toHaveCount(0);
+    await page.locator('tbody tr.clickable').first().click();
+    await expect(
+      page.locator('select').filter({ has: page.locator('option[value="business_space_upkeep"]') }),
+    ).toHaveValue('business_space_upkeep');
 
     // The store re-persisted the payload it loaded; a second reload must not lose it either.
     await page.goto('/settings#!/fiscal');
@@ -394,7 +412,11 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // migration and prove nothing — what B-26 actually broke was the WRITE, so the assertion belongs on the
     // bytes the save effect put back into localStorage.
     const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}'), STORAGE_KEY);
-    expect(saved.version).toBe(5);
+    // The payload entered at v4; the chain ran `money-bani` (4→5) and, since TASK 2b,
+    // `expense-category` (5→6). The save effect stamps the version this build writes, so the bytes
+    // written back are v6 — and the notice below is what proves the migration report survived the
+    // write rather than being recomputed on the next load.
+    expect(saved.version).toBe(6);
     expect(saved.moneyNotices).toHaveLength(1);
     expect(saved.moneyNotices[0].original).toBe('674.504');
     expect(saved.moneyNotices[0].converted).toBe(67450);

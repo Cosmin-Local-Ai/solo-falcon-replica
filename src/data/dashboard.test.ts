@@ -267,10 +267,14 @@ describe('threshold bases (Phase 8 — amount semantics, on seeded data)', () =>
     ]);
     for (const t of contribution) {
       expect(t.fiscalBase).toBe('net-income');
-      expect(t.currentValue).toBe(lei(7494.5)); // 7700 - 205.5, net of VAT
+      // TASK 2b moved this figure: the engine's `net-income` base is built from the CONFIRMED-DEDUCTIBLE
+      // subset, not from every recorded expense. Seed expenseNet was 205,50 lei (e1 120,00 + e2 85,50);
+      // e2 is a Carrefour bon fiscal categorised `personal_or_family_use`, nedeductibilă expres prin
+      // CF art. 68 alin. (7) lit. a), so the base is now 7.700,00 - 120,00 = 7.580,00 lei.
+      expect(t.currentValue).toBe(lei(7580));
       // No contribution row may compare a contribution base to a turnover figure.
       expect(t.currentValue).not.toBe(ytd.revenue);
-      // `YtdTotals.net` is VAT-INCLUSIVE profit (9068.34) and is NOT the fiscal VNA (7494.50).
+      // `YtdTotals.net` is VAT-INCLUSIVE profit (9068.34) and is NOT the fiscal VNA (7580.00).
       expect(t.currentValue).not.toBe(ytd.net);
     }
   });
@@ -321,27 +325,35 @@ describe('threshold bases (Phase 8 — amount semantics, on seeded data)', () =>
     if (tax.status !== 'computed') return;
     // Measured on HEAD before Phase 8 and re-measured after: byte-identical. Phase 10 leaves these
     // three BASES untouched — art. 66 rounds sums DUE, never a base or a deduction input.
+    //
+    // TASK 2b moves `cheltuieliDeductibile`, and that is the whole point of the task: the label stops
+    // meaning "every expense" and starts meaning "the expenses a rule says are deductible". Derived by
+    // hand before running, from seed.ts:
+    //   e1 120,00 lei `postal_and_telecom`  -> deductibilă (Normele pct. 7 alin. (5) lit. j))
+    //   e2  85,50 lei `personal_or_family_use` -> nedeductibilă (art. 68 alin. (7) lit. a))
+    //   e3 340,00 lei `business_space_upkeep` -> exclusă de statusul 'respinsa', ca și până acum
+    //   cheltuieli deductibile = 120,00 lei (a fost 205,50 lei)
     expect(tax.bases).toEqual({
       venitulBrut: lei(7700),
-      cheltuieliDeductibile: lei(205.5),
-      venitulNetDinActivitate: lei(7494.5),
+      cheltuieliDeductibile: lei(120),
+      venitulNetDinActivitate: lei(7580),
     });
     const line = (l: string) => tax.lines.find((x) => x.label === l)!.value;
     expect(line('Venit brut')).toBe(lei(7700));
-    expect(line('Cheltuieli deductibile')).toBe(lei(205.5));
-    expect(line('Venit net din activitate')).toBe(lei(7494.5));
+    expect(line('Cheltuieli deductibile')).toBe(lei(120));
+    expect(line('Venit net din activitate')).toBe(lei(7580));
     // Phase 10 DOES move the deduction and everything downstream of it, because the deduction is a
     // sum DUE and is therefore rounded once by art. 66:
-    //   CASS deductibilă 749.45 lei -> 45 bani < 50 -> neglected -> 749.00
-    //   base = 7494.50 - 749.00 = 6745.50 (was 6745.05; the base is plain integer arithmetic on the
-    //   already-rounded line, it is not itself rounded)
-    expect(line('CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))')).toBe(lei(749));
-    expect(line('Venit net anual impozabil (art. 118 alin. (2) lit. b))')).toBe(lei(6745.5));
-    //   income tax = 6745.50 x 10% = 674.55 -> 55 bani >= 50 -> rounded UP to 675.00
-    expect(line('Impozit pe venit (rată de bază 10%)')).toBe(lei(675));
-    //   total = CASS owed 2430 + income tax 675 = 3105.00 (was 3104.505) — this is the figure the
-    //   e2e suite shows as `3.105,00 RON`.
-    expect(tax.output.total).toBe(lei(3105));
+    //   CASS deductibilă 10% x 7.580,00 = 758,00 lei -> 0 bani -> 758,00 (a fost 749,00 din 7.494,50)
+    //   base = 7.580,00 - 758,00 = 6.822,00 (a fost 6.745,50; baza e aritmetică întreagă pe linia deja
+    //   rotunjită, nu se rotunjește ea însăși)
+    expect(line('CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))')).toBe(lei(758));
+    expect(line('Venit net anual impozabil (art. 118 alin. (2) lit. b))')).toBe(lei(6822));
+    //   income tax = 6.822,00 x 10% = 682,20 -> 20 bani <= 50 -> neglijat -> 682,00 (a fost 675,00)
+    expect(line('Impozit pe venit (rată de bază 10%)')).toBe(lei(682));
+    //   total = CASS owed 2430 + income tax 682 = 3.112,00 lei (a fost 3.105,00). CASS datorată rămâne
+    //   2.430 lei — pragul de 6 SM din art. 174 alin. (6) nu depinde de cheltuieli.
+    expect(tax.output.total).toBe(lei(3112));
   });
 });
 
@@ -428,7 +440,7 @@ describe('CAS_TIER2_FLOOR — the 24 SM ladder step is surfaced (Phase 6 §7 ite
     const row = rows.find((t) => t.thresholdId === 'CAS_TIER2_FLOOR')!;
     expect(row.type).toBe('tier-floor');
     expect(row.thresholdValue).toBe(lei(97200));
-    expect(row.currentValue).toBe(lei(7494.5));
+    expect(row.currentValue).toBe(lei(7580)); // TASK 2b: 7.700,00 - 120,00 (was 7.494,50)
     // Far below the tier, so the tier-1 floor applies and nothing is flagged.
     expect(row.status).toBe('ok');
 
@@ -574,20 +586,23 @@ describe('getTaxEstimate - the projected basis enters the engine and the snapsho
     if (est.status !== 'computed') throw new Error('expected a computed estimate');
     if (est.basis.kind !== 'annual-projected') throw new Error('expected an annual-projected basis');
 
-    // Seed YTD (every record is September 2026, only 'inregistrata' counts):
-    // revenueNet 7.700,00 lei / expenseNet 205,50 lei. 2026-10-31 -> 10 elapsed months -> x 12/10.
+    // Seed YTD (every record is September 2026, only 'inregistrata' counts). TASK 2b: the operand is the
+    // CONFIRMED-DEDUCTIBLE subset, so expenseNet is e1's 120,00 lei — e2 (85,50 lei,
+    // `personal_or_family_use`, art. 68 alin. (7) lit. a)) is classified out before aggregation.
+    // 2026-10-31 -> 10 elapsed months -> x 12/10.
     expect(est.basis.elapsedMonths).toBe(10);
     expect(est.basis.actual.revenuesNet).toBe(lei(7700));
-    expect(est.basis.actual.expensesNet).toBe(lei(205.5));
+    expect(est.basis.actual.expensesNet).toBe(lei(120));
     expect(est.basis.projected.revenuesNet).toBe(lei(9240));
-    expect(est.basis.projected.expensesNet).toBe(lei(246.6));
+    expect(est.basis.projected.expensesNet).toBe(lei(144)); // 120,00 x 1,2
     // The engine ran on the projected pair and says so in its own bases:
     expect(est.bases.venitulBrut).toBe(lei(9240));
-    expect(est.bases.cheltuieliDeductibile).toBe(lei(246.6));
-    expect(est.bases.venitulNetDinActivitate).toBe(lei(8993.4));
-    // CASS owed 2.430 (art. 174 alin. (6) difference to the 6 SM floor; only 10% x VNA = 899,34 ->
-    // art. 66 -> 899,00 is deductible) + impozit 10% x 8.094,40 = 809,44 -> art. 66 -> 809,00.
-    expect(est.output.total).toBe(lei(3239));
+    expect(est.bases.cheltuieliDeductibile).toBe(lei(144));
+    expect(est.bases.venitulNetDinActivitate).toBe(lei(9096)); // 9.240,00 - 144,00
+    // CASS owed 2.430 (art. 174 alin. (6) difference to the 6 SM floor; only 10% x VNA = 909,60 ->
+    // art. 66, 60 bani > 50 -> 910,00 is deductible) + impozit 10% x 8.186,00 = 818,60 ->
+    // art. 66, 60 bani > 50 -> 819,00. Total 2.430 + 819 = 3.249,00 lei.
+    expect(est.output.total).toBe(lei(3249));
   });
 
   it('the estimate tracks the basis: another date is another run rate and another record', async () => {
@@ -597,8 +612,13 @@ describe('getTaxEstimate - the projected basis enters the engine and the snapsho
     if (sep.basis.kind !== 'annual-projected') throw new Error('expected an annual-projected basis');
 
     expect(sep.basis.elapsedMonths).toBe(9);
-    expect(sep.output.total).toBe(lei(3329)); // shorter year -> higher run rate -> higher annual figure
-    expect(oct.output.total).toBe(lei(3239));
+    // 2026-09-30 -> 9 elapsed months -> x 12/9. Derived by hand:
+    //   revenueNet 7.700,00 x 12/9 = 10.266,67 lei; expenseNet 120,00 x 12/9 = 160,00 lei
+    //   VNA 10.106,67; CASS deductibilă 10% x 10.106,67 = 1.010,667 -> art. 66 -> 1.011,00
+    //   bază 10.106,67 - 1.011,00 = 9.095,67; impozit 909,567 -> art. 66 -> 910,00
+    //   total 2.430 + 910 = 3.340,00 lei (a fost 3.329,00)
+    expect(sep.output.total).toBe(lei(3340)); // shorter year -> higher run rate -> higher annual figure
+    expect(oct.output.total).toBe(lei(3249));
     // The snapshot digests the operands that entered the engine, so the two runs are distinguishable in
     // the persisted record, not only on screen.
     expect(sep.snapshot.inputsHash).not.toBe(oct.snapshot.inputsHash);
@@ -611,8 +631,44 @@ describe('getTaxEstimate - the projected basis enters the engine and the snapsho
     const est = await getTaxEstimate(seedData, '2026-12-31');
     if (est.status !== 'computed') throw new Error('expected a computed estimate');
     expect(est.bases.venitulBrut).toBe(lei(7700));
-    expect(est.bases.cheltuieliDeductibile).toBe(lei(205.5));
-    expect(est.output.total).toBe(lei(3105));
+    expect(est.bases.cheltuieliDeductibile).toBe(lei(120));
+    expect(est.output.total).toBe(lei(3112));
+  });
+
+  it('TASK 2b: the classification reaches the engine — recategorising one expense moves the taxable base', async () => {
+    // The acceptance criterion in one pair of assertions: `cheltuieliDeductibile` is no longer "every
+    // expense". e2 is seeded as `personal_or_family_use` (art. 68 alin. (7) lit. a), nedeductibilă);
+    // giving it a deductible category puts the same 85,50 lei back into the base.
+    const recategorised = {
+      ...seedData,
+      expenses: seedData.expenses.map((e) =>
+        e.id === 'e2' ? { ...e, category: 'postal_and_telecom' as const } : e,
+      ),
+    };
+    const excluded = await getTaxEstimate(seedData, '2026-12-31');
+    const included = await getTaxEstimate(recategorised, '2026-12-31');
+    if (excluded.status !== 'computed' || included.status !== 'computed') {
+      throw new Error('expected both to compute');
+    }
+    expect(excluded.bases.cheltuieliDeductibile).toBe(lei(120));
+    // 120,00 (e1) + 85,50 (e2) = 205,50 — the pre-Task-2b figure, now reachable only because the
+    // category says the expense is deductible.
+    expect(included.bases.cheltuieliDeductibile).toBe(lei(205.5));
+  });
+
+  it('TASK 2b: a payload whose expenses carry no category deducts nothing — the migrated-data case', async () => {
+    const stripped = {
+      ...seedData,
+      expenses: seedData.expenses.map((e) => {
+        const { category: _category, ...rest } = e;
+        return rest;
+      }),
+    };
+    const est = await getTaxEstimate(stripped, '2026-12-31');
+    if (est.status !== 'computed') throw new Error('expected a computed estimate');
+    expect(est.bases.cheltuieliDeductibile).toBe(lei(0));
+    // It still computes: `undetermined` excludes an expense, it does not stop the estimate.
+    expect(est.bases.venitulNetDinActivitate).toBe(lei(7700));
   });
 
   it('a post-Task-1 snapshot needs no hash migration: the guards leave an untouched digest alone', async () => {

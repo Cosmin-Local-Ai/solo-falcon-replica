@@ -21,6 +21,7 @@ import {
   DATA_VERSION_DATES,
   DATA_VERSION_VAT_DATE,
   DATA_VERSION_MONEY_BANI,
+  DATA_VERSION_EXPENSE_CATEGORY,
   DATA_VERSION_IDENTITY,
   DATA_VERSION_PROFILE,
   MIGRATION_CHAIN,
@@ -187,15 +188,16 @@ beforeEach(() => {
 });
 
 describe('migration chain (pure)', () => {
-  it('covers the Phase 6 profile backfill, the Phase 7 identity absorption, the Phase 9 payment dates, the VAT exceedance date and the Phase 10 money scale as separate steps', () => {
+  it('covers the Phase 6 profile backfill, the Phase 7 identity absorption, the Phase 9 payment dates, the VAT exceedance date, the Phase 10 money scale and the TASK 2b expense category as separate steps', () => {
     expect(MIGRATION_CHAIN.map((s) => [s.from, s.to])).toEqual([
       [DATA_VERSION_BASE, DATA_VERSION_PROFILE],
       [DATA_VERSION_PROFILE, DATA_VERSION_IDENTITY],
       [DATA_VERSION_IDENTITY, DATA_VERSION_DATES],
       [DATA_VERSION_DATES, DATA_VERSION_VAT_DATE],
       [DATA_VERSION_VAT_DATE, DATA_VERSION_MONEY_BANI],
+      [DATA_VERSION_MONEY_BANI, DATA_VERSION_EXPENSE_CATEGORY],
     ]);
-    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_MONEY_BANI);
+    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_EXPENSE_CATEGORY);
   });
 
   // Phase 9 acceptance criterion 4: a payload written by a newer build is refused loudly rather
@@ -214,7 +216,7 @@ describe('migration chain (pure)', () => {
     const outcome = migratePersistedData(payload as never);
     // The chain runs to the current version, so the money-scale step follows; it converts
     // amounts and invents no fields, which is what the assertions below check.
-    expect(outcome.stepsApplied).toEqual(['payment-dates', 'vat-exceedance-date', 'money-bani']);
+    expect(outcome.stepsApplied).toEqual(['payment-dates', 'vat-exceedance-date', 'money-bani', 'expense-category']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     for (const r of outcome.data.revenues) {
       expect('collected' in r).toBe(false);
@@ -235,7 +237,7 @@ describe('migration chain (pure)', () => {
     const payload = prePhase7Payload({ version: DATA_VERSION_DATES });
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_DATES);
-    expect(outcome.stepsApplied).toEqual(['vat-exceedance-date', 'money-bani']);
+    expect(outcome.stepsApplied).toEqual(['vat-exceedance-date', 'money-bani', 'expense-category']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     expect('vatExceedanceDate' in outcome.data.profile!).toBe(false);
     // And nothing else about the profile moved.
@@ -254,8 +256,38 @@ describe('migration chain (pure)', () => {
       'payment-dates',
       'vat-exceedance-date',
       'money-bani',
+      'expense-category',
     ]);
     expect(outcome.data.version).toBe(CURRENT_DATA_VERSION);
+  });
+
+  // TASK 2b: the v5→v6 step widens the expense schema and NOTHING MORE. Every pre-v6 expense is a real
+  // invoice and it would be easy to guess a category from the supplier name — but a category decides
+  // whether the amount enters the deductible base, so a guess would manufacture the user's tax position.
+  // Absence is carried forward instead: an uncategorised expense classifies as `undetermined`.
+  it('the expense-category step backfills nothing: the field stays absent and every record survives by id', () => {
+    const payload = prePhase7Payload({ version: DATA_VERSION_MONEY_BANI });
+    const outcome = migratePersistedData(payload as never);
+    expect(outcome.fromVersion).toBe(DATA_VERSION_MONEY_BANI);
+    expect(outcome.stepsApplied).toEqual(['expense-category']);
+    expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
+    const migrated = outcome.data.expenses ?? [];
+    expect(migrated.map((e) => e.id)).toEqual(['e-legacy-1']);
+    for (const e of migrated) {
+      expect('category' in e).toBe(false);
+    }
+  });
+
+  // A payload that already carries a category keeps it byte-for-byte: the step neither validates nor
+  // rewrites it, so loading a classified payload can never lose the classification.
+  it('keeps an expense category that is already on the payload, unchanged', () => {
+    const payload = prePhase7Payload({
+      version: DATA_VERSION_MONEY_BANI,
+      expenses: [{ ...expenses[0], category: 'rent_business_space' }],
+    });
+    const outcome = migratePersistedData(payload as never);
+    expect(outcome.stepsApplied).toEqual(['expense-category']);
+    expect(outcome.data.expenses?.[0].category).toBe('rent_business_space');
   });
 
   it('materializes a missing profile from settings instead of leaving it undefined', () => {
@@ -430,6 +462,7 @@ describe('load path runs the chain (acceptance criteria 2 and 3)', () => {
         'payment-dates',
         'vat-exceedance-date',
         'money-bani',
+        'expense-category',
       ],
     });
     // Not the seed: the seed's ids are different.

@@ -10,9 +10,8 @@ import {
 import { assessCompleteness, type CompletenessReport } from '../domain/completeness';
 import { selectProjectionV1, type ProjectionV1 } from '../domain/projection';
 import {
-  amountsForEstimate,
   attachEstimateBasis,
-  selectTaxEstimateBasis,
+  selectEstimateOperands,
   withEstimateBasis,
   type TaxEstimateWithBasis,
 } from '../domain/estimateBasis';
@@ -102,18 +101,27 @@ export function getPendingCounts(data: AppData): PendingCounts {
  * Task 1 (pre-Phase-11): the engine is no longer fed raw YTD totals. It is fed the annual figures
  * from the projection model (`domain/projection.ts`, `run-rate-v1`) whenever that model has a run
  * rate to project with, and the choice is recorded on the result as `basis`. When the model has no
- * run rate — an `asOfDate` before the fiscal year start, where its own denominator is 0 — the
- * engine runs on actuals-to-date and the basis says so, instead of annualising a zero into a
+ * run rate — an `asOfDate` before the fiscal year start, where its own denominator is 0 — the engine
+ * runs on actuals-to-date and the basis says so, instead of annualising a zero into a
  * plausible-looking number.
  *
+ * TASK 2b adds the step in front of that: the operands come from `estimateBasis.ts`
+ * `selectEstimateOperands`, which classifies every expense under CF art. 68 and aggregates only the
+ * confirmed-deductible subset. This call site no longer decides what enters the engine — it cannot,
+ * which is the point: the live path (`data/derived.ts useLatestTaxEstimate`) calls the same
+ * assembler, so the two cannot drift. When the law supplies no expense engine for the activity
+ * (art. 68^3 cazare, defect B-29) the assembler returns a `review_required` result naming the rule,
+ * and `computeTaxEstimate` is never reached.
+ *
  * The YTD financial summary is a separate path (`getFinancialSummary`) and is deliberately not
- * touched here.
+ * touched here: it reports what the user recorded, not what the law lets them deduct.
  */
 export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEstimateWithBasis> {
-  const ytd = selectYtd(data, asOfDate);
-  const projection = selectProjectionV1(data, asOfDate);
-  const basis = selectTaxEstimateBasis(projection, ytd);
-  const amounts = amountsForEstimate(basis);
+  const operands = selectEstimateOperands(data, asOfDate, PFA_2026_SYSTEM_REAL_PACKAGE);
+  if (operands.kind === 'refused') {
+    return Promise.resolve(attachEstimateBasis(operands.result, operands.basis));
+  }
+  const { basis, amounts } = operands;
   const derived = selectTaxDerived(data, PFA_2026_SYSTEM_REAL_PACKAGE);
   return computeTaxEstimate({
     inputs: derived.inputs,

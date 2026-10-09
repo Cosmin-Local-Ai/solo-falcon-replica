@@ -44,9 +44,23 @@ export const seedData: AppData = {
     { id: 'r4', tip: 'factura', nr: 'FCT-2026-004', date: '2026-09-25', client: 'Presta Consulting SRL', cui: 'RO12345678', valoareFaraTva: lei(3200), tva: lei(672), status: 'inregistrata', eFacturaStatus: 'Acceptată' },
   ],
   expenses: [
-    { id: 'e1', tip: 'factura', nr: 'FCT-PRO-118', date: '2026-09-05', furnizor: 'CloudHost SRL', cui: 'RO87654321', valoareFaraTva: lei(120), tva: lei(25.2), status: 'inregistrata' },
-    { id: 'e2', tip: 'bon-fiscal', nr: 'BF-4471', date: '2026-09-12', furnizor: 'Carrefour', cui: 'RO11223344', valoareFaraTva: lei(85.5), tva: lei(17.96), status: 'inregistrata' },
-    { id: 'e3', tip: 'factura', nr: 'FCT-PRO-121', date: '2026-09-20', furnizor: 'Office Supplies SA', cui: 'RO55667788', valoareFaraTva: lei(340), tva: lei(71.4), status: 'respinsa', statusDetail: 'Document neconform' },
+    // TASK 2b — seed records are FIXTURES, not user data, so they carry explicit categories; migrated
+    // user data stays uncategorised and classifies as `undetermined` (see `migrateExpenseCategoryV6`).
+    // The three tokens are chosen so the demo shows all three fates, and each is the honest reading of
+    // the document the fixture depicts — none is chosen to make a figure land somewhere:
+    //   e1  CloudHost SRL, factură de hosting/conectivitate → `postal_and_telecom`, deductibilă
+    //       (Normele HG 1/2016 pct. 7 alin. (5) lit. j)).
+    //   e2  Carrefour, bon fiscal de la un supermarket → `personal_or_family_use`, expres nedeductibil
+    //       (CF art. 68 alin. (7) lit. a): „cheltuielile efectuate în interes personal sau de familie”).
+    //   e3  Office Supplies SA, factură de rechizite → `business_space_upkeep`, deductibilă ca categorie,
+    //       dar exclusă oricum de `status: 'respinsa'` — care nu ajunge niciodată în agregat.
+    // Consequence for every pinned figure downstream: the deductible base is no longer „all expenses”.
+    //   before: expenseNet = 120,00 + 85,50 = 205,50 lei (20.550 bani) — every 'inregistrata' record
+    //   after:  expenseNet = 120,00 lei (12.000 bani) — only e1 survives classification
+    //   and VAT-inclusive: 12.000 + 2.520 = 14.520 bani, down from 24.866 bani.
+    { id: 'e1', tip: 'factura', nr: 'FCT-PRO-118', date: '2026-09-05', furnizor: 'CloudHost SRL', cui: 'RO87654321', valoareFaraTva: lei(120), tva: lei(25.2), status: 'inregistrata', category: 'postal_and_telecom' },
+    { id: 'e2', tip: 'bon-fiscal', nr: 'BF-4471', date: '2026-09-12', furnizor: 'Carrefour', cui: 'RO11223344', valoareFaraTva: lei(85.5), tva: lei(17.96), status: 'inregistrata', category: 'personal_or_family_use' },
+    { id: 'e3', tip: 'factura', nr: 'FCT-PRO-121', date: '2026-09-20', furnizor: 'Office Supplies SA', cui: 'RO55667788', valoareFaraTva: lei(340), tva: lei(71.4), status: 'respinsa', statusDetail: 'Document neconform', category: 'business_space_upkeep' },
   ],
   clients: [
     { id: 'c1', denumire: 'Presta Consulting SRL', cui: 'RO12345678', email: 'contact@presta.ro', telefon: '0721 111 222', oras: 'București' },

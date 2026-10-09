@@ -56,8 +56,18 @@ export const DATA_VERSION_VAT_DATE = 4;
  * is the one step in the chain that must never change a value by accident.
  */
 export const DATA_VERSION_MONEY_BANI = 5;
+/**
+ * TASK 2b step 6: an expense may carry a deductibility **category** (`Expense.category`), the token the
+ * CF art. 68 classifier reads. See `migrateExpenseCategoryV6` and `docs/ai/phases/14_expense_deductibility_wiring.md`.
+ *
+ * This is the third pure schema-widening step in the chain (after `payment-dates` and
+ * `vat-exceedance-date`): it backfills NOTHING. An uncategorised expense is legal input — it classifies
+ * as `undetermined` and is excluded from the deductible total — so leaving the field absent is both the
+ * honest state and the safe one for the user's money.
+ */
+export const DATA_VERSION_EXPENSE_CATEGORY = 6;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_MONEY_BANI;
+export const CURRENT_DATA_VERSION = DATA_VERSION_EXPENSE_CATEGORY;
 
 export interface MigrationStep {
   readonly from: number;
@@ -462,6 +472,28 @@ export function migrateMoneyBaniV5(data: PersistedAppData): PersistedAppData {
   return notices.length ? { ...converted, moneyNotices: notices } : converted;
 }
 
+/**
+ * TASK 2b step 6 (`5 → 6`): `Expense` may now carry `category`, the token the deductibility classifier
+ * reads (`domain/fiscal/deductibility.ts`, CF art. 68).
+ *
+ * **It backfills nothing, for the third time, and this time the temptation was real.** Every expense in
+ * a pre-v6 payload is a real invoice, and it would be easy to guess a category from the supplier name or
+ * the amount. That guess would decide the user's tax: an uncategorised expense is EXCLUDED from the
+ * deductible total, while a wrongly categorised one enters it. The law supplies no default (research 21,
+ * "What the law cannot decide": purpose is a fact about each expense, not a category), so absence is
+ * carried forward unchanged and surfaced as a count instead of being repaired.
+ *
+ * A payload that already carries a category keeps it byte-for-byte — the step neither validates nor
+ * rewrites it. Nothing here can quarantine a payload for a missing category: the field is optional in
+ * `expenseSchema`, and the load gate runs before the chain.
+ *
+ * The step touches no bytes and cannot move a stored `inputSnapshot` digest: `buildInputSnapshot` hashes
+ * `profile` plus two aggregate numbers, not the expense array.
+ */
+export function migrateExpenseCategoryV6(data: PersistedAppData): PersistedAppData {
+  return { ...data, version: DATA_VERSION_EXPENSE_CATEGORY };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -502,6 +534,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Banii se stochează acum ca număr întreg de bani (1 leu = 100 de bani), nu ca zecimale de lei. Valorile cu precizie subun ban au fost rotunjite la cel mai apropiat ban (semn +50 în jos) și sunt raportate, nu ascunse.',
     apply: migrateMoneyBaniV5,
+  },
+  {
+    from: DATA_VERSION_MONEY_BANI,
+    to: DATA_VERSION_EXPENSE_CATEGORY,
+    name: 'expense-category',
+    summary:
+      'Cheltuielile pot avea acum o categorie de deductibilitate (CF art. 68). Nimic nu a fost completat: o cheltuială fără categorie este exclusă din totalul deductibil și raportată ca neclasificată, nu clasificată prin ghicit.',
+    apply: migrateExpenseCategoryV6,
   },
 ];
 

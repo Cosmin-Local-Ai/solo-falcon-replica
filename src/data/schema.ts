@@ -5,6 +5,7 @@ import type { PfaProfile } from '../domain/models';
 import type { Bani } from '../domain/money';
 import type { MoneyPrecisionNotice } from './migration';
 import type { RuleRelease } from '../domain/fiscal/rules';
+import { EXPENSE_CATEGORIES } from '../domain/fiscal/deductibility';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import type {
   Client,
@@ -82,6 +83,13 @@ export const expenseSchema = z.object({
   tva: bani(),
   status: z.enum(['inregistrata', 'respinsa']),
   statusDetail: z.string().optional(),
+  // TASK 2b: the deductibility category (CF art. 68). Declared here as well as on `Expense` because
+  // zod STRIPS undeclared keys — an undeclared category would be erased on the next load, which is
+  // how the `moneyNotices` report and the identity fields had to be handled (see the notes above).
+  // Optional, never nullable, never defaulted: a payload written before v6 has no category, and the
+  // v5→v6 step does not invent one. The vocabulary is `EXPENSE_CATEGORIES`, the same list the
+  // classifier reads, so the persisted token space and the rule space cannot drift apart.
+  category: z.enum(EXPENSE_CATEGORIES).optional(),
 });
 
 export const clientSchema = z.object({

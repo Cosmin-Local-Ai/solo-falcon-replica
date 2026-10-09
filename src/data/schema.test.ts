@@ -80,6 +80,33 @@ describe('parseAppData — valid payloads', () => {
     expect(parsed && 'someUnknownField' in (parsed as object)).toBe(false);
   });
 
+  // TASK 2b: `category` is declared in `expenseSchema` for the same reason `moneyNotices` is — zod
+  // STRIPS undeclared keys, so a field that exists only on the TS type would be erased on the next
+  // load and the user's classification would silently disappear.
+  it('keeps an expense category through the parse gate', () => {
+    const parsed = parseAppData(
+      write({ expenses: [{ ...seedData.expenses[0], category: 'postal_and_telecom' }] }),
+    );
+    expect(parsed?.expenses?.[0].category).toBe('postal_and_telecom');
+  });
+
+  it('accepts an expense with no category — absence is legal input, not corruption', () => {
+    const { category: _category, ...uncategorised } = seedData.expenses[0];
+    const parsed = parseAppData(write({ expenses: [uncategorised] }));
+    expect(parsed).not.toBeNull();
+    // Absent, not null: a stored null would fail this same gate on the NEXT load and quarantine the
+    // payload, which is why the form writes an absent field rather than a null.
+    expect(parsed?.expenses?.[0] && 'category' in parsed.expenses[0]).toBe(false);
+  });
+
+  it('refuses a category outside the rule vocabulary — the token space belongs to the rules, not to free text', () => {
+    // Only a build with a wider vocabulary could write such a token, and that payload is already
+    // refused by its version number before this gate matters. Pinning it here keeps `category` from
+    // quietly becoming a free-text field the classifier would answer `undetermined` for.
+    const parsed = parseAppData(write({ expenses: [{ ...seedData.expenses[0], category: 'aleatoriu' }] }));
+    expect(parsed).toBeNull();
+  });
+
   it('accepts an empty revenues array (valid, not corrupt)', () => {
     const parsed = parseAppData(write({ revenues: [] }));
     expect(parsed).not.toBeNull();

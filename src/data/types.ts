@@ -1,4 +1,5 @@
 import type { PfaProfile } from '../domain/models';
+import type { ExpenseCategory } from '../domain/fiscal/deductibility';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import type { MoneyPrecisionNotice } from './migration';
 import { localDateISO, now } from '../domain/date';
@@ -58,6 +59,20 @@ export interface Expense {
   tva: Bani;
   status: ExpenseStatus;
   statusDetail?: string;
+  /**
+   * TASK 2b — the token the deductibility classifier reads (`domain/fiscal/deductibility.ts`, CF art. 68).
+   *
+   * **Optional by design, and never invented by a migration.** Absence is legal input, not a defect: an
+   * uncategorised expense classifies as `undetermined`, is EXCLUDED from the deductible total, and is
+   * surfaced as a count with one action. That is the safe target for data written before this field
+   * existed — the v5→v6 step widens the schema and backfills nothing, exactly as `paid` (v2→v3) and
+   * `vatExceedanceDate` (v3→v4) did.
+   *
+   * The vocabulary is `EXPENSE_CATEGORIES`. A token outside it is not deductible by silence:
+   * `classifyExpenseDeductibility` answers `undetermined` with `rule: null`, because art. 68 alin. (7)
+   * lit. l) is an open clause and an uncited category may never be treated as deductible.
+   */
+  category?: ExpenseCategory;
 }
 
 // ── Clienți ───────────────────────────────────────────────
