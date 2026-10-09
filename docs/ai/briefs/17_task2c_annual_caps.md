@@ -139,3 +139,7 @@ Research 22 settled the *rule* for every cap. For some caps the app still lacks 
 **FY2026 date gates the rules must already carry** (research 22 §7): lit. g¹)/g²) capture only contributions **paid from 2026-03-01**; lit. s) only amounts **paid and settled from 2026-03-01**; for pensii facultative in 2026 the 400 EUR test **also counts payments made 2026-01-01 – 2026-02-28**. If a rule in `deductibility2026.ts` does not already encode this, fix the rule, not the caller.
 
 **Do not hard-code an entry-into-force date for Legea 227/2015 or for HG 1/2016** — research 22 verified publication dates (MO 688/10.09.2015; MO 22/13.01.2016) but explicitly could not establish entry into force from the texts read.
+
+---
+
+4. ~~alin. (6) base measured before or after the other alin. (5) caps: post-cap reading (smaller base, smaller allowance)~~ — **corrected by TASK 2c: my rationale was inverted.** Post-cap subtracts only the *allowed* lit. q) amount, so it leaves a **larger** base and a **larger** protocol allowance (pinned example: **146,30 lei used vs 54,00 lei** under the pre-cap reading). The post-cap reading is still the one implemented — „cheltuielile deductibile" plus the heading „deductibile limitat" support it — but it is the **less conservative** of the two, and the delta is reported on the result (`baseAlt` / `ceilingAlt`) rather than buried. Open question for the user, not for a Worker: whether to keep the textually-supported reading or switch to the pre-cap reading, which understates the deduction and so can never cause an underpayment.
