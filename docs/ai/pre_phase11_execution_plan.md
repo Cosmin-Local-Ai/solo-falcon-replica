@@ -162,6 +162,10 @@ TASK 2a therefore has a duty beyond classification: **where the law says there i
 
 ---
 
+**TASK 2d — the protocol base is PRE-CAP (user decision, 2026-10-09).** Art. 68 alin. (6) never says whether „cheltuielile deductibile" in the base means the amounts as recorded or the amounts after the other alin. (5) ceilings. Pre-cap subtracts more → smaller base → smaller allowance → **can never cause an underpayment**. Post-cap is the generous reading (pinned example: 146,30 lei vs 54,00 lei) and **must still be shown to the user** — the flip may not be silent.
+
+**TASK 10 — what research 23 actually settled.** The euro caps convert at the BNR **annual average for the year of payment** (HG 1/2016 Titlul IV Cap. II pct. 7 alin. (6)), and ANAF itself quotes that rule with its citation in the Brașov and București PFA brochures — but **no primary source reconciles it with CF art. 9 alin. (3) lit. b) + alin. (4)**, which reserve exceptions to „prevăzute expres în prezentul cod" and the norms are not the code. So the app uses the norm's rule **and discloses the conflict**. Three hard constraints: (1) the annual average is **obtainable, not computable** — BNR publishes `CURSA_EURM` and defines the annual average as an average of *monthly averages*, so a mean of daily rates gives a different number; (2) **there is no FY2026 annual average yet** — it is published after the year closes, so any 2026 cap is provisional (defect **B-33**); (3) the daily-rate endpoints moved to **`curs.bnr.ro`** on 6 Aug 2026, and the **25.000 euro** sistem-real threshold is anchored to the *year of income realisation*, not the year of payment — one conversion function must not serve both without a `basis` parameter.
+
 ## 4. Where the two audits contradict each other — resolved here
 
 | Conflict | Audit A | Audit B | Decision |
