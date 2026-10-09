@@ -24,7 +24,13 @@ export interface TaxCalculationInput {
   revenuesNet: Bani;
   /** Total expenses without VAT (valoareFaraTva only). */
   expensesNet: Bani;
-  ruleRelease: RuleRelease;
+  /**
+   * TASK 6: the release the calculation is bound to, or `null` when this build registers none for the
+   * profile's fiscal year. `null` makes the engine refuse instead of writing a snapshot that names no law
+   * — the old behaviour was to hand in the 2026 release whatever the year said, which is how a call site
+   * could silently re-bind a calculation to rules from a year it was not asking about.
+   */
+  ruleRelease: RuleRelease | null;
   rules: FiscalRule[];
 }
 
@@ -114,6 +120,15 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   if (!Number.isFinite(expensesNet) || expensesNet < 0) return rr(`Cheltuielile nete (fără TVA) trebuie să fie >= 0, s-a obținut ${leiText(expensesNet)}`);
   if (!profile?.id) return rr('Profilul lipsește sau nu are id');
   const lines: CalculationLine[] = [];
+  // TASK 6: no release registered for this fiscal year ⇒ no arithmetic may run and no snapshot may be
+  // written. Falling back to a release from another year is exactly the silent re-binding this phase
+  // removes, so the refusal names the year instead.
+  if (!ruleRelease) {
+    return rr(
+      `Niciun set de reguli înregistrat pentru anul fiscal ${inputs.fiscalYear}; calculul nu poate fi legat de nicio regulă.`,
+      lines,
+    );
+  }
   const asOf = `${inputs.fiscalYear}-01-01`;
   const applicable = selectApplicableRules(rules, { taxYear: inputs.fiscalYear, asOfDate: asOf });
   const casRule = applicable.find((r) => r.taxRegime === 'cas');
@@ -323,7 +338,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     const total = sumBani([casRes.value, cassValue]);
     lines.push({ label: 'Impozit pe venit (fără bază impozabilă)', value: lei(0) });
     lines.push({ label: 'Total taxe', value: total });
-    const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, calculationLines: lines, output: { total } });
+    const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, rules: applicable, calculationLines: lines, output: { total } });
     const computed: TaxEstimateResult = {
       status: 'computed',
       lines,
@@ -342,7 +357,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // integers is exact, and it is why no second rounding can happen anywhere downstream.
   const total = sumBani([casRes.value, cassValue, incomeTaxRes.value]);
   lines.push({ label: 'Total taxe', value: total });
-  const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, calculationLines: lines, output: { total } });
+  const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, rules: applicable, calculationLines: lines, output: { total } });
   return {
     status: 'computed',
     lines,

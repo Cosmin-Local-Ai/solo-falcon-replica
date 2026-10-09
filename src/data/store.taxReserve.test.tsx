@@ -148,7 +148,7 @@ describe('a payload with no reserve field loads as null, not 0', () => {
 
     load();
     expect(storeRef!.dataOrigin).toBe('persisted');
-    expect(storeRef!.migration!.stepsApplied).toEqual(['tax-reserve', 'pension-facts']);
+    expect(storeRef!.migration!.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest']);
     expect(storeRef!.reservedAmount).toBeNull();
     // And the next write stamps the current version — the upgrade is one-way and additive.
     expect(persisted().version).toBe(CURRENT_DATA_VERSION);

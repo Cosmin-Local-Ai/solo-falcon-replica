@@ -160,7 +160,12 @@ export interface FiscalThreshold {
    * acquire one.
    */
   warningDistance: Bani;
-  ruleRelease: string;
+  /**
+   * TASK 6: the `releaseId` of the release that produced this row, or `null` when the caller had no
+   * release to ask about. It used to be typed `string` and fed `PFA_2026_RELEASE.ruleIds[0]` — a rule id
+   * wearing a release field's name, which is what a hard-coded constant turns into when nothing checks it.
+   */
+  ruleRelease: string | null;
   source: string;
   status: ThresholdStatus;
   /** The fiscal base this threshold was evaluated against. */
@@ -206,7 +211,8 @@ export interface ThresholdQuery {
    * `review_required` row rather than disappearing.
    */
   bases: ThresholdBases;
-  ruleRelease: string; // releaseId
+  /** TASK 6: the releaseId in force for this query, or `null` when none is registered for the year. */
+  ruleRelease: string | null; // releaseId
   /**
    * TASK 4 — the profile the applicability decision is derived from. Optional in the TYPE because
    * the domain function is also called with hand-built queries; omitting it yields

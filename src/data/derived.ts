@@ -12,7 +12,7 @@ import {
   type TaxDerivedView,
 } from '../domain/derived';
 import { selectApplicableRules } from '../domain/fiscal/select';
-import { PFA_2026_RELEASE, PFA_2026_SYSTEM_REAL_PACKAGE } from '../domain/fiscal';
+import { selectRuleSet } from '../domain/fiscal';
 import { localDateISO, now } from '../domain/date';
 import {
   attachEstimateBasis,
@@ -38,7 +38,11 @@ export function useFinancialDerived(asOfDate: string = todayISO()): FinancialDer
 export function useTaxDerived(asOfDate: string = todayISO()): TaxDerivedView {
   const store = useStore();
   return useMemo(() => {
-    const activeRules = selectApplicableRules(PFA_2026_SYSTEM_REAL_PACKAGE, {
+    // TASK 6: the rule set is selected from the profile's fiscal year and the as-of date. Nothing in this
+    // file names a year any more, so a profile that says another year gets no rules instead of getting
+    // 2026's.
+    const selection = selectRuleSet(store.profile.fiscalYear, asOfDate);
+    const activeRules = selectApplicableRules(selection ? [...selection.rules] : [], {
       taxYear: store.profile.fiscalYear,
       asOfDate,
     });
@@ -72,7 +76,11 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    const operands = selectEstimateOperands(store, asOfDate, PFA_2026_SYSTEM_REAL_PACKAGE);
+    // TASK 6: one selection per run, shared by the operand assembler, the input selector and the engine —
+    // the three cannot now disagree about which rules they were given, and none of them can name a year.
+    const selection = selectRuleSet(store.profile.fiscalYear, asOfDate);
+    const rules = selection ? [...selection.rules] : [];
+    const operands = selectEstimateOperands(store, asOfDate, rules);
     if (operands.kind === 'refused') {
       // Art. 68^3 (defect B-29): there is no expense engine for this activity, so the engine is never
       // called and no number is rendered. The refusal arrives as `review_required` naming the rule.
@@ -83,7 +91,7 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
     const { basis, amounts } = operands;
     const taxInputs = selectTaxDerived(
       store,
-      selectApplicableRules(PFA_2026_SYSTEM_REAL_PACKAGE, {
+      selectApplicableRules(rules, {
         taxYear: store.profile.fiscalYear,
         asOfDate,
       }),
@@ -95,8 +103,8 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
       expenses: amounts.expenses,
       revenuesNet: amounts.revenuesNet,
       expensesNet: amounts.expensesNet,
-      ruleRelease: PFA_2026_RELEASE,
-      rules: PFA_2026_SYSTEM_REAL_PACKAGE,
+      ruleRelease: selection ? selection.release : null,
+      rules,
     }).then((result) => {
       if (!cancelled) {
         setEstimate(attachEstimateBasis(result, basis));

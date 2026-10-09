@@ -150,6 +150,16 @@ export const ruleReleaseSchema = z.object({
   ruleIds: z.array(z.string()),
   status: z.enum(['SAFE_ACTIVATION', 'REVIEW_REQUIRED']),
   effectiveFrom: z.string(),
+  // TASK 6. Every one of these is OPTIONAL on the persisted shape, and that is a decision, not an
+  // oversight: a release embedded in a snapshot written before data version 9 carries none of them, and
+  // the v9 `rule-set-digest` step deliberately does not fill them in. Minting a `contentHash` from today's
+  // rule set would claim that today's arithmetic is the arithmetic that produced a years-old number.
+  // Absence is the record saying "this release was never content-addressed".
+  effectiveTo: z.string().nullable().optional(),
+  lifecycle: z.enum(['PROPOSED', 'VALIDATED', 'STAGED', 'SCHEDULED', 'ACTIVE', 'SUPERSEDED']).optional(),
+  version: z.number().int().optional(),
+  contentHash: z.string().optional(),
+  supersededBy: z.string().optional(),
   createdAt: z.string(),
   evidence: z.array(z.string()),
   notes: z.string().optional(),
@@ -173,6 +183,11 @@ export const taxCalculationSnapshotSchema = z.object({
     expenses: bani(z.number()),
   }),
   inputsHash: z.string(),
+  // TASK 6: the digest of the rules that produced this record. Declared, because zod strips undeclared
+  // keys and a silently dropped digest is the failure mode this phase is about. Nullable-optional so a
+  // pre-v9 payload parses (parse runs before migration) and so the v9 step can write `null` — the record
+  // stating that its rules cannot be reconstructed — instead of inventing one.
+  ruleSetHash: z.string().nullable().optional(),
   // Phase 7: the digest carried before a data migration rewrote the embedded
   // profile. Optional, so snapshots written before AND after Phase 7 both parse.
   preMigrationInputsHash: z.string().optional(),

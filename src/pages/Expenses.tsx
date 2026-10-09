@@ -5,9 +5,22 @@ import { fmtDate, sumTotals, total, EXP_STATUS_LABEL, statusBadge } from '../dat
 import type { Expense } from '../data/types';
 import { EXPENSE_CATEGORIES } from '../domain/fiscal/deductibility';
 import { selectDeductibleExpenses, selectEstimateOperands } from '../domain/estimateBasis';
-import { PFA_2026_SYSTEM_REAL_PACKAGE } from '../domain/fiscal';
+import { selectRuleSet } from '../domain/fiscal';
+import type { FiscalRule } from '../domain/fiscal/rules';
 import { localDateISO, now } from '../domain/date';
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
+
+/**
+ * TASK 6: the rules in force for the profile's fiscal year, selected rather than imported.
+ *
+ * This page used to import `PFA_2026_SYSTEM_REAL_PACKAGE` by name — the clearest example of the defect,
+ * because the call site had no year and no date in scope at all, so it could only ever ask for 2026. The
+ * year is now read from the profile the store already holds.
+ */
+function activeRulesFor(fiscalYear: number, asOfDate: string): FiscalRule[] {
+  const selection = selectRuleSet(fiscalYear, asOfDate);
+  return selection ? [...selection.rules] : [];
+}
 
 // Canonical route hash keys (English) mapped to the Romanian data statuses.
 const TABS = [
@@ -182,10 +195,10 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
   // the number on this screen and the total the engine used cannot disagree: same status/period filter,
   // same classification. A count built from `expenses.filter(e => !e.category)` would have been a
   // different population — out-of-period and rejected records included.
-  const classification = useMemo(
-    () => selectDeductibleExpenses(store, localDateISO(now()), PFA_2026_SYSTEM_REAL_PACKAGE),
-    [store],
-  );
+  const classification = useMemo(() => {
+    const asOf = localDateISO(now());
+    return selectDeductibleExpenses(store, asOf, activeRulesFor(store.profile.fiscalYear, asOf));
+  }, [store]);
   const unclassifiedIds = classification.excluded
     .filter(x => x.reason === 'undetermined')
     .map(x => x.id);
@@ -200,10 +213,10 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
   // ceiling shown here and the deductible total the engine used cannot disagree. The alin. (6) letters
   // carry both readings of the base because the law settles neither (research 22 §6) — hiding the one
   // that was not applied would present an unresolved reading as settled law.
-  const capStruck = useMemo(
-    () => selectEstimateOperands(store, localDateISO(now()), PFA_2026_SYSTEM_REAL_PACKAGE).capAdjustments,
-    [store],
-  );
+  const capStruck = useMemo(() => {
+    const asOf = localDateISO(now());
+    return selectEstimateOperands(store, asOf, activeRulesFor(store.profile.fiscalYear, asOf)).capAdjustments;
+  }, [store]);
   const alin6Struck = capStruck.filter(a => a.base !== undefined && a.ceilingAlt !== undefined);
   // The engine picks the money measure by `vatExempt` (`tax.ts:143-144`); the page shows the one that
   // actually moved the deductible total, and says which one it is.

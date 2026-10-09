@@ -92,8 +92,26 @@ export const DATA_VERSION_TAX_RESERVE = 7;
  * (`unknown` / REVIEW_REQUIRED) for every migrated profile — neither granted nor refused.
  */
 export const DATA_VERSION_PENSION_FACTS = 8;
+/**
+ * TASK 6 step 9: a calculation snapshot now records `ruleSetHash`, the digest of the rules that produced
+ * it. See `migrateRuleSetDigestV9` and `docs/ai/phases/20_rule_release_immutability.md` §5.
+ *
+ * This is a shape change to the STORED SNAPSHOT, so it is a version bump and a named chain step — not a
+ * silent widening. What the step refuses to do is the interesting part: it does NOT compute a digest for
+ * a snapshot that lacks one. The rules that produced a pre-v9 snapshot were never content-addressed, and
+ * the rule set has since moved (the CAS, CASS and income-tax corrections all changed formula-bearing
+ * parameters under an unchanged `releaseId`). Hashing today's rules and stamping the result onto an old
+ * record would manufacture the one fact the record is supposed to guarantee. The step writes `null`:
+ * the record says out loud that its arithmetic cannot be reconstructed.
+ *
+ * No `inputsHash` moves. `inputSnapshot` is still the enumerated subset `{ profile, revenues, expenses }`
+ * that TASK 3 pinned, and the rule digest deliberately sits BESIDE it on the calculation record, never
+ * inside it — putting it inside would have re-hashed every stored snapshot and made stored history claim
+ * inputs the user never gave.
+ */
+export const DATA_VERSION_RULE_SET_DIGEST = 9;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_PENSION_FACTS;
+export const CURRENT_DATA_VERSION = DATA_VERSION_RULE_SET_DIGEST;
 
 export interface MigrationStep {
   readonly from: number;
@@ -571,6 +589,35 @@ export function migratePensionFactsV8(data: PersistedAppData): PersistedAppData 
   return { ...stamped, profile: { ...rest, pensionerStatus: pensionStatus } };
 }
 
+/**
+ * TASK 6: the v8→v9 step widens every stored calculation snapshot with `ruleSetHash`, and writes `null`
+ * into it for a snapshot that predates content-addressing.
+ *
+ * The honest half of this step is what it does NOT do. It does not call `ruleSetDigest` on the current
+ * rule set and stamp the result onto an old record. That would be a guess dressed as a guarantee: the
+ * rules have moved three times since those snapshots were written — CAS (Phase 3), CASS (Phase 4) and
+ * the 2026 income tax (Phase 5) each changed formula-bearing parameters while `releaseId` and `createdAt`
+ * stood still — so today's digest is almost certainly not the digest that produced the stored number.
+ * `null` is the record admitting it cannot be reproduced, which is what actually happened.
+ *
+ * `inputsHash` is untouched, and that is pinned by `store.migration.chain.test.tsx`: the step adds a
+ * sibling field on the calculation record and never edits `inputSnapshot`, which is still the enumerated
+ * subset `{ profile, revenues, expenses }` TASK 3 fixed. The embedded `ruleRelease` is likewise left
+ * exactly as it was written — no `contentHash`, no `lifecycle`, no `version` is minted for it.
+ */
+export function migrateRuleSetDigestV9(data: PersistedAppData): PersistedAppData {
+  const stamped = { ...data, version: DATA_VERSION_RULE_SET_DIGEST };
+  const snapshots = data.snapshots;
+  if (!snapshots || snapshots.length === 0) return stamped;
+  let touched = false;
+  const next = snapshots.map((snapshot) => {
+    if (snapshot.ruleSetHash !== undefined) return snapshot;
+    touched = true;
+    return { ...snapshot, ruleSetHash: null };
+  });
+  return touched ? { ...stamped, snapshots: next } : stamped;
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -635,6 +682,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Profilul poate consemna acum faptele pensiei pe an fiscal: sume primite ca pensii în an (art. 174 alin. (7) lit. c) din Codul fiscal), suspendarea consemnată, contextul anului precedent (alin. (8)) și asigurarea medicală din alt stat dovedită (art. 153 alin. (2)). „pensionStatus” a fost redenumit în „pensionerStatus”, nu reinterpretat: un vechi „da” nu dovedește nicio sumă încasată în an, deci excepția CASS rămâne nehotărâtă, nici acordată nici refuzată.',
     apply: migratePensionFactsV8,
+  },
+  {
+    from: DATA_VERSION_PENSION_FACTS,
+    to: DATA_VERSION_RULE_SET_DIGEST,
+    name: 'rule-set-digest',
+    summary:
+      'Fiecare înregistrare de calcul primește acum „ruleSetHash”: amprenta sha-256 a regulilor care au produs cifra, calculată pe o serializare canonicală (chei sortate, reguli sortate după ruleId, parametri după id). Nimic nu a fost inventat: o înregistrare veche primește „null”, adică „regulile care au produs acest calcul nu mai pot fi reconstruite” — setul de reguli s-a schimbat de trei ori (CAS, CASS, impozit pe venit) sub același „releaseId”, iar o amprentă calculată astăzi ar pretinde că ea a produs un număr vechi. Niciun „inputsHash" stocat nu se mișcă și niciun „ruleRelease" înglobat nu este rescris.',
+    apply: migrateRuleSetDigestV9,
   },
 ];
 

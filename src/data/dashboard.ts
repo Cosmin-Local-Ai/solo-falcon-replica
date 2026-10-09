@@ -31,9 +31,23 @@ import {
 } from '../domain/taxReserve';
 import { getInsights as buildInsights, type Insight } from '../domain/insights';
 import { selectTaxDerived } from '../domain/derived';
-import { PFA_2026_RELEASE, PFA_2026_SYSTEM_REAL_PACKAGE } from '../domain/fiscal';
+import { selectRuleSet } from '../domain/fiscal';
+import type { FiscalRule } from '../domain/fiscal/rules';
+import { selectApplicableRules } from '../domain/fiscal/select';
 import { localDateISO, now } from '../domain/date';
 import type { Bani } from '../domain/money';
+
+/**
+ * TASK 6: the rules in force for this profile's fiscal year on `asOfDate`, or none.
+ *
+ * One helper, one question — "which rules apply here?" — so no call site in this file can reach for a
+ * year-named constant instead. An empty array is an honest answer, not a fallback: the engines already
+ * report a missing rule rather than inventing one.
+ */
+function selectionRules(data: AppData, asOfDate: string): FiscalRule[] {
+  const selection = selectRuleSet(data.profile.fiscalYear, asOfDate);
+  return selection ? [...selection.rules] : [];
+}
 
 export interface PendingCounts {
   revenuesInAsteptare: number;
@@ -119,12 +133,26 @@ export function getPendingCounts(data: AppData): PendingCounts {
  * touched here: it reports what the user recorded, not what the law lets them deduct.
  */
 export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEstimateWithBasis> {
-  const operands = selectEstimateOperands(data, asOfDate, PFA_2026_SYSTEM_REAL_PACKAGE);
+  // TASK 6: the rule set is SELECTED by the profile's fiscal year and the as-of date, not imported. An
+  // imported `PFA_2026_*` constant is a call site that hard-codes the law: it would keep feeding the 2026
+  // rules to a profile that says another year, and — the part that mattered — it would let a new rule set
+  // silently re-bind calculations that were supposed to be pinned to an old one. When no release is
+  // registered for the year, `rules` is empty and `ruleRelease` is null, and `computeTaxEstimate` refuses
+  // rather than computing under a year it was not asked about.
+  const selection = selectRuleSet(data.profile.fiscalYear, asOfDate);
+  const rules = selection ? [...selection.rules] : [];
+  const operands = selectEstimateOperands(data, asOfDate, rules);
   if (operands.kind === 'refused') {
     return Promise.resolve(attachEstimateBasis(operands.result, operands.basis));
   }
   const { basis, amounts } = operands;
-  const derived = selectTaxDerived(data, PFA_2026_SYSTEM_REAL_PACKAGE);
+  // TASK 6 also closes a drift Scout-level review found: this path used to hand the UNFILTERED package to
+  // `selectTaxDerived` while the live path (`data/derived.ts`) handed it the year/date-filtered set, so the
+  // two could report different rule sets from the same data. Both now filter.
+  const derived = selectTaxDerived(
+    data,
+    selectApplicableRules(rules, { taxYear: data.profile.fiscalYear, asOfDate }),
+  );
   return computeTaxEstimate({
     inputs: derived.inputs,
     profile: data.profile,
@@ -132,8 +160,8 @@ export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEsti
     expenses: amounts.expenses,
     revenuesNet: amounts.revenuesNet,
     expensesNet: amounts.expensesNet,
-    ruleRelease: PFA_2026_RELEASE,
-    rules: PFA_2026_SYSTEM_REAL_PACKAGE,
+    ruleRelease: selection ? selection.release : null,
+    rules,
   }).then((result) => attachEstimateBasis(result, basis));
 }
 
@@ -193,11 +221,15 @@ export function getThresholdStatuses(
 ): FiscalThreshold[] {
   const ytd = selectYtd(data, asOfDate);
   const estimate = withEstimateBasis(tax);
-  return computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, {
+  // TASK 6: selected, not imported. `ruleRelease` on a threshold row is the releaseId of the release that
+  // produced the row — it used to be `PFA_2026_RELEASE.ruleIds[0]`, i.e. the first RULE id stamped on a
+  // field named `ruleRelease`, which is how a hard-coded constant quietly becomes a wrong label.
+  const selection = selectRuleSet(data.profile.fiscalYear, asOfDate);
+  return computeThresholds(selection ? [...selection.rules] : [], {
     taxYear: data.profile.fiscalYear,
     asOfDate,
     bases: buildThresholdBases(ytd, estimate),
-    ruleRelease: PFA_2026_RELEASE.ruleIds[0],
+    ruleRelease: selection ? selection.release.releaseId : null,
     // TASK 4: applicability is derived from the profile, never assumed. Passing no profile would
     // make every row `applicability: 'unknown'`, and `dashboard.test.ts` pins that the production
     // path never does that.
@@ -210,7 +242,7 @@ export function getUpcomingDeadlines(data: AppData, asOfDate: string): Deadline[
   // Step 31: only applicable upcoming deadlines — past, due-today, and
   // null-dated deadlines are excluded by the domain `filterUpcoming`.
   return filterUpcoming(
-    computeDeadlines(PFA_2026_SYSTEM_REAL_PACKAGE, {
+    computeDeadlines(selectionRules(data, asOfDate), {
       taxYear: data.profile.fiscalYear,
       asOfDate,
       // Phase 9b: `pfaStartDate` is passed but read by NO deadline rule, and none may be — the only
@@ -330,7 +362,7 @@ function buildSnapshot(
 ): DashboardSnapshotView {
   const taxYear = data.profile.fiscalYear;
   const completeness = assessCompleteness(data);
-  const deadlines = computeDeadlines(PFA_2026_SYSTEM_REAL_PACKAGE, {
+  const deadlines = computeDeadlines(selectionRules(data, asOfDate), {
     taxYear,
     asOfDate,
     pfaStartDate: data.profile.pfaStartDate,

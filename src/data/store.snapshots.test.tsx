@@ -4,7 +4,7 @@ import { StoreProvider, useStore } from './store';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import { createCalculationSnapshot } from '../domain/snapshots/snapshot';
 import type { PfaProfile } from '../domain/models';
-import type { RuleRelease } from '../domain/fiscal/rules';
+import type { FiscalRule, RuleRelease } from '../domain/fiscal/rules';
 import { lei, type Bani } from '../domain/money';
 
 const STORAGE_KEY = 'pfa-app-data-v2';
@@ -57,6 +57,28 @@ const release2025: RuleRelease = {
   evidence: ['https://example.com/legis-2025'],
 };
 
+// TASK 6: a snapshot records the digest of the rules it applied, so the fixture carries real rules.
+const rules2025: FiscalRule[] = [
+  {
+    ruleId: 'rule-2025-1',
+    name: 'CAS 2025',
+    jurisdiction: 'RO',
+    entityType: 'PFA',
+    taxRegime: 'cas',
+    taxYear: 2025,
+    effectiveFrom: '2025-01-01',
+    effectiveTo: null,
+    parameters: [{ id: 'rate', label: 'Rata', value: 25, unit: 'percent' }],
+    calculatorId: 'calc-cas',
+    sourceAct: 'Cod fiscal (fixture)',
+    sourceArticle: 'art. 148 alin. (2) (fixture)',
+    sourceUrl: 'https://example.com/legis-2025',
+    verifiedAt: '2025-01-01',
+    status: 'ACTIVE',
+    version: 1,
+  },
+];
+
 // Captures the live store value so tests can drive it.
 let storeRef: ReturnType<typeof useStore> | null = null;
 function Probe() {
@@ -70,6 +92,7 @@ async function makeSnapshot(over: Partial<{ revenues: Bani; expenses: Bani }>): 
     revenues: over.revenues ?? lei(1000),
     expenses: over.expenses ?? lei(400),
     ruleRelease: release2025,
+    rules: rules2025,
     calculationLines: [],
     output: { total: lei(0) },
   });

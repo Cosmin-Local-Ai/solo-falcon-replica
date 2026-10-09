@@ -63,8 +63,26 @@ export interface TaxCalculationSnapshot {
   taxYear: number;
   /** When the calculation was executed (ISO 8601). */
   calculatedAt: string;
-  /** The exact rule release used — embedded, not referenced. */
+  /** The exact rule release used — embedded, not referenced.
+   *
+   * TASK 6: from data version 9 a release written by this build carries `contentHash`, the digest of the
+   * rule set it names. A release embedded before version 9 carries none, and that absence is the honest
+   * record: the rules that produced this snapshot were never content-addressed, and minting a digest from
+   * today's rule set would claim a fact nobody observed.
+   */
   ruleRelease: RuleRelease;
+  /**
+   * TASK 6 — SHA-256 hex over the canonical serialisation of the rules that were actually applied
+   * (`docs/ai/phases/20_rule_release_immutability.md` §3). This is the sibling of `inputsHash`, not part
+   * of it: `inputsHash` pins what the user supplied, `ruleSetHash` pins the law that consumed it. Two
+   * snapshots with the same `inputsHash` and different `ruleSetHash` are the same inputs through
+   * different arithmetic — which is precisely the case that used to be invisible.
+   *
+   * `null` means the record states out loud that it predates content-addressing and its rules cannot be
+   * reconstructed. Absent means the payload never passed through the v9 `rule-set-digest` step.
+   * Neither is ever filled in by guessing.
+   */
+  ruleSetHash?: string | null;
   /** Frozen input data — embedded, not referenced. */
   inputSnapshot: CalculationInput;
   /** SHA-256 hex digest of the canonical serialization of inputSnapshot. */

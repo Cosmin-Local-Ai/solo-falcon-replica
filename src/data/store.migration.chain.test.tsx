@@ -24,6 +24,7 @@ import {
   DATA_VERSION_EXPENSE_CATEGORY,
   DATA_VERSION_TAX_RESERVE,
   DATA_VERSION_PENSION_FACTS,
+  DATA_VERSION_RULE_SET_DIGEST,
   DATA_VERSION_IDENTITY,
   DATA_VERSION_PROFILE,
   MIGRATION_CHAIN,
@@ -191,7 +192,7 @@ beforeEach(() => {
 });
 
 describe('migration chain (pure)', () => {
-  it('covers the Phase 6 profile backfill, the Phase 7 identity absorption, the Phase 9 payment dates, the VAT exceedance date, the Phase 10 money scale, the TASK 2b expense category, the TASK 3 tax reserve and the TASK 5 pension facts as separate steps', () => {
+  it('covers the Phase 6 profile backfill, the Phase 7 identity absorption, the Phase 9 payment dates, the VAT exceedance date, the Phase 10 money scale, the TASK 2b expense category, the TASK 3 tax reserve, the TASK 5 pension facts and the TASK 6 rule-set digest as separate steps', () => {
     expect(MIGRATION_CHAIN.map((s) => [s.from, s.to])).toEqual([
       [DATA_VERSION_BASE, DATA_VERSION_PROFILE],
       [DATA_VERSION_PROFILE, DATA_VERSION_IDENTITY],
@@ -201,8 +202,9 @@ describe('migration chain (pure)', () => {
       [DATA_VERSION_MONEY_BANI, DATA_VERSION_EXPENSE_CATEGORY],
       [DATA_VERSION_EXPENSE_CATEGORY, DATA_VERSION_TAX_RESERVE],
       [DATA_VERSION_TAX_RESERVE, DATA_VERSION_PENSION_FACTS],
+      [DATA_VERSION_PENSION_FACTS, DATA_VERSION_RULE_SET_DIGEST],
     ]);
-    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_PENSION_FACTS);
+    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_RULE_SET_DIGEST);
   });
 
   // Phase 9 acceptance criterion 4: a payload written by a newer build is refused loudly rather
@@ -221,7 +223,7 @@ describe('migration chain (pure)', () => {
     const outcome = migratePersistedData(payload as never);
     // The chain runs to the current version, so the money-scale step follows; it converts
     // amounts and invents no fields, which is what the assertions below check.
-    expect(outcome.stepsApplied).toEqual(['payment-dates', 'vat-exceedance-date', 'money-bani', 'expense-category', 'tax-reserve', 'pension-facts']);
+    expect(outcome.stepsApplied).toEqual(['payment-dates', 'vat-exceedance-date', 'money-bani', 'expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     for (const r of outcome.data.revenues) {
       expect('collected' in r).toBe(false);
@@ -242,7 +244,7 @@ describe('migration chain (pure)', () => {
     const payload = prePhase7Payload({ version: DATA_VERSION_DATES });
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_DATES);
-    expect(outcome.stepsApplied).toEqual(['vat-exceedance-date', 'money-bani', 'expense-category', 'tax-reserve', 'pension-facts']);
+    expect(outcome.stepsApplied).toEqual(['vat-exceedance-date', 'money-bani', 'expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     expect('vatExceedanceDate' in outcome.data.profile!).toBe(false);
     // And nothing else about the profile moved.
@@ -264,6 +266,7 @@ describe('migration chain (pure)', () => {
       'expense-category',
       'tax-reserve',
       'pension-facts',
+      'rule-set-digest',
     ]);
     expect(outcome.data.version).toBe(CURRENT_DATA_VERSION);
   });
@@ -276,7 +279,7 @@ describe('migration chain (pure)', () => {
     const payload = prePhase7Payload({ version: DATA_VERSION_MONEY_BANI });
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_MONEY_BANI);
-    expect(outcome.stepsApplied).toEqual(['expense-category', 'tax-reserve', 'pension-facts']);
+    expect(outcome.stepsApplied).toEqual(['expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     const migrated = outcome.data.expenses ?? [];
     expect(migrated.map((e) => e.id)).toEqual(['e-legacy-1']);
@@ -293,7 +296,7 @@ describe('migration chain (pure)', () => {
       expenses: [{ ...expenses[0], category: 'rent_business_space' }],
     });
     const outcome = migratePersistedData(payload as never);
-    expect(outcome.stepsApplied).toEqual(['expense-category', 'tax-reserve', 'pension-facts']);
+    expect(outcome.stepsApplied).toEqual(['expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest']);
     expect(outcome.data.expenses?.[0].category).toBe('rent_business_space');
   });
 
@@ -307,7 +310,7 @@ describe('migration chain (pure)', () => {
     delete payload.reservedAmount;
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_EXPENSE_CATEGORY);
-    expect(outcome.stepsApplied).toEqual(['tax-reserve', 'pension-facts']);
+    expect(outcome.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     // Absence carried forward verbatim — not `null`, not `0`, not an empty string.
     expect('reservedAmount' in outcome.data).toBe(false);
@@ -324,7 +327,7 @@ describe('migration chain (pure)', () => {
     const withAmount = migratePersistedData(
       prePhase7Payload({ version: DATA_VERSION_EXPENSE_CATEGORY, reservedAmount: lei(25000) }) as never,
     );
-    expect(withAmount.stepsApplied).toEqual(['tax-reserve', 'pension-facts']);
+    expect(withAmount.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest']);
     expect(withAmount.data.reservedAmount).toBe(lei(25000));
 
     const explicitZero = migratePersistedData(
@@ -343,7 +346,7 @@ describe('migration chain (pure)', () => {
     payload.profile = { ...prePhase7Profile(), pensionStatus: 'da' };
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_TAX_RESERVE);
-    expect(outcome.stepsApplied).toEqual(['pension-facts']);
+    expect(outcome.stepsApplied).toEqual(['pension-facts', 'rule-set-digest']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     // The status fact travels, under the name that says what it is.
     expect(outcome.data.profile!.pensionerStatus).toBe('da');
@@ -497,13 +500,69 @@ describe('stored snapshots survive the migration (F-1, acceptance criterion 3)',
     });
     delete payload.reservedAmount;
     const outcome = migratePersistedData(payload as never);
-    expect(outcome.stepsApplied).toEqual(['tax-reserve', 'pension-facts']);
+    expect(outcome.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest']);
     const [after] = outcome.data.snapshots!;
     expect(after.inputSnapshot).toEqual(stored.inputSnapshot);
     expect(after.inputsHash).toBe(stored.inputsHash);
     // No re-hash marker: nothing was re-derived, because nothing inside the hashed subset moved.
     expect(after.preMigrationInputsHash).toBeUndefined();
     expect(after.inputsHash).toBe(computeInputsHashSync(after.inputSnapshot));
+  });
+
+  /*
+   * TASK 6 — the v8→v9 step, and the two things it must refuse to do.
+   *
+   * A stored snapshot gains `ruleSetHash`, and the value it gains is `null`. Computing today's rule-set
+   * digest and stamping it onto a years-old record would assert that today's arithmetic is the arithmetic
+   * that produced that number — and the rule set has moved three times (CAS, CASS, income tax) under an
+   * unchanged `releaseId`, so that claim would be false. `null` is the record admitting it cannot be
+   * reproduced. Same discipline as the pension-facts step refusing to mint a receipt fact.
+   */
+  it('the rule-set-digest step stamps ruleSetHash: null and invents no digest', () => {
+    const stored = prePhase7Snapshot('calc-v8-1', 15000);
+    const payload = prePhase7Payload({
+      version: DATA_VERSION_PENSION_FACTS,
+      profile: prePhase7Profile(),
+      snapshots: [stored],
+    });
+    const outcome = migratePersistedData(payload as never);
+    expect(outcome.stepsApplied).toEqual(['rule-set-digest']);
+    const [after] = outcome.data.snapshots!;
+    // The record now says out loud that its rules cannot be reconstructed…
+    expect(after.ruleSetHash).toBeNull();
+    // …while everything it DID record stays exactly as it was, digest included.
+    expect(after.inputSnapshot).toEqual(stored.inputSnapshot);
+    expect(after.inputsHash).toBe(stored.inputsHash);
+    expect(after.preMigrationInputsHash).toBeUndefined();
+    expect(after.calculationLines).toEqual(stored.calculationLines);
+    expect(after.output).toEqual(stored.output);
+  });
+
+  it('the rule-set-digest step does not retrofit a contentHash onto an embedded rule release', () => {
+    const stored = prePhase7Snapshot('calc-v8-2', 15000);
+    const payload = prePhase7Payload({
+      version: DATA_VERSION_PENSION_FACTS,
+      profile: prePhase7Profile(),
+      snapshots: [stored],
+    });
+    const after = migratePersistedData(payload as never).data.snapshots![0];
+    // The embedded release is a historical copy. Minting `contentHash` / `lifecycle` / `version` for it
+    // would describe a release nobody recorded at the time the calculation ran.
+    expect(after.ruleRelease).toEqual(stored.ruleRelease);
+    expect(after.ruleRelease.contentHash).toBeUndefined();
+    expect(after.ruleRelease.lifecycle).toBeUndefined();
+    expect(after.ruleRelease.version).toBeUndefined();
+  });
+
+  it('leaves a snapshot that already carries a ruleSetHash untouched', () => {
+    const pinned = { ...prePhase7Snapshot('calc-v8-3', 15000), ruleSetHash: 'a'.repeat(64) };
+    const payload = prePhase7Payload({
+      version: DATA_VERSION_PENSION_FACTS,
+      profile: prePhase7Profile(),
+      snapshots: [pinned],
+    });
+    const outcome = migratePersistedData(payload as never);
+    expect(outcome.data.snapshots![0]).toEqual(pinned);
   });
 
   it("backfills the embedded profile's CAEN from the snapshot's OWN deprecated string", () => {
@@ -605,6 +664,7 @@ describe('load path runs the chain (acceptance criteria 2 and 3)', () => {
         'expense-category',
         'tax-reserve',
         'pension-facts',
+        'rule-set-digest',
       ],
     });
     // Not the seed: the seed's ids are different.

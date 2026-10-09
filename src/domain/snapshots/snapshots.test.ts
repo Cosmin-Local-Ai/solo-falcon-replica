@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { PfaProfile } from '../models';
-import type { RuleRelease } from '../fiscal/rules';
+import type { FiscalRule, RuleRelease } from '../fiscal/rules';
+import { ruleSetDigest } from '../fiscal/ruleSetDigest';
 import { canonicalize } from './serialize';
 import { computeInputsHash } from './hash';
 import { createCalculationSnapshot } from './snapshot';
@@ -67,6 +68,29 @@ const release2026: RuleRelease = {
   evidence: ['https://example.com/legis-2026'],
 };
 
+// TASK 6: a snapshot now records the digest of the rules it applied, so the fixtures need real rules.
+// These are the rule set `release2025` names — one CAS rule at 25 %.
+const rule2025: FiscalRule = {
+  ruleId: 'rule-2025-1',
+  name: 'CAS 2025',
+  jurisdiction: 'RO',
+  entityType: 'PFA',
+  taxRegime: 'cas',
+  taxYear: 2025,
+  effectiveFrom: '2025-01-01',
+  effectiveTo: null,
+  parameters: [{ id: 'rate', label: 'Rata', value: 25, unit: 'percent' }],
+  calculatorId: 'calc-cas',
+  sourceAct: 'Cod fiscal (fixture)',
+  sourceArticle: 'art. 148 alin. (2) (fixture)',
+  sourceUrl: 'https://example.com/legis-2025',
+  verifiedAt: '2025-01-01',
+  status: 'ACTIVE',
+  version: 1,
+};
+const rules2025: FiscalRule[] = [rule2025];
+const rules2026: FiscalRule[] = [{ ...rule2025, ruleId: 'rule-2026-1', taxYear: 2026 }];
+
 // --- Tests ------------------------------------------------------------------
 
 describe('canonicalize', () => {
@@ -123,12 +147,13 @@ describe('computeInputsHash', () => {
 });
 
 describe('createCalculationSnapshot', () => {
-  it('builds a snapshot with all 9 fields, default status, and a tax-year-prefixed id', async () => {
+  it('builds a snapshot with all 10 fields, default status, and a tax-year-prefixed id', async () => {
     const snap = await createCalculationSnapshot({
       profile,
       revenues: lei(1000),
       expenses: lei(400),
       ruleRelease: release2025,
+      rules: rules2025,
       calculationLines: [{ label: 'Venit net imposable', value: lei(600) }],
       output: { total: lei(600) },
     });
@@ -141,6 +166,7 @@ describe('createCalculationSnapshot', () => {
         'inputsHash',
         'output',
         'ruleRelease',
+        'ruleSetHash',
         'status',
         'taxYear',
       ].sort()
@@ -156,6 +182,7 @@ describe('createCalculationSnapshot', () => {
       revenues: lei(1000),
       expenses: lei(400),
       ruleRelease: release2025,
+      rules: rules2025,
       calculationLines: [],
       output: { total: lei(0) },
     });
@@ -168,6 +195,7 @@ describe('createCalculationSnapshot', () => {
       revenues: lei(1000),
       expenses: lei(400),
       ruleRelease: release2025,
+      rules: rules2025,
       calculationLines: [],
       output: { total: lei(0) },
     });
@@ -176,6 +204,7 @@ describe('createCalculationSnapshot', () => {
       revenues: lei(1000),
       expenses: lei(400),
       ruleRelease: release2025,
+      rules: rules2025,
       calculationLines: [],
       output: { total: lei(0) },
     });
@@ -188,6 +217,7 @@ describe('createCalculationSnapshot', () => {
       revenues: lei(1000),
       expenses: lei(400),
       ruleRelease: release2025,
+      rules: rules2025,
       calculationLines: [],
       output: { total: lei(0) },
     });
@@ -197,6 +227,7 @@ describe('createCalculationSnapshot', () => {
       revenues: lei(2000),
       expenses: lei(800),
       ruleRelease: release2026,
+      rules: rules2026,
       calculationLines: [],
       output: { total: lei(0) },
     });
@@ -210,6 +241,7 @@ describe('createCalculationSnapshot', () => {
       revenues: lei(1000),
       expenses: lei(400),
       ruleRelease: release2025,
+      rules: rules2025,
       calculationLines: [],
       output: { total: lei(0) },
       status: 'superseded',
@@ -301,6 +333,7 @@ describe('createCalculationSnapshot — rule-release identity preservation', () 
       revenues: lei(1000),
       expenses: lei(400),
       ruleRelease: release2025,
+      rules: rules2025,
       calculationLines: [{ label: 'Venit net imposable', value: lei(600) }],
       output: { total: lei(600) },
     });
@@ -317,6 +350,7 @@ describe('createCalculationSnapshot — rule-release identity preservation', () 
       revenues: lei(1000),
       expenses: lei(400),
       ruleRelease: laterRelease,
+      rules: rules2025,
       calculationLines: [],
       output: { total: lei(0) },
     });
@@ -327,5 +361,80 @@ describe('createCalculationSnapshot — rule-release identity preservation', () 
     expect(snap.ruleRelease.ruleIds).toEqual(['rule-2025-1']);
     // The stored inputsHash is still reproducible from the embedded inputs.
     expect(await computeInputsHash(snap.inputSnapshot)).toBe(snap.inputsHash);
+  });
+});
+
+/*
+ * TASK 6 — the snapshot records the arithmetic, not only the inputs.
+ *
+ * The defect in one line: two snapshots could carry the same `releaseId` and the same `inputsHash` while
+ * the rules behind them differed, because the CAS / CASS / income-tax corrections changed formula-bearing
+ * parameters under an unchanged release identity. These tests pin the two halves of the fix and the
+ * boundary between them.
+ */
+describe('createCalculationSnapshot — ruleSetHash', () => {
+  it('records a 64-char hex digest of the rules that were applied', async () => {
+    const snap = await createCalculationSnapshot({
+      profile,
+      revenues: lei(1000),
+      expenses: lei(400),
+      ruleRelease: release2025,
+      rules: rules2025,
+      calculationLines: [],
+      output: { total: lei(0) },
+    });
+    expect(snap.ruleSetHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(snap.ruleSetHash).toBe(ruleSetDigest(rules2025));
+  });
+
+  it('same inputs through different arithmetic is now a visible difference', async () => {
+    // The rule set R2: identical except one formula-bearing parameter, CAS rate 25 -> 26.
+    const revisedRules: FiscalRule[] = [
+      {
+        ...rule2025,
+        version: 2,
+        parameters: [{ id: 'rate', label: 'Rata', value: 26, unit: 'percent' }],
+      },
+    ];
+    const a = await createCalculationSnapshot({
+      profile,
+      revenues: lei(1000),
+      expenses: lei(400),
+      ruleRelease: release2025,
+      rules: rules2025,
+      calculationLines: [],
+      output: { total: lei(0) },
+    });
+    const b = await createCalculationSnapshot({
+      profile,
+      revenues: lei(1000),
+      expenses: lei(400),
+      ruleRelease: release2025,
+      rules: revisedRules,
+      calculationLines: [],
+      output: { total: lei(0) },
+    });
+    // Identical inputs — this is the half that used to be indistinguishable.
+    expect(b.inputsHash).toBe(a.inputsHash);
+    // Different rules — and now distinguishable.
+    expect(b.ruleSetHash).not.toBe(a.ruleSetHash);
+  });
+
+  it('the rule digest lives BESIDE inputSnapshot, never inside it: changing a rule moves no inputsHash', async () => {
+    // TASK 3 pinned `inputSnapshot` as the enumerated subset { profile, revenues, expenses }. Putting the
+    // rule digest inside it would have moved every stored digest — which is why `ruleSetHash` is a
+    // sibling field on the calculation record instead. This test is the guard against re-deciding that.
+    const before = await computeInputsHash({ profile, revenues: lei(1000), expenses: lei(400) });
+    const snap = await createCalculationSnapshot({
+      profile,
+      revenues: lei(1000),
+      expenses: lei(400),
+      ruleRelease: release2025,
+      rules: [{ ...rule2025, parameters: [{ id: 'rate', label: 'Rata', value: 26, unit: 'percent' }] }],
+      calculationLines: [],
+      output: { total: lei(0) },
+    });
+    expect(Object.keys(snap.inputSnapshot).sort()).toEqual(['expenses', 'profile', 'revenues']);
+    expect(snap.inputsHash).toBe(before);
   });
 });

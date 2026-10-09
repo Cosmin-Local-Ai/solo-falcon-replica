@@ -1,11 +1,32 @@
 import type { RuleRelease } from './rules';
+import { PFA_2026_SYSTEM_REAL_PACKAGE } from './package2026';
+import { ruleSetDigest } from './ruleSetDigest';
 
+/**
+ * TASK 6 — this release is now content-addressed.
+ *
+ * `releaseId` and `createdAt` used to be the whole identity, and neither moved across the Phase 3 (CAS),
+ * Phase 4 (CASS) and Phase 5 (income tax) corrections: the arithmetic changed, the identity did not. Two
+ * snapshots carrying `PFA_2026_SYSTEM_REAL` could therefore encode different law. `contentHash` is what
+ * closes that — it is the SHA-256 of the canonical serialisation of the 48 rules this release names
+ * (`./ruleSetDigest`), so any change to a formula-bearing parameter produces a different release.
+ *
+ * `createdAt` is now a real instant, not the effective date repeated. It is the commit instant of the
+ * last change to this rule set's content — `431afaf` (TASK 2d, 2026-10-09T09:05:44+03:00), which changed
+ * a parameter the engine surfaces; the last change to an arithmetic parameter was `1583d9e` (TASK 2a,
+ * which added the 39 art. 68 rules). Derivation and the full history are recorded in
+ * `docs/ai/phases/20_rule_release_immutability.md` §4. `effectiveFrom: '2026-01-01'` is when the law
+ * bites; `createdAt` is when this record was made. A test now pins that they differ.
+ */
 export const PFA_2026_RELEASE: RuleRelease = {
   releaseId: 'PFA_2026_SYSTEM_REAL',
   name: 'PFA 2026 system-real package',
   jurisdiction: 'RO',
   entityType: 'PFA',
   taxYear: 2026,
+  lifecycle: 'ACTIVE',
+  version: 1,
+  contentHash: ruleSetDigest(PFA_2026_SYSTEM_REAL_PACKAGE),
   ruleIds: [
     'PFA_2026_TAX_REFERENCE',
     'GENERAL_MINIMUM_WAGE_2026_H1',
@@ -62,7 +83,8 @@ export const PFA_2026_RELEASE: RuleRelease = {
   ],
   status: 'SAFE_ACTIVATION',
   effectiveFrom: '2026-01-01',
-  createdAt: '2026-01-01',
+  effectiveTo: null,
+  createdAt: '2026-10-09T09:05:44+03:00',
   evidence: [
     // Cod fiscal, consolidated (Portal Legislativ doc 312601, consolidation history newest 08.08.2026)
     // — art. 68, 118, 122 alin. (3), 123 alin. (1), 135^1 alin. (3), 148 alin. (2), 170 alin. (1),
