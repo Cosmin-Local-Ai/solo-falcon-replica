@@ -258,12 +258,14 @@ export interface AnnualCapAdjustment {
   ceiling: MeasurePair;
   /** `min(claimed, ceiling)` — the part that entered the deductible total. */
   allowed: MeasurePair;
-  /** art. 68 alin. (6) only: the base the ceiling was struck on. */
+  /** art. 68 alin. (6) only: the base the ceiling was actually struck on (TASK 2d: the pre-cap one). */
   base?: MeasurePair;
   /**
-   * art. 68 alin. (6) only: the same base under the OTHER, equally unresolved reading (the other
-   * alin. (5) caps subtracted as recorded rather than as allowed), and the ceiling it would have
-   * given. research 22 §6 records no order of application, so the delta is disclosed, not hidden.
+   * art. 68 alin. (6) only: the same base under the OTHER, equally unresolved reading, and the ceiling
+   * it would have given. Since TASK 2d the operative reading is PRE-cap (the other alin. (5) caps
+   * subtracted as RECORDED), so `baseAlt` / `ceilingAlt` carry the POST-cap reading — the base with those
+   * caps subtracted as ALLOWED, and the larger ceiling it yields. research 22 §6 records no order
+   * of application, so the delta is disclosed, not hidden, and it is rendered to the user.
    */
   baseAlt?: MeasurePair;
   ceilingAlt?: MeasurePair;
@@ -625,7 +627,9 @@ function applyAnnualDeductibilityCaps(
   let actual: EstimateAmounts = { ...basis.actual };
 
   const adjustments: AnnualCapAdjustment[] = [];
-  // Tracked only so the alternative (pre-cap) reading of the alin. (6) base can be reported.
+  // lit. q) as RECORDED and as ALLOWED. TASK 2d: the operative alin. (6) base subtracts the RECORDED
+  // amount, so `profClaimed` is load-bearing arithmetic, not bookkeeping; `profAllowed` survives so the
+  // post-cap reading can still be computed and shown as the alternative.
   const profAllowed = zeroPair();
   const profClaimed = zeroPair();
 
@@ -657,15 +661,27 @@ function applyAnnualDeductibilityCaps(
   }
 
   // ── Pass B — the art. 68 alin. (6) base, struck ONCE.
-  // `annual`'s deductible total is, by construction, the records that carry no annual ceiling plus what
-  // Pass A allowed in: burse private and protocol are absent from it, which is precisely what alin. (6)
-  // asks for. The alternative reading subtracts lit. q) as RECORDED rather than as ALLOWED.
-  const base = zeroPair();
-  const baseAlt = zeroPair();
+  // TASK 2d — the OPERATIVE reading is PRE-cap. alin. (6) says „venitul brut și cheltuielile deductibile,
+  // altele decât…” and never says whether those cheltuieli deductibile are the amounts as RECORDED or as
+  // left after the other alin. (5) ceilings have cut them: research 22 §6 found zero occurrences of
+  // „protocol”, „ordinea” and „în ordine” in the whole norms chapter for Titlul IV Cap. II, so the order of
+  // application is a genuine gap, not an oversight. The user's decision of 2026-10-09 chooses the
+  // RECORDED reading: it subtracts more, so the base is smaller, so the allowance is smaller — it can
+  // never understate the tax due. The post-cap reading is the more generous one; it is still computed,
+  // travels on the adjustment as `baseAlt` / `ceilingAlt`, and is rendered to the user.
+  //
+  // The pass structure does not change. `annual`'s deductible total is, by construction, the records that
+  // carry no annual ceiling plus what Pass A allowed in: burse private and protocol are absent from it,
+  // which is precisely what alin. (6) asks for. The base is still struck ONCE, before Pass B, so neither
+  // alin. (6) letter can move it and there is still no iteration.
+  const base = zeroPair(); // operative — PRE-cap: lit. q) subtracted as RECORDED
+  const baseAlt = zeroPair(); // alternative — POST-cap: lit. q) subtracted as ALLOWED
   const ceilingAlt = zeroPair();
   for (const m of MEASURES) {
-    base[m] = nonNegativeBani(subBani(grossOf(annual, m), deductibleOf(annual, m)));
-    baseAlt[m] = nonNegativeBani(subBani(base[m], subBani(profClaimed[m], profAllowed[m])));
+    const postCap = nonNegativeBani(subBani(grossOf(annual, m), deductibleOf(annual, m)));
+    baseAlt[m] = postCap;
+    // Subtract the lit. q) excess Pass A disallowed, i.e. subtract the category as it was RECORDED.
+    base[m] = nonNegativeBani(subBani(postCap, subBani(profClaimed[m], profAllowed[m])));
   }
   for (const { line, claimed } of claims) {
     if (line.cap.base !== 'art68_alin6_base') continue;

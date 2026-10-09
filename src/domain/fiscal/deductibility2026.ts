@@ -184,15 +184,18 @@ const PER_PERSON_MULTIPLIER_CONFLICT =
  * research 22 §6. alin. (6) says „cheltuielile deductibile" and never says whether that is the amount
  * as recorded or the amount after the other alin. (5) ceilings. Negative finding: zero occurrences of
  * „protocol", „ordinea" or „în ordine" in the whole norms chapter for Titlul IV Cap. II, so no order of
- * application is prescribed. The app uses the post-cap reading and reports the other reading's delta.
+ * application is prescribed. TASK 2d: the user's decision of 2026-10-09 makes the PRE-cap reading the
+ * operative one (it subtracts more, so the allowance is smaller, so it can never understate the tax due),
+ * and the post-cap ceiling is surfaced to the user as the alternative — the flip must never be silent.
  */
 const ALIN6_BASE_ORDER_CONFLICT =
   'CONFLICT NEREZOLVAT (research 22 §6): art. 68 alin. (6) spune „venitul brut și cheltuielile '
   + 'deductibile" fără să precizeze dacă scăderea se face cu cheltuielile înregistrate sau cu cele '
   + 'rămase după plafoanele alin. (5). Negative finding: zero occurențe ale „protocol", „ordinea" și '
   + '„în ordine" în tot capitolul normelor pentru Titlul IV Cap. II — nicio normă nu prescrie o ordine. '
-  + 'Aplicația citește post-plafon (deduce sumele rămase deductibile) și raportează ce ar fi dat cealaltă '
-  + 'lectură.';
+  + 'Aplicația citește pre-plafon (deduce cheltuielile înregistrate, nu sumele rămase după plafon) — ' 
+  + 'lectura cea mai puțin generoasă, care nu poate produce subimpozitare — și afișează și plafonul ' 
+  + 'celeilalte lecturi, post-plafon, pentru că legea nu stabilește care dintre ele se aplică.';
 
 /**
  * research 22 §3. alin. (4) lit. i) lists contribuții profesionale obligatorii among the generally

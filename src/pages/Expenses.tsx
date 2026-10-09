@@ -4,7 +4,7 @@ import { useStore } from '../data/store';
 import { fmtDate, sumTotals, total, EXP_STATUS_LABEL, statusBadge } from '../data/types';
 import type { Expense } from '../data/types';
 import { EXPENSE_CATEGORIES } from '../domain/fiscal/deductibility';
-import { selectDeductibleExpenses } from '../domain/estimateBasis';
+import { selectDeductibleExpenses, selectEstimateOperands } from '../domain/estimateBasis';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from '../domain/fiscal';
 import { localDateISO, now } from '../domain/date';
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
@@ -195,6 +195,21 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
   // of the deductible total and the reason says which, in the words the rule itself carries.
   const capBlocked = classification.excluded.filter(x => x.reason === 'cap_unresolved');
 
+  // TASK 2d — a ceiling that WAS struck must be explained, not just applied. These are the numbers the
+  // estimate itself produced: the SAME assembler the tax engine runs (`selectEstimateOperands`), so the
+  // ceiling shown here and the deductible total the engine used cannot disagree. The alin. (6) letters
+  // carry both readings of the base because the law settles neither (research 22 §6) — hiding the one
+  // that was not applied would present an unresolved reading as settled law.
+  const capStruck = useMemo(
+    () => selectEstimateOperands(store, localDateISO(now()), PFA_2026_SYSTEM_REAL_PACKAGE).capAdjustments,
+    [store],
+  );
+  const alin6Struck = capStruck.filter(a => a.base !== undefined && a.ceilingAlt !== undefined);
+  // The engine picks the money measure by `vatExempt` (`tax.ts:143-144`); the page shows the one that
+  // actually moved the deductible total, and says which one it is.
+  const measure = store.profile.vatExempt ? 'inclVat' : 'exclVat';
+  const measureLabel = store.profile.vatExempt ? 'cu TVA inclus' : 'fără TVA';
+
   return (
     <div>
       <div className="page-header">
@@ -226,6 +241,32 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
               Clasifică
             </button>
           )}
+        </div>
+      )}
+
+      {alin6Struck.length > 0 && (
+        <div className="banner banner-warn" role="status">
+          <strong>Plafonul calculat</strong>
+          {' '}— {alin6Struck.length === 1 ? 'o cheltuială are' : `${alin6Struck.length} cheltuieli au`} plafonul
+          {' '}măsurat pe baza art. 68 alin. (6) în lectura «înregistrată» (pre-plafon): baza scade
+          {' '}cheltuielile deductibile așa cum au fost înregistrate, nu așa cum rămân după celelalte
+          {' '}plafoane alin. (5). Legea nu stabilește care lectură se aplică — nicio normă nu prescrie o
+          {' '}ordine — deci ambele cifre sunt afișate. Cea aplicată este mai puțin generoasă și nu poate
+          {' '}produce subimpozitare.
+          {alin6Struck.map(a => (
+            <div className="text-sm" key={a.ruleId} style={{ marginTop: 6 }}>
+              <div>
+                <strong>{a.category}</strong>
+                {` · ${a.sourceArticle} · plafon ${a.cap.percent}% din baza art. 68 alin. (6)`}
+              </div>
+              <div>
+                {`Plafon aplicat (${measureLabel}): `}
+                <strong>{formatBaniRON(a.ceiling[measure])}</strong>
+                {` · cealaltă lectură, post-plafon: `}
+                <strong>{formatBaniRON(a.ceilingAlt![measure])}</strong>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

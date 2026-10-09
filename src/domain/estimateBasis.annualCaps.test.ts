@@ -163,44 +163,110 @@ describe('TASK 2c — contribuții profesionale: 5 % of the gross (art. 68 alin.
   });
 });
 
-describe('TASK 2c — decision 4: the alin. (6) base is struck POST-cap, and the other reading is reported', () => {
-  it('the post-cap base is the one used, and the pre-cap reading plus its delta are recorded', () => {
+describe('TASK 2d — the alin. (6) base is struck PRE-cap, and the post-cap reading is surfaced', () => {
+  it('the pre-cap base is the one used, and the post-cap reading is recorded as the alternative', () => {
     // protocol 1.000,00 / 190,00 lei + contribuții profesionale 5.000,00 / 950,00 lei, at year end.
-    // Pass A (lit. q), excl measure):
-    //   ceiling = floor(770.000 x 5 / 100) = 38.500 bani; claimed 500.000 -> allowed 38.500
-    // Pass B (alin. (6) base, excl measure):
-    //   base      = 770.000 - 38.500 = 731.500 bani = 7.315,00 lei          <- POST-cap reading
-    //   ceiling   = floor(731.500 x 2 / 100) = floor(14.630) = 14.630 bani = 146,30 lei
-    //   allowed   = min(100.000, 14.630) = 14.630
-    //   expensesNet = 38.500 + 14.630 = 53.130 bani = 531,30 lei
-    // The alternative (pre-cap) reading subtracts lit. q) AS RECORDED:
-    //   baseAlt   = 731.500 - (500.000 - 38.500) = 270.000 bani = 2.700,00 lei
-    //   ceilingAlt= floor(270.000 x 2 / 100) = 5.400 bani = 54,00 lei
-    // incl measure, same shape:
-    //   prof ceiling = floor(931.700 x 5 / 100) = 46.585; claimed 595.000 -> allowed 46.585
-    //   base      = 931.700 - 46.585 = 885.115; ceiling = floor(17.702,3) = 17.702 bani = 177,02 lei
-    //   baseAlt   = 885.115 - (595.000 - 46.585) = 336.700; ceilingAlt = floor(6.734) = 6.734 = 67,34 lei
-    //   expenses  = 46.585 + 17.702 = 64.287 bani = 642,87 lei
+    // Re-derived BY HAND before running (TASK 2d), all amounts in bani:
+    //   seed gross: exclVat 770.000 (7.700,00 lei) · inclVat 931.700 (9.317,00 lei)
+    //   Pass 1 holds BOTH capped categories out of the aggregate, so the uncapped deductible is 0.
+    // Pass A — lit. q), 5 % of the gross:
+    //   exclVat ceiling = floor(770.000 x 5 / 100) = 38.500; claimed 500.000 -> allowed 38.500
+    //   inclVat ceiling = floor(931.700 x 5 / 100) = 46.585; claimed 595.000 -> allowed 46.585
+    // The two readings of the alin. (6) base:
+    //   POST-cap  exclVat = 770.000 - 38.500 = 731.500 (7.315,00 lei)  [lit. q) as ALLOWED]
+    //             inclVat = 931.700 - 46.585 = 885.115 (8.851,15 lei)
+    //   PRE-cap   exclVat = 731.500 - (500.000 - 38.500) = 270.000 (2.700,00 lei)  [as RECORDED]
+    //             inclVat = 885.115 - (595.000 - 46.585) = 336.700 (3.367,00 lei)
+    // Protocol at 2 %, struck on the PRE-cap base — OPERATIVE since TASK 2d:
+    //   exclVat = floor(270.000 x 2 / 100) = floor(5.400)      =  5.400 bani = 54,00 lei
+    //   inclVat = floor(336.700 x 2 / 100) = floor(6.734)      =  6.734 bani = 67,34 lei
+    // The post-cap alternative — computed, surfaced, NOT applied:
+    //   exclVat = floor(731.500 x 2 / 100) = floor(14.630)     = 14.630 bani = 146,30 lei
+    //   inclVat = floor(885.115 x 2 / 100) = floor(17.702,30)  = 17.702 bani = 177,02 lei
+    //   allowed = min(100.000, 5.400) = 5.400 · min(119.000, 6.734) = 6.734
+    //   expensesNet = 38.500 + 5.400  = 43.900 bani = 439,00 lei   (was 531,30 lei post-cap)
+    //   expenses    = 46.585 + 6.734 = 53.319 bani = 533,19 lei   (was 642,87 lei post-cap)
+    // Cross-check: the drop equals the two ceilings apart —
+    //   531,30 - 439,00 = 92,30 = 146,30 - 54,00 · 642,87 - 533,19 = 109,68 = 177,02 - 67,34.
     const o = amounts(
       run([
         expense({ id: 'p', category: 'protocol' }),
         expense({ id: 'q', category: 'mandatory_professional_contribution', valoareFaraTva: lei(5000), tva: lei(950) }),
       ]),
     );
-    expect(o.amounts.expensesNet).toBe(lei(531.3));
-    expect(o.amounts.expenses).toBe(lei(642.87));
+    expect(o.amounts.expensesNet).toBe(lei(439));
+    expect(o.amounts.expenses).toBe(lei(533.19));
     const adj = o.capAdjustments.find((a) => a.category === 'protocol')!;
-    expect(adj.base).toEqual({ inclVat: lei(8851.15), exclVat: lei(7315) });
-    expect(adj.baseAlt).toEqual({ inclVat: lei(3367), exclVat: lei(2700) });
-    expect(adj.ceiling).toEqual({ inclVat: lei(177.02), exclVat: lei(146.3) });
+    // `base` is the base the ceiling was ACTUALLY struck on; `baseAlt` is the reading not applied.
+    expect(adj.base).toEqual({ inclVat: lei(3367), exclVat: lei(2700) });
+    expect(adj.baseAlt).toEqual({ inclVat: lei(8851.15), exclVat: lei(7315) });
+    expect(adj.ceiling).toEqual({ inclVat: lei(67.34), exclVat: lei(54) });
     const alt = adj.ceilingAlt ?? { inclVat: lei(0), exclVat: lei(0) };
-    expect(adj.ceilingAlt).toEqual({ inclVat: lei(67.34), exclVat: lei(54) });
-    // The delta, stated rather than buried. NOTE the direction: the post-cap reading subtracts the
-    // ALLOWED lit. q) amount, which is SMALLER than the recorded one, so it leaves a LARGER base and a
-    // LARGER protocol allowance. Brief 17's decision table says post-cap gives "the smaller base"; that
-    // parenthetical is inverted. The reading chosen is the one the brief binds, and the delta is pinned
-    // here so the direction is on the record either way: 146,30 lei used vs 54,00 lei under the other.
-    expect(adj.ceiling.exclVat).toBeGreaterThan(alt.exclVat);
+    expect(adj.ceilingAlt).toEqual({ inclVat: lei(177.02), exclVat: lei(146.3) });
+    expect(adj.allowed).toEqual({ inclVat: lei(67.34), exclVat: lei(54) });
+    // The direction, pinned. The PRE-cap reading subtracts the RECORDED lit. q) amount, which is LARGER
+    // than the allowed one, so it leaves a SMALLER base and a SMALLER allowance: 54,00 lei applied vs
+    // 146,30 lei under the post-cap reading. Smaller allowance = less deduction = it can never produce
+    // an underpayment. (Brief 17's decision table had this direction inverted; phase doc 15 §5.4
+    // corrected it, and TASK 2d now chooses the smaller one deliberately.)
+    expect(adj.ceiling.exclVat).toBeLessThan(alt.exclVat);
+    expect(adj.ceiling.inclVat).toBeLessThan(alt.inclVat);
+  });
+
+  it('the alternative ceiling travels on the result object for BOTH alin. (6) letters', () => {
+    // TASK 2d's condition is that the flip is never silent. `baseAlt` / `ceilingAlt` are not scratch
+    // values: they ride on every art. 68 alin. (6) adjustment inside `EstimateOperands.capAdjustments`,
+    // which is what `Expenses.tsx` renders. Pinned here as part of the RESULT, not as an internal
+    // intermediate — and for both letters, because a partial surfacing would hide one ceiling's delta.
+    // Derived by hand, bani. Adding burse private 2.000,00 / 380,00 lei to the fixture above:
+    //   operative base (PRE-cap)  exclVat = 770.000 - 500.000 = 270.000 · inclVat = 931.700 - 595.000 = 336.700
+    //   alternative base (POST)   exclVat = 731.500                       · inclVat = 885.115
+    //   burse 5 % applied   exclVat = floor(270.000 x 5 / 100) = 13.500 = 135,00 lei
+    //                     inclVat = floor(336.700 x 5 / 100) = 16.835 = 168,35 lei
+    //   burse 5 % alternative exclVat = floor(731.500 x 5 / 100) = 36.575 = 365,75 lei
+    //                           inclVat = floor(885.115 x 5 / 100) = floor(44.255,75) = 44.255 = 442,55 lei
+    //   expensesNet = 38.500 + 5.400 + 13.500 = 57.400 bani = 574,00 lei
+    //   expenses    = 46.585 + 6.734 + 16.835 = 70.154 bani = 701,54 lei
+    const o = run([
+      expense({ id: 'p', category: 'protocol' }),
+      expense({ id: 'b', category: 'private_scholarship', valoareFaraTva: lei(2000), tva: lei(380) }),
+      expense({ id: 'q', category: 'mandatory_professional_contribution', valoareFaraTva: lei(5000), tva: lei(950) }),
+    ]);
+    if (o.kind !== 'run') throw new Error('expected the estimate to run');
+    expect(o.capAdjustments).toHaveLength(3);
+    expect(o.amounts.expensesNet).toBe(lei(574));
+    expect(o.amounts.expenses).toBe(lei(701.54));
+    const struck = o.capAdjustments.filter(a => a.cap.base === 'art68_alin6_base');
+    expect(struck).toHaveLength(2);
+    for (const ruleId of ['EXPENSE_PROTOCOL_2026', 'EXPENSE_PRIVATE_SCHOLARSHIP_2026']) {
+      const adj = struck.find(a => a.ruleId === ruleId)!;
+      // Present, not merely computed: the alternative is a field of the result the UI reads.
+      expect(adj.base, ruleId).toBeDefined();
+      expect(adj.baseAlt, ruleId).toBeDefined();
+      expect(adj.ceilingAlt, ruleId).toBeDefined();
+      // The alternative base is the post-cap one, and it is never smaller than the operative one.
+      expect(adj.baseAlt!.exclVat, ruleId).toBe(lei(7315));
+      expect(adj.baseAlt!.inclVat, ruleId).toBe(lei(8851.15));
+      expect(adj.base!.exclVat, ruleId).toBe(lei(2700));
+      expect(adj.base!.inclVat, ruleId).toBe(lei(3367));
+      expect(adj.ceilingAlt!.exclVat, ruleId).toBeGreaterThan(adj.ceiling.exclVat);
+      expect(adj.ceilingAlt!.inclVat, ruleId).toBeGreaterThan(adj.ceiling.inclVat);
+    }
+    // The two letters still share ONE base object — the flip did not reintroduce an iteration.
+    expect(struck[0].base).toEqual(struck[1].base);
+    expect(struck[0].baseAlt).toEqual(struck[1].baseAlt);
+  });
+
+  it('with no other alin. (5) cap the two readings coincide, and the alternative is still surfaced', () => {
+    // Protocol alone: nothing else carries an alin. (5) ceiling, so recorded == allowed and the two
+    // readings give the same number. The alternative must still be PRESENT (not omitted) — the UI
+    // renders whatever is on the record, and an absent field would read as "no alternative exists".
+    //   base = 770.000 - 0 = 770.000 exclVat · 931.700 inclVat; 2 % -> 15.400 / 18.634 bani
+    const o = amounts(run([expense({ id: 'p', category: 'protocol' })]));
+    const adj = o.capAdjustments[0];
+    expect(adj.base).toEqual(adj.baseAlt);
+    expect(adj.ceiling).toEqual(adj.ceilingAlt);
+    expect(adj.ceiling).toEqual({ inclVat: lei(186.34), exclVat: lei(154) });
   });
 });
 
