@@ -159,6 +159,8 @@ TASK 2a therefore has a duty beyond classification: **where the law says there i
 - Seed: 2020 start, SRL identity, SRL company documents, own-CUI colliding with a customer CUI, seed declarations contradicting seed transactions.
 - Mobile chart overflow at 390 px (renders 657 px, clipped); two card systems with mixed h2/h3 and inconsistent padding.
 - Heading/padding consistency; the "Revenue figures disagree" report (9.317 incl-VAT strip vs 7.700 threshold) is **correct by design** — different bases — and is a **labelling** fix for Task 7, not a bug.
+- **Add a browser-level reload test for the tax reserve** (user decision, 2026-10-09). TASK 3 proved the round trip in jsdom against real `localStorage`; a Playwright test — record a reserve, reload the page, assert the same value — is the one that exercises a real browser's storage lifecycle. **This raises e2e from 36 to 37**, so every brief that pins "e2e 36 passed" must be read as 36 *until TASK 9 lands*.
+- **Docs hygiene:** `docs/ai/briefs/` holds **two briefs numbered 14** (`14_projection_tax_estimate.md`, `14_task1_projection_estimate.md`), and `docs/ai/phases/` still holds `_WORKING_NOTES_phase10.md` and `_WORKING_NOTES_task1.md`. Renumber or retire them so the brief sequence is unambiguous.
 
 ---
 
