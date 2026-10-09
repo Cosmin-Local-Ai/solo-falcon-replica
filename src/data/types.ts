@@ -4,6 +4,7 @@ import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import type { MoneyPrecisionNotice } from './migration';
 import { localDateISO, now } from '../domain/date';
 import { maxBani, subBani, sumMoney, type Bani, type CurrencyCode, type Money } from '../domain/money';
+import type { FxRateRecord } from '../domain/fx/rates';
 
 // ── Venituri ──────────────────────────────────────────────
 export type RevenueStatus = 'inregistrata' | 'in-asteptare' | 'respinsa';
@@ -257,6 +258,19 @@ export interface AppData {
    * `JSON.stringify` drops the key rather than writing an empty array.
    */
   moneyNotices?: MoneyPrecisionNotice[];
+  /**
+   * TASK 10a: the FX rates this install holds — fetched from BNR or entered by hand, each with its
+   * provenance.
+   *
+   * Optional, and absence is meaningful: it means **no rate has been recorded**, which is the state of every
+   * payload written before this task and of a fresh install. The migration chain backfills nothing here, on
+   * the same principle the `tax-reserve` and `expense-category` steps follow — a rate is a fact about a
+   * published number, and a step that manufactured one would be manufacturing a legal figure.
+   *
+   * Reads of this collection never fetch. A rate is a fact about the past: once recorded it is cached, and
+   * `src/domain/fx/provider.ts` is the only place new records arrive.
+   */
+  fxRates?: FxRateRecord[];
 }
 
 // ── Formatare ─────────────────────────────────────────────

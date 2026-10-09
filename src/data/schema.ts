@@ -4,6 +4,7 @@ import { parsePfaProfile } from '../domain/schema';
 import type { PfaProfile } from '../domain/models';
 import type { Bani, Money } from '../domain/money';
 import { CURRENCY_CODES } from '../domain/money';
+import { fxRateRecordSchema, type FxRateRecord } from '../domain/fx/rates';
 import type { MoneyPrecisionNotice } from './migration';
 import type { RuleRelease } from '../domain/fiscal/rules';
 import { EXPENSE_CATEGORIES } from '../domain/fiscal/deductibility';
@@ -339,6 +340,16 @@ export interface PersistedAppData {
    * vanish" rule failing silently. Absent means "nothing had to be decided".
    */
   moneyNotices?: MoneyPrecisionNotice[];
+  /**
+   * TASK 10a: the FX rates this install has recorded. Optional because absence is the honest state for a
+   * fresh install and for every payload written before this task — no migration step backfills a rate, and
+   * inventing one would be inventing a legal figure.
+   *
+   * Declared rather than left off, for the standing reason in this file: **zod strips undeclared keys**, so
+   * an undeclared `fxRates` would be erased by the next save-and-load and the user would silently lose the
+   * rates they entered by hand.
+   */
+  fxRates?: FxRateRecord[];
 }
 
 export const persistedAppDataSchema = z.object({
@@ -376,6 +387,10 @@ export const persistedAppDataSchema = z.object({
       }),
     )
     .optional(),
+  // TASK 10a. Declared so the rates a user entered by hand survive a save-and-load instead of being
+  // stripped. Absence is a real state — no rate has been fetched or entered — and no migration step
+  // backfills one, because a backfilled rate would be a fabricated legal figure.
+  fxRates: z.array(fxRateRecordSchema).optional(),
 });
 
 /**
