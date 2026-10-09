@@ -8,21 +8,27 @@ import {
 import type { DocTypeCode, CompanyDocument, TaxStatement } from '../data/types';
 import { type Bani, formatBani, formatBaniRON, sumBani, subBani } from '../domain/money';
 import { Card, Badge, Modal, Empty } from '../components/ui';
+import { copy, documents as documentsCopy, expenses as expensesCopy } from '../ui/copy';
 
 // Canonical route hash keys — mirror the original SOLO Documents feature:
 //   documents.company     → "Documente PFA"  (registration documents, real uploads)
 //   documents.statements  → "Declarații"     (local registry of filed tax declarations)
 //   documents.reports     → "Rapoarte"       (RJIP cashflow registers, CSV download)
 const TABS = [
-  { key: 'company', label: 'Documente PFA' },
-  { key: 'statements', label: 'Declarații' },
-  { key: 'reports', label: 'Rapoarte' },
+  { key: 'company', label: documentsCopy.tabs.pfa },
+  { key: 'statements', label: documentsCopy.tabs.declarations },
+  { key: 'reports', label: documentsCopy.tabs.reports },
 ] as const;
 type TabKey = (typeof TABS)[number]['key'];
 
 const TIP_ICON: Partial<Record<CompanyDocument['tip'], string>> = {
   pdf: '📄', jpg: '🖼', png: '🖼',
 };
+
+// The size limit the upload messages state. Derived from the constant the check actually uses, so the
+// number a person reads cannot drift away from the number the code enforces (it had: copy said 2 MB,
+// MAX_DOC_BYTES is 5 MB).
+const MAX_MB = MAX_DOC_BYTES / (1024 * 1024);
 
 // ---------- file helpers ----------
 
@@ -40,6 +46,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
 function DocumentSection({ code }: { code: DocTypeCode }) {
   const { companyDocs, uploadDocument, deleteDocument, toast } = useStore();
   const def = DOC_SECTION_MAP[code];
+  const words = documentsCopy.sections[code];
   const files = companyDocs[code] ?? [];
   const [helperOpen, setHelperOpen] = useState(false);
   const [preview, setPreview] = useState<CompanyDocument | null>(null);
@@ -51,11 +58,11 @@ function DocumentSection({ code }: { code: DocTypeCode }) {
     if (!file) return;
     const tip = docTipFromName(file.name);
     if (!tip) {
-      toast('error', 'Format acceptat: PDF, JPG, PNG');
+      toast('error', documentsCopy.acceptedFormats);
       return;
     }
     if (file.size > MAX_DOC_BYTES) {
-      toast('error', 'Fișierul depășește 2 MB — stocarea locală nu e suficientă');
+      toast('error', documentsCopy.tooLarge(MAX_MB));
       return;
     }
     try {
@@ -67,9 +74,9 @@ function DocumentSection({ code }: { code: DocTypeCode }) {
         data: todayISO(),
         content,
       });
-      toast('success', `„${file.name}" a fost încărcat`);
+      toast('success', documentsCopy.uploaded(file.name));
     } catch {
-      toast('error', 'Nu am putut citi fișierul');
+      toast('error', documentsCopy.readFailed);
     }
   }
 
@@ -78,23 +85,23 @@ function DocumentSection({ code }: { code: DocTypeCode }) {
       <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div>
           <div style={{ fontWeight: 600, fontSize: 14 }}>
-            {def.title}
+            {words.title}
             {def.allowMultiple && (
-              <span title="Se pot încărca mai multe documente" style={{ marginLeft: 8, cursor: 'help' }}>ⓘ</span>
+              <span title={documentsCopy.uploadManyHint} style={{ marginLeft: 8, cursor: 'help' }}>ⓘ</span>
             )}
           </div>
-          {def.helper && (
+          {words.helper && (
             <div style={{ marginTop: 4 }}>
               <button
                 className="btn btn-ghost"
                 style={{ padding: '2px 8px', fontSize: 12 }}
                 onClick={() => setHelperOpen(o => !o)}
               >
-                {helperOpen ? 'Ascunde exemplele' : 'Vezi exemple'}
+                {helperOpen ? documentsCopy.hideExamples : documentsCopy.showExamples}
               </button>
               {helperOpen && (
                 <div style={{ marginTop: 6, fontSize: 12.5, color: 'var(--text-3)' }}>
-                  {def.helper}
+                  {words.helper}
                 </div>
               )}
             </div>
@@ -102,7 +109,7 @@ function DocumentSection({ code }: { code: DocTypeCode }) {
         </div>
         <div className="actions">
           <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>
-            {files.length ? 'Încarcă alt document' : 'Încarcă document'}
+            {files.length ? documentsCopy.uploadOther : documentsCopy.upload}
           </button>
         </div>
         <input
@@ -135,7 +142,7 @@ function DocumentSection({ code }: { code: DocTypeCode }) {
               </div>
               {(f.tip === 'jpg' || f.tip === 'png') && f.content && (
                 <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12.5 }} onClick={() => setPreview(f)}>
-                  Previzualizează
+                  {documentsCopy.preview}
                 </button>
               )}
               {f.content && (
@@ -144,7 +151,7 @@ function DocumentSection({ code }: { code: DocTypeCode }) {
                   style={{ padding: '4px 10px', fontSize: 12.5 }}
                   onClick={() => downloadDataUrl(f.content!, f.nume)}
                 >
-                  Descarcă
+                  {documentsCopy.download}
                 </button>
               )}
               <button
@@ -152,10 +159,10 @@ function DocumentSection({ code }: { code: DocTypeCode }) {
                 style={{ padding: '4px 10px', fontSize: 12.5, color: 'var(--danger)' }}
                 onClick={() => {
                   deleteDocument(code, f.id);
-                  toast('info', `„${f.nume}" a fost șters`);
+                  toast('info', documentsCopy.deleted(f.nume));
                 }}
               >
-                Șterge
+                {copy.ui.remove}
               </button>
             </div>
           ))}
@@ -203,11 +210,11 @@ function StatementForm({ onSave, onClose }: {
     e.target.value = '';
     if (!file) return;
     if (file.name.toLowerCase().endsWith('.pdf') === false) {
-      setErrors(p => ({ ...p, fisier: 'Doar fișiere PDF' }));
+      setErrors(p => ({ ...p, fisier: documentsCopy.pdfOnly }));
       return;
     }
     if (file.size > MAX_DOC_BYTES) {
-      setErrors(p => ({ ...p, fisier: 'Maxim 2 MB' }));
+      setErrors(p => ({ ...p, fisier: documentsCopy.maxSizeMb(MAX_MB) }));
       return;
     }
     setErrors(p => ({ ...p, fisier: '' }));
@@ -220,8 +227,8 @@ function StatementForm({ onSave, onClose }: {
 
   function submit() {
     const e: Record<string, string> = {};
-    if (!f.tip.trim()) e.tip = 'Tipul declarației este obligatoriu';
-    if (!f.perioada.trim()) e.perioada = 'Perioada este obligatorie';
+    if (!f.tip.trim()) e.tip = documentsCopy.declaration.typeRequired;
+    if (!f.perioada.trim()) e.perioada = documentsCopy.declaration.periodRequired;
     setErrors(e);
     if (Object.keys(e).length) return;
     onSave({
@@ -236,45 +243,45 @@ function StatementForm({ onSave, onClose }: {
 
   return (
     <Modal
-      title="Adaugă declarație depusă"
+      title={documentsCopy.declaration.addTitle}
       onClose={onClose}
       footer={<>
-        <button className="btn btn-ghost" onClick={onClose}>Anulează</button>
-        <button className="btn btn-primary" onClick={submit}>Salvează</button>
+        <button className="btn btn-ghost" onClick={onClose}>{copy.ui.cancel}</button>
+        <button className="btn btn-primary" onClick={submit}>{copy.ui.save}</button>
       </>}
     >
       <div className="form-grid">
         <div className="field">
-          <label>Tip declarație *</label>
+          <label>{documentsCopy.declaration.type}</label>
           <input
             value={f.tip}
             onChange={e => set('tip', e.target.value)}
-            placeholder="ex. D101, D112, D200, 220, 221…"
+            placeholder={documentsCopy.declaration.typePlaceholder}
           />
           {errors.tip && <span className="error">{errors.tip}</span>}
         </div>
         <div className="field">
-          <label>Perioadă *</label>
+          <label>{documentsCopy.declaration.period}</label>
           <input
             value={f.perioada}
             onChange={e => set('perioada', e.target.value)}
-            placeholder="ex. I–IV 2025, luna martie 2025"
+            placeholder={documentsCopy.declaration.periodPlaceholder}
           />
           {errors.perioada && <span className="error">{errors.perioada}</span>}
         </div>
         <div className="field">
-          <label>Mod de depunere</label>
+          <label>{documentsCopy.declaration.method}</label>
           <select value={f.depunere} onChange={e => set('depunere', e.target.value)}>
-            <option value="SOLO">Prin SOLO</option>
-            <option value="personală">Personală</option>
+            <option value="SOLO">{documentsCopy.declaration.methodSolo}</option>
+            <option value="personală">{documentsCopy.declaration.methodPersonal}</option>
           </select>
         </div>
         <div className="field">
-          <label>Data depunerii</label>
+          <label>{documentsCopy.declaration.depunereDate}</label>
           <input type="date" value={f.dataDepunere} onChange={e => set('dataDepunere', e.target.value)} />
         </div>
         <div className="field full">
-          <label>Fișier PDF atașat (opțional)</label>
+          <label>{documentsCopy.declaration.pdfLabel}</label>
           <input
             ref={fileRef}
             type="file"
@@ -283,7 +290,7 @@ function StatementForm({ onSave, onClose }: {
             onChange={onFile}
           />
           <button className="btn btn-ghost" onClick={() => fileRef.current?.click()}>
-            {f.nume ? `Schimbă: ${f.nume}` : 'Alege un PDF'}
+            {f.nume ? documentsCopy.declaration.changeFile(f.nume) : documentsCopy.declaration.choosePdf}
           </button>
           {errors.fisier && <span className="error">{errors.fisier}</span>}
         </div>
@@ -309,11 +316,11 @@ function StatementsTab() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
             <thead>
               <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--border-strong)' }}>
-                <th style={{ padding: '10px 12px' }}>Tip</th>
-                <th style={{ padding: '10px 12px' }}>Perioadă</th>
-                <th style={{ padding: '10px 12px' }}>Depunere</th>
-                <th style={{ padding: '10px 12px' }}>Data</th>
-                <th style={{ padding: '10px 12px' }}>Fișier</th>
+                <th style={{ padding: '10px 12px' }}>{documentsCopy.declaration.columns.type}</th>
+                <th style={{ padding: '10px 12px' }}>{documentsCopy.declaration.columns.period}</th>
+                <th style={{ padding: '10px 12px' }}>{documentsCopy.declaration.columns.method}</th>
+                <th style={{ padding: '10px 12px' }}>{documentsCopy.declaration.columns.date}</th>
+                <th style={{ padding: '10px 12px' }}>{documentsCopy.declaration.columns.file}</th>
                 <th style={{ padding: '10px 12px' }} />
               </tr>
             </thead>
@@ -324,7 +331,7 @@ function StatementsTab() {
                   <td style={{ padding: '10px 12px' }}>{s.perioada}</td>
                   <td style={{ padding: '10px 12px' }}>
                     <Badge kind={s.depunere === 'SOLO' ? 'badge-success' : 'badge-neutral'}>
-                      {s.depunere}
+                      {s.depunere === 'SOLO' ? documentsCopy.declaration.methodSolo : documentsCopy.declaration.methodPersonal}
                     </Badge>
                   </td>
                   <td style={{ padding: '10px 12px' }}>{s.dataDepunere ? fmtDate(s.dataDepunere) : '—'}</td>
@@ -335,7 +342,7 @@ function StatementsTab() {
                         style={{ padding: '3px 8px', fontSize: 12.5 }}
                         onClick={() => downloadDataUrl(s.content!, s.nume!)}
                       >
-                        ⬇ {s.nume}
+                      ⬇ {s.nume}
                       </button>
                     ) : '—'}
                   </td>
@@ -345,7 +352,7 @@ function StatementsTab() {
                       style={{ padding: '3px 8px', fontSize: 12.5, color: 'var(--danger)' }}
                       onClick={() => setConfirmDelete(s)}
                     >
-                      Șterge
+                      {copy.ui.remove}
                     </button>
                   </td>
                 </tr>
@@ -358,15 +365,15 @@ function StatementsTab() {
         <div style={{ padding: '20px 18px' }}>
           <Empty
             icon="🧾"
-            title="Nicio declarație înregistrată"
-            text="Înregistrează aici declarațiile fiscale depuse (D101, D112, 220, 221…) cu perioada și modul de depunere."
-            action={<button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Adaugă declarație</button>}
+            title={documentsCopy.declaration.emptyTitle}
+            text={documentsCopy.declaration.emptyBody}
+            action={<button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ {documentsCopy.declaration.add}</button>}
           />
         </div>
       )}
       {rows.length > 0 && (
         <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end' }}>
-          <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Adaugă declarație</button>
+          <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ {documentsCopy.declaration.add}</button>
         </div>
       )}
 
@@ -375,7 +382,7 @@ function StatementsTab() {
           onClose={() => setShowAdd(false)}
           onSave={s => {
             addStatement(s);
-            toast('success', `Declarația ${s.tip} (${s.perioada}) a fost înregistrată`);
+            toast('success', documentsCopy.declaration.registered(s.tip, s.perioada));
             setShowAdd(false);
           }}
         />
@@ -383,19 +390,19 @@ function StatementsTab() {
 
       {confirmDelete && (
         <Modal
-          title="Șterge declarația?"
+          title={documentsCopy.declaration.deleteTitle}
           onClose={() => setConfirmDelete(null)}
           footer={<>
-            <button className="btn btn-ghost" onClick={() => setConfirmDelete(null)}>Anulează</button>
+            <button className="btn btn-ghost" onClick={() => setConfirmDelete(null)}>{copy.ui.cancel}</button>
             <button
               className="btn btn-danger"
               onClick={() => {
                 deleteStatement(confirmDelete.id);
-                toast('info', 'Declarația a fost ștearsă');
+                toast('info', documentsCopy.declaration.deleted);
                 setConfirmDelete(null);
               }}
             >
-              Șterge
+              {copy.ui.remove}
             </button>
           </>}
         >
@@ -422,7 +429,7 @@ export function rjipCsv(
 ): string {
   const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
   const lines = [
-    'Data;Descriere;Venit (RON);Cheltuiala (RON)',
+    documentsCopy.rjip.csvHeader,
     // `formatBani`, not `toFixed(2)`: these are BANI. `14250..toFixed(2)` exported 142,50 lei as
     // "14250,00" — a 100× error in a register the tax office reads, and an exported file is exactly
     // where a raw stored unit must not leak.
@@ -451,7 +458,7 @@ function ReportsTab() {
       if (r.date.slice(0, 4) === String(year)) {
         out.push({
           data: r.date,
-          descriere: `${r.tip === 'factura' ? 'Factură' : 'Notă de factură'} ${r.nr} – ${r.client}`,
+          descriere: `${r.tip === 'factura' ? documentsCopy.rjip.invoiceKind.factura : documentsCopy.rjip.invoiceKind.nota} ${r.nr} – ${r.client}`,
           venit: total(r),
           cheltuiala: 0 as Bani,
         });
@@ -461,7 +468,7 @@ function ReportsTab() {
       if (e.date.slice(0, 4) === String(year)) {
         out.push({
           data: e.date,
-          descriere: `${e.tip === 'factura' ? 'Factură' : 'Bon fiscal'} ${e.nr} – ${e.furnizor}`,
+          descriere: `${e.tip === 'factura' ? expensesCopy.documentTypeCell.factura : expensesCopy.documentTypeCell.bon} ${e.nr} – ${e.furnizor}`,
           venit: 0 as Bani,
           cheltuiala: total(e),
         });
@@ -478,18 +485,18 @@ function ReportsTab() {
 
   function download() {
     if (!rows.length) {
-      toast('info', `Niciun flux de trezorerie pentru ${year}`);
+      toast('info', documentsCopy.rjip.noCashflow(year));
       return;
     }
     downloadText(rjipCsv(rows), `RJIP_${year}.csv`);
-    toast('success', `RJIP ${year} a fost generat (${rows.length} rânduri)`);
+    toast('success', documentsCopy.rjip.generated(year, rows.length));
   }
 
   return (
     <Card>
       <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 13.5 }}>
-          Raport de mișcări de trezorerie (RJIP) — generat din datele din Venituri și Cheltuieli.
+          {documentsCopy.rjip.description}
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
           <select
@@ -501,26 +508,26 @@ function ReportsTab() {
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
-          <button className="btn btn-primary" onClick={download}>⬇ Descarcă CSV</button>
+          <button className="btn btn-primary" onClick={download}>{documentsCopy.rjip.downloadCsv}</button>
         </div>
       </div>
       <div style={{ borderTop: '1px solid var(--border)', padding: '14px 18px', display: 'flex', gap: 24, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Venituri {year}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{documentsCopy.rjip.revenue(year)}</div>
           <div style={{ fontSize: 16, fontWeight: 700 }}>{formatBaniRON(venit)}</div>
         </div>
         <div>
-          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Cheltuieli {year}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{documentsCopy.rjip.expenses(year)}</div>
           <div style={{ fontSize: 16, fontWeight: 700 }}>{formatBaniRON(chelt)}</div>
         </div>
         <div>
-          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Sold</div>
+          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{documentsCopy.rjip.balance}</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: sold >= 0 ? 'var(--success)' : 'var(--danger)' }}>
             {formatBaniRON(sold)}
           </div>
         </div>
         <div>
-          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Rânduri</div>
+          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{documentsCopy.rjip.rows}</div>
           <div style={{ fontSize: 16, fontWeight: 700 }}>{rows.length}</div>
         </div>
       </div>
@@ -557,8 +564,8 @@ export default function Documents({ initialTab, onTabChange }: DocumentsProps) {
     <div>
       <div className="page-header">
         <div>
-          <h1>Documente</h1>
-          <div className="sub">Documente de înregistrare, declarații fiscale și rapoarte de trezorerie — stocate local.</div>
+          <h1>{documentsCopy.title}</h1>
+          <div className="sub">{documentsCopy.subtitle}</div>
         </div>
       </div>
 

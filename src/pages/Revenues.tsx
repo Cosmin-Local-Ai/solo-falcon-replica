@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatBaniRON, leiInputValue, parseLeiInput } from '../domain/money';
 import { useStore } from '../data/store';
-import { fmtDate, total, REV_STATUS_LABEL, statusBadge } from '../data/types';
+import { fmtDate, total, statusBadge } from '../data/types';
 import type { Revenue } from '../data/types';
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
+import { copy, empty, fields, recordStatus, revenues as revenuesCopy, validation } from '../ui/copy';
 
 // Canonical route hash keys (English) mapped to the Romanian data statuses.
 const TABS = [
-  { key: 'registered', label: 'Înregistrate', status: 'inregistrata' },
-  { key: 'pending', label: 'În așteptare', status: 'in-asteptare' },
-  { key: 'rejected', label: 'Respinse', status: 'respinsa' },
+  { key: 'registered', label: recordStatus.tabs.inregistrata, status: 'inregistrata' },
+  { key: 'pending', label: recordStatus.tabs['in-asteptare'], status: 'in-asteptare' },
+  { key: 'rejected', label: recordStatus.tabs.respinsa, status: 'respinsa' },
 ] as const;
 
 const statusFor = (tab: (typeof TABS)[number]['key']) =>
@@ -42,16 +43,16 @@ function RevenueForm({ initial, onSave, onClose }: {
 
   const submit = () => {
     const e: Record<string, string> = {};
-    if (!f.nr.trim()) e.nr = 'Numărul documentului este obligatoriu';
-    if (!f.date) e.date = 'Data este obligatorie';
-    if (!f.client.trim()) e.client = 'Clientul este obligatoriu';
+    if (!f.nr.trim()) e.nr = validation.documentNumberRequired;
+    if (!f.date) e.date = validation.dateRequired;
+    if (!f.client.trim()) e.client = validation.clientRequired;
     // Phase 10: the form speaks lei, storage speaks bani. `parseLeiInput` is the one boundary, and it
     // REFUSES sub-ban precision (`85.555`) instead of rounding it — rounding on the way into a ledger is the
     // silent money change this phase forbids. The existing messages are unchanged.
     const v = parseLeiInput(f.valoare);
     const t = parseLeiInput(f.tva);
-    if (v === null || v < 0) e.valoare = 'Introduceți o valoare validă';
-    if (t === null || t < 0) e.tva = 'Introduceți un TVA valid';
+    if (v === null || v < 0) e.valoare = validation.amountInvalid;
+    if (t === null || t < 0) e.tva = validation.vatInvalid;
     setErrors(e);
     if (Object.keys(e).length) return;
     // Unreachable — the two checks above already recorded an error for a null. It exists so the compiler
@@ -67,61 +68,61 @@ function RevenueForm({ initial, onSave, onClose }: {
 
   return (
     <Modal
-      title={initial ? `Editează ${initial.nr}` : 'Adaugă venit'}
+      title={initial ? revenuesCopy.editTitle(initial.nr) : revenuesCopy.addTitle}
       onClose={onClose}
       footer={<>
-        <button className="btn btn-ghost" onClick={onClose}>Anulează</button>
-        <button className="btn btn-primary" onClick={submit}>{initial ? 'Salvează' : 'Adaugă'}</button>
+        <button className="btn btn-ghost" onClick={onClose}>{copy.ui.cancel}</button>
+        <button className="btn btn-primary" onClick={submit}>{initial ? copy.ui.save : copy.ui.add}</button>
       </>}
     >
       <div className="form-grid">
         <div className="field">
-          <label>Tip document <span className="req">*</span></label>
+          <label>{fields.documentType} <span className="req">*</span></label>
           <select value={f.tip} onChange={e => set('tip', e.target.value)}>
-            <option value="factura">Factură</option>
-            <option value="notafactura">Notă fără factură</option>
+            <option value="factura">{revenuesCopy.documentTypes.factura}</option>
+            <option value="notafactura">{revenuesCopy.documentTypes.nota}</option>
           </select>
         </div>
         <div className="field">
-          <label>Număr document <span className="req">*</span></label>
-          <input className={errors.nr ? 'invalid' : ''} value={f.nr} onChange={e => set('nr', e.target.value)} placeholder="FCT-2025-0045" />
+          <label>{fields.documentNumber} <span className="req">*</span></label>
+          <input className={errors.nr ? 'invalid' : ''} value={f.nr} onChange={e => set('nr', e.target.value)} placeholder={revenuesCopy.documentNumberPlaceholder} />
           {errors.nr && <span className="error">{errors.nr}</span>}
         </div>
         <div className="field">
-          <label>Data <span className="req">*</span></label>
+          <label>{fields.date} <span className="req">*</span></label>
           <input type="date" className={errors.date ? 'invalid' : ''} value={f.date} onChange={e => set('date', e.target.value)} />
           {errors.date && <span className="error">{errors.date}</span>}
         </div>
         <div className="field">
-          <label>Client <span className="req">*</span></label>
+          <label>{revenuesCopy.columns.client} <span className="req">*</span></label>
           <select className={errors.client ? 'invalid' : ''} value={f.client} onChange={e => {
             const c = clients.find(x => x.denumire === e.target.value);
             setF(p => ({ ...p, client: e.target.value, cui: c?.cui ?? p.cui }));
           }}>
-            <option value="">— alege clientul —</option>
+            <option value="">{revenuesCopy.clientSelectPlaceholder}</option>
             {clients.map(c => <option key={c.id} value={c.denumire}>{c.denumire}</option>)}
           </select>
           {errors.client && <span className="error">{errors.client}</span>}
         </div>
         <div className="field">
-          <label>CUI</label>
-          <input value={f.cui} onChange={e => set('cui', e.target.value)} placeholder="RO…" />
+          <label>{fields.cui}</label>
+          <input value={f.cui} onChange={e => set('cui', e.target.value)} placeholder={fields.cuiPlaceholder} />
         </div>
         <div className="field">
-          <label>Valoare fără TVA (RON) <span className="req">*</span></label>
-          <input className={errors.valoare ? 'invalid' : ''} value={f.valoare} onChange={e => set('valoare', e.target.value)} placeholder="0,00" />
+          <label>{fields.amountWithoutVat} <span className="req">*</span></label>
+          <input className={errors.valoare ? 'invalid' : ''} value={f.valoare} onChange={e => set('valoare', e.target.value)} placeholder={fields.amountPlaceholder} />
           {errors.valoare && <span className="error">{errors.valoare}</span>}
         </div>
         <div className="field">
-          <label>TVA (RON) <span className="req">*</span></label>
-          <input className={errors.tva ? 'invalid' : ''} value={f.tva} onChange={e => set('tva', e.target.value)} placeholder="0,00" />
+          <label>{fields.vatAmount} <span className="req">*</span></label>
+          <input className={errors.tva ? 'invalid' : ''} value={f.tva} onChange={e => set('tva', e.target.value)} placeholder={fields.amountPlaceholder} />
           {errors.tva && <span className="error">{errors.tva}</span>}
         </div>
         <div className="field">
-          <label>Status</label>
+          <label>{fields.status}</label>
           <select value={f.status} onChange={e => set('status', e.target.value)}>
-            <option value="inregistrata">Înregistrată</option>
-            <option value="in-asteptare">În așteptare</option>
+            <option value="inregistrata">{recordStatus.labels.inregistrata}</option>
+            <option value="in-asteptare">{recordStatus.labels['in-asteptare']}</option>
             <option value="respinsa">Respinsă</option>
           </select>
         </div>
@@ -177,17 +178,17 @@ export default function Revenues({ initialTab, onTabChange }: RevenuesProps) {
     <div>
       <div className="page-header">
         <div>
-          <h1>Venituri</h1>
-          <div className="sub">Facturi și notele fără factură emise de către dvs.</div>
+          <h1>{revenuesCopy.title}</h1>
+          <div className="sub">{revenuesCopy.subtitle}</div>
         </div>
         <div className="actions">
           <input
-            placeholder="Caută după nr. sau client…"
+            placeholder={revenuesCopy.searchPlaceholder}
             style={{ border: '1px solid var(--border-strong)', borderRadius: 6, padding: '7px 10px', fontSize: 13, width: 220 }}
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
           />
-          <button className="btn btn-primary" onClick={() => setEditing('new')}>+ Adaugă venit</button>
+          <button className="btn btn-primary" onClick={() => setEditing('new')}>+ {revenuesCopy.add}</button>
         </div>
       </div>
 
@@ -203,25 +204,25 @@ export default function Revenues({ initialTab, onTabChange }: RevenuesProps) {
         </div>
         {pageRows.length === 0 ? (
           <Empty
-            title="Niciun venit în această categorie"
-            text={search ? 'Niciun rezultat pentru căutare.' : 'Adăugați primul venit pentru a-l vedea aici.'}
-            action={<button className="btn btn-primary" onClick={() => setEditing('new')}>+ Adaugă venit</button>}
+            title={revenuesCopy.emptyTitle}
+            text={search ? empty.noSearchResults : revenuesCopy.emptyBody}
+            action={<button className="btn btn-primary" onClick={() => setEditing('new')}>+ {revenuesCopy.add}</button>}
           />
         ) : (
           <>
             <table className="table">
               <thead>
                 <tr>
-                  <th>Document</th><th>Tip</th><th>Client</th><th>CUI</th><th>Data</th>
-                  <th className="amount">Fără TVA</th><th className="amount">TVA</th><th className="amount">Total</th>
-                  <th>Status</th><th />
+                  <th>{revenuesCopy.columns.document}</th><th>{revenuesCopy.columns.type}</th><th>{revenuesCopy.columns.client}</th><th>{revenuesCopy.columns.cui}</th><th>{revenuesCopy.columns.date}</th>
+                  <th className="amount">{revenuesCopy.columns.withoutVat}</th><th className="amount">{revenuesCopy.columns.vat}</th><th className="amount">{revenuesCopy.columns.total}</th>
+                  <th>{revenuesCopy.columns.status}</th><th />
                 </tr>
               </thead>
               <tbody>
                 {pageRows.map(r => (
                   <tr key={r.id} className="clickable" onClick={() => setEditing(r)}>
                     <td style={{ fontWeight: 500, color: 'var(--text)' }}>{r.nr}</td>
-                    <td>{r.tip === 'factura' ? 'Factură' : 'Notă f. factură'}</td>
+                    <td>{r.tip === 'factura' ? revenuesCopy.documentTypeCell.factura : revenuesCopy.documentTypeCell.nota}</td>
                     <td>{r.client}</td>
                     <td className="muted">{r.cui}</td>
                     <td>{fmtDate(r.date)}</td>
@@ -229,12 +230,12 @@ export default function Revenues({ initialTab, onTabChange }: RevenuesProps) {
                     <td className="amount">{formatBaniRON(r.tva)}</td>
                     <td className="amount">{formatBaniRON(total(r))}</td>
                     <td>
-                      <Badge kind={statusBadge(r.status)}>{REV_STATUS_LABEL[r.status]}</Badge>
+                      <Badge kind={statusBadge(r.status)}>{recordStatus.revenueLabels[r.status]}</Badge>
                       {r.statusDetail && <div className="text-sm muted" style={{ marginTop: 3 }}>{r.statusDetail}</div>}
                     </td>
                     <td>
                       <div className="row-actions">
-                        <button className="btn btn-sm btn-ghost" onClick={e => { e.stopPropagation(); deleteRevenue(r.id); toast('success', `${r.nr} a fost ștearsă`); }}>Șterge</button>
+                        <button className="btn btn-sm btn-ghost" onClick={e => { e.stopPropagation(); deleteRevenue(r.id); toast('success', revenuesCopy.deleted(r.nr)); }}>{copy.ui.remove}</button>
                       </div>
                     </td>
                   </tr>
@@ -251,8 +252,8 @@ export default function Revenues({ initialTab, onTabChange }: RevenuesProps) {
           initial={editing === 'new' ? undefined : editing}
           onClose={() => setEditing(null)}
           onSave={r => {
-            if (editing === 'new') { addRevenue(r); toast('success', `Venitul ${r.nr} a fost adăugat`); }
-            else { updateRevenue({ ...r, id: editing.id }); toast('success', `Venitul ${r.nr} a fost actualizat`); }
+            if (editing === 'new') { addRevenue(r); toast('success', revenuesCopy.added(r.nr)); }
+            else { updateRevenue({ ...r, id: editing.id }); toast('success', revenuesCopy.updated(r.nr)); }
             setEditing(null);
           }}
         />

@@ -4,11 +4,12 @@ import { fmtDate, total } from '../data/types';
 import type { Revenue } from '../data/types';
 import { formatBaniRON } from '../domain/money';
 import { Card, Badge, Empty, Pagination } from '../components/ui';
+import { eFactura as eFacturaCopy } from '../ui/copy';
 
 const TABS = [
-  { key: 'Acceptată', label: 'Acceptate' },
-  { key: 'În așteptare', label: 'În așteptare' },
-  { key: 'Respinsă', label: 'Respinse' },
+  { key: 'Acceptată', label: eFacturaCopy.tabs.accepted },
+  { key: 'În așteptare', label: eFacturaCopy.tabs.pending },
+  { key: 'Respinsă', label: eFacturaCopy.tabs.rejected },
 ] as const;
 
 const PAGE_SIZE = 8;
@@ -32,16 +33,16 @@ export default function EFactura() {
   const counts = (k: string) => revenues.filter(r => (r.eFacturaStatus ?? 'Acceptată') === k).length;
 
   const retry = (r: Revenue) => {
-    updateRevenue({ ...r, status: 'in-asteptare', statusDetail: 'Retransmisă către e-Factura', eFacturaStatus: 'În așteptare' });
-    toast('info', `${r.nr} a fost retransmisă către e-Factura`);
+    updateRevenue({ ...r, status: 'in-asteptare', statusDetail: eFacturaCopy.resentDetail, eFacturaStatus: 'În așteptare' });
+    toast('info', eFacturaCopy.resentToast(r.nr));
   };
 
   return (
     <div>
       <div className="page-header">
         <div>
-          <h1>e-Factura</h1>
-          <div className="sub">Starea facturilor transmise în sistemul e-Factura.</div>
+          <h1>{eFacturaCopy.title}</h1>
+          <div className="sub">{eFacturaCopy.subtitle}</div>
         </div>
       </div>
 
@@ -58,16 +59,16 @@ export default function EFactura() {
         {pageRows.length === 0 ? (
           <Empty
             icon="⚡"
-            title="Nicio factură în această stare"
-            text="Facturile transmise către e-Factura vor apărea aici."
+            title={eFacturaCopy.emptyTitle}
+            text={eFacturaCopy.emptyBody}
           />
         ) : (
           <>
             <table className="table">
               <thead>
                 <tr>
-                  <th>Document</th><th>Client</th><th>CUI</th><th>Data</th>
-                  <th className="amount">Total</th><th>Status e-Factura</th><th />
+                  <th>{eFacturaCopy.columns.document}</th><th>{eFacturaCopy.columns.client}</th><th>{eFacturaCopy.columns.cui}</th><th>{eFacturaCopy.columns.date}</th>
+                  <th className="amount">{eFacturaCopy.columns.total}</th><th>{eFacturaCopy.columns.status}</th><th />
                 </tr>
               </thead>
               <tbody>
@@ -85,7 +86,7 @@ export default function EFactura() {
                     <td>
                       <div className="row-actions">
                         {r.eFacturaStatus === 'Respinsă' && (
-                          <button className="btn btn-sm btn-outline" onClick={() => retry(r)}>Retransmite</button>
+                          <button className="btn btn-sm btn-outline" onClick={() => retry(r)}>{eFacturaCopy.resend}</button>
                         )}
                       </div>
                     </td>

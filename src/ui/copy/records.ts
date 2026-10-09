@@ -254,7 +254,32 @@ export const documents = {
     reports: 'Rapoarte',
   },
   uploadManyHint: 'Se pot încărca mai multe documente',
-  uploadManyBody: 'Se pot încărca mai multe documente deodată, în format PDF, JPG sau PNG, maximum 2 MB fiecare.',
+  /**
+   * The four registration sections, keyed by the same `DocTypeCode` the data layer uses. The words used
+   * to sit in `DOC_SECTIONS` below the data layer, where no language test could reach them.
+   */
+  sections: {
+    im: {
+      title: 'Impozit pe venit (IM)',
+      desc: 'Declarația 100 / impozit pe venit',
+      helper: 'Un fișier pe perioadă (PDF).',
+    },
+    cs: {
+      title: 'Contribuții sociale (CS)',
+      desc: 'Declarația 220 / contribuții sociale',
+      helper: 'Un fișier pe perioadă (PDF).',
+    },
+    tva: {
+      title: 'TVA',
+      desc: 'Declarația 300 / TVA',
+      helper: 'Un fișier pe perioadă (PDF).',
+    },
+    facturi: {
+      title: 'Facturi și documente',
+      desc: 'Facturi, note fără factură, bonuri fiscale',
+      helper: 'Poți adăuga mai multe fișiere.',
+    },
+  },
   hideExamples: 'Ascunde exemplele',
   showExamples: 'Vezi exemple',
   uploadOther: 'Încarcă alt document',
@@ -263,12 +288,21 @@ export const documents = {
   download: 'Descarcă',
   empty: 'Nicio document încărcat.',
   acceptedFormats: 'Format acceptat: PDF, JPG, PNG',
-  tooLarge: 'Fișierul depășește 2 MB — stocarea locală nu e suficientă',
+  /**
+   * The limit is stated by the caller from `MAX_DOC_BYTES`, not baked into the sentence. The copy used to
+   * say 2 MB while the constant is 5 MB — a number in a message that the code never checked.
+   */
+  tooLarge: (limitMb: number): string =>
+    `Fișierul depășește ${limitMb} MB — stocarea locală nu e suficientă`,
+  pdfOnly: 'Doar fișiere PDF',
+  maxSizeMb: (limitMb: number): string => `Maxim ${limitMb} MB`,
   uploaded: (name: string): string => `„${name}" a fost încărcat`,
   readFailed: 'Nu am putut citi fișierul',
   deleted: (name: string): string => `„${name}" a fost șters`,
   declaration: {
     addTitle: 'Adaugă declarație depusă',
+    typeRequired: 'Tipul declarației este obligatoriu',
+    periodRequired: 'Perioada este obligatorie',
     type: 'Tip declarație *',
     typePlaceholder: 'ex. D101, D112, D200, 220, 221…',
     period: 'Perioadă *',
@@ -307,6 +341,11 @@ export const documents = {
     expenses: (year: number): string => `Cheltuieli ${year}`,
     balance: 'Sold',
     rows: 'Rânduri',
+    csvHeader: 'Data;Descriere;Venit (RON);Cheltuiala (RON)',
+    invoiceKind: {
+      factura: 'Factură',
+      nota: 'Notă de factură',
+    },
   },
 } as const;
 

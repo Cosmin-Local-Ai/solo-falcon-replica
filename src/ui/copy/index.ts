@@ -10,32 +10,77 @@
  * interpolated date), the sentence is split into `…Lead` / `…Tail` fragments so the DOM keeps the
  * shape the tests and the screen reader already depend on.
  *
+ * The re-exports below are named rather than `export *` on purpose: the public surface of the copy
+ * layer is then visible in one place, and a key that no call site imports is easy to spot.
+ *
  * Enforced by `src/ui/copy/copy.guard.test.ts`.
  */
-export * from './common';
-export * from './dashboard';
-export * from './thresholds';
-export * from './notes';
-export * from './provenance';
-export * from './settings';
-export * from './records';
+export { ui, disclosure, noteLabel, fields, validation, empty, nav, shell } from './common';
+export {
+  dashboard,
+  chart,
+  summary,
+  insights,
+  reserve,
+  actions,
+  deadlines,
+  completeness,
+  legislation,
+  moneyPrecision,
+  CHECK_LABELS,
+  checkLabel,
+  deadlineAppliesToLabels,
+  actionAppliesToLabels,
+} from './dashboard';
+export {
+  thresholds,
+  thresholdStatusLabels,
+  measuredBasisLabels,
+  thresholdDomainLabels,
+  thresholdRowLabels,
+  thresholdKindLabels,
+} from './thresholds';
+export { notes, sources } from './notes';
+export { provenance, severity } from './provenance';
+export { settings } from './settings';
+export {
+  revenues,
+  expenses,
+  expenseCategoryLabels,
+  clients,
+  declarations,
+  recordStatus,
+  documents,
+  eFactura,
+} from './records';
 
-import * as common from './common';
-import * as dashboardCopy from './dashboard';
-import * as thresholdsCopy from './thresholds';
-import * as notesCopy from './notes';
-import * as provenanceCopy from './provenance';
-import * as settingsCopy from './settings';
-import * as recordsCopy from './records';
+import {
+  ui, disclosure, noteLabel, fields, validation, empty, nav, shell,
+} from './common';
+import {
+  dashboard, chart, summary, insights, reserve, actions, deadlines, completeness,
+  legislation, moneyPrecision, checkLabel, deadlineAppliesToLabels, actionAppliesToLabels,
+} from './dashboard';
+import {
+  thresholds, thresholdStatusLabels, measuredBasisLabels, thresholdDomainLabels,
+  thresholdRowLabels, thresholdKindLabels,
+} from './thresholds';
+import { notes, sources } from './notes';
+import { provenance, severity } from './provenance';
+import { settings } from './settings';
+import {
+  revenues, expenses, expenseCategoryLabels, clients, declarations, recordStatus, documents, eFactura,
+} from './records';
 
 /** The whole layer as one namespaced object, for call sites that prefer `copy.x.y`. */
 export const copy = {
-  ...common,
-  ...dashboardCopy,
-  ...thresholdsCopy,
-  ...notesCopy,
-  ...provenanceCopy,
-  ...settingsCopy,
-  ...recordsCopy,
-} as const;
-/** Barrel: `src/ui/copy` is the only import a component or page needs for words. */
+  ui, disclosure, noteLabel, fields, validation, empty, nav, shell,
+  dashboard, chart, summary, insights, reserve, actions, deadlines, completeness,
+  legislation, moneyPrecision, checkLabel, deadlineAppliesToLabels, actionAppliesToLabels,
+  thresholds, thresholdStatusLabels, measuredBasisLabels, thresholdDomainLabels,
+  thresholdRowLabels, thresholdKindLabels,
+  notes, sources,
+  provenance, severity,
+  settings,
+  revenues, expenses, expenseCategoryLabels, clients, declarations, recordStatus, documents, eFactura,
+};

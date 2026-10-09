@@ -262,23 +262,11 @@ export const declarationNet = (d: Pick<Declaration, 'venituri' | 'cheltuieli'>):
   maxBani(subBani(d.venituri, d.cheltuieli), 0 as Bani);
 
 // ── Statusuri ─────────────────────────────────────────────
-export const REV_STATUS_LABEL: Record<RevenueStatus, string> = {
-  inregistrata: 'Înregistrată',
-  'in-asteptare': 'În așteptare',
-  respinsa: 'Respinsă',
-};
-
-export const EXP_STATUS_LABEL: Record<ExpenseStatus, string> = {
-  inregistrata: 'Înregistrată',
-  respinsa: 'Respinsă',
-};
-
-export const DECL_STATUS_LABEL: Record<DeclStatus, string> = {
-  inregistrata: 'Înregistrată',
-  'in-asteptare': 'În așteptare',
-  transmisa: 'Transmisa',
-  respinsa: 'Respinsă',
-};
+// The Romanian words for these statuses used to be spelled three times here — `REV_STATUS_LABEL`,
+// `EXP_STATUS_LABEL`, `DECL_STATUS_LABEL` — with 'Înregistrată' and 'Respinsă' identical in all three.
+// They are gone: `copy.recordStatus.revenueLabels / expenseLabels / declarationLabels` is the one place,
+// and the status codes stay here as data only. `statusBadge` below keeps the code→colour mapping,
+// which is presentation logic, not language.
 
 export type BadgeKind = 'badge-neutral' | 'badge-info' | 'badge-success' | 'badge-warning' | 'badge-danger';
 
@@ -293,20 +281,23 @@ export const statusBadge = (status: string): BadgeKind => {
 };
 
 // ── Secțiuni documente ────────────────────────────────────
+/**
+ * A document section is a code, an icon and whether it takes several files. The Romanian words that
+ * name a section are not here — they live in `copy.documents.sections`, keyed by the same code. This
+ * file is the data shape; it used to carry the labels too, which put UI wording below the data layer
+ * where no language test could reach it.
+ */
 export interface DocSection {
   code: DocTypeCode;
-  title: string;
-  desc: string;
   icon: string;
   allowMultiple: boolean;
-  helper: string;
 }
 
 export const DOC_SECTIONS: DocSection[] = [
-  { code: 'im', title: 'Impozit pe venit (IM)', desc: 'Declarația 100 / impozit pe venit', icon: '📋', allowMultiple: false, helper: 'Un fișier pe perioadă (PDF).' },
-  { code: 'cs', title: 'Contribuții sociale (CS)', desc: 'Declarația 220 / contribuții sociale', icon: '🏥', allowMultiple: false, helper: 'Un fișier pe perioadă (PDF).' },
-  { code: 'tva', title: 'TVA', desc: 'Declarația 300 / TVA', icon: '🧾', allowMultiple: false, helper: 'Un fișier pe perioadă (PDF).' },
-  { code: 'facturi', title: 'Facturi și documente', desc: 'Facturi, note fără factură, bonuri fiscale', icon: '📄', allowMultiple: true, helper: 'Poți adăuga mai multe fișiere.' },
+  { code: 'im', icon: '📋', allowMultiple: false },
+  { code: 'cs', icon: '🏥', allowMultiple: false },
+  { code: 'tva', icon: '🧾', allowMultiple: false },
+  { code: 'facturi', icon: '📄', allowMultiple: true },
 ];
 
 export const DOC_SECTION_MAP: Record<DocTypeCode, DocSection> = Object.fromEntries(

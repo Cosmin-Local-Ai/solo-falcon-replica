@@ -94,8 +94,6 @@ export const validation = {
   declarationTypeRequired: 'Tipul declarației este obligatoriu',
   amountInvalid: 'Introduceți o valoare validă',
   vatInvalid: 'Introduceți un TVA valid',
-  onlyPdf: 'Doar fișiere PDF',
-  maxTwoMegabytes: 'Maxim 2 MB',
   yearInvalid: 'An invalid (2000–2100).',
   leiInvalid: 'Valoare invalidă (lei, ≥ 0).',
   monthsInvalid: 'Luni invalide: numere întregi 1-12, separate prin virgulă (ex: 3,4).',
@@ -111,4 +109,33 @@ export const validation = {
 export const empty = {
   noSearchResults: 'Niciun rezultat pentru căutare.',
   records: (n: number): string => `${n} ${n === 1 ? 'înregistrare' : 'înregistrări'}`,
+} as const;
+
+/**
+ * The eight destinations in the sidebar. `App.tsx` used to spell these twice — once in `NAV`, once in
+ * `TITLES` — which is how a rename ends up half-applied. One key now feeds both the link and the
+ * page title.
+ */
+export const nav = {
+  dashboard: 'Panou de control',
+  revenues: 'Venituri',
+  expenses: 'Cheltuieli',
+  'e-factura': 'e-Factura',
+  declarations: 'Declarații',
+  documents: 'Documente',
+  clients: 'Clienți',
+  settings: 'Setări',
+} as const;
+
+/** The chrome around the pages: the brand, the mobile drawer, and the two storage banners. */
+export const shell = {
+  brand: 'SOLO',
+  closeMenu: 'Închide meniul',
+  menu: 'Meniu',
+  /** The stored payload failed to parse and was quarantined. */
+  quarantineTitle: 'Datele salvate nu au putut fi citite.',
+  savedCopy: (when: string): string => `Copia salvată: ${when}`,
+  /** D-3: a migration rewrote the stored data on load, and that has to be announced. */
+  migrationToast: (steps: string): string => `Datele salvate au fost aduse la zi (${steps})`,
+  migrationStepsFallback: 'format nou',
 } as const;

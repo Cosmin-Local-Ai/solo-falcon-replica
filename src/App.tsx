@@ -12,6 +12,7 @@ import Documents from './pages/Documents';
 import Clients from './pages/Clients';
 import Settings from './pages/Settings';
 import { Toasts } from './components/ui';
+import { disclosure, nav, shell } from './ui/copy';
 
 export type Page =
   | 'dashboard'
@@ -35,26 +36,18 @@ const PAGES: Page[] = [
 ];
 
 const NAV: { page: Page; label: string; icon: string }[] = [
-  { page: 'dashboard', label: 'Panou de control', icon: '▦' },
-  { page: 'revenues', label: 'Venituri', icon: '↑' },
-  { page: 'expenses', label: 'Cheltuieli', icon: '↓' },
-  { page: 'e-factura', label: 'e-Factura', icon: '⚡' },
-  { page: 'declarations', label: 'Declarații', icon: '📋' },
-  { page: 'documents', label: 'Documente', icon: '📁' },
-  { page: 'clients', label: 'Clienți', icon: '👥' },
-  { page: 'settings', label: 'Setări', icon: '⚙' },
+  { page: 'dashboard', label: nav.dashboard, icon: '▦' },
+  { page: 'revenues', label: nav.revenues, icon: '↑' },
+  { page: 'expenses', label: nav.expenses, icon: '↓' },
+  { page: 'e-factura', label: nav['e-factura'], icon: '⚡' },
+  { page: 'declarations', label: nav.declarations, icon: '📋' },
+  { page: 'documents', label: nav.documents, icon: '📁' },
+  { page: 'clients', label: nav.clients, icon: '👥' },
+  { page: 'settings', label: nav.settings, icon: '⚙' },
 ];
 
-const TITLES: Record<Page, string> = {
-  dashboard: 'Panou de control',
-  revenues: 'Venituri',
-  expenses: 'Cheltuieli',
-  'e-factura': 'e-Factura',
-  declarations: 'Declarații',
-  documents: 'Documente',
-  clients: 'Clienți',
-  settings: 'Setări',
-};
+// The page title is the nav label — one key, spelled once.
+const TITLES: Record<Page, string> = nav;
 
 // --- URL routing: /<page> with optional #!<tab> ---
 
@@ -140,7 +133,7 @@ function Shell() {
     migrationAnnounced.current = true;
     toast(
       'info',
-      `Datele salvate au fost aduse la zi (${migration.stepsApplied.join(', ') || 'format nou'})`,
+      shell.migrationToast(migration.stepsApplied.join(', ') || shell.migrationStepsFallback),
     );
   }, [migration, toast]);
   const { pendingCounts } = useDashboardData();
@@ -206,7 +199,7 @@ function Shell() {
         {...inertAttrs}
       >
         <div className="sidebar-logo">
-          <span className="mark">S</span> SOLO
+          <span className="mark">S</span> {shell.brand}
         </div>
         {/* Phase 7: the sidebar shows WHOSE data this is, read from the one
             identity store. It deliberately shows the trade name, not the person
@@ -240,7 +233,7 @@ function Shell() {
           className="nav-overlay"
           role="button"
           tabIndex={-1}
-          aria-label="Închide meniul"
+          aria-label={shell.closeMenu}
           onClick={() => setNavOpen(false)}
           onKeyDown={e => {
             if (e.key === 'Enter' || e.key === ' ') setNavOpen(false);
@@ -252,7 +245,7 @@ function Shell() {
           <button
             type="button"
             className="nav-toggle"
-            aria-label="Meniu"
+            aria-label={shell.menu}
             aria-expanded={navOpen}
             onClick={() => setNavOpen(v => !v)}
           >
@@ -268,11 +261,11 @@ function Shell() {
         <div className="main-content">
           {dataOrigin === 'quarantined' && quarantine && (
             <div className="banner banner-warn" role="alert">
-              <strong>Datele salvate nu au putut fi citite.</strong> {quarantineSummary(quarantine)}
+              <strong>{shell.quarantineTitle}</strong> {quarantineSummary(quarantine)}
               <details className="banner-details">
-                <summary>Detalii tehnice</summary>
+                <summary>{disclosure.technicalDetails}</summary>
                 <p>{quarantine.reason} — {quarantine.detail}</p>
-                <p>Copia salvată: {quarantine.quarantinedAt}</p>
+                <p>{shell.savedCopy(quarantine.quarantinedAt)}</p>
               </details>
             </div>
           )}
