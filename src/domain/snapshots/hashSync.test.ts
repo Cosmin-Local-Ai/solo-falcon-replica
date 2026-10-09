@@ -48,7 +48,7 @@ describe('computeInputsHashSync is the exact sync twin of computeInputsHash', ()
     fiscalYear: 2026,
     regime: 'impozit_pe_venit' as const,
     salaryStatus: 'nu' as const,
-    pensionStatus: 'nu' as const,
+    pensionerStatus: 'nu' as const,
     otherIncome: [] as [],
     socialInsuranceStatus: 'neplata' as const,
     vatExempt: false,

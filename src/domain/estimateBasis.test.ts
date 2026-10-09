@@ -38,7 +38,7 @@ function identity(): PfaIdentity {
 function profile(fiscalYear = 2026): PfaProfile {
   return {
     id: 'profile-test', pfaStartYear: 2026, fiscalYear, regime: 'impozit_pe_venit', caen: '6201',
-    salaryStatus: 'nu', pensionStatus: 'nu', otherIncome: [], socialInsuranceStatus: 'obligatoriu',
+    salaryStatus: 'nu', pensionerStatus: 'nu', otherIncome: [], socialInsuranceStatus: 'obligatoriu',
     vatExempt: false, cashFloorLei: lei(0), identity: identity(),
     updatedAt: '2026-01-01T00:00:00.000Z',
   };

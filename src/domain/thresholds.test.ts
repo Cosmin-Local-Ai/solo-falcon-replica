@@ -41,7 +41,7 @@ const allBases = (value: Bani) => ({
  */
 const APPLICABLE_PROFILE: PfaProfile = createDefaultProfile({
   fiscalYear: 2026,
-  pensionStatus: 'nu',
+  pensionerStatus: 'nu',
   salaryStatus: 'nu',
   socialInsuranceStatus: 'obligatoriu',
   vatExempt: true,
@@ -635,7 +635,9 @@ describe('TASK 4 — severity, applicability and the measured basis', () => {
   });
 
   it('a pensioner profile makes both CAS rows not applicable, with the art. 150 alin. (1) reason', () => {
-    const rows = rowsFor({ ...APPLICABLE_PROFILE, pensionStatus: 'da' }, lei(100000));
+    // TASK 5: CAS still keys on the STATUS — the one provision in this area where a status is the right
+    // key. It now reads `pensionerStatus`, not the deprecated `pensionStatus`.
+    const rows = rowsFor({ ...APPLICABLE_PROFILE, pensionerStatus: 'da' }, lei(100000));
     for (const id of ['CAS_MIN_BASE', 'CAS_TIER2_FLOOR']) {
       const row = byId(rows, id);
       expect(row.applicability, id).toBe('not_applicable');
@@ -646,23 +648,149 @@ describe('TASK 4 — severity, applicability and the measured basis', () => {
     }
   });
 
-  it('a zero net income makes both CASS rows not applicable (art. 174 alin. (2))', () => {
+  // TASK 5 — the art. 174 alin. (2) zero/loss branch used to return `not_applicable` for BOTH CASS rows
+  // on the same citation. That settled by inference a question research 25 gap 2 records as unresolved:
+  // whether the alin. (6) 6-SM difference survives a zero/loss year. The cap row keeps the citation (no
+  // base, nothing to cap); the top-up row is now undecided and says why.
+  it('a zero net income leaves the CASS top-up row unknown, not decided by inference (art. 174 alin. (2) vs alin. (6))', () => {
     const rows = rowsFor(APPLICABLE_PROFILE, lei(0));
-    for (const id of ['CASS_MIN_BASE', 'CASS_MAX_BASE']) {
-      const row = byId(rows, id);
-      expect(row.applicability, id).toBe('not_applicable');
-      expect(row.applicabilityReason ?? '', id).toContain('art. 174 alin. (2)');
-      expect(row.severity, id).toBe('none');
-      expect(row.status, id).not.toBe('breached');
-    }
+    const topUp = byId(rows, 'CASS_MIN_BASE');
+    expect(topUp.applicability).toBe('unknown');
+    expect(topUp.applicabilityReason ?? '').toContain('Notă de interpretare');
+    expect(topUp.applicabilityReason ?? '').toContain('art. 174 alin. (6)');
+    expect(topUp.applicabilityReason ?? '').toContain('research 25');
+    expect(topUp.status).not.toBe('breached');
   });
 
-  it('a pensioner removes the CASS 6 SM top-up row but keeps the CASS cap row applicable', () => {
+  it('a zero net income still makes the CASS cap row not applicable (art. 174 alin. (2))', () => {
+    const rows = rowsFor(APPLICABLE_PROFILE, lei(0));
+    const cap = byId(rows, 'CASS_MAX_BASE');
+    expect(cap.applicability).toBe('not_applicable');
+    expect(cap.applicabilityReason ?? '').toContain('art. 174 alin. (2)');
+    expect(cap.applicabilityReason ?? '').toContain('art. 180 alin. (1)');
+    expect(cap.severity).toBe('none');
+    expect(cap.status).not.toBe('breached');
+  });
+
+  it('a fiscal loss splits the same way as a zero year', () => {
+    const rows = rowsFor(APPLICABLE_PROFILE, lei(-50000));
+    expect(byId(rows, 'CASS_MIN_BASE').applicability).toBe('unknown');
+    expect(byId(rows, 'CASS_MAX_BASE').applicability).toBe('not_applicable');
+  });
+
+  it('pension sums received in the fiscal year remove the CASS 6 SM top-up row but keep the cap row applicable', () => {
     // CF art. 174 alin. (7) lit. c) removes ONLY the art. 174 alin. (6) difference; 10 % × net is still
     // owed, so the 72-SM cap row still applies. Never mirror the CAS pensioner exemption into CASS.
-    const rows = rowsFor({ ...APPLICABLE_PROFILE, pensionStatus: 'da' }, lei(10000));
+    const rows = rowsFor(
+      { ...APPLICABLE_PROFILE, pensionReceiptYears: [{ fiscalYear: 2026, received: 'da' }] },
+      lei(10000),
+    );
     expect(byId(rows, 'CASS_MIN_BASE').applicability).toBe('not_applicable');
     expect(byId(rows, 'CASS_MIN_BASE').applicabilityReason ?? '').toContain('art. 174 alin. (7) lit. c)');
+    expect(byId(rows, 'CASS_MIN_BASE').applicabilityReason ?? '').toContain('art. 99 alin. (1)');
+    expect(byId(rows, 'CASS_MAX_BASE').applicability).toBe('applicable');
+  });
+
+  // TASK 5 — the defect: the relief used to fire on `pensionStatus === 'da'`. Status is not the fact
+  // alin. (7) tests, so a status with no receipt fact for the year decides nothing.
+  it('pensioner status alone does NOT remove the top-up row: the receipt fact is missing, so it is unknown', () => {
+    const rows = rowsFor({ ...APPLICABLE_PROFILE, pensionerStatus: 'da' }, lei(10000));
+    const row = byId(rows, 'CASS_MIN_BASE');
+    expect(row.applicability).toBe('unknown');
+    expect(row.applicabilityReason ?? '').toContain('art. 174 alin. (7) lit. c)');
+    expect(row.applicabilityReason ?? '').toContain('alin. (8) nu extinde excepția la pensionari');
+  });
+
+  it('a receipt fact recorded for another year does not relieve this year', () => {
+    const rows = rowsFor(
+      { ...APPLICABLE_PROFILE, pensionReceiptYears: [{ fiscalYear: 2025, received: 'da' }] },
+      lei(10000),
+    );
+    expect(byId(rows, 'CASS_MIN_BASE').applicability).toBe('applicable');
+  });
+
+  it('a recorded `nu` receipt for the year leaves the top-up applicable — the pensioner did not qualify', () => {
+    const rows = rowsFor(
+      { ...APPLICABLE_PROFILE, pensionerStatus: 'da', pensionReceiptYears: [{ fiscalYear: 2026, received: 'nu' }] },
+      lei(10000),
+    );
+    expect(byId(rows, 'CASS_MIN_BASE').applicability).toBe('applicable');
+  });
+
+  // lit. c) carries no monetary qualifier. The profile holds no pension amount at all, and the row is
+  // still relieved — an invented 6-SM test on lit. c) has nowhere to attach.
+  it('lit. c) has no amount threshold: relief fires with no pension quantum anywhere in the profile', () => {
+    const rows = rowsFor(
+      { ...APPLICABLE_PROFILE, pensionReceiptYears: [{ fiscalYear: 2026, received: 'da' }] },
+      lei(100),
+    );
+    expect(byId(rows, 'CASS_MIN_BASE').applicability).toBe('not_applicable');
+    expect(byId(rows, 'CASS_MIN_BASE').applicabilityReason ?? '').toContain('nu are niciun prag valoric');
+  });
+
+  // CF art. 174 alin. (8): the previous-year route, with no pension fact present at all.
+  it('the art. 174 alin. (8) previous-year art. 154 category removes the top-up row', () => {
+    const rows = rowsFor(
+      { ...APPLICABLE_PROFILE, cassPreviousYearContext: { previousFiscalYear: 2025, inExceptedCategory: 'da' } },
+      lei(10000),
+    );
+    expect(byId(rows, 'CASS_MIN_BASE').applicability).toBe('not_applicable');
+    expect(byId(rows, 'CASS_MIN_BASE').applicabilityReason ?? '').toContain('art. 174 alin. (8)');
+    expect(byId(rows, 'CASS_MIN_BASE').applicabilityReason ?? '').toContain('nu include pensionarii');
+    // alin. (8) reaches the top-up only — the cap row keeps applying.
+    expect(byId(rows, 'CASS_MAX_BASE').applicability).toBe('applicable');
+  });
+
+  it('the art. 174 alin. (8) art. 180 alin. (1) option route removes the top-up row', () => {
+    const rows = rowsFor(
+      { ...APPLICABLE_PROFILE, cassPreviousYearContext: { previousFiscalYear: 2025, optedUnderArt180Alin1: 'da' } },
+      lei(10000),
+    );
+    expect(byId(rows, 'CASS_MIN_BASE').applicability).toBe('not_applicable');
+  });
+
+  // alin. (8) is previous-year-scoped: a context attributed to the income year is not the fact it asks
+  // for, and pensioner status may never stand in for it.
+  it('an art. 174 alin. (8) context attributed to the wrong year relieves nothing', () => {
+    const rows = rowsFor(
+      { ...APPLICABLE_PROFILE, cassPreviousYearContext: { previousFiscalYear: 2026, inExceptedCategory: 'da' } },
+      lei(10000),
+    );
+    expect(byId(rows, 'CASS_MIN_BASE').applicability).toBe('applicable');
+  });
+
+  // CF art. 153 alin. (2) removes the CASS taxpayer quality itself, so it reaches BOTH CASS rows — the
+  // one ground in this area that does, and it is unrelated to pensions.
+  it('proved foreign sickness/maternity insurance makes BOTH CASS rows not applicable (art. 153 alin. (2))', () => {
+    const rows = rowsFor(
+      { ...APPLICABLE_PROFILE, foreignSicknessInsurance: { fiscalYear: 2026, held: 'da', proved: 'da' } },
+      lei(100000),
+    );
+    for (const id of ['CASS_MIN_BASE', 'CASS_MAX_BASE']) {
+      expect(byId(rows, id).applicability, id).toBe('not_applicable');
+      expect(byId(rows, id).applicabilityReason ?? '', id).toContain('art. 153 alin. (2)');
+      expect(byId(rows, id).severity, id).toBe('none');
+    }
+    // CAS is untouched by it — art. 153 alin. (2) is a CASS provision.
+    expect(byId(rows, 'CAS_MIN_BASE').applicability).toBe('applicable');
+  });
+
+  it('foreign insurance held but not proved is not the art. 153 alin. (2) exclusion', () => {
+    const rows = rowsFor(
+      { ...APPLICABLE_PROFILE, foreignSicknessInsurance: { fiscalYear: 2026, held: 'da' } },
+      lei(100000),
+    );
+    expect(byId(rows, 'CASS_MAX_BASE').applicability).toBe('applicable');
+  });
+
+  // CF art. 174 alin. (7) lit. b): other art. 155 alin. (1) lit. c)-h) income at least 6 SM. The profile
+  // declares such incomes but the app holds no amount, so the condition is undecided — never assumed.
+  it('declared other income leaves the top-up row unknown: art. 174 alin. (7) lit. b) cannot be tested', () => {
+    const rows = rowsFor({ ...APPLICABLE_PROFILE, otherIncome: ['imobiliare'] }, lei(10000));
+    const row = byId(rows, 'CASS_MIN_BASE');
+    expect(row.applicability).toBe('unknown');
+    expect(row.applicabilityReason ?? '').toContain('art. 174 alin. (7) lit. b)');
+    // The cap row is unaffected — lit. b) reaches only the top-up.
     expect(byId(rows, 'CASS_MAX_BASE').applicability).toBe('applicable');
   });
 

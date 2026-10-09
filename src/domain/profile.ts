@@ -45,7 +45,10 @@ export function createDefaultProfile(
     // Phase 7 (D-1): CAEN lives in `identity.caen`; the deprecated `caen` string
     // is not written for new profiles.
     salaryStatus: 'nu',
-    pensionStatus: 'nu',
+    // TASK 5: `pensionerStatus` is the STATUS fact only (CF art. 150 alin. (1) — CAS). The receipt facts
+    // that CF art. 174 alin. (7) lit. c) keys on are NOT defaulted here: a fresh profile has not recorded
+    // them, and defaulting one would state a fact the user never entered.
+    pensionerStatus: 'nu',
     otherIncome: [],
     socialInsuranceStatus: 'neplata',
     vatExempt: false,

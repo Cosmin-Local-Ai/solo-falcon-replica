@@ -9,7 +9,6 @@ import {
 } from '../domain/regimes';
 import { isoCalendarDateProblem, isoCalendarDateProblemText } from '../domain/date';
 import type {
-  PfaPensionStatus,
   PfaRegime,
   PfaSalaryStatus,
   PfaSocialInsuranceStatus,
@@ -32,6 +31,37 @@ type TabKey = (typeof TABS)[number]['key'];
 interface SettingsProps {
   initialTab?: string;
   onTabChange?: (tab: string) => void;
+}
+
+/**
+ * TASK 5 — the three states a pension/CASS-exception select can hold. `''` is "not recorded", which is
+ * NOT the same answer as `nu`: `nu` asserts a checked negative, `''` leaves the fact unknown. Without
+ * this label TypeScript widens the empty option to `string` and the save path loses the union.
+ */
+type TriState = 'da' | 'nu' | '';
+
+/** Narrow a `TriState` to the two recorded answers, or `undefined` for "not recorded". */
+function recorded(value: TriState): 'da' | 'nu' | undefined {
+  return value === '' ? undefined : value;
+}
+
+/**
+ * TASK 5 — parse the recorded suspension months. Returns `null` for anything that is not a list of
+ * whole months 1-12, and `[]` for an empty field ("not recorded"), which the save path turns into
+ * `undefined` rather than an empty record.
+ */
+function parseSuspensionMonths(raw: string): number[] | null {
+  const trimmed = raw.trim();
+  if (trimmed === '') return [];
+  const months: number[] = [];
+  for (const part of trimmed.split(',')) {
+    const token = part.trim();
+    if (token === '') continue;
+    const n = Number(token);
+    if (!Number.isInteger(n) || n < 1 || n > 12) return null;
+    if (!months.includes(n)) months.push(n);
+  }
+  return months.sort((a, b) => a - b);
 }
 
 export default function Settings({ initialTab, onTabChange }: SettingsProps) {
@@ -88,7 +118,35 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     // `leiInputValue`, not `String(...)`: the stored amount is integer bani and an input is a screen.
     // The `undefined` branch stays a separate case — an empty field means "not recorded", which is not 0.
     salaryIncomeLei: profile.salaryIncomeLei === undefined ? '' : leiInputValue(profile.salaryIncomeLei),
-    pensionStatus: profile.pensionStatus,
+    // TASK 5 — the pension facts, each read back for the fiscal year the profile declares. Every one of
+    // them is a THREE-state select: '' means "not recorded", which is a different state from answering
+    // `nu` (a checked negative) and from `da`. Collapsing '' into 'nu' would assert a fact the user
+    // never stated, and for art. 174 alin. (7) lit. c) it would decide a tax relief.
+    pensionerStatus: (profile.pensionerStatus ?? '') as TriState,
+    pensionReceipt: (profile.pensionReceiptYears?.find((r) => r.fiscalYear === profile.fiscalYear)?.received ??
+      '') as TriState,
+    pensionSuspensionMonths:
+      profile.pensionSuspensionYears?.find((s) => s.fiscalYear === profile.fiscalYear)?.months.join(',') ?? '',
+    previousYearExcepted: (
+      profile.cassPreviousYearContext?.previousFiscalYear === profile.fiscalYear - 1
+        ? profile.cassPreviousYearContext.inExceptedCategory ?? ''
+        : ''
+    ) as TriState,
+    previousYearOption: (
+      profile.cassPreviousYearContext?.previousFiscalYear === profile.fiscalYear - 1
+        ? profile.cassPreviousYearContext.optedUnderArt180Alin1 ?? ''
+        : ''
+    ) as TriState,
+    foreignInsuranceHeld: (
+      profile.foreignSicknessInsurance?.fiscalYear === profile.fiscalYear
+        ? profile.foreignSicknessInsurance.held ?? ''
+        : ''
+    ) as TriState,
+    foreignInsuranceProved: (
+      profile.foreignSicknessInsurance?.fiscalYear === profile.fiscalYear
+        ? profile.foreignSicknessInsurance.proved ?? ''
+        : ''
+    ) as TriState,
     socialInsuranceStatus: profile.socialInsuranceStatus,
     vatExempt: profile.vatExempt ? 'da' : 'nu',
     // Optional: an empty field means "the app does not know the date", which is not
@@ -171,6 +229,12 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     }
     const cash = parseLeiInput(fiscal.cashFloorLei);
     if (cash === null || cash < 0) e.cashFloorLei = 'Valoare invalidă (lei, ≥ 0).';
+    // A suspension is recorded as months, because that is the fact; whether those months change
+    // anything under art. 174 alin. (7) is UNVERIFIED and is not decided here.
+    const suspensionMonths = parseSuspensionMonths(fiscal.pensionSuspensionMonths);
+    if (suspensionMonths === null) {
+      e.pensionSuspensionMonths = 'Luni invalide: numere întregi 1-12, separate prin virgulă (ex: 3,4).';
+    }
     if (!isSelectableRegime(fiscal.regime)) {
       e.regime = 'Regimul salvat nu poate fi calculat; alege un regim valabil pentru un PFA.';
     }
@@ -183,7 +247,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     // cannot reach here. Guarding explicitly instead of casting keeps the narrowing honest: if a
     // future edit adds a path that skips validation, this stops compiling rather than writing
     // `null` into a `Bani` field.
-    if (salary === null || cash === null) return;
+    if (salary === null || cash === null || suspensionMonths === null) return;
     updateProfile({
       regime: fiscal.regime,
       pfaStartYear: year,
@@ -192,7 +256,32 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       salaryStatus: fiscal.salaryStatus,
       // No salary ⇒ no art. 174 alin. (7) lit. a) relief, and no stale amount left behind.
       salaryIncomeLei: fiscal.salaryStatus === 'da' ? salary : undefined,
-      pensionStatus: fiscal.pensionStatus,
+      // TASK 5 — each pension fact is written under the fiscal year the profile will declare, and an
+      // empty select writes `undefined` (absent), never `nu`. `pensionerStatus` is the CAS key under CF
+      // art. 150 alin. (1); the art. 174 alin. (7) lit. c) relief keys on `pensionReceiptYears`.
+      pensionerStatus: recorded(fiscal.pensionerStatus),
+      pensionReceiptYears:
+        fiscal.pensionReceipt === '' ? undefined : [{ fiscalYear: fy, received: fiscal.pensionReceipt }],
+      pensionSuspensionYears:
+        suspensionMonths.length === 0
+          ? undefined
+          : [{ fiscalYear: fy, months: suspensionMonths }],
+      cassPreviousYearContext:
+        fiscal.previousYearExcepted === '' && fiscal.previousYearOption === ''
+          ? undefined
+          : {
+              previousFiscalYear: fy - 1,
+              inExceptedCategory: recorded(fiscal.previousYearExcepted),
+              optedUnderArt180Alin1: recorded(fiscal.previousYearOption),
+            },
+      foreignSicknessInsurance:
+        fiscal.foreignInsuranceHeld === '' && fiscal.foreignInsuranceProved === ''
+          ? undefined
+          : {
+              fiscalYear: fy,
+              held: recorded(fiscal.foreignInsuranceHeld),
+              proved: recorded(fiscal.foreignInsuranceProved),
+            },
       socialInsuranceStatus: fiscal.socialInsuranceStatus,
       vatExempt: fiscal.vatExempt === 'da',
       // '' ⇒ undefined, never '': a stored empty string would be a malformed date.
@@ -681,18 +770,131 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>Venituri din pensii</label>
+                <label>Calitate de pensionar</label>
                 <select
                   className="input"
-                  value={fiscal.pensionStatus}
-                  onChange={e => setFiscal({ ...fiscal, pensionStatus: e.target.value as PfaPensionStatus })}
+                  value={fiscal.pensionerStatus}
+                  onChange={e => setFiscal({ ...fiscal, pensionerStatus: e.target.value as TriState })}
                 >
+                  <option value="">nu înregistrat</option>
                   <option value="nu">nu</option>
                   <option value="da">da</option>
                 </select>
                 <span className="hint">
-                  Art. 174 alin. (7) lit. c): elimină doar diferența de la alin. (6); CAS se datorează
-                  doar în condițiile art. 150 alin. (1).
+                  Art. 150 alin. (1) din Codul fiscal: calitatea de pensionar este temeiul pentru care nu
+                  se datorează CAS pe venitul din activități independente. Nu este temeiul pentru CASS —
+                  art. 174 alin. (7) lit. c) se decide pe sumele primite ca pensii în anul fiscal, nu pe
+                  acest statut. „Nu înregistrat" înseamnă că aplicația nu știe, nu că persoana nu este
+                  pensionară.
+                </span>
+              </div>
+
+              <div className="field">
+                <label>Sume primite ca pensii în anul fiscal</label>
+                <select
+                  className="input"
+                  value={fiscal.pensionReceipt}
+                  onChange={e => setFiscal({ ...fiscal, pensionReceipt: e.target.value as TriState })}
+                >
+                  <option value="">nu înregistrat</option>
+                  <option value="nu">nu</option>
+                  <option value="da">da</option>
+                </select>
+                <span className="hint">
+                  Art. 174 alin. (7) lit. c) coroborat cu art. 99 alin. (1) din Codul fiscal: diferența de
+                  contribuție până la baza de 6 salarii minime brute nu se datorează dacă în anul fiscal
+                  persoana a primit cel puțin o sumă ca pensie. Fapta este încasarea din an, nu statutul.
+                  Cuantumul nu contează — lit. c) nu are niciun prag valoric, spre deosebire de lit. a) și
+                  lit. b). Excepția elimină doar diferența: contribuția de 10 % pe venitul net rămâne
+                  datorată.
+                </span>
+              </div>
+
+              <div className="field">
+                <label>Luni cu pensia suspendată (anul fiscal)</label>
+                <input
+                  className="input"
+                  value={fiscal.pensionSuspensionMonths}
+                  placeholder="ex: 3,4"
+                  onChange={e => setFiscal({ ...fiscal, pensionSuspensionMonths: e.target.value })}
+                />
+                <span className="hint">
+                  Faptă înregistrată, fără efect juridic: nicio prevedere verificată (Cod fiscal, HG
+                  1/2016, OPANAF 2.736/2025) nu spune ce produce suspendarea asupra art. 174 alin. (7)
+                  lit. c). Aplicația consemnează lunile și nu trage nicio concluzie din ele.
+                </span>
+                {errors.pensionSuspensionMonths && <span className="error">{errors.pensionSuspensionMonths}</span>}
+              </div>
+
+              <div className="field">
+                <label>Excepție art. 154 alin. (1) lit. a), b), e) sau f) în anul precedent</label>
+                <select
+                  className="input"
+                  value={fiscal.previousYearExcepted}
+                  onChange={e => setFiscal({ ...fiscal, previousYearExcepted: e.target.value as TriState })}
+                >
+                  <option value="">nu înregistrat</option>
+                  <option value="nu">nu</option>
+                  <option value="da">da</option>
+                </select>
+                <span className="hint">
+                  Art. 174 alin. (8) din Codul fiscal extinde excepția de la alin. (7) și la persoanele
+                  care în anul precedent s-au încadrat în art. 154 alin. (1) lit. a), b), e) sau f). Lista
+                  este închisă și NU include pensionarii, deci acest răspuns nu se deduce din calitatea de
+                  pensionar.
+                </span>
+              </div>
+
+              <div className="field">
+                <label>Opțiune pentru CASS (art. 180 alin. (1)) în anul precedent</label>
+                <select
+                  className="input"
+                  value={fiscal.previousYearOption}
+                  onChange={e => setFiscal({ ...fiscal, previousYearOption: e.target.value as TriState })}
+                >
+                  <option value="">nu înregistrat</option>
+                  <option value="nu">nu</option>
+                  <option value="da">da</option>
+                </select>
+                <span className="hint">
+                  Art. 174 alin. (8) lit. b) din Codul fiscal: aceeași cale pentru persoanele care au
+                  optat pentru plata contribuției potrivit art. 180 alin. (1) în anul precedent.
+                </span>
+              </div>
+
+              <div className="field">
+                <label>Asigurare de sănătate în alt stat (art. 153 alin. (2))</label>
+                <select
+                  className="input"
+                  value={fiscal.foreignInsuranceHeld}
+                  onChange={e => setFiscal({ ...fiscal, foreignInsuranceHeld: e.target.value as TriState })}
+                >
+                  <option value="">nu înregistrat</option>
+                  <option value="nu">nu</option>
+                  <option value="da">da</option>
+                </select>
+                <span className="hint">
+                  Art. 153 alin. (2) din Codul fiscal: persoana asigurată pentru boală și maternitate în
+                  alt stat UE/SEE/Elvețian sau cu acord bilateral nu are calitatea de contribuabil la CASS
+                  — dar numai dacă face și dovada valabilității asigurării. Nu are legătură cu pensia.
+                </span>
+              </div>
+
+              <div className="field">
+                <label>Dovada asigurării din alt stat a fost făcută</label>
+                <select
+                  className="input"
+                  value={fiscal.foreignInsuranceProved}
+                  onChange={e => setFiscal({ ...fiscal, foreignInsuranceProved: e.target.value as TriState })}
+                >
+                  <option value="">nu înregistrat</option>
+                  <option value="nu">nu</option>
+                  <option value="da">da</option>
+                </select>
+                <span className="hint">
+                  Art. 153 alin. (2) din Codul fiscal cere ambele: asigurarea și „dovada valabilității
+                  asigurării” stabilită prin ordin comun A.N.A.F. / C.N.A.S. Fără dovadă, exceptia nu
+                  produce nimic.
                 </span>
               </div>
 

@@ -165,7 +165,7 @@ describe('Dashboard page', () => {
         pfaStartYear: 2026,
         fiscalYear: 2026,
         regime: 'impozit_pe_venit',
-        pensionStatus: 'nu',
+        pensionerStatus: 'nu',
         otherIncome: [],
         socialInsuranceStatus: 'obligatoriu',
       },

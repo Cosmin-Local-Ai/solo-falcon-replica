@@ -412,12 +412,17 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // migration and prove nothing — what B-26 actually broke was the WRITE, so the assertion belongs on the
     // bytes the save effect put back into localStorage.
     const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}'), STORAGE_KEY);
-    // The payload entered at v4; the chain ran `money-bani` (4→5), `expense-category` (5→6) and, since
-    // TASK 3, `tax-reserve` (6→7). The save effect stamps the version this build writes, so the bytes
-    // written back are v7 — and the notice below is what proves the migration report survived the
-    // write rather than being recomputed on the next load. The `tax-reserve` step backfills nothing, so
-    // the payload gains a version number and no money.
-    expect(saved.version).toBe(7);
+    // The payload entered at v4; the chain ran `money-bani` (4→5), `expense-category` (5→6),
+    // `tax-reserve` (6→7) and, since TASK 5, `pension-facts` (7→8). The save effect stamps the version
+    // this build writes, so the bytes written back are v8 — and the notice below is what proves the
+    // migration report survived the write rather than being recomputed on the next load. `tax-reserve`
+    // backfills nothing, so the payload gains a version number and no money.
+    expect(saved.version).toBe(8);
+    // TASK 5: the legacy profile entered this test with the pre-v8 `pensionStatus` key. The step folds it
+    // into `pensionerStatus` and removes the old key — a rename of the status fact, never an inference
+    // from it about pension sums received in the year.
+    expect(saved.profile.pensionerStatus).toBe('nu');
+    expect(saved.profile.pensionStatus).toBeUndefined();
     expect(saved.moneyNotices).toHaveLength(1);
     expect(saved.moneyNotices[0].original).toBe('674.504');
     expect(saved.moneyNotices[0].converted).toBe(67450);

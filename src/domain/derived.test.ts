@@ -36,7 +36,7 @@ function profile(overrides: Partial<PfaProfile> = {}): PfaProfile {
     regime: 'impozit_pe_venit',
     caen: '6201',
     salaryStatus: 'nu',
-    pensionStatus: 'nu',
+    pensionerStatus: 'nu',
     otherIncome: [],
     socialInsuranceStatus: 'obligatoriu',
     vatExempt: false,
@@ -369,6 +369,28 @@ describe('selectTaxDerived (Step 14, structural — no formula)', () => {
       activeRules2026(),
     );
     expect(after.inputs.inputsKey).not.toBe(before.inputs.inputsKey);
+  });
+
+  // TASK 5: the receipt fact is a tax input in its own right — the art. 174 alin. (7) lit. c) relief turns
+  // on it — so it must reach the canonical key independently of pensioner status.
+  it('changes inputsKey when the pension receipt fact for the year changes, independently of status', () => {
+    const statusOnly = selectTaxDerived(makeData({ profile: profile({ pensionerStatus: 'da' }) }), activeRules2026());
+    const withReceipt = selectTaxDerived(
+      makeData({ profile: profile({ pensionerStatus: 'da', pensionReceiptYears: [{ fiscalYear: 2026, received: 'da' }] }) }),
+      activeRules2026(),
+    );
+    expect(withReceipt.inputs.inputsKey).not.toBe(statusOnly.inputs.inputsKey);
+    expect(withReceipt.inputs.pensionReceiptYears).toEqual([{ fiscalYear: 2026, received: 'da' }]);
+    expect(statusOnly.inputs.pensionReceiptYears).toEqual([]);
+  });
+
+  it('carries the new pension facts as null/[] rather than undefined, so the key stays canonical', () => {
+    const d = selectTaxDerived(makeData(), activeRules2026());
+    expect(d.inputs.pensionerStatus).toBe('nu');
+    expect(d.inputs.pensionReceiptYears).toEqual([]);
+    expect(d.inputs.pensionSuspensionYears).toEqual([]);
+    expect(d.inputs.cassPreviousYearContext).toBeNull();
+    expect(d.inputs.foreignSicknessInsurance).toBeNull();
   });
 
   it('changes inputsKey when the start date changes', () => {

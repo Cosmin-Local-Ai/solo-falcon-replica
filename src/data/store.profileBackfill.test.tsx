@@ -156,9 +156,31 @@ describe('pre-Phase-6 profile payload still loads (data-loss trap)', () => {
     load();
     expect(storeRef!.profile.pfaStartDate).toBeUndefined();
     expect(storeRef!.profile.salaryIncomeLei).toBeUndefined();
+    // TASK 5: none of the pension facts is invented on the way in either.
+    expect(storeRef!.profile.pensionReceiptYears).toBeUndefined();
+    expect(storeRef!.profile.pensionSuspensionYears).toBeUndefined();
+    expect(storeRef!.profile.cassPreviousYearContext).toBeUndefined();
+    expect(storeRef!.profile.foreignSicknessInsurance).toBeUndefined();
     // Everything the old payload carried is untouched.
     expect(storeRef!.profile.regime).toBe(seedData.profile.regime);
     expect(storeRef!.profile.caen).toBe(seedData.profile.caen);
+  });
+
+  // TASK 5 acceptance: an old record still renders, and its pension status survives the rename without
+  // acquiring a legal conclusion it never recorded.
+  it('loads an old record that carries the pre-v8 `pensionStatus` key, renames it and invents no receipt fact', () => {
+    const payload = legacyPayload();
+    const profile = payload.profile as Record<string, unknown>;
+    delete profile.pensionerStatus;
+    profile.pensionStatus = 'da';
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    load();
+    // Not quarantined, not reset to seed: the old record still loads and still renders.
+    expect(storeRef!.profile.id).toBe(seedData.profile.id);
+    expect(storeRef!.profile.pensionerStatus).toBe('da');
+    expect(storeRef!.profile.pensionStatus).toBeUndefined();
+    expect(storeRef!.profile.pensionReceiptYears).toBeUndefined();
+    expect(storeRef!.revenues.map((r) => r.id)).toEqual(['r-legacy-1', 'r-legacy-2']);
   });
 
   it('survives a reload after the store has re-persisted the loaded payload', () => {

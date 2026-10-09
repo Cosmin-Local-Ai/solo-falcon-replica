@@ -174,6 +174,9 @@ export function readCassExceptionFacts(fields: PensionFactFields, fiscalYear: nu
     previousYearArt180Option: readPreviousYearArt180Option(fields, fiscalYear),
     foreignSicknessInsuranceProved: readForeignSicknessInsuranceProved(fields, fiscalYear),
     suspensionNote: suspension && suspension.months.length > 0 ? PENSION_SUSPENSION_NOTE : null,
-    receiptGapNote: readPensionerStatus(fields) === 'da' && pensionSumsReceived !== 'da' ? PENSION_RECEIPT_GAP_NOTE : null,
+    // The gap is specifically "a pensioner, and no answer at all for this year". A recorded `nu` is an
+    // answer — the person did not receive pension sums — and needs no withheld-conclusion note.
+    receiptGapNote:
+      readPensionerStatus(fields) === 'da' && pensionSumsReceived === 'unknown' ? PENSION_RECEIPT_GAP_NOTE : null,
   };
 }

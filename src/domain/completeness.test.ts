@@ -24,7 +24,7 @@ function makeProfile(): PfaProfile {
     regime: 'impozit_pe_venit',
     caen: '6201',
     salaryStatus: 'nu',
-    pensionStatus: 'nu',
+    pensionerStatus: 'nu',
     otherIncome: [],
     socialInsuranceStatus: 'obligatoriu',
     vatExempt: false,

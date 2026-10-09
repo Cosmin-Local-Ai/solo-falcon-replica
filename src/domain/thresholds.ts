@@ -1,6 +1,11 @@
 import type { FiscalRule } from './fiscal/rules';
 import { selectApplicableRules } from './fiscal/select';
 import type { PfaProfile } from './models';
+import {
+  readCassExceptionFacts,
+  readForeignSicknessInsuranceProved,
+  readPensionerStatus,
+} from './pensionFacts';
 import { formatBaniLei, lei, subBani, type Bani } from './money';
 
 /**
@@ -494,7 +499,10 @@ export function applicabilityFor(
       // CF art. 150 alin. (1): pensioners and people insured in their own social insurance systems
       // owe NO CAS on art. 137 alin. (1) lit. b)/b^1) income. `salaryStatus` is deliberately NOT
       // consulted: art. 150 alin. (2) exempts salary earners only for lit. b^1), never for lit. b).
-      if (profile.pensionStatus === 'da') {
+      //
+      // TASK 5: this stays keyed on the pension STATUS — it is the one provision in this area where
+      // status is the correct key. It reads `pensionerStatus`, not the deprecated `pensionStatus`.
+      if (readPensionerStatus(profile) === 'da') {
         return {
           applicability: 'not_applicable',
           reason:
@@ -523,13 +531,42 @@ export function applicabilityFor(
           reason: 'Baza de calcul nu a fost măsurată, deci aplicabilitatea contribuției nu a putut fi stabilită.',
         };
       }
-      // CF art. 174 alin. (2): a zero net income or a fiscal loss owes NO CASS at all, so neither the
-      // 6-SM top-up nor the 72-SM cap is in play. The same person may opt in under art. 180 alin. (1).
-      if (measured <= 0) {
+      // CF art. 153 alin. (2): a person who holds sickness/maternity insurance in another EU/SEE /
+      // Confederația Elvețiană or bilateral-agreement state and has proved it „nu au calitatea de
+      // contribuabil la sistemul de asigurări sociale de sănătate”. That removes the CASS taxpayer
+      // quality itself, so it reaches BOTH rows — unlike the art. 174 alin. (7) reliefs below, which
+      // reach only the alin. (6) top-up. Both halves are required: holding the insurance without
+      // proving it is reported as `unknown`, not as the exemption.
+      if (readForeignSicknessInsuranceProved(profile, profile.fiscalYear) === 'da') {
         return {
           applicability: 'not_applicable',
           reason:
-            'Venit net anual egal cu zero sau pierdere fiscală: nu se datorează contribuția de asigurări sociale de sănătate (art. 174 alin. (2) din Codul fiscal). Aceeași persoană poate opta pentru plată potrivit art. 180 alin. (1).',
+            'Persoana deține o asigurare pentru boală și maternitate în sistemul de securitate socială din alt stat membru al Uniunii Europene, Spațiului Economic European și Confederația Elvețiană sau dintr-un stat cu acord bilateral, și a făcut dovada valabilității ei: nu are calitatea de contribuabil la sistemul de asigurări sociale de sănătate (art. 153 alin. (2) din Codul fiscal). Temeiul nu privește pensia: art. 154 alin. (2) păstrează CASS pentru celelalte venituri din art. 155 alin. (1).',
+        };
+      }
+      // CF art. 174 alin. (2): a zero net income or a fiscal loss owes no CASS „potrivit art. 170
+      // alin. (1)”, so the 72-SM cap has nothing to cap. The same person may opt in under art. 180
+      // alin. (1).
+      //
+      // TASK 5 — the row split is the whole point here. Whether the art. 174 alin. (6) 6-SM DIFFERENCE
+      // survives a zero/loss year is NOT settled by the code: alin. (2) switches off the contribution
+      // under art. 170 alin. (1), while alin. (6) speaks of a base „corespunzătoare veniturilor
+      // realizate” below 6 SM. Research 25 gap 2 records this as unresolved and forbids settling it by
+      // inference, and until TASK 5 the same `not_applicable` was returned for BOTH rows on the same
+      // citation — an inference presented as law. The cap row keeps the citation; the top-up row
+      // reports `unknown` with a Notă de interpretare.
+      if (measured <= 0) {
+        if (spec.applicabilityTest === 'cass-art-170-1') {
+          return {
+            applicability: 'not_applicable',
+            reason:
+              'Venit net anual egal cu zero sau pierdere fiscală: nu se datorează contribuția de asigurări sociale de sănătate stabilită potrivit art. 170 alin. (1) (art. 174 alin. (2) din Codul fiscal), deci plafonul de 72 de salarii minime brute nu are ce să limiteze. Aceeași persoană poate opta pentru plată potrivit art. 180 alin. (1). Pierderile fiscale anuale prevăzute la art. 118 nu intră în baza de calcul.',
+          };
+        }
+        return {
+          applicability: 'unknown',
+          reason:
+            'Notă de interpretare: venitul net anual este zero sau pierdere fiscală. art. 174 alin. (2) din Codul fiscal spune că nu se datorează contribuția „potrivit art. 170 alin. (1)”, iar art. 174 alin. (6) vorbește despre o diferență de contribuție pentru o bază „corespunzătoare veniturilor realizate” mai mică decât 6 salarii minime brute. Codul nu spune dacă diferența de la alin. (6) supraviețuiește unui an cu venit zero sau pierdere — research 25, gap 2 (NEVERIFICAT). Aplicația nu decide prin inferență: randul rămâne nehotărât până la o sursă primară.',
         };
       }
       if (spec.applicabilityTest === 'cass-art-170-1') {
@@ -538,13 +575,31 @@ export function applicabilityFor(
         // pensioner exemption into CASS.
         return { applicability: 'applicable' };
       }
-      // Below here the row is the art. 174 alin. (6) TOP-UP, and only the top-up, so the two reliefs
-      // in art. 174 alin. (7) make THIS row inapplicable while the CASS contribution keeps applying.
-      if (profile.pensionStatus === 'da') {
+      // Below here the row is the art. 174 alin. (6) TOP-UP, and only the top-up, so the reliefs in
+      // art. 174 alin. (7) and alin. (8) make THIS row inapplicable while the CASS contribution keeps
+      // applying.
+      const facts = readCassExceptionFacts(profile, profile.fiscalYear);
+      // CF art. 174 alin. (7) lit. c): pension sums received in the fiscal year, at ANY amount. This
+      // is not pensioner status — a pensioner who received no pension sums in the year does not
+      // qualify, and a person who was not a pensioner all year but received some does. No amount is
+      // compared: lit. a) and lit. b) carry the 6-SM qualifier and lit. c) deliberately does not.
+      if (facts.pensionSumsReceived === 'da') {
         return {
           applicability: 'not_applicable',
           reason:
-            'Venituri din pensii (art. 99) realizate în anul fiscal: diferența de contribuție până la baza de 6 salarii minime brute nu se datorează (art. 174 alin. (7) lit. c) din Codul fiscal). Contribuția de 10 % pe venitul net rămâne datorată — art. 174 alin. (7) lit. c) elimină doar diferența.',
+            'Sume primite ca pensii (art. 99 alin. (1)) realizate în anul fiscal pentru care se depune declarația: diferența de contribuție până la baza de 6 salarii minime brute nu se datorează (art. 174 alin. (7) lit. c) din Codul fiscal). Fapta este încasarea din an, nu calitatea de pensionar, și lit. c) nu are niciun prag valoric. Contribuția de 10 % pe venitul net rămâne datorată — art. 174 alin. (7) lit. c) elimină doar diferența.' +
+            (facts.suspensionNote ? ` ${facts.suspensionNote}` : ''),
+        };
+      }
+      // CF art. 174 alin. (8): the same relief also reaches a person who in the PREVIOUS year was in
+      // art. 154 alin. (1) lit. a), b), e) or f), or had opted under art. 180 alin. (1). That list
+      // excludes pensioners, so this route needs its own recorded fact and can never be inferred from
+      // `pensionerStatus`.
+      if (facts.previousYearExceptedCategory === 'da' || facts.previousYearArt180Option === 'da') {
+        return {
+          applicability: 'not_applicable',
+          reason:
+            'În anul precedent persoana s-a încadrat în categoriile exceptate de la art. 154 alin. (1) lit. a), b), e) și f) sau a optat pentru plata contribuției potrivit art. 180 alin. (1): prevederile art. 174 alin. (7) se aplică și în cazul ei (art. 174 alin. (8) din Codul fiscal), deci diferența de contribuție până la 6 salarii minime brute nu se datorează. Lista alin. (8) lit. a) nu include pensionarii — această cale nu se deduce din calitatea de pensionar. Contribuția de 10 % pe venitul net rămâne datorată.',
         };
       }
       if (profile.salaryStatus === 'da' && profile.salaryIncomeLei === undefined) {
@@ -564,6 +619,23 @@ export function applicabilityFor(
           reason:
             'Venituri din salarii și asimilate realizate în anul fiscal cel puțin egale cu 6 salarii minime brute: diferența de contribuție până la baza de 6 salarii minime brute nu se datorează (art. 174 alin. (7) lit. a) din Codul fiscal). Contribuția de 10 % pe venitul net rămâne datorată.',
         };
+      }
+      // CF art. 174 alin. (7) lit. b): other art. 155 alin. (1) lit. c)-h) income at least equal to
+      // 6 SM also removes the top-up. The profile records WHICH such incomes exist but the app holds no
+      // amount for any of them, so the condition cannot be tested. It is reported as undecided —
+      // assuming it satisfied would invent a relief, assuming it failed would invent a liability.
+      if (profile.otherIncome.length > 0) {
+        return {
+          applicability: 'unknown',
+          reason:
+            'Profilul declară și alte venituri din art. 155 alin. (1) lit. c)-h), iar art. 174 alin. (7) lit. b) din Codul fiscal elimină diferența de la alin. (6) doar dacă acele venituri sunt cel puțin egale cu 6 salarii minime brute pe țară. Aplicația nu deține cuantumul lor, deci nu poate stabili condiția — nu o presupune nici îndeplinită, nici neîndeplinită.',
+        };
+      }
+      // The state every payload written before TASK 5 lands in: a pensioner status is recorded, but the
+      // receipt fact art. 174 alin. (7) lit. c) actually tests is not. The relief is neither granted on
+      // the status nor refused on its absence — the missing fact is named.
+      if (facts.receiptGapNote) {
+        return { applicability: 'unknown', reason: facts.receiptGapNote };
       }
       return { applicability: 'applicable' };
     }

@@ -87,7 +87,12 @@ describe('legacyProfileFromSettings (profile migration)', () => {
     const p = legacyProfileFromSettings(minimal, PINNED_INSTANT);
     expect(p.regime).toBe('impozit_pe_venit');
     expect(p.salaryStatus).toBe('nu');
-    expect(p.pensionStatus).toBe('nu');
+    // TASK 5: no pension fact is minted. The legacy `settings` block never recorded a pension status, so
+    // writing `pensionerStatus: 'nu'` here would assert a checked negative the source never held.
+    // Absence is the honest state and the readers report it as `unknown`.
+    expect(p.pensionerStatus).toBeUndefined();
+    expect(p.pensionStatus).toBeUndefined();
+    expect(p.pensionReceiptYears).toBeUndefined();
     expect(p.otherIncome).toEqual([]);
     expect(p.vatExempt).toBe(false);
     expect(p.cashFloorLei).toBe(0);

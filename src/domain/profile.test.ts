@@ -12,7 +12,7 @@ const validProfile: PfaProfile = {
   regime: 'impozit_pe_venit',
   caen: '6201',
   salaryStatus: 'nu',
-  pensionStatus: 'nu',
+  pensionerStatus: 'nu',
   otherIncome: [],
   socialInsuranceStatus: 'obligatoriu',
   vatExempt: false,
@@ -46,7 +46,14 @@ describe('createDefaultProfile', () => {
     expect(p.id).toBe('profile-1');
     expect(p.regime).toBe('impozit_pe_venit');
     expect(p.salaryStatus).toBe('nu');
-    expect(p.pensionStatus).toBe('nu');
+    expect(p.pensionerStatus).toBe('nu');
+    // TASK 5: the year-attributed facts are NOT defaulted. A fresh profile has not recorded them, and a
+    // default would state a fact the user never entered — for art. 174 alin. (7) lit. c) it would decide
+    // a tax relief.
+    expect(p.pensionReceiptYears).toBeUndefined();
+    expect(p.pensionSuspensionYears).toBeUndefined();
+    expect(p.cassPreviousYearContext).toBeUndefined();
+    expect(p.foreignSicknessInsurance).toBeUndefined();
     expect(p.otherIncome).toEqual([]);
     expect(p.vatExempt).toBe(false);
     expect(p.cashFloorLei).toBe(0);

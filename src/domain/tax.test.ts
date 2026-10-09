@@ -16,7 +16,7 @@ function makeProfile(overrides: Partial<PfaProfile> = {}): PfaProfile {
 }
 
 function makeInputs(overrides: Partial<TaxInputsReference> = {}): TaxInputsReference {
-  return { regime: 'impozit_pe_venit', salaryStatus: 'da', pensionStatus: 'nu', otherIncome: [], socialInsuranceStatus: 'obligatoriu', vatExempt: false, cashFloorLei: lei(0), fiscalYear: 2026, salaryIncomeLei: null, pfaStartDate: null, inputsKey: 'p1:2026:impozit_pe_venit:obligatoriu', ...overrides };
+  return { regime: 'impozit_pe_venit', salaryStatus: 'da', pensionerStatus: 'nu', pensionReceiptYears: [], pensionSuspensionYears: [], cassPreviousYearContext: null, foreignSicknessInsurance: null, otherIncome: [], socialInsuranceStatus: 'obligatoriu', vatExempt: false, cashFloorLei: lei(0), fiscalYear: 2026, salaryIncomeLei: null, pfaStartDate: null, inputsKey: 'p1:2026:impozit_pe_venit:obligatoriu', ...overrides };
 }
 
 describe('computeTaxEstimate', () => {
@@ -263,21 +263,21 @@ describe('computeTaxEstimate', () => {
   // lit. a) case: the top-up is waived only if salary income reaches 6 SM, and the profile
   // carries no salary amount — so it must surface as review_required, never as a number.
   it('net 24,299 with salaryStatus da → review_required names art. 174 alin. (7) lit. a)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'da', pensionStatus: 'nu' }), profile: makeProfile(), revenues: lei(24_299), expenses: lei(0), revenuesNet: lei(24_299), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'da', pensionerStatus: 'nu' }), profile: makeProfile(), revenues: lei(24_299), expenses: lei(0), revenuesNet: lei(24_299), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
     if (res.status !== 'review_required') return;
     expect(res.reason).toContain('art. 174 alin. (7) lit. a)');
   });
 
   it('net 24,299 with no salary and no pension → CASS 2,430 (art. 174 alin. (6) top-up)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'nu', pensionStatus: 'nu' }), profile: makeProfile({ salaryStatus: 'nu', pensionStatus: 'nu' }), revenues: lei(24_299), expenses: lei(0), revenuesNet: lei(24_299), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'nu', pensionerStatus: 'nu' }), profile: makeProfile({ salaryStatus: 'nu', pensionerStatus: 'nu' }), revenues: lei(24_299), expenses: lei(0), revenuesNet: lei(24_299), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     expect(res.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(lei(2_430));
   });
 
-  it('pensioner with net below 6 SM → CASS = 10% x net, NOT 0 (art. 174 alin. (7) lit. c) waives only the top-up)', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ pensionStatus: 'da' }), profile: makeProfile({ pensionStatus: 'da' }), revenues: lei(10_000), expenses: lei(0), revenuesNet: lei(10_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+  it('pension sums received in the year, net below 6 SM → CASS = 10% x net, NOT 0 (art. 174 alin. (7) lit. c) waives only the top-up)', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs({ pensionerStatus: 'da', pensionReceiptYears: [{ fiscalYear: 2026, received: 'da' }] }), profile: makeProfile({ pensionerStatus: 'da', pensionReceiptYears: [{ fiscalYear: 2026, received: 'da' }] }), revenues: lei(10_000), expenses: lei(0), revenuesNet: lei(10_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     // CAS = 0 (art. 150 alin. (1)) but CASS = 1000 (art. 170 alin. (1)) — the asymmetry.
@@ -286,6 +286,40 @@ describe('computeTaxEstimate', () => {
     expect(cass).toBe(lei(1_000));
     // taxable = 10000 - 0 - 1000 = 9000 → income 900 → total 1900.
     expect(res.output.total).toBe(lei(1_900));
+  });
+
+  // TASK 5 — the key, not the scope. A pensioner STATUS with no receipt fact for the year must NOT get
+  // the relief: the top-up stands, and the app says the exception is undecided rather than refusing it.
+  it('pensioner status with no receipt fact for the year → top-up stands, relief withheld', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'nu', pensionerStatus: 'da' }), profile: makeProfile({ salaryStatus: 'nu', pensionerStatus: 'da' }), revenues: lei(10_000), expenses: lei(0), revenuesNet: lei(10_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    expect(res.lines.find(l => l.label === 'CAS (25%)')?.value).toBe(0);
+    expect(res.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(lei(2_430));
+  });
+
+  // alin. (7) is year-scoped: a receipt recorded for another fiscal year is not this year's fact.
+  it('pension receipt attributed to another year does not relieve this year', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'nu', pensionReceiptYears: [{ fiscalYear: 2025, received: 'da' }] }), profile: makeProfile({ salaryStatus: 'nu', pensionReceiptYears: [{ fiscalYear: 2025, received: 'da' }] }), revenues: lei(10_000), expenses: lei(0), revenuesNet: lei(10_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    expect(res.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(lei(2_430));
+  });
+
+  // CF art. 174 alin. (8): the previous-year route, reached with no pension fact at all.
+  it('previous-year art. 154 alin. (1) category relieves the top-up through the engine (art. 174 alin. (8))', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'nu', cassPreviousYearContext: { previousFiscalYear: 2025, inExceptedCategory: 'da' } }), profile: makeProfile({ salaryStatus: 'nu', cassPreviousYearContext: { previousFiscalYear: 2025, inExceptedCategory: 'da' } }), revenues: lei(10_000), expenses: lei(0), revenuesNet: lei(10_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    expect(res.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(lei(1_000));
+  });
+
+  // CF art. 153 alin. (2) is the one ground that removes CASS entirely — and it is not a pension rule.
+  it('proved foreign sickness/maternity insurance → no CASS at all (art. 153 alin. (2))', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'nu', foreignSicknessInsurance: { fiscalYear: 2026, held: 'da', proved: 'da' } }), profile: makeProfile({ salaryStatus: 'nu', foreignSicknessInsurance: { fiscalYear: 2026, held: 'da', proved: 'da' } }), revenues: lei(60_000), expenses: lei(0), revenuesNet: lei(60_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    expect(res.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(lei(0));
   });
 
   it('CASS ceiling is parameter-driven: max_annual_base 100,000 → CASS 10,000 at net 150,000', async () => {
@@ -343,8 +377,8 @@ describe('computeTaxEstimate', () => {
 
   // ── CF art. 150 alin. (1): pension exemption. Salary is NOT an exemption. ──
 
-  it('pensionStatus da → CAS = 0 regardless of income (CF art. 150 alin. (1))', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ pensionStatus: 'da' }), profile: makeProfile({ pensionStatus: 'da' }), revenues: lei(200_000), expenses: lei(0), revenuesNet: lei(200_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+  it('pensionerStatus da → CAS = 0 regardless of income (CF art. 150 alin. (1))', async () => {
+    const res = await computeTaxEstimate({ inputs: makeInputs({ pensionerStatus: 'da' }), profile: makeProfile({ pensionerStatus: 'da' }), revenues: lei(200_000), expenses: lei(0), revenuesNet: lei(200_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;
@@ -354,7 +388,7 @@ describe('computeTaxEstimate', () => {
   });
 
   it('salaryStatus da does NOT exempt from CAS (CF art. 150 alin. (2) covers only lit. b^1))', async () => {
-    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'da', pensionStatus: 'nu' }), profile: makeProfile({ salaryStatus: 'da', pensionStatus: 'nu' }), revenues: lei(60_000), expenses: lei(0), revenuesNet: lei(60_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
+    const res = await computeTaxEstimate({ inputs: makeInputs({ salaryStatus: 'da', pensionerStatus: 'nu' }), profile: makeProfile({ salaryStatus: 'da', pensionerStatus: 'nu' }), revenues: lei(60_000), expenses: lei(0), revenuesNet: lei(60_000), expensesNet: lei(0), ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     const cas = res.lines.find(l => l.label === 'CAS (25%)')?.value;

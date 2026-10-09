@@ -58,7 +58,7 @@ function profile(overrides: Partial<PfaProfile> = {}): PfaProfile {
     regime: 'impozit_pe_venit',
     caen: '6201',
     salaryStatus: 'nu',
-    pensionStatus: 'nu',
+    pensionerStatus: 'nu',
     otherIncome: [],
     socialInsuranceStatus: 'obligatoriu',
     vatExempt: false,
@@ -507,7 +507,7 @@ describe('snapshot.thresholds[].breached (B-20, re-typed by TASK 4)', () => {
   it('a pensioner profile removes the CAS rows from applicability, with the art. 150 alin. (1) reason', async () => {
     // The seed records are kept: with no records the VNA would be zero and art. 174 alin. (2) would
     // switch CASS off for a different reason, hiding the asymmetry this test is about.
-    const data: AppData = { ...seedData, profile: { ...seedData.profile, pensionStatus: 'da' } };
+    const data: AppData = { ...seedData, profile: { ...seedData.profile, pensionerStatus: 'da' } };
     const tax = await getTaxEstimate(data, AS_OF_SEED);
     const rows = getThresholdStatuses(data, AS_OF_SEED, tax);
     for (const id of ['CAS_MIN_BASE', 'CAS_TIER2_FLOOR']) {
@@ -516,9 +516,37 @@ describe('snapshot.thresholds[].breached (B-20, re-typed by TASK 4)', () => {
       expect(row.applicabilityReason ?? '', id).toContain('art. 150 alin. (1)');
       expect(row.severity, id).toBe('none');
     }
-    // CASS is NOT mirrored: CF art. 174 alin. (7) lit. c) removes only the art. 174 alin. (6) top-up.
+    // CASS is NOT mirrored: CF art. 174 alin. (7) lit. c) removes only the art. 174 alin. (6) top-up, and
+    // it keys on pension sums RECEIVED in the year. A status alone therefore leaves the top-up row
+    // undecided — neither relieved (that would grant a relief from a boolean) nor refused as settled.
     expect(rows.find((t) => t.thresholdId === 'CASS_MAX_BASE')!.applicability).toBe('applicable');
+    const topUp = rows.find((t) => t.thresholdId === 'CASS_MIN_BASE')!;
+    expect(topUp.applicability).toBe('unknown');
+    expect(topUp.applicabilityReason ?? '').toContain('art. 174 alin. (7) lit. c)');
+  });
+
+  // TASK 5 — the relief, keyed on the right fact, at the level the user actually reads.
+  it('pension sums received in the year remove the top-up row, and the 10 % CASS contribution survives', async () => {
+    const data: AppData = {
+      ...seedData,
+      profile: {
+        ...seedData.profile,
+        pensionerStatus: 'da',
+        pensionReceiptYears: [{ fiscalYear: 2026, received: 'da' as const }],
+      },
+    };
+    const tax = await getTaxEstimate(data, AS_OF_SEED);
+    const rows = getThresholdStatuses(data, AS_OF_SEED, tax);
     expect(rows.find((t) => t.thresholdId === 'CASS_MIN_BASE')!.applicability).toBe('not_applicable');
+    // The cap row rides on the art. 170 alin. (1) contribution itself, which is still owed.
+    expect(rows.find((t) => t.thresholdId === 'CASS_MAX_BASE')!.applicability).toBe('applicable');
+    // The 10 % CASS contribution still applies whenever the top-up is disapplied. At this as-of date the
+    // seed is read from actuals: venit brut 7.700,00 lei − cheltuieli deductibile 120,00 lei = VNA
+    // 7.580,00 lei; 10 % = 758,00 lei exactly (art. 66 rounding is a no-op here). Not 0, and not the
+    // 2.430,00 lei art. 174 alin. (6) top-up.
+    expect(tax.status).toBe('computed');
+    if (tax.status !== 'computed') return;
+    expect(tax.lines.find((l) => l.label === 'CASS (10%)')?.value).toBe(lei(758));
   });
 });
 

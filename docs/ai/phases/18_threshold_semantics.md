@@ -311,6 +311,15 @@ bases into one label. The language test and the e2e absence assertions will fail
   alin. (2) zero-income year, alin. (7) lit. a) salary ≥ 6 SM, lit. c) pensioner, and `unknown` while
   the B-19 flag is unverified); `CASS_MAX_BASE` (art. 174 alin. (2) + the flag only — **never** the
   pensioner exception); `VAT_REGISTRATION` (only inside the TVA scutire, art. 310 alin. (1)).
+  **Corrected by TASK 5 (`phases/19_pension_cass_input_model.md`), and this bullet was wrong as
+  written:** art. 174 alin. (7) lit. c) does **not** key on „pensioner” — it keys on pension sums
+  *received in the fiscal year* (art. 99 alin. (1)), with no amount threshold. A pensioner profile with
+  no recorded receipt now returns **`unknown`** for `CASS_MIN_BASE`, not `not_applicable`, and the
+  alin. (6) top-up stays payable; a recorded `da` returns `not_applicable` and a recorded `nu` returns
+  `applicable`. The zero/loss-year branch also **splits the two rows** now — the cap row keeps the
+  art. 174 alin. (2) `not_applicable`, the top-up row reports `unknown`, because whether the 6-SM
+  difference survives a zero/loss year is research 25 gap 2 and is not settled by inference.
+  `CASS_MAX_BASE` is unchanged: still never a pension exception.
 - **What TASK 7 may reword:** the phrasing of `consequenceWhenEngaged` / `consequenceWhenNotEngaged`,
   `applicabilityReason`, the `Nu se aplică:` / `Aplicabilitate nesigură:` / `Bază măsurată:` /
   `Sumă calculată de aplicație:` labels, the 10 % policy sentence, and the alert titles and actions in

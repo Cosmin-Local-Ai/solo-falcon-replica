@@ -260,6 +260,10 @@ function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
   const floorBase = paramBani(rule, 'min_base'); // 6 SM — CF art. 174 alin. (6) top-up floor
   const maxBase = paramBani(rule, 'max_annual_base'); // 72 SM — CF art. 170 alin. (1) ceiling
   const vna = input?.base ?? lei(0);
+  // TASK 5: an absent fact and an explicitly-unknown fact are the same state, and the withheld-conclusion
+  // notes below must fire for both. Normalising once here keeps every branch honest about that.
+  const pensionSumsReceived: FactState = input?.pensionSumsReceived ?? 'unknown';
+  const pensionerStatus: FactState = input?.pensionerStatus ?? 'unknown';
   // Derived, never declared as separate parameters (one legal figure, one source of truth) — and rounded
   // by the same single art. 66 call as every other sum due, so the floor figure and the computed figure
   // cannot disagree about how rounding works.
@@ -314,7 +318,7 @@ function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
     // year, and art. 99 alin. (1) defines those as „sume primite ca pensii”. A pensioner who received
     // no pension sums that year does not qualify; someone who was not a pensioner all year but
     // received some does. No amount is compared — lit. c) carries no 6-SM qualifier.
-    if (input?.pensionSumsReceived === 'da') {
+    if (pensionSumsReceived === 'da') {
       const cass = roundArt66(applyRateDecimal(vna, ratePercent));
       return {
         value: cass,
@@ -324,7 +328,7 @@ function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
           'exceptie: sume primite ca pensii (art. 99 alin. (1)) REALIZATE in anul fiscal — CF art. 174 alin. (7) lit. c); fara prag valoric, nu este un simplu statut de pensionar',
           'lit. c) elimina DOAR diferenta de la art. 174 alin. (6) — contributia de 10% pe VNA ramane datorata (art. 170 alin. (1)); pensia NU scuteste de CASS, spre deosebire de CAS unde art. 150 alin. (1) scuteste integral',
           `CASS = ${leiText(vna)} x ${ratePercent / 100} = ${leiText(cass)} lei`,
-          ...(input.pensionSuspensionMonths && input.pensionSuspensionMonths.length > 0
+          ...(input?.pensionSuspensionMonths && input.pensionSuspensionMonths.length > 0
             ? [`NOTA (FAPTA, NU CONCLUZIE): pensia a fost suspendata in lunile ${input.pensionSuspensionMonths.join(',')}; efectul suspendarii asupra art. 174 alin. (7) lit. c) nu este verificat (research 25, gap 1) — aplicatia nu trage nicio concluzie din ea`]
             : []),
         ],
@@ -409,10 +413,10 @@ function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
         // TASK 5 — the withheld conclusions travel here so a reader sees WHY no relief was granted.
         // Neither line changes the amount: the app declines to grant an exception it cannot establish,
         // and says so instead of pretending the fact was checked.
-        ...(input?.pensionerStatus === 'da'
+        ...(pensionerStatus === 'da' && pensionSumsReceived === 'unknown'
           ? ['NOTA (EXCEPTIE NESTABILITA): profilul consemneaza calitatea de pensionar, dar nu consemneaza ca in acest an fiscal au fost primite sume ca pensii. art. 174 alin. (7) lit. c) se decide pe incasarea din an (art. 99 alin. (1)), nu pe statut, iar alin. (8) nu extinde exceptia la pensionari — diferenta NU se acorda automat, dar nici nu se refuza pe baza statutului. randul CASS_MIN_BASE raporteaza `unknown`.']
           : []),
-        ...(input?.pensionSumsReceived === 'unknown'
+        ...(pensionSumsReceived === 'unknown' && pensionerStatus !== 'da'
           ? ['NOTA: fapta „sume primite ca pensii in acest an fiscal” nu este inregistrata in profil; absenta ei nu este o dovada contrara (research 25, "What fact the input model must actually hold").']
           : []),
         ...(input?.pensionSuspensionMonths && input.pensionSuspensionMonths.length > 0

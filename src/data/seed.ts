@@ -10,7 +10,11 @@ export const seedData: AppData = {
     // Phase 7 (D-1): CAEN lives in `identity.caen`; the deprecated `profile.caen`
     // string is not seeded any more.
     salaryStatus: 'nu',
-    pensionStatus: 'nu',
+    // TASK 5: the pension facts are split. The seed records the STATUS (the CAS key under CF art. 150
+    // alin. (1)) and deliberately records NO receipt fact: whether pension sums were received in 2026 is
+    // something this demo user never stated, and inventing it would either grant or refuse the art. 174
+    // alin. (7) lit. c) relief out of nothing.
+    pensionerStatus: 'nu',
     otherIncome: [],
     socialInsuranceStatus: 'obligatoriu',
     vatExempt: false,

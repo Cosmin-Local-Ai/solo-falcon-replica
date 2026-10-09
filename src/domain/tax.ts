@@ -9,6 +9,7 @@ import type { TaxInputsReference } from './derived';
 import type { CalculationLine, CalculationOutput, TaxCalculationSnapshot } from './snapshots/types';
 import { selectApplicableRules } from './fiscal/select';
 import { calculatorRegistry } from './fiscal/calculators';
+import { readCassExceptionFacts, readPensionSuspension, readPensionerStatus } from './pensionFacts';
 import { regimeRefusalReason } from './regimes';
 import { createCalculationSnapshot } from './snapshots/snapshot';
 import Decimal from 'decimal.js-light';
@@ -164,41 +165,51 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     lines.push({ label: 'Fracțiune de an (art. 118 alin. (3)): venit anual', value: net });
   }
 
-  // CF art. 150 alin. (1): pensioners and persons insured in their own social insurance
-  // system owe no CAS. `inputs.pensionStatus` carries it, mirroring how
-  // `inputs.socialInsuranceStatus` gates CASS below. `inputs.salaryStatus` is
-  // deliberately NOT passed: art. 150 alin. (2) exempts salary earners only for
-  // art. 137 alin. (1) lit. b^1) (drepturi de proprietate intelectuală), not lit. b),
-  // so a salaried PFA owner still owes full CAS on independent-activity income.
-  // A CAS of 0 (exemption, or income below 12 SM) flows through `taxable` and the
-  // lines unchanged. NOTE the asymmetry: the same `pensionStatus` flag does NOT exempt
-  // from CASS — see the CASS block below (CAS art. 150 alin. (1) vs CASS art. 174 alin. (7) lit. c)).
+  // CF art. 150 alin. (1): pensioners and persons insured in their own social insurance system owe no
+  // CAS. TASK 5 reads it from `pensionerStatus` — the STATUS fact, which is the correct key here and the
+  // only place in this area where a status is the correct key. `inputs.salaryStatus` is deliberately NOT
+  // passed: art. 150 alin. (2) exempts salary earners only for art. 137 alin. (1) lit. b^1) (drepturi de
+  // proprietate intelectuală), not lit. b), so a salaried PFA owner still owes full CAS on
+  // independent-activity income. A CAS of 0 (exemption, or income below 12 SM) flows through `taxable`
+  // and the lines unchanged. NOTE the asymmetry: nothing in this CAS block feeds the CASS block below —
+  // CAS art. 150 alin. (1) exempts entirely, CASS art. 174 alin. (7) lit. c) waives only a difference,
+  // and it keys on pension sums received in the year, not on the status that keys this call.
+  const pensionerStatus = readPensionerStatus(inputs);
+  const cassFacts = readCassExceptionFacts(inputs, inputs.fiscalYear);
   const casRes = calculatorRegistry['calc-cas'](casRule, {
     base: net,
-    pensionStatus: inputs.pensionStatus,
+    pensionerStatus,
   });
   if ('reviewRequired' in casRes) return rr(casRes.reason, lines);
   lines.push({ label: 'CAS (25%)', value: casRes.value });
 
   let cassValue: Bani = lei(0);
   let cassNonDeductibila: Bani = lei(0);
-  // CASS AND CAS TREAT PENSIONERS DIFFERENTLY — never mirror one branch into the other.
-  //   CAS:  CF art. 150 alin. (1) — a pensioner owes NO CAS at all on art. 137 alin. (1)
-  //         lit. b)/b^1) income (the call above).
-  //   CASS: CF art. 174 alin. (7) lit. c) — pension income realised in that fiscal year
-  //         removes ONLY the art. 174 alin. (6) top-up to 6 SM. 10% × net is still owed
-  //         whenever net > 0, so `pensionStatus` must never zero CASS here.
-  // `salaryStatus` is passed for CASS only: art. 174 alin. (7) lit. a) makes the top-up
-  // conditional on salary income of at least 6 SM, an amount the profile does not carry, so
-  // calcCass returns reviewRequired instead of guessing. It is deliberately NOT passed to
-  // calcCas (art. 150 alin. (2) covers only lit. b^1)).
-  // A CASS of 0 — art. 174 alin. (2) zero/loss year, or a relief — flows through `taxable`
-  // and the lines unchanged; the reviewRequired case aborts with the reason and the partial
+  // CASS AND CAS TREAT PENSIONERS DIFFERENTLY — and TASK 5 split the fact that used to serve both.
+  //   CAS:  CF art. 150 alin. (1) — a pensioner owes NO CAS at all on art. 137 alin. (1) lit. b)/b^1)
+  //         income (the call above). Key: pensioner STATUS.
+  //   CASS: CF art. 174 alin. (7) lit. c) — pension SUMS RECEIVED in that fiscal year remove ONLY the
+  //         art. 174 alin. (6) top-up to 6 SM. 10% × net is still owed whenever net > 0, so no pension
+  //         fact may zero CASS here. Key: RECEIPT in the year, at any amount.
+  // The two facts travel separately precisely so neither branch can borrow the other's key.
+  // `salaryStatus` is passed for CASS only: art. 174 alin. (7) lit. a) makes the top-up conditional on
+  // salary income of at least 6 SM. It is deliberately NOT passed to calcCas (art. 150 alin. (2)
+  // covers only lit. b^1)).
+  // A CASS of 0 — art. 174 alin. (2) zero/loss year, or the art. 153 alin. (2) exclusion — flows through
+  // `taxable` and the lines unchanged; the reviewRequired case aborts with the reason and the partial
   // lines rather than reporting a wrong number.
   if (inputs.socialInsuranceStatus === 'obligatoriu') {
     const cassRes = calculatorRegistry['calc-cass'](cassRule, {
       base: net,
-      pensionStatus: inputs.pensionStatus,
+      // Read by calcCass for ONE purpose — noticing that the receipt fact is missing. It switches
+      // nothing off in this calculator.
+      pensionerStatus,
+      pensionSumsReceived: cassFacts.pensionSumsReceived,
+      previousYearExceptedCategory: cassFacts.previousYearExceptedCategory,
+      previousYearArt180Option: cassFacts.previousYearArt180Option,
+      foreignSicknessInsuranceProved: cassFacts.foreignSicknessInsuranceProved,
+      pensionSuspensionMonths: readPensionSuspension(inputs, inputs.fiscalYear)?.months,
+      otherIncomeArt155LitCH: inputs.otherIncome.length > 0,
       salaryStatus: inputs.salaryStatus,
       // Phase 6: the amount CF art. 174 alin. (7) lit. a) compares to the 6 SM floor. With it both
       // branches compute; without it (a pre-Phase-6 payload) calcCass still refuses rather than guess.

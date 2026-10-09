@@ -172,7 +172,7 @@ describe('calculators', () => {
   it('pensioners owe no CAS (CF art. 150 alin. (1))', () => {
     const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), {
       base: lei(200000),
-      pensionStatus: 'da',
+      pensionerStatus: 'da',
     });
     expect(result).toMatchObject({ value: lei(0) });
   });
@@ -180,15 +180,34 @@ describe('calculators', () => {
   it('the CAS exemption does not depend on the income amount', () => {
     const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), {
       base: lei(60000),
-      pensionStatus: 'da',
+      pensionerStatus: 'da',
     });
     expect(result).toMatchObject({ value: lei(0) });
   });
 
-  it('pensionStatus nu is not exempt — only the art. 150 alin. (1) categories are', () => {
+  it('pensionerStatus nu is not exempt — only the art. 150 alin. (1) categories are', () => {
     const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), {
       base: lei(60000),
-      pensionStatus: 'nu',
+      pensionerStatus: 'nu',
+    });
+    expect(result).toMatchObject({ value: lei(12150) });
+  });
+
+  // TASK 5: CAS keys on the STATUS (CF art. 150 alin. (1)). An unrecorded status is no exemption
+  // either — the exception needs a recorded `da`, so `unknown` leaves the obligation in place.
+  it('CAS: an unrecorded pensioner status is not an exemption (unknown is not da)', () => {
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), {
+      base: lei(60000),
+      pensionerStatus: 'unknown',
+    });
+    expect(result).toMatchObject({ value: lei(12150) });
+  });
+
+  // The reverse half of the split: the RECEIPT fact, which is what CASS keys on, must never reach CAS.
+  it('CAS: pension sums received in the year do NOT exempt CAS — only status does (art. 150 alin. (1))', () => {
+    const result = calculatorRegistry['calc-cas'](byId('CAS_2026'), {
+      base: lei(60000),
+      pensionSumsReceived: 'da',
     });
     expect(result).toMatchObject({ value: lei(12150) });
   });
@@ -292,8 +311,8 @@ describe('calculators', () => {
     expect(params).not.toContain('max_cass');
   });
 
-  it('CASS: pensioner below 6 SM → 10% x VNA, NOT 0 and NOT 2430 (art. 174 alin. (7) lit. c))', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(10000), pensionStatus: 'da' });
+  it('CASS: pension sums received in the year, below 6 SM → 10% x VNA, NOT 0 and NOT 2430 (art. 174 alin. (7) lit. c))', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(10000), pensionSumsReceived: 'da' });
     expect(result).toMatchObject({ value: lei(1000) });
     if ('breakdown' in result) {
       const text = result.breakdown.join('\n');
@@ -304,13 +323,108 @@ describe('calculators', () => {
     }
   });
 
-  it('CASS: pensioner above 6 SM → 10% x VNA, unchanged (relief is irrelevant there)', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(100000), pensionStatus: 'da' });
+  // TASK 5 — the defect this task removes. The relief keys on receipt in the year, so a STATUS alone
+  // must not switch the top-up off: the fact stays undecided and the top-up keeps standing.
+  it('CASS: pensioner STATUS alone does not remove the top-up — the receipt fact is what decides', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(10000), pensionerStatus: 'da' });
+    expect(result).toMatchObject({ value: lei(2430) });
+    if ('breakdown' in result) {
+      const text = result.breakdown.join('\n');
+      expect(text).toContain('EXCEPTIE NESTABILITA');
+      expect(text).toContain('art. 99 alin. (1)');
+    }
+  });
+
+  it('CASS: a recorded `nu` receipt does not relieve and needs no withheld-conclusion note', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(10000), pensionSumsReceived: 'nu' });
+    expect(result).toMatchObject({ value: lei(2430) });
+    if ('breakdown' in result) expect(result.breakdown.join('\n')).not.toContain('EXCEPTIE NESTABILITA');
+  });
+
+  // lit. c) carries no monetary qualifier — lit. a) and lit. b) carry „cel puțin egal cu 6 salarii minime
+  // brute”, lit. c) does not. The calculator receives no pension quantum at all, so an invented
+  // threshold has nowhere to live; this pins that receipt alone fires the relief.
+  it('CASS: lit. c) has NO amount threshold — receipt alone triggers it, with no pension quantum supplied', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(100), pensionSumsReceived: 'da' });
+    expect(result).toMatchObject({ value: lei(10) });
+    if ('breakdown' in result) expect(result.breakdown.join('\n')).toContain('fara prag valoric');
+  });
+
+  // CF art. 174 alin. (8): the previous-year route. Its category list excludes pensioners, so it needs
+  // its own fact and is pinned here independently of any pension input.
+  it('CASS: art. 174 alin. (8) previous-year art. 154 category removes the top-up, with no pension fact at all', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
+      base: lei(10000),
+      previousYearExceptedCategory: 'da',
+    });
+    expect(result).toMatchObject({ value: lei(1000) });
+    if ('breakdown' in result) {
+      const text = result.breakdown.join('\n');
+      expect(text).toContain('CF art. 174 alin. (8)');
+      expect(text).toContain('nu include pensionarii');
+    }
+  });
+
+  it('CASS: art. 174 alin. (8) via the art. 180 alin. (1) option in the previous year', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
+      base: lei(10000),
+      previousYearArt180Option: 'da',
+    });
+    expect(result).toMatchObject({ value: lei(1000) });
+  });
+
+  // CF art. 153 alin. (2) is the one ground that removes CASS taxpayer quality entirely — and it is
+  // unrelated to pensions, so it is pinned separately from every art. 174 alin. (7) branch.
+  it('CASS: proved foreign sickness/maternity insurance removes the contribution entirely (art. 153 alin. (2))', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
+      base: lei(100000),
+      foreignSicknessInsuranceProved: 'da',
+    });
+    expect(result).toMatchObject({ value: lei(0) });
+    if ('breakdown' in result) {
+      const text = result.breakdown.join('\n');
+      expect(text).toContain('art. 153 alin. (2)');
+      expect(text).toContain('NU are calitatea de contribuabil');
+      expect(text).toContain('art. 154 alin. (2)');
+    }
+  });
+
+  it('CASS: foreign insurance held but not proved is NOT the art. 153 alin. (2) exclusion', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
+      base: lei(10000),
+      foreignSicknessInsuranceProved: 'unknown',
+    });
+    expect(result).toMatchObject({ value: lei(2430) });
+  });
+
+  // Research 25 gap 1: a suspension is a recorded fact whose legal effect is UNVERIFIED. It must be
+  // visible and must change nothing.
+  it('CASS: recorded suspension months are reported as a fact and change no amount', () => {
+    const withSuspension = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
+      base: lei(10000),
+      pensionSumsReceived: 'da',
+      pensionSuspensionMonths: [3, 4],
+    });
+    const without = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
+      base: lei(10000),
+      pensionSumsReceived: 'da',
+    });
+    expect(withSuspension).toMatchObject({ value: lei(1000) });
+    expect(without).toMatchObject({ value: lei(1000) });
+    if ('breakdown' in withSuspension) {
+      const text = withSuspension.breakdown.join('\n');
+      expect(text).toContain('FAPTA, NU CONCLUZIE');
+      expect(text).toContain('3,4');
+    }
+  });
+
+  it('CASS: pension receipt above 6 SM → 10% x VNA, unchanged (relief is irrelevant there)', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(100000), pensionSumsReceived: 'da' });
     expect(result).toMatchObject({ value: lei(10000) });
   });
 
-  it('CASS: pensioner with VNA = 0 → still 0 (art. 174 alin. (2) is upstream of any relief)', () => {
-    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(0), pensionStatus: 'da' });
+  it('CASS: pension receipt with VNA = 0 → still 0 (art. 174 alin. (2) is upstream of any relief)', () => {
+    const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), { base: lei(0), pensionSumsReceived: 'da' });
     expect(result).toMatchObject({ value: lei(0) });
   });
 
@@ -324,7 +438,7 @@ describe('calculators', () => {
     const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
       base: lei(10000),
       salaryStatus: 'da',
-      pensionStatus: 'da',
+      pensionSumsReceived: 'da',
     });
     expect(result).toMatchObject({ value: lei(1000) });
   });
@@ -439,7 +553,7 @@ describe('calc-cass — salaried PFA below the 6 SM floor (art. 174 alin. (6) + 
   it('pension relief is still evaluated first, even when a salary amount exists', () => {
     const result = calculatorRegistry['calc-cass'](byId('CASS_2026'), {
       base: lei(10_000),
-      pensionStatus: 'da',
+      pensionSumsReceived: 'da',
       salaryStatus: 'da',
       salaryIncomeLei: lei(10_000),
     });

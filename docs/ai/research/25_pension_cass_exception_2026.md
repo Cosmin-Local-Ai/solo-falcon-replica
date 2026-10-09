@@ -178,3 +178,25 @@ For 2026 that is **4.050 lei** (HG 1.506/2024), notwithstanding HG 146/2026 rais
 3. **Evidence ANAF may demand** — no primary text names a document. Next: the joint ANAF/CNAS order contemplated by art. 154 alin. (3) and art. 153 alin. (2), and ANAF control instructions.
 4. **The D212 model for FY2026 income** — OPANAF 2.736/2025 covers incomes from 2025 (and the 2026 CASS option); its footnotes still recite 60 SM. A new OPANAF order will govern the D212 filed by 25 May 2027. Re-check before implementing the FY2026 return layout.
 5. **HG 1/2016 alignment with the post-2025 CASS regime** — the consolidated norms still contain pre-2025 constructs (estimated declarations, „plafon recalculat pe luni", examples referencing 12 SM). Treat norm text in this area as **Partially verified / possibly stale**.
+
+## How the app implements this boundary (pre-Phase-11 TASK 5, 2026-10-09)
+
+Implemented in `phases/19_pension_cass_input_model.md`. Recorded here so the research and the code say the
+same thing about what is **not** settled:
+
+- **The fact, not the status.** `PensionReceiptYear { fiscalYear, received }` is what art. 174 alin. (7)
+  lit. c) reads. The record carries **no amount field**, so no threshold can be applied to lit. c. by
+  accident. `pensionerStatus` remains, and remains the key for art. 150 alin. (1) only.
+- **Gap 1 (suspension) stays UNVERIFIED and is not resolved in code.** `PensionSuspensionYear` records the
+  months and nothing reads them as a legal conclusion; the breakdown and the UI say the effect is
+  unverified.
+- **Gap 2 (alin. (2) vs alin. (6)) stays UNVERIFIED and is not resolved in code.** A zero/loss year now
+  **splits the two threshold rows**: `CASS_MAX_BASE` takes the art. 174 alin. (2) `not_applicable`, while
+  `CASS_MIN_BASE` reports `unknown` with a Notă de interpretare. Before TASK 5 both rows returned
+  `not_applicable` on the same citation — an inference presented as law.
+- **Gap 3 (evidence ANAF may demand) stays UNVERIFIED.** No document is named anywhere in the UI; the
+  art. 153 alin. (2) field records only that proof was made, not which paper made it.
+- **The withheld conclusion is explicit.** A profile with a pensioner status and no receipt fact for the
+  year — the state every pre-TASK-5 payload lands in after the v7→v8 step, which backfills nothing —
+  reports `CASS_MIN_BASE` as `unknown` and keeps the art. 174 alin. (6) top-up payable, with a note naming
+  the missing fact. The relief is neither granted on the status nor refused on its absence.
