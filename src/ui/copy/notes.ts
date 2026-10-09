@@ -60,6 +60,42 @@ export const notes = {
   /** The money-conversion report: rounding direction (CF art. 66 alin. (1)). */
   roundingDirection:
     'Legea nu spune cum se rotunjesc sumele la conversie, așa că aplicația rotunjește la banul cel mai apropiat, jumătate în jos — aceeași direcție pe care o folosește art. 66 alin. (1).',
+  /**
+   * TASK 10a — a calendar date with no published rate. The carry-forward rule that exists in the Codul
+   * fiscal sits in the CASS articles (art. 68^3 alin. (4) and art. 85 alin. (4) — the only two occurrences
+   * of that phrase in the whole code), and art. 9 alin. (4) admits only methods „prevăzute expres în
+   * prezentul cod". Borrowing it for an income-tax conversion is an app decision, so the note says the
+   * analogy out loud instead of letting the substitution read as a published rule.
+   */
+  fxCarryForward:
+    'BNR publică cursul doar în zilele bancare, iar nicio normă verificată nu spune ce curs se folosește pentru o dată fără curs publicat, așa că aplicația ia ultimul curs publicat anterior și semnalează înlocuirea ca politică a aplicației, prin analogie cu art. 68^3 alin. (4) și art. 85 alin. (4).',
+  /**
+   * TASK 10a — the unresolved hierarchy conflict. HG 1/2016 Titlul IV Cap. II pct. 7 alin. (6) gives the
+   * annual average of the payment year; CF art. 9 alin. (3) lit. b) + alin. (4) gives the daily rate on the
+   * date of receipt, and alin. (4) limits the permitted methods to those stated „în prezentul cod". No
+   * primary source reconciles them, so the note names both and says the app does not choose between them.
+   */
+  fxConversionConflict:
+    'Două norme dau cursuri diferite pentru aceeași sumă în valută și nicio sursă primară nu le împacă, așa că aplicația aplică temeiul pe care i-l indică operațiunea și afișează ambele interpretări în loc să aleagă una.',
+  /** BNR publishes a year's average only after the year closes, so a current-year figure is never final. */
+  fxProvisionalAnnual:
+    'BNR publică media anuală abia după închiderea anului, așa că orice medie pe un an încă în curs este provizorie și se recalculează când apare media definitivă.',
+  /**
+   * The one thing this task must never do. BNR's printed methodology is the average of the 12 monthly
+   * averages, each of which is itself an average of daily rates — so a mean of the daily rates is a
+   * different number, and showing one would be showing a fabricated legal figure.
+   */
+  fxAnnualNotComputable:
+    'Media anuală publicată de BNR este media a 12 medii lunare, nu media cursurilor zilnice, așa că aplicația nu o calculează și lasă suma în afara calculelor până când media este înregistrată.',
+  /**
+   * TASK 10a — rounding the product of an amount and a rate. Deliberately distinct from
+   * `roundingDirection` above, which describes the Phase 10 lei→bani storage conversion. art. 66 alin. (1)
+   * rounds a sum of tax to a whole leu; whether it reaches an intermediate conversion product is not
+   * established, and applying it there would move every converted amount by up to 0,50 lei on an
+   * unverified reading.
+   */
+  fxRoundingAtConversion:
+    'Legea nu spune dacă rotunjirea la leu din art. 66 se aplică și la produsul dintre o sumă și un curs, așa că aplicația rotunjește doar la banul cel mai apropiat și nu aplică rotunjirea la leu decât la suma de impozit.',
 } as const;
 
 /**

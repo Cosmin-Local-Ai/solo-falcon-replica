@@ -133,6 +133,11 @@ function toAppData(parsed: PersistedAppData): AppData {
     // object back into localStorage, so carrying it here is what keeps it alive past the first write.
     // Left `undefined` when absent so the key is not written at all for healthy data.
     moneyNotices: parsed.moneyNotices?.length ? parsed.moneyNotices : undefined,
+    // TASK 10a: recorded FX rates ride along the same way. Left `undefined` when absent — an empty array
+    // would be written back and would read as „rates were fetched and none existed”, which is a different
+    // fact from „nothing has been recorded yet”. No migration step backfills this collection: a backfilled
+    // rate would be a fabricated legal figure.
+    fxRates: parsed.fxRates,
   };
 }
 

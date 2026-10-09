@@ -4,6 +4,7 @@ import { useStore } from '../data/store';
 import { Card, Badge, Modal } from '../components/ui';
 import { Disclosure } from '../components/ui/Disclosure';
 import { InterpretationNote } from '../components/ui/InterpretationNote';
+import { FxRateProvenance } from '../components/ui/FxRateProvenance';
 import { copy, fields, settings as settingsCopy, validation } from '../ui/copy';
 import {
   isSelectableRegime,
@@ -97,7 +98,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
   // all — they are frozen legacy data, read only by the migration chain.
   // `settings` itself stays live for what is genuinely settings: e-Factura
   // behaviour and the bank-account list.
-  const { settings, updateSettings, profile, updateProfile, toast } = useStore();
+  const { settings, updateSettings, profile, updateProfile, toast, fxRates } = useStore();
   const identity = profile.identity;
   const [tab, setTab] = useState<TabKey>(
     TABS.some(t => t.key === initialTab) ? (initialTab as TabKey) : 'company'
@@ -979,6 +980,25 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                 {errors.cashFloorLei && <span className="error">{errors.cashFloorLei}</span>}
               </div>
             </div>
+          </Card>
+
+          {/*
+            TASK 10a — the recorded exchange rates, with their provenance on the face of the card.
+            Read-only here on purpose: 10a builds the store, the fetcher boundary and the conversion rule;
+            the entry form and the provisional → final lifecycle are TASK 10b's. What this card establishes
+            now is that a rate is never shown as a bare number — the series, the source and the fetch date
+            travel with it, because BNR's licence requires the source to be indicated and a conversion the
+            user cannot trace is a conversion they cannot defend.
+          */}
+          <Card title={copy.fx.card}>
+            <p className="hint">{copy.fx.explanation}</p>
+            <FxRateProvenance records={fxRates ?? []} id="fx-rate-provenance" />
+            <p className="hint">{copy.fx.manualEntryHint}</p>
+            <InterpretationNote note={copy.notes.fxAnnualNotComputable} />
+            <InterpretationNote
+              note={copy.notes.fxRoundingAtConversion}
+              citation="art. 66 alin. (1) Codul fiscal"
+            />
           </Card>
         </div>
       )}

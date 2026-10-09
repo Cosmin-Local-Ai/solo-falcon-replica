@@ -41,6 +41,7 @@ export {
   thresholdKindLabels,
 } from './thresholds';
 export { notes, sources } from './notes';
+export { fx } from './fx';
 export { provenance, severity } from './provenance';
 export { attention, estimateState } from './attention';
 export { settings } from './settings';
@@ -67,6 +68,7 @@ import {
   thresholdRowLabels, thresholdKindLabels,
 } from './thresholds';
 import { notes, sources } from './notes';
+import { fx } from './fx';
 import { provenance, severity } from './provenance';
 import { attention, estimateState } from './attention';
 import { settings } from './settings';
@@ -82,6 +84,7 @@ export const copy = {
   thresholds, thresholdStatusLabels, measuredBasisLabels, thresholdDomainLabels,
   thresholdRowLabels, thresholdKindLabels,
   notes, sources,
+  fx,
   provenance, severity,
   attention, estimateState,
   settings,
