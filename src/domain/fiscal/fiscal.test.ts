@@ -622,4 +622,28 @@ describe('PFA 2026 release identity (TASK 6)', () => {
       expect(url).toMatch(/^https?:\/\//);
     }
   });
+
+  it('TASK 9: every citation is published by an official source, never a commercial mirror', () => {
+    // The package used to cite `www.legalteka.ro` for both minimum-wage acts. A mirror re-types the text
+    // it reproduces, so it cannot settle a question about what the act says — and the digest pins the
+    // PARAMETERS, which is exactly why the citation has to stay authoritative on its own. This is an
+    // allow-list, not a block-list: a new mirror passes a block-list by being new.
+    //   legislatie.just.ro — Portal Legislativ, Ministerul Justiției (the state register of acts)
+    //   static.anaf.ro     — ANAF, the administering authority (its own forms and instructions)
+    const OFFICIAL_HOSTS = ['legislatie.just.ro', 'static.anaf.ro'];
+    const cited = new Set<string>();
+    for (const rule of PFA_2026_SYSTEM_REAL_PACKAGE) cited.add(rule.sourceUrl);
+    for (const url of PFA_2026_RELEASE.evidence) cited.add(url);
+    for (const url of cited) {
+      const host = new URL(url).host;
+      expect(OFFICIAL_HOSTS, `${url} host`).toContain(host);
+    }
+    // And the two wage acts are cited by their register document, not by a search page: a bare search URL
+    // is a pointer to a query, not to an act.
+    const wageRules = PFA_2026_SYSTEM_REAL_PACKAGE.filter(r => r.taxRegime === 'wage-reference');
+    expect(wageRules.length).toBeGreaterThan(0);
+    for (const rule of wageRules) {
+      expect(rule.sourceUrl).toMatch(/^https:\/\/legislatie\.just\.ro\/Public\/DetaliiDocument\/\d+$/);
+    }
+  });
 });

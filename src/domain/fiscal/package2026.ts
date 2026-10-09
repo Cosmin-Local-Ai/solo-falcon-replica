@@ -22,6 +22,16 @@ const PROVENANCE_2026 = {
 // and 4,325 lei from 1 iulie 2026 (HG 146/2026, MO 196/13.03.2026, which abrogă HG 1.506/2024 at that
 // date). ANAF states the 2026 CASS ceiling as "291.600 lei (72 x 4.050 lei)", confirming the 1 January
 // anchor. Any "8,100 / 8,600 lei" figure seen in older notes is a hallucination — do not reintroduce it.
+// TASK 9 (citation hygiene): the two wage rules below cited a commercial mirror (legalteka.ro). They now
+// cite the same acts on Portal Legislativ, the Ministry of Justice's own register: HG 1.506 din 27
+// noiembrie 2024 is document 291450 (the 28.11.2024 date is the MONITORUL OFICIAL issue, not the signing
+// date — the act is "din 27 noiembrie 2024"), and HG 146 din 12 martie 2026 is document 308231. Both ids
+// were read off the primary pages, and 291450 is corroborated by the hyperlink in HG 146/2026 art. 2.
+// HG 1.506/2024 art. 1 fixes 4.050 lei "începând cu data de 1 ianuarie 2025" with no end date, which is
+// why it is still the act behind the 1 ianuarie 2026 anchor: no 2025 or H1-2026 wage act exists between
+// it and HG 146/2026 (Portal Legislativ title search, newest first: 146/2026 → 1506/2024 → 598/2024).
+// `sourceAct` strings are deliberately UNCHANGED — thresholds.ts maps them to `computedFrom.smAct`, and
+// the surfaces and tests cite them verbatim.
 export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
   {
     ...PROVENANCE_2026,
@@ -47,7 +57,7 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     calculatorId: 'calc-wage-reference',
     sourceAct: 'HG 1506/2024',
     sourceArticle: 'art. 1',
-    sourceUrl: 'https://www.legalteka.ro/act/1506/2024',
+    sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/291450',
   },
   {
     ...PROVENANCE_2026,
@@ -62,7 +72,7 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     calculatorId: 'calc-wage-reference',
     sourceAct: 'HG 1506/2024',
     sourceArticle: 'art. 1',
-    sourceUrl: 'https://www.legalteka.ro/act/1506/2024',
+    sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/291450',
   },
   {
     ...PROVENANCE_2026,
@@ -77,7 +87,7 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     calculatorId: 'calc-wage-reference',
     sourceAct: 'HG 146/2026',
     sourceArticle: 'art. 1',
-    sourceUrl: 'https://www.legalteka.ro/act/146/2026',
+    sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/308231',
   },
   {
     ...PROVENANCE_2026,

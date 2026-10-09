@@ -104,9 +104,10 @@ export const PFA_2026_RELEASE: RuleRelease = {
     'https://static.anaf.ro/static/10/Anaf/formulare/Instructiuni_D212_2736_2025.pdf',
     // Titlul V comparative amendment table (Legea 239/2025) — corroborates the art. 170 alin. (1) change.
     'https://static.anaf.ro/static/10/Brasov/Brasov/titl_V_cf.pdf',
-    // Minimum-wage reference acts (unchanged from the original package).
-    'https://www.legalteka.ro/act/1506/2024',
-    'https://www.legalteka.ro/act/146/2026',
+    // Minimum-wage reference acts (unchanged from the original package; TASK 9 re-pointed them from the
+    // legalteka.ro mirror to Portal Legislativ — HG 1.506/2024 is doc 291450, HG 146/2026 is doc 308231).
+    'https://legislatie.just.ro/Public/DetaliiDocument/291450',
+    'https://legislatie.just.ro/Public/DetaliiDocument/308231',
     // Added with the TASK 2a deductibility rules: the consolidated Normele metodologice HG 1/2016
     // (pct. 7 alin. (4)-(8), pct. 68) and the consolidated OUG nr. 8/2026 that added art. 68
     // alin. (5) lit. g^1), g^2) and s).
