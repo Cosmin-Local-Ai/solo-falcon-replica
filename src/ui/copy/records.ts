@@ -185,7 +185,14 @@ export const clients = {
 
 export const declarations = {
   title: 'Declarații',
-  subtitle: 'Declarații fiscale lunare — IM, CS, TVA',
+  // TASK 9: this used to read 'Declarații fiscale lunare — IM, CS, TVA'. It stated a monthly filing
+  // cadence that does not exist for this profile: a persoană fizică autorizată în sistem real files the
+  // Declarația Unică 212 once a year, by 25 May of the following year (CF art. 122 alin. (3)), and the
+  // estimated-advance filings art. 120 / 120¹ were abrogated by OUG 128/2024 from 01-01-2025
+  // (docs/ai/research/12_quarterly_payment_deadlines_2026.md §6). The page is a register of the
+  // declaration records the app holds; it cannot promise a statutory cadence it does not model, and the
+  // seed no longer carries monthly rows for the old wording to describe.
+  subtitle: 'Declarații fiscale — ce ai înregistrat în aplicație',
   searchPlaceholder: 'Caută după perioadă…',
   add: 'Adaugă declarație',
   addTitle: 'Adaugă declarație',

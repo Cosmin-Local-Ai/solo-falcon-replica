@@ -20,15 +20,19 @@ import { test, expect, type Page } from '@playwright/test';
 const STORAGE_KEY = 'pfa-app-data-v2';
 
 /** Shared settings payload for localStorage-seeded datasets (valid per settingsSchema). */
+// TASK 9 re-pin (replaced, not deleted): the legacy `company` block followed the seed's identity fix —
+// 'Popescu Consulting SRL' / 'SRL' → 'Popescu Andrei PFA' / 'Persoană fizică autorizată', and the CUI
+// that sat in the `cnp` field became the person's CNP. A PFA has no legal personality separate from the
+// person, and every rule, deadline and estimate in the app already resolves this profile as a PFA.
 const SEED_SETTINGS = {
   cotaTva: 9,
   company: {
-    denumire: 'Popescu Consulting SRL',
+    denumire: 'Popescu Andrei PFA',
     cui: 'RO4455667788990',
     numarRegComert: 'J40/1234/2020',
     adresa: 'Str. Libertății 12, Cluj-Napoca',
-    cnp: 'RO4455667788990',
-    formaJuridica: 'SRL',
+    cnp: '1234567890123',
+    formaJuridica: 'Persoană fizică autorizată',
     codFiscal: 'RO4455667788990',
     codCAEN: '6201',
     'regComerț': 'J40/1234/2020',
@@ -123,11 +127,15 @@ test.describe('Dashboard — cockpit cards (seed data)', () => {
     await expect(ramane).toBeVisible();
     await expect(ramane.locator('.value')).toHaveText('3.249,00 RON');
 
-    // Completeness: still 8 of 9 — the check looks for a PERSISTED tax snapshot, and the live estimate
-    // is not written to storage (persisting it is Phase 7, not Phase 5).
+    // Completeness: 7 of 9 — the check looks for a PERSISTED tax snapshot, and the live estimate is not
+    // written to storage (persisting it is Phase 7, not Phase 5).
+    // TASK 9 re-pin (replaced, not deleted): 8/9 → 7/9. The 'Declarații' check asks whether the app holds
+    // any declaration record, and the seed no longer holds one — the three it carried recorded monthly
+    // filings that do not exist for this profile (see the note in src/data/seed.ts). The check is honest
+    // about the data it has; the missing record is the honest state of the demo, not a bug to paper over.
     const dateComplete = statCard(page, 'Date complete');
     await expect(dateComplete).toBeVisible();
-    await expect(dateComplete.locator('.value')).toHaveText('8/9');
+    await expect(dateComplete.locator('.value')).toHaveText('7/9');
     await expect(dateComplete.locator('.hint')).toHaveText('verificări');
   });
 
@@ -147,16 +155,18 @@ test.describe('Dashboard — cockpit cards (seed data)', () => {
       await expect(page.locator('h2.card-title', { hasText: title })).toBeVisible();
     }
 
-    // Step 22 sections (CardTitle → h3).
-    const h3Titles = [
+    // TASK 9 re-pin (replaced, not deleted): these five sections used to render a bare <h3> from the
+    // second card system. There is one card system now, and its title is `h2.card-title` — the same
+    // element the five page-level sections above use. The titles asserted are unchanged.
+    const cardTitleSections = [
       'Praguri',
       'Termene limită',
       'Completitudine date',
       'Ce trebuie să faci',
       'Legislație',
     ];
-    for (const title of h3Titles) {
-      await expect(page.locator('h3', { hasText: title })).toBeVisible();
+    for (const title of cardTitleSections) {
+      await expect(page.locator('h2.card-title', { hasText: title })).toBeVisible();
     }
 
     // Tax hero mirrors the cockpit: the seed estimate is computed, so the hero shows the number.
@@ -180,7 +190,9 @@ test.describe('Dashboard — section content (seed data)', () => {
    */
 
   /** Scope to the dashboard card (section.card) containing the given title. */
-  const sectionWith = (page: Page, title: string, level: 'h2' | 'h3' = 'h3') =>
+  // TASK 9: the default level flips from 'h3' to 'h2' — the two card systems became one, and every
+  // section title is now `h2.card-title`. Call sites are unchanged; the sections they scope are the same.
+  const sectionWith = (page: Page, title: string, level: 'h2' | 'h3' = 'h2') =>
     page.locator('section.card').filter({ has: page.locator(level, { hasText: title }) });
 
   test('Rezervă fiscală: shows the recommended reserve built from the computed seed estimate', async ({ page }) => {
@@ -335,11 +347,14 @@ test.describe('Dashboard — section content (seed data)', () => {
     }
   });
 
-  test('Completitudine date: renders 9 checks, 8 satisfied and the missing tax estimate', async ({ page }) => {
+  test('Completitudine date: renders 9 checks, 7 satisfied, and the two facts the app does not hold', async ({ page }) => {
     await page.goto('/dashboard');
 
     const completeness = sectionWith(page, 'Completitudine date');
-    await expect(completeness.getByText('8 din 9 verificări îndeplinite')).toBeVisible();
+    // TASK 9 re-pin (replaced, not deleted): '8 din 9' → '7 din 9', and one 'Lipsă' became two. The new
+    // unsatisfied check is 'Declarații' — the seed holds no declaration record now. The nine checks and
+    // their labels are unchanged.
+    await expect(completeness.getByText('7 din 9 verificări îndeplinite')).toBeVisible();
     // CompletenessSection renders one .check-row per check (not .item-row).
     await expect(completeness.locator('.check-row')).toHaveCount(9);
 
@@ -356,11 +371,15 @@ test.describe('Dashboard — section content (seed data)', () => {
       await expect(completeness.getByText(label, { exact: true })).toBeVisible();
     }
 
-    // The only unsatisfied check is the tax estimate snapshot.
+    // The two unsatisfied checks: no persisted tax snapshot, and no declaration record.
     await expect(completeness.getByText('Estimare impozit', { exact: true })).toBeVisible();
     await expect(completeness.getByText('nu există instantanee de taxe')).toBeVisible();
-    await expect(completeness.getByText('Complet', { exact: true })).toHaveCount(8);
-    await expect(completeness.getByText('Lipsă', { exact: true })).toHaveCount(1);
+    await expect(completeness.getByText('nu există declarații')).toBeVisible();
+    // The company documents the seed does hold, stated per section — the D212 for the 2025 year sits in
+    // `im`, and `cs` is empty because D212 is one form covering income and contributions alike.
+    await expect(completeness.getByText(/im: 1, tva: 1, facturi: 3/)).toBeVisible();
+    await expect(completeness.getByText('Complet', { exact: true })).toHaveCount(7);
+    await expect(completeness.getByText('Lipsă', { exact: true })).toHaveCount(2);
   });
 
   test('Ce trebuie să faci: renders the 6 pending action items', async ({ page }) => {
@@ -373,6 +392,11 @@ test.describe('Dashboard — section content (seed data)', () => {
     // review. The tax-review action is gone (the seed estimate computes, so there is nothing to
     // review), and the four records the seed genuinely holds unresolved (r2, r3, e3, d2) now surface.
     // New six = 4 records + 1 completeness + 1 deadline.
+    // TASK 9 re-pin (replaced, not deleted): still six, but one of them changed identity. The `d2`
+    // declaration row is gone — the record it came from described a monthly filing that was never due,
+    // and the seed no longer holds it. What takes its place is the honest one: the app holds no
+    // declaration record at all, so the 'Declarații' completeness check is unsatisfied and says so.
+    // Six now = 3 records + 2 completeness + 1 deadline.
     await expect(actions.getByText('6 elemente de rezolvat')).toBeVisible();
     // ActionSection renders one .action-label per item (not .item-row).
     await expect(actions.locator('.action-label')).toHaveCount(6);
@@ -384,19 +408,24 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(actions.getByText(/„În așteptare”/)).toBeVisible();
     await expect(actions.getByText('Document de cheltuială respins: FCT-PRO-121')).toBeVisible();
     await expect(actions.getByText(/Document neconform/)).toBeVisible();
-    await expect(actions.getByText('Declarație fără depunere înregistrată: 2026-06')).toBeVisible();
-    // The app states that no submission is recorded; it does not claim the return was not filed.
-    await expect(actions.getByText(/nu are nicio dată de depunere înregistrată/)).toBeVisible();
+    // TASK 9: the declaration row is replaced by the completeness row that states the same absence.
+    // Old row: 'Declarație fără depunere înregistrată: 2026-06' + 'nu are nicio dată de depunere
+    // înregistrată'. It asserted a filing the law does not ask of this profile, so it is gone with the
+    // record it described; the row below states only what the app knows — it holds no declaration data.
+    await expect(actions.getByText('Date lipsă: Declarații')).toBeVisible();
+    await expect(actions.getByText(/nu este îndeplinită: Declarații/)).toBeVisible();
+    await expect(actions.getByText('Declarație fără depunere înregistrată: 2026-06')).toHaveCount(0);
 
     // Source badges — one per attention source. Old: deadline / completeness / tax only.
     await expect(actions.getByText('Termen limită', { exact: true })).toHaveCount(1);
-    await expect(actions.getByText('Completitudine', { exact: true })).toHaveCount(1);
+    await expect(actions.getByText('Completitudine', { exact: true })).toHaveCount(2);
     await expect(actions.getByText('Venit', { exact: true })).toHaveCount(2);
     await expect(actions.getByText('Cheltuială', { exact: true })).toHaveCount(1);
-    await expect(actions.getByText('Declarație', { exact: true })).toHaveCount(1);
+    await expect(actions.getByText('Declarație', { exact: true })).toHaveCount(0);
     await expect(actions.getByText('Revizuire estimări fiscale')).toHaveCount(0);
 
-    // Severity is the domain's decision, and the row is styled from it alone.
+    // Severity is the domain's decision, and the row is styled from it alone. Unchanged by TASK 9: the
+    // row that left was `medium` and the row that arrived is `medium`.
     await expect(actions.getByText('prioritate ridicată', { exact: true })).toHaveCount(1);
     await expect(actions.getByText('prioritate medie', { exact: true })).toHaveCount(4);
     await expect(actions.getByText('prioritate scăzută', { exact: true })).toHaveCount(1);
@@ -646,7 +675,7 @@ test.describe('Dashboard — a PFA start date resolves no deadline', () => {
     // Same section locator as the seed-data suite (`sectionWith` is scoped to that describe block).
     const deadlines = page
       .locator('section.card')
-      .filter({ has: page.locator('h3', { hasText: 'Termene limită' }) });
+      .filter({ has: page.locator('h2.card-title', { hasText: 'Termene limită' }) });
     // The start date (today + 5 days) resolves nothing: exactly one row, the rule-driven D212.
     await expect(deadlines.locator('.item-row')).toHaveCount(1);
     await expect(deadlines.getByText('Depunere D212')).toBeVisible();
@@ -836,6 +865,23 @@ test.describe('Dashboard — Grafic financiar & KPI table (seeded FY2025)', () =
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(overflow, 'page must not scroll horizontally at 390px with seeded data').toBeLessThanOrEqual(0);
+
+    // TASK 9: the chart must fit the box it is given, not be cut off by its own scroll container.
+    // `.chart-scroll > *` used to force `min-width: 640px` (480px under the 640px breakpoint), so at a
+    // 390px viewport — where the card body is ~358px — the chart rendered ~657px. The page did NOT
+    // overflow, so the assertion above passed the whole time; the chart was simply clipped. Measured here
+    // rather than inferred from the stylesheet: the child may not exceed the container, and the
+    // container may not have anything left to scroll to.
+    const fit = await chart.locator('.chart-scroll').evaluate((el) => {
+      const child = el.firstElementChild as HTMLElement | null;
+      return {
+        container: el.clientWidth,
+        child: child ? child.scrollWidth : 0,
+        scrollable: el.scrollWidth - el.clientWidth,
+      };
+    });
+    expect(fit.child, `chart child ${fit.child}px in a ${fit.container}px box`).toBeLessThanOrEqual(fit.container);
+    expect(fit.scrollable, 'the chart box has content it cannot show').toBeLessThanOrEqual(0);
   });
 });
 
@@ -978,7 +1024,7 @@ test.describe('Dashboard — impozit_pe_cit on a PFA is a data-integrity failure
 
     const thresholds = page
       .locator('section.card')
-      .filter({ has: page.locator('h3', { hasText: 'Praguri' }) });
+      .filter({ has: page.locator('h2.card-title', { hasText: 'Praguri' }) });
 
     // The silent-skip trap: a base the caller cannot supply used to delete the card. All five
     // rows must still be here — four of them loud, not missing (the 24 SM CAS step is measured on
@@ -993,5 +1039,55 @@ test.describe('Dashboard — impozit_pe_cit on a PFA is a data-integrity failure
     // measured even while the contribution rows are unmeasurable.
     await expect(thresholds.getByText(/Curent: 130\.000,00 lei/)).toHaveCount(1);
     await expect(thresholds.getByText('Prag: 395.000,00 lei')).toBeVisible();
+  });
+});
+
+test.describe('Dashboard — a recorded reserve survives a reload (TASK 9)', () => {
+  test('the reserve the user records is read back from the store after a reload', async ({ page }) => {
+    // Deliberately NOT seeded with addInitScript: that script re-runs on every document, including
+    // reload, and would overwrite the value the UI just saved — the assertion would then prove nothing
+    // (the same reason e2e/settings.spec.ts:125 avoids it). The app loads its own seed, the user records
+    // a reserve, and the reload reads back what the store actually persisted.
+    //
+    // This is the round trip the reserve had no coverage for: TASK 3 fixed two read sites that ignored
+    // the recorded value, and nothing in the suite proved the value survived the page at all.
+    await page.goto('/dashboard');
+
+    const reserveCard = () =>
+      page
+        .locator('section.card')
+        .filter({ has: page.locator('h2.card-title', { hasText: 'Rezervă fiscală' }) });
+
+    // The seed records no reserve, and says so — `null` is not rendered as 0,00 lei.
+    await expect(reserveCard().getByText('Nicio sumă înregistrată.')).toBeVisible();
+
+    await page.locator('#reserve-input').fill('1500');
+    await reserveCard().getByRole('button', { name: 'Salvează' }).click();
+    await expect(reserveCard().getByText('1.500,00 RON').first()).toBeVisible();
+
+    await page.reload();
+
+    // The point of the test: the amount comes back. A card that renders it only from component state
+    // would show „Nicio sumă înregistrată.” again here.
+    await expect(reserveCard().getByText('1.500,00 RON').first()).toBeVisible();
+    await expect(reserveCard().getByText('Nicio sumă înregistrată.')).toHaveCount(0);
+
+    // And it is the store that holds it: `reservedAmount` is persisted in bani, 1 leu = 100 bani —
+    // the unit the whole money layer uses, not the lei the box was typed in.
+    const stored = await page.evaluate(
+      (key) => JSON.parse(localStorage.getItem(key) ?? '{}') as { reservedAmount?: number | null },
+      STORAGE_KEY,
+    );
+    expect(stored.reservedAmount).toBe(150000);
+
+    // Clearing is the same round trip in the other direction: the card returns to the no-record state,
+    // and the payload goes back to `null` rather than to 0 — the two empty states are different facts.
+    await reserveCard().getByRole('button', { name: 'Șterge înregistrarea' }).click();
+    await expect(reserveCard().getByText('Nicio sumă înregistrată.')).toBeVisible();
+    const cleared = await page.evaluate(
+      (key) => JSON.parse(localStorage.getItem(key) ?? '{}') as { reservedAmount?: number | null },
+      STORAGE_KEY,
+    );
+    expect(cleared.reservedAmount).toBeNull();
   });
 });

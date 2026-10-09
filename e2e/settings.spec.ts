@@ -322,7 +322,10 @@ test.describe('Phase 7 — identity round-trips through the one store', () => {
     const saved = await stored(page);
     expect(saved.profile.identity.denumire).toBe('Georgescu Maria SRL');
     // The retired block keeps the value the app seeded and is never written again.
-    expect(saved.settings.company.denumire).toBe('Popescu Consulting SRL');
+    // TASK 9 re-pin (replaced, not deleted): 'Popescu Consulting SRL' → 'Popescu Andrei PFA'. The seed
+    // identity is a persoană fizică autorizată now; what this assertion guards is unchanged — the
+    // retired `settings.company` block is still on disk with the seeded value and is never rewritten.
+    expect(saved.settings.company.denumire).toBe('Popescu Andrei PFA');
 
     await page.goto('/');
     await expect(page.locator('.sidebar-identity')).toHaveText('Georgescu Maria SRL');
