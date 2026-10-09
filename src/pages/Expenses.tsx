@@ -190,6 +190,10 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
     .filter(x => x.reason === 'undetermined')
     .map(x => x.id);
   const firstUnclassified = expenses.find(e => unclassifiedIds.includes(e.id));
+  // TASK 2c — a cap the app cannot measure is NOT a silent drop. The rule settled the ceiling; what is
+  // missing is a datum (a BNR rate, a payroll) or a primary text that picks a side. The expense stays out
+  // of the deductible total and the reason says which, in the words the rule itself carries.
+  const capBlocked = classification.excluded.filter(x => x.reason === 'cap_unresolved');
 
   return (
     <div>
@@ -221,6 +225,21 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
             >
               Clasifică
             </button>
+          )}
+        </div>
+      )}
+
+      {capBlocked.length > 0 && (
+        <div className="banner banner-warn" role="status">
+          <strong>{capBlocked.length}</strong>
+          {' '}{capBlocked.length === 1 ? 'cheltuială are' : 'cheltuieli au'} un plafon legal care nu poate fi
+          {' '}măsurat din datele înregistrate, deci nu intră în cheltuielile deductibile (CF art. 68 alin. (5)).
+          {' '}Nu este o eroare de completare — este un fapt pe care aplicația nu îl deține.
+          <div className="text-sm muted" style={{ marginTop: 6 }}>{capBlocked[0].detail}</div>
+          {capBlocked.length > 1 && (
+            <div className="text-sm muted">
+              {`Celelalte ${capBlocked.length - 1} sunt excluse pentru temeiuri identice sau analoage; fiecare poartă motivul ei.`}
+            </div>
           )}
         </div>
       )}

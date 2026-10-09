@@ -61,6 +61,23 @@ type DeductibilityRuleSpec = {
   capBase?: string;
   capBaseArticle?: string;
   missingFact?: string;
+  /**
+   * TASK 2c — a conflict the primary sources do NOT resolve, carried on the rule so the app can state
+   * it instead of silently picking a side. research 22, „What must stay unresolved". Distinct from
+   * `missingFact`: a missing fact is a datum the app does not hold; a conflict is two operative rules
+   * that point to different answers.
+   */
+  conflict?: string;
+  /**
+   * TASK 2c — for an annual cap, the earliest PAYMENT date whose amounts count against the cap in this
+   * tax year, when that is NOT the same question as `effectiveFrom`. An art. 68 alin. (5) cap is
+   * measured per year of payment (art. 68 alin. (4) lit. b) + art. 65 alin. (1)), so a rule can be in
+   * force for the year while the cap still counts payments made earlier in that year — OUG 8/2026
+   * art. 10 alin. (9) does exactly that for pensii facultative. `effectiveFrom` cannot express it:
+   * setting it earlier would make the letter selectable before it exists, setting it later would drop
+   * payments the cap is obliged to count.
+   */
+  capCountsPaymentsFrom?: string;
   note?: string;
   effectiveFrom?: string;
   sourceAct: string;
@@ -93,6 +110,12 @@ function rule(spec: DeductibilityRuleSpec): FiscalRule {
   if (spec.missingFact !== undefined) {
     parameters.push({ id: 'missing_fact', label: 'The fact the law does not supply', value: spec.missingFact, unit: 'text' });
   }
+  if (spec.conflict !== undefined) {
+    parameters.push({ id: 'conflict', label: 'Conflict the primary sources do not resolve', value: spec.conflict, unit: 'text' });
+  }
+  if (spec.capCountsPaymentsFrom !== undefined) {
+    parameters.push({ id: 'cap_counts_payments_from', label: 'Earliest payment counted against the annual cap', value: spec.capCountsPaymentsFrom, unit: 'text' });
+  }
   if (spec.note !== undefined) {
     parameters.push({ id: 'note', label: 'Legal condition or caveat', value: spec.note, unit: 'text' });
   }
@@ -120,6 +143,85 @@ const NORME = (article: string): Pick<DeductibilityRuleSpec, 'sourceAct' | 'sour
   sourceArticle: article,
   sourceUrl: NORME_HG_1_2016,
 });
+
+// ── TASK 2c: the conflicts research 22 could not close, carried on the rules that hit them ──────
+//
+// These strings are not commentary bolted onto a call site. Every one of them is a rule PARAMETER, so
+// the estimate that uses the rule can say which of its own numbers rests on an unresolved reading.
+// The rule for each is settled; what is missing is either a datum the app does not hold, or a primary
+// text that reconciles two operative rules. research 22 §1, §2, §3, §5, §6.
+
+/**
+ * research 22 §1. Art. 68 fixes NO rate and NO date for its euro caps — none of lit. g), g^1), g^2),
+ * h), p), r), s) contains a conversion clause. HG 1/2016 Norme, Titlul IV, Cap. II, Secțiunea a 2-a,
+ * pct. 7 alin. (6) does convert them, at the BNR annual average for the payment year. CF art. 9 alin.
+ * (3) lit. b) + alin. (4) convert at the BNR rate on the payment date, excepting only „cazurile
+ * prevăzute expres în prezentul cod" — and the norms are not „prezentul cod". The app therefore
+ * converts nothing: picking a rate would be picking a side in a conflict no primary text resolves, and
+ * the app stores no BNR rate at all.
+ */
+const EUR_CONVERSION_CONFLICT =
+  'CONFLICT NEREZOLVAT (research 22 §1): HG 1/2016, Norme, Titlul IV, Cap. II, Secțiunea a 2-a, pct. 7 '
+  + 'alin. (6) convertește plafonul în lei „la cursul mediu comunicat de Banca Națională a României '
+  + 'pentru anul în care s-a efectuat plata", iar art. 9 alin. (3) lit. b) și alin. (4) CF folosesc '
+  + 'cursul BNR „valabil pentru datele respective" al plății, cu excepția doar a cazurilor „prevăzute '
+  + 'expres în prezentul cod" — normele nu sunt „prezentul cod". Niciun text primar citit nu împacă cele '
+  + 'două reguli. Aplicația nu alege niciuna și nu convertește nimic: nu stochează niciun curs BNR, iar '
+  + 'un curs fixat în cod ar fi o regulă inventată.';
+
+/**
+ * research 22 §2. „pentru fiecare persoană" is not settled to mean per taxpayer or per insured/covered
+ * person, and art. 68 alin. (7) lit. a) pulls the other way for family use. The app applies ONE cap per
+ * taxpayer — the smaller allowance — and records that as an interpretation, not as a rule.
+ */
+const PER_PERSON_MULTIPLIER_CONFLICT =
+  'INTERPRETARE (research 22 §2): „pentru fiecare persoană" nu este lămurit dacă înseamnă un plafon '
+  + 'pentru contribuabil sau câte unul pentru fiecare persoană asigurată/acoperită; art. 68 alin. (7) '
+  + 'lit. a) trage în sens contrar pentru uzul familial. Aplicația aplică UN SINGUR plafon pe '
+  + 'contribuabil — lectura care dă deducerea cea mai mică — și o declară interpretare, nu regulă.';
+
+/**
+ * research 22 §6. alin. (6) says „cheltuielile deductibile" and never says whether that is the amount
+ * as recorded or the amount after the other alin. (5) ceilings. Negative finding: zero occurrences of
+ * „protocol", „ordinea" or „în ordine" in the whole norms chapter for Titlul IV Cap. II, so no order of
+ * application is prescribed. The app uses the post-cap reading and reports the other reading's delta.
+ */
+const ALIN6_BASE_ORDER_CONFLICT =
+  'CONFLICT NEREZOLVAT (research 22 §6): art. 68 alin. (6) spune „venitul brut și cheltuielile '
+  + 'deductibile" fără să precizeze dacă scăderea se face cu cheltuielile înregistrate sau cu cele '
+  + 'rămase după plafoanele alin. (5). Negative finding: zero occurențe ale „protocol", „ordinea" și '
+  + '„în ordine" în tot capitolul normelor pentru Titlul IV Cap. II — nicio normă nu prescrie o ordine. '
+  + 'Aplicația citește post-plafon (deduce sumele rămase deductibile) și raportează ce ar fi dat cealaltă '
+  + 'lectură.';
+
+/**
+ * research 22 §3. alin. (4) lit. i) lists contribuții profesionale obligatorii among the generally
+ * deductible (no ceiling); alin. (5) lit. q) caps the same category at 5 % of the gross. No norm in
+ * HG 1/2016 resolves the overlap — the norms' illustrative deductible list does not mention the
+ * category at all. The app applies the cap: the reading that deducts less.
+ */
+const PROFESSIONAL_CONTRIBUTION_CONFLICT =
+  'CONFLICT NEREZOLVAT (research 22 §3): art. 68 alin. (4) lit. i) enumeră „contribuții profesionale '
+  + 'obligatorii plătite" printre condițiile de deductibilitate generală, fără plafon, iar alin. (5) '
+  + 'lit. q) plafonează exact aceeași categorie la 5 % din venitul brut. Nicio normă HG 1/2016 nu '
+  + 'rezolvă suprapunerea — lista ilustrativă a normelor (pct. 7 alin. (5)) nu menționează deloc '
+  + 'categoria. Aplicația aplică plafonul, adică lectura care deduce mai puțin.';
+
+/**
+ * research 22 §5. alin. (5) lit. j) limits running/maintenance/repair costs to „cel mult un singur
+ * autoturism aferent fiecărei persoane", but the norms for Titlul IV Cap. II never use the word
+ * „autoturism" at all (zero occurrences in the 42.814-character chapter). Registrul-inventar
+ * (pct. 7 alin. (8)) identifies vehicles generally and does not select one. Nothing says whether the
+ * cap attaches to a designated car, the first, the most expensive, or a free election — so the app
+ * must not pick one.
+ */
+const ONE_CAR_SELECTION_CONFLICT =
+  'NESTABILIT (research 22 §5): art. 68 alin. (5) lit. j) limitează cheltuielile de funcționare, '
+  + 'întreținere și reparații la „cel mult un singur autoturism aferent fiecărei persoane", dar normele '
+  + 'pentru Titlul IV Cap. II nu folosesc deloc cuvântul „autoturism" (zero occurențe) și nu spun nici '
+  + 'unui autoturism i se aplică plafonul când contribuabilul are două sau mai multe. Registrul-inventar '
+  + '(pct. 7 alin. (8)) identifică bunurile, dar nu alege unul. Aplicația nu alege niciun autoturism: '
+  + 'limitează doar 50 % pe înregistrare (alin. (7) lit. k)), care nu cere nicio selecție.';
 
 export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
   // ── Expressly non-deductible — CF art. 68 alin. (7) „Nu sunt cheltuieli deductibile:" ──────────
@@ -326,6 +428,7 @@ export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
     capBase: 'expense_itself',
     capBaseArticle: 'art. 68 alin. (7) lit. k)',
     note: 'art. 68 alin. (7) lit. k): 50 % of the expenses relating to a motorised road vehicle (MTMA <= 3.500 kg, <= 9 seats incl. driver) held in property or use is NOT deductible when the vehicle is not used exclusively for the activity. The capped set includes the directly attributable costs named by Normele pct. 7 alin. (7): local taxes, mandatory RCA, periodic technical inspections, rovinieta — and fuel, parts, lubricants and repairs via the Titlul VII definition imported at Normele pct. 68 alin. (1). DEPRECIATION IS OUTSIDE the cap. One car per person: art. 68 alin. (5) lit. j) limits deductible running/maintenance/repair costs to „cel mult un singur autoturism aferent fiecărei persoane" — a cross-record limit this per-expense classifier cannot enforce.',
+    conflict: ONE_CAR_SELECTION_CONFLICT,
     ...CF('art. 68 alin. (7) lit. k); art. 68 alin. (5) lit. j); Normele HG 1/2016 pct. 7 alin. (7), pct. 68 alin. (1)'),
   }),
   rule({
@@ -348,6 +451,7 @@ export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
     capBase: 'art68_alin6_base',
     capBaseArticle: 'art. 68 alin. (6): „Baza de calcul se determină ca diferență între venitul brut și cheltuielile deductibile, altele decât cheltuielile pentru acordarea de burse private și cheltuielile de protocol."',
     note: 'THIS IS NOT THE CORPORATE CAP. art. 25 alin. (3) lit. a) caps protocol at 2 % of ACCOUNTING PROFIT plus corporate tax and protocol — a different base, and art. 68 does not incorporate it. INTERPRETATION NOTE: neither art. 68 nor the norms define „cheltuieli de protocol" for alin. (5) lit. b); what counts as protocol rather than reclamă/publicitate or facilități pentru clienți is a genuine legal ambiguity, so the category assignment itself is a judgement call, not a settled classification.',
+    conflict: ALIN6_BASE_ORDER_CONFLICT,
     ...CF('art. 68 alin. (5) lit. b) și alin. (6)'),
   }),
   rule({
@@ -370,6 +474,7 @@ export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
     capBase: 'art68_alin6_base',
     capBaseArticle: 'art. 68 alin. (6)',
     note: 'art. 68 alin. (5) lit. a). alin. (6) excludes burse private and protocol from the cap base itself.',
+    conflict: ALIN6_BASE_ORDER_CONFLICT,
     ...CF('art. 68 alin. (5) lit. a) și alin. (6)'),
   }),
   rule({
@@ -380,7 +485,9 @@ export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
     capEur: 400,
     capBase: 'annual_eur_per_person',
     capBaseArticle: 'art. 68 alin. (5): „în limita echivalentului în lei a 400 euro anual pentru fiecare persoană"',
-    note: 'art. 68 alin. (5) lit. g). The cap is stated in EUR and converted to lei at the law\'s own equivalent; this rule deliberately does NOT convert it, and `paramBani` refuses any unit but \'lei\' so a euro figure can never be read as money.',
+    note: 'art. 68 alin. (5) lit. g). The cap is stated in EUR and converted to lei at the law\'s own equivalent; this rule deliberately does NOT convert it, and `paramBani` refuses any unit but \'lei\' so a euro figure can never be read as money. OUG 8/2026 art. 10 alin. (9): „În anul 2026, la verificarea încadrării în limita echivalentului în lei a 400 euro anual … se iau în calcul și sumele plătite în perioada 1 ianuarie-28 februarie 2026 în cazul pensiilor facultative" — the 2026 ceiling therefore counts payments from 1 ianuarie 2026 even though the neighbouring letters bite from 1 martie 2026. That is a cap-aggregation window, not a rule-availability date, so it travels as `cap_counts_payments_from` and NOT as `effectiveFrom`.',
+    conflict: EUR_CONVERSION_CONFLICT + ' ' + PER_PERSON_MULTIPLIER_CONFLICT,
+    capCountsPaymentsFrom: '2026-01-01',
     ...CF('art. 68 alin. (5) lit. g)'),
   }),
   rule({
@@ -392,6 +499,7 @@ export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
     capBase: 'annual_eur_per_person',
     capBaseArticle: 'art. 68 alin. (5): „în limita echivalentului în lei a 400 euro anual pentru fiecare persoană"',
     note: 'art. 68 alin. (5) lit. g^1), ADDED by OUG nr. 8/2026 (MO 147/25.02.2026), art. 6 pct. 27. Per art. 10 alin. (6) it applies începând cu veniturile aferente anului 2026, and per art. 10 alin. (10) to contributions PLĂTITE începând cu 1 martie 2026 — hence the 1 March effectiveFrom, which makes a January 2026 contribution correctly unclassifiable rather than wrongly deductible.',
+    conflict: EUR_CONVERSION_CONFLICT + ' ' + PER_PERSON_MULTIPLIER_CONFLICT,
     effectiveFrom: '2026-03-01',
     sourceAct: 'Cod fiscal, art. 68 alin. (5) lit. g^1) — OUG nr. 8 din 24.02.2026 (MO 147/25.02.2026), art. 6 pct. 27, aplicabilă art. 10 alin. (6) și (10)',
     sourceArticle: 'art. 68 alin. (5) lit. g^1)',
@@ -406,6 +514,7 @@ export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
     capBase: 'annual_eur_per_person',
     capBaseArticle: 'art. 68 alin. (5): „în limita echivalentului în lei a 400 euro anual pentru fiecare persoană"',
     note: 'art. 68 alin. (5) lit. g^2), ADDED by OUG nr. 8/2026, art. 6 pct. 28; contributions plătite începând cu 1 martie 2026 (art. 10 alin. (10)).',
+    conflict: EUR_CONVERSION_CONFLICT + ' ' + PER_PERSON_MULTIPLIER_CONFLICT,
     effectiveFrom: '2026-03-01',
     sourceAct: 'Cod fiscal, art. 68 alin. (5) lit. g^2) — OUG nr. 8 din 24.02.2026 (MO 147/25.02.2026), art. 6 pct. 28, aplicabilă art. 10 alin. (6) și (10)',
     sourceArticle: 'art. 68 alin. (5) lit. g^2)',
@@ -420,6 +529,7 @@ export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
     capBase: 'annual_eur_per_person',
     capBaseArticle: 'art. 68 alin. (5): „în limita echivalentului în lei a 400 euro anual pentru fiecare persoană"',
     note: 'art. 68 alin. (5) lit. h). This is the express exception to the art. 68 alin. (7) lit. d) exclusion of insurance premiums — the two rules must be read together.',
+    conflict: EUR_CONVERSION_CONFLICT + ' ' + PER_PERSON_MULTIPLIER_CONFLICT,
     ...CF('art. 68 alin. (5) lit. h); excepție expresă la art. 68 alin. (7) lit. d)'),
   }),
   rule({
@@ -430,6 +540,7 @@ export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
     capEur: 100,
     capBase: 'annual_eur_per_person',
     capBaseArticle: 'art. 68 alin. (5): „în limita echivalentului în lei a 100 euro anual pentru fiecare persoană"',
+    conflict: EUR_CONVERSION_CONFLICT + ' ' + PER_PERSON_MULTIPLIER_CONFLICT,
     ...CF('art. 68 alin. (5) lit. r)'),
   }),
   rule({
@@ -440,6 +551,9 @@ export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
     capEur: 4000,
     capBase: 'annual_eur_per_person',
     capBaseArticle: 'art. 68 alin. (5): „în limita echivalentului în lei a 4.000 euro anual"',
+    // lit. p) is the one euro letter WITHOUT „pentru fiecare persoană" — research 22 §2 verified that it
+    // states a single annual amount, so only the conversion conflict applies to it.
+    conflict: EUR_CONVERSION_CONFLICT,
     ...CF('art. 68 alin. (5) lit. p)'),
   }),
   rule({
@@ -451,6 +565,7 @@ export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
     capBase: 'gross_income',
     capBaseArticle: 'art. 68 alin. (5) lit. q): plafonul se calculează asupra venitului brut, nu asupra bazei de la alin. (6)',
     note: 'art. 68 alin. (4) lit. i) separately requires such amounts to be „contribuții de asigurări sociale plătite la sistemele proprii de asigurări sociale și/sau contribuții profesionale obligatorii plătite … organizațiilor profesionale din care fac parte contribuabilii".',
+    conflict: PROFESSIONAL_CONTRIBUTION_CONFLICT,
     ...CF('art. 68 alin. (5) lit. q); art. 68 alin. (4) lit. i)'),
   }),
   rule({
@@ -461,8 +576,10 @@ export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
     capEur: 400,
     capBase: 'annual_eur_per_person',
     capBaseArticle: 'art. 68 alin. (5) lit. s): „în limita echivalentului în lei a 400 euro anual pentru fiecare persoană, fără a include costurile aferente tranzacției"',
-    note: 'art. 68 alin. (5) lit. s), ADDED by OUG nr. 8/2026, art. 6 pct. 28, aplicabilă începând cu veniturile aferente anului 2026 (art. 10 alin. (6)). Deduction requires justificative documents issued by the art. 96^1 alin. (1) entities, and transaction costs are expressly outside the deductible amount.',
-    sourceAct: 'Cod fiscal, art. 68 alin. (5) lit. s) — OUG nr. 8 din 24.02.2026 (MO 147/25.02.2026), art. 6 pct. 28, aplicabilă art. 10 alin. (6)',
+    note: 'art. 68 alin. (5) lit. s), ADDED by OUG nr. 8/2026, art. 6 pct. 28. Deduction requires justificative documents issued by the art. 96^1 alin. (1) entities, and transaction costs are expressly outside the deductible amount. DATE GATE: art. 10 alin. (7) applies lit. s) „începând cu veniturile aferente anului 2026 pentru sumele plătite ȘI DECONTATE începând cu data de 1 martie 2026", so the 1 March effectiveFrom encodes the payment half of that test. The „decontate" (settled/reimbursed) half is NOT representable in this app: `Expense` carries `date` and `paid` only, and no settlement concept exists anywhere in `src/`, so an ETF bought 2026-03-10 and settled 2026-02-20 would still be treated as in force. That is recorded as a missing datum, not silently ignored.',
+    conflict: EUR_CONVERSION_CONFLICT + ' ' + PER_PERSON_MULTIPLIER_CONFLICT,
+    effectiveFrom: '2026-03-01',
+    sourceAct: 'Cod fiscal, art. 68 alin. (5) lit. s) — OUG nr. 8 din 24.02.2026 (MO 147/25.02.2026), art. 6 pct. 28, aplicabilă art. 10 alin. (6) și (7)',
     sourceArticle: 'art. 68 alin. (5) lit. s)',
     sourceUrl: CF_CONSOLIDATED_2026,
   }),

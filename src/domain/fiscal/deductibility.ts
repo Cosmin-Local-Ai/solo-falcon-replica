@@ -183,6 +183,13 @@ export type ClassifiedExpense = {
   cap?: DeductibilityCap;
   /** A legal condition the treatment depends on, when the rule states one. */
   condition?: string;
+  /**
+   * TASK 2c — an unresolved conflict the rule itself carries, verbatim from the rule parameter. It is
+   * separate from `condition` because it is not a fact the treatment depends on: it is two operative
+   * rules that give different answers, and the app has chosen the smaller one. Surfaced so no consumer
+   * can present the resulting number as settled law.
+   */
+  conflict?: string;
 };
 
 export type UndeterminedExpense = {
@@ -371,6 +378,7 @@ export function classifyExpenseDeductibility(
 
   if (treatment === 'deductible' || treatment === 'non_deductible' || treatment === 'capped') {
     const cap = capFor(rule);
+    const conflict = textParam(rule, 'conflict');
     return {
       status: 'classified',
       treatment,
@@ -378,6 +386,7 @@ export function classifyExpenseDeductibility(
       rule,
       ...(cap ? { cap } : {}),
       ...(textParam(rule, 'note') ? { condition: textParam(rule, 'note') } : {}),
+      ...(conflict ? { conflict } : {}),
     };
   }
 

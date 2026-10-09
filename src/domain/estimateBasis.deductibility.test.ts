@@ -132,26 +132,56 @@ describe('selectDeductibleExpenses — the law decides, the record only states',
     expect(set.records[0].id).toBe('orig');
   });
 
-  it('an annual cap is NOT computed here: the category is excluded and counted for TASK 2c', () => {
-    // art. 68 alin. (6) defines the protocol cap base as gross minus deductible expenses OTHER THAN
-    // protocol and private scholarships — the base depends on a total that must itself exclude the
-    // category being capped. Computing it here would need a deductible total that does not exist yet.
+  it('an annual cap the law fully determines is held for the assembler’s second pass, not excluded (TASK 2c)', () => {
+    // TASK 2b pinned this OUT, and that was correct while no base existed: `counts.capUnresolved` was 1,
+    // `excluded[0].reason` was 'cap_unresolved' and its detail named 'art68_alin6_base'. TASK 2c strikes
+    // the base in `selectEstimateOperands`, so at THIS stage the category is neither entered nor excluded
+    // — it is held. `records` stays empty (it must not enter unbounded) and `excluded` becomes empty.
     const set = assemble([expense({ category: 'protocol' })]);
-    expect(set.records).toHaveLength(0);
-    expect(set.counts.capUnresolved).toBe(1);
-    expect(set.excluded[0]).toMatchObject({
-      reason: 'cap_unresolved',
+    expect(set.records).toHaveLength(0);      // unchanged: not entered before the ceiling is struck
+    expect(set.excluded).toHaveLength(0);     // was 1 — no longer an exclusion
+    expect(set.counts.capUnresolved).toBe(0); // was 1
+    expect(set.counts.annualCapped).toBe(1);  // new bucket
+    expect(set.annualCapped).toHaveLength(1);
+    expect(set.annualCapped[0]).toMatchObject({
+      category: 'protocol',
       ruleId: 'EXPENSE_PROTOCOL_2026',
+      count: 1,
+      exclVat: lei(1000), // 1.000,00 lei claimed, before any ceiling
+      inclVat: lei(1190), // 1.000,00 + 190,00 lei
     });
-    expect(set.excluded[0].detail).toContain('art68_alin6_base');
+    expect(set.annualCapped[0].cap).toMatchObject({ percent: 2, base: 'art68_alin6_base' });
+    // The unresolved reading of alin. (6) travels with the line, so the number it produces can never be
+    // presented as settled law (research 22 §6).
+    expect(set.annualCapped[0].conflict).toContain('nicio normă nu prescrie o ordine');
   });
 
-  it('a euro-denominated annual cap is unresolved for the same reason — no rate, no year aggregate', () => {
+  it('a euro-denominated annual cap stays unresolved, and names the datum AND the rule that is missing', () => {
     const set = assemble([expense({ category: 'private_pension_contribution', date: '2026-03-15' })]);
     expect(set.records).toHaveLength(0);
+    expect(set.annualCapped).toHaveLength(0);
     expect(set.counts.capUnresolved).toBe(1);
     expect(set.excluded[0].ruleId).toBe('EXPENSE_PRIVATE_PENSION_2026');
     expect(set.excluded[0].detail).toContain('annual_eur_per_person');
+    // TASK 2c acceptance: the missing fact is the DATUM and the RULE, not a vague "not implemented".
+    expect(set.excluded[0].detail).toContain('nu stochează niciun curs BNR');
+    expect(set.excluded[0].detail).toContain('pct. 7 alin. (6)');
+    expect(set.excluded[0].detail).toContain('cursul mediu comunicat de Banca Națională a României');
+    expect(set.excluded[0].detail).toContain('art. 9 alin. (3) lit. b)');
+  });
+
+  it('cheltuieli sociale stays unresolved: no payroll datum is not the same as a zero ceiling', () => {
+    // research 22 §4: the ceiling is 5 % of „valoarea anuală a cheltuielilor efectuate cu salariile
+    // personalului", and with no personnel that base is arithmetically 0 — but the app holds no payroll
+    // concept at all, so it cannot assert the taxpayer HAS no personnel. "No data" is not "no employees".
+    const set = assemble([expense({ category: 'social_expenses' })]);
+    expect(set.records).toHaveLength(0);
+    expect(set.annualCapped).toHaveLength(0);
+    expect(set.counts.capUnresolved).toBe(1);
+    expect(set.excluded[0].ruleId).toBe('EXPENSE_SOCIAL_EXPENSES_2026');
+    expect(set.excluded[0].detail).toContain('annual_salary_expense');
+    expect(set.excluded[0].detail).toContain('nu are niciun concept de pontaj');
+    expect(set.excluded[0].detail).toContain('nu este declarat 0');
   });
 
   it('the period and status filter is the aggregate’s, so the count is not a different population', () => {
@@ -169,17 +199,28 @@ describe('selectDeductibleExpenses — the law decides, the record only states',
   });
 
   it('the classification date is the PAYMENT date, and the OUG 8/2026 letters turn on it', () => {
-    // art. 68 alin. (4) lit. b) attributes by year of payment; g^1)/g^2) bind only from 2026-03-01
-    // (OUG 8/2026 art. 10 alin. (10): contribuții plătite începând cu 1 martie 2026).
+    // art. 68 alin. (4) lit. b) attributes by year of payment; g^1)/g^2)/s) bind only from 2026-03-01
+    // (OUG 8/2026 art. 10 alin. (10) for g^1)/g^2), art. 10 alin. (7) for s).
     const before = assemble([expense({ id: 'ian', category: 'pepp_contribution', date: '2026-01-15' })]);
     expect(before.counts.undetermined).toBe(1);
     const after = assemble([
       expense({ id: 'mar', category: 'pepp_contribution', date: '2026-01-15', paid: '2026-03-15' }),
     ]);
     // Same issue date, different payment date: the rule is now in force, so the category is capped —
-    // and an annual euro cap is TASK 2c, so it is still excluded, but for a different reason.
+    // and an annual euro cap has no rate to strike it with, so it is still excluded, but for a
+    // different reason.
     expect(after.counts.undetermined).toBe(0);
     expect(after.counts.capUnresolved).toBe(1);
+  });
+
+  it('lit. s) ETF turns on the same 2026-03-01 payment date, through the assembler too', () => {
+    const jan = assemble([expense({ id: 'ian', category: 'etf_purchase', date: '2026-01-20' })]);
+    expect(jan.counts.undetermined).toBe(1);
+    expect(jan.counts.capUnresolved).toBe(0);
+    const mar = assemble([expense({ id: 'mar', category: 'etf_purchase', date: '2026-01-20', paid: '2026-03-02' })]);
+    expect(mar.counts.undetermined).toBe(0);
+    expect(mar.counts.capUnresolved).toBe(1);
+    expect(mar.excluded[0].ruleId).toBe('EXPENSE_ETF_PURCHASE_2026');
   });
 });
 

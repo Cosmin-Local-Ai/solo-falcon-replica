@@ -294,4 +294,115 @@ describe('expense deductibility — rules take effect when the law says they do'
     expect(r.rule.sourceArticle).toContain('art. 68 alin. (7) lit. e)');
     expect(r.rule.sourceUrl).toContain('legislatie.just.ro');
   });
+
+  it('lit. s) ETF carries the same 1 martie 2026 payment gate as g^1) and g^2)', () => {
+    // TASK 2c fixed this rule, not the caller. OUG 8/2026 art. 10 alin. (7): lit. s) se aplică
+    // „începând cu veniturile aferente anului 2026 pentru sumele plătite și decontate începând cu data
+    // de 1 martie 2026". Before the fix the rule inherited effectiveFrom '2026-01-01' and was selectable
+    // for a January payment — the same leak research 22 §7 flags for g^1)/g^2), which already carried it.
+    const jan = classifyExpenseDeductibility({ category: 'etf_purchase' }, RULES, q('2026-01-15'));
+    expect(jan.status).toBe('undetermined');
+    if (jan.status !== 'undetermined') return;
+    expect(jan.rule).toBeNull();
+
+    const apr = classifyExpenseDeductibility({ category: 'etf_purchase' }, RULES, q('2026-04-02'));
+    expect(apr.status === 'classified' && apr.treatment).toBe('capped');
+    if (apr.status !== 'classified') return;
+    expect(apr.rule.ruleId).toBe('EXPENSE_ETF_PURCHASE_2026');
+    expect(apr.cap?.eur).toBe(400);
+    // The „și decontate" half of art. 10 alin. (7) is NOT representable here, and the rule says so
+    // rather than pretending the payment date settles the whole test.
+    expect(apr.condition).toContain('plătite ȘI DECONTATE');
+  });
+});
+
+describe('expense deductibility — the FY2026 cap window is a cap rule, not a rule date', () => {
+  it('pensii facultative count 2026 payments from 1 ianuarie against the 400 EUR ceiling', () => {
+    // OUG 8/2026 art. 10 alin. (9) verbatim: „În anul 2026, la verificarea încadrării în limita
+    // echivalentului în lei a 400 euro anual … se iau în calcul și sumele plătite în perioada 1
+    // ianuarie-28 februarie 2026 în cazul pensiilor facultative." This is which payments the CEILING
+    // counts — not whether the letter is in force — so it travels as `cap_counts_payments_from`.
+    // Encoding it as `effectiveFrom` would be the wrong lever in both directions: the letter already
+    // runs from 2026-01-01, and a later date would drop payments the ceiling is obliged to count.
+    const rule = byId('EXPENSE_PRIVATE_PENSION_2026');
+    const window = rule.parameters.find((p) => p.id === 'cap_counts_payments_from');
+    expect(window?.value).toBe('2026-01-01');
+    expect(window?.unit).toBe('text'); // never 'lei': a date is not money
+    expect(rule.effectiveFrom).toBe('2026-01-01');
+    expect(rule.sourceArticle).toContain('lit. g)');
+  });
+});
+
+describe('expense deductibility — unresolved conflicts travel on the rule, not in a comment', () => {
+  const conflictOf = (ruleId: string): string => {
+    const p = byId(ruleId).parameters.find((x) => x.id === 'conflict');
+    if (typeof p?.value !== 'string') {
+      throw new Error(`${ruleId} carries no conflict parameter`);
+    }
+    return p.value;
+  };
+
+  it('every euro cap states the conversion-rule conflict, because the app must not pick a rate', () => {
+    // research 22 §1: HG 1/2016 pct. 7 alin. (6) says BNR annual average for the payment year; CF art.
+    // 9 alin. (3) lit. b) + alin. (4) say BNR rate at the payment date. No primary text reconciles them.
+    const euroRules = [
+      'EXPENSE_PRIVATE_PENSION_2026',
+      'EXPENSE_OCCUPATIONAL_PENSION_2026',
+      'EXPENSE_PEPP_2026',
+      'EXPENSE_VOLUNTARY_HEALTH_INSURANCE_2026',
+      'EXPENSE_SPORTS_SUBSCRIPTION_2026',
+      'EXPENSE_PROFESSIONAL_BODY_DUES_2026',
+      'EXPENSE_ETF_PURCHASE_2026',
+    ];
+    for (const id of euroRules) {
+      const c = conflictOf(id);
+      expect(c, id).toContain('pct. 7 alin. (6)');
+      expect(c, id).toContain('cursul mediu comunicat de Banca Națională a României');
+      expect(c, id).toContain('art. 9 alin. (3) lit. b)');
+    }
+  });
+
+  it('the per-person multiplier is declared an interpretation on the six letters that say it, and not on lit. p)', () => {
+    // research 22 §2 verified that lit. p) („în limita a 4.000 euro anual") is the one euro letter with no
+    // „pentru fiecare persoană", so the multiplier question does not arise for it.
+    const perPerson = [
+      'EXPENSE_PRIVATE_PENSION_2026',
+      'EXPENSE_OCCUPATIONAL_PENSION_2026',
+      'EXPENSE_PEPP_2026',
+      'EXPENSE_VOLUNTARY_HEALTH_INSURANCE_2026',
+      'EXPENSE_SPORTS_SUBSCRIPTION_2026',
+      'EXPENSE_ETF_PURCHASE_2026',
+    ];
+    for (const id of perPerson) {
+      expect(conflictOf(id), id).toContain('UN SINGUR plafon pe contribuabil');
+    }
+    expect(conflictOf('EXPENSE_PROFESSIONAL_BODY_DUES_2026')).not.toContain('UN SINGUR plafon pe contribuabil');
+  });
+
+  it('contribuții profesionale states the alin. (4) lit. i) versus alin. (5) lit. q) conflict it resolved by capping', () => {
+    const r = classifyExpenseDeductibility({ category: 'mandatory_professional_contribution' }, RULES, q());
+    expect(r.status === 'classified' && r.treatment).toBe('capped');
+    if (r.status !== 'classified') return;
+    expect(r.cap).toMatchObject({ percent: 5, base: 'gross_income' });
+    expect(r.conflict).toContain('alin. (4) lit. i)');
+    expect(r.conflict).toContain('lit. q)');
+    expect(r.conflict).toContain('Aplicația aplică plafonul');
+  });
+
+  it('protocol and burse private state that no norm fixes the order of the alin. (5) caps', () => {
+    for (const id of ['EXPENSE_PROTOCOL_2026', 'EXPENSE_PRIVATE_SCHOLARSHIP_2026']) {
+      const c = conflictOf(id);
+      expect(c, id).toContain('art. 68 alin. (6)');
+      expect(c, id).toContain('nicio normă nu prescrie o ordine');
+    }
+  });
+
+  it('the vehicle rule states that no primary source selects which car carries the one-car limit', () => {
+    // research 22 §5: the norms for Titlul IV Cap. II never use „autoturism"; Registrul-inventar
+    // identifies goods but does not select one. The app therefore enforces only the per-record 50 %
+    // haircut, which needs no selection.
+    const c = conflictOf('EXPENSE_VEHICLE_MIXED_USE_2026');
+    expect(c).toContain('un singur autoturism');
+    expect(c).toContain('nu alege niciun autoturism');
+  });
 });
