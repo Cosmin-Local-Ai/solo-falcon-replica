@@ -656,3 +656,37 @@ numbering stays readable.
     commit** — a broken tree is never an acceptable handoff, and green may never be restored by weakening an assertion.
     Option (c) (storage-only, domain stays in lei) was rejected outright: a permanent lei↔bani boundary is the drift
     mechanism this phase exists to remove.
+
+## Pre-Phase-11 corrections round (2026-10-09) — recorded here because PLAN.md's phase table stops at 10
+
+Ten tightly-scoped corrections landed between Phase 10 and Phase 11, each with its own brief and phase
+doc. They are **not** new phases and no phase boundary was invented for them:
+
+| Task | What it corrected | Phase doc |
+|---|---|---|
+| TASK 1 | the annual estimate was fed raw YTD totals behind a label claiming a year (`c49d88f`) | `phases/12_projection_annual_estimate.md` |
+| TASK 2a / 2b | expenses were all deductible; 39 rules on CF art. 68 + `Expense.category` (`1583d9e`, `1490bdb`) | `phases/13_…`, `phases/14_…` |
+| TASK 2c | the annual / cross-record deductibility caps, struck in one two-pass (`f1caa36`) | `phases/15_deductibility_caps.md` |
+| TASK 2d | the art. 68 alin. (6) base becomes the pre-cap reading (`431afaf`) | `phases/16_precap_base.md` |
+| TASK 3 | the tax reserve was computed and never stored (`698e180`) | `phases/17_tax_reserve_persistence.md` |
+| TASK 4 | a threshold said what a crossing means in law; the „dezcalificare" claim deleted (`8750402`) | `phases/18_threshold_semantics.md` |
+| TASK 5 | one boolean answered three legal questions; the CASS relief keyed on status (`649e0f1`) | `phases/19_pension_cass_input_model.md` |
+| **TASK 6** | **a snapshot pinned release *metadata*, not the rules that produced it** | `phases/20_rule_release_immutability.md` |
+
+**TASK 6 — the recorded decision and its shape (2026-10-09).** The decision was already made and was not
+reopened: **content-address the rule set; do not redesign the release model.** `releaseId` and
+`createdAt` were the whole identity, and neither moved across the Phase 3 / 4 / 5 formula corrections, so
+two snapshots carrying `PFA_2026_SYSTEM_REAL` could encode different arithmetic. Now: a SHA-256 over a
+canonical projection of the formula-bearing subset (`src/domain/fiscal/ruleSetDigest.ts`, scheme
+`pfa-rules-v1`), a release registry that enforces the `PROPOSED → … → ACTIVE → SUPERSEDED` ladder, one
+ACTIVE release per tax year, no in-place edit of a registered `releaseId`, per-rule `version` tied to the
+digest, and deep-frozen rule sets (`src/domain/fiscal/registry.ts`). The digest is stored on the
+**calculation record** (`TaxCalculationSnapshot.ruleSetHash`), **not inside `inputSnapshot`** — TASK 3's
+enumerated subset `{profile, revenues, expenses}` is untouched and **no stored `inputsHash` moved**.
+Stored snapshots change shape, so this is a **data version bump 8 → 9** with chain step
+**`rule-set-digest`**, which stamps `ruleSetHash: null` and **fabricates no digest** for a snapshot whose
+rules can no longer be reconstructed. All 15 hard-wired `PFA_2026_*` call sites now select by
+`fiscalYear` + `asOfDate`, policed by a source-tree scan. **No future-year automation was built** — a
+year with no registered release gets an explicit refusal. **No money figure moved**: deductible
+120,00 / 144,00, VNA 9.096,00, clock 3.249,00, reserve 1.083,00 all unchanged; `61 files / 1071 tests`,
+`tsc` 0, `build` 0, `e2e` 36 (one assertion re-pinned 8 → 9).
