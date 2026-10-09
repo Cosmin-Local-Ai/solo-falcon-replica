@@ -7,6 +7,15 @@
  * `?? rawValue` fallbacks that used to sit in `ThresholdSection.tsx` / `DeadlineSection.tsx` /
  * `LegislationSection.tsx` / `checkLabels.ts` are the leak path, and they are gone.
  *
+ * **One map is not exhaustive, and says so.** `thresholdDomainLabels` is keyed by
+ * `FiscalThreshold.affectedDomain`, which `src/domain/thresholds.ts` declares as an open `string`
+ * (`// e.g. 'pfa-revenue'`), not a union — so there is no union for TypeScript to check coverage
+ * against, and `ThresholdSection.tsx:92` still has a `?? t.affectedDomain` fallback for a key this map
+ * does not know. That fallback is the leak path this file's header otherwise claims is gone; it stays
+ * only because the domain key is open. Closing `affectedDomain` to a union in the domain would let this
+ * map become `Record<AffectedDomain, string>` and delete the fallback — a domain change, so TASK 7 did
+ * not make it.
+ *
  * What is NOT here: the `consequence`, `applicabilityReason` and `reviewReason` sentences. Those are
  * legal conclusions produced by `src/domain/thresholds.ts` with a citation attached, and
  * `thresholds.language.test.ts` pins their wording at the site that produces them.
@@ -39,7 +48,11 @@ export const measuredBasisLabels: Record<MeasuredBasis, string> = {
   unmeasured: 'bază nemăsurată',
 };
 
-/** Labels for the affected-domain keys. Exhaustive over the keys the data layer emits. */
+/**
+ * Labels for the affected-domain keys. **Not** exhaustive over a union: `affectedDomain` is an open
+ * `string` in the domain (see the header), so this is `Record<string, string>` by necessity and the
+ * call site keeps a raw-key fallback. One key is emitted today.
+ */
 export const thresholdDomainLabels: Record<string, string> = {
   'pfa-revenue': 'Venit PFA',
 };
@@ -81,10 +94,16 @@ export const thresholds = {
     'Bandă de avertizare la 10 % din prag — politică de afișare a aplicației, nu o prevedere legală.',
 } as const;
 
-/** The `kind` of a row, in words — TASK 8 renders severity from `severity`, not from these. */
+/**
+ * The `kind` of a row, in words — TASK 8 renders severity from `severity`, not from these.
+ * `over_limit` is the 72-SM ceiling on the CASS base (CF art. 170 alin. (1)), which is the same concept
+ * the row caption calls `Prag maxim` in `thresholdRowLabels['max-base']`. One concept, one name, because
+ * both can appear on one screen. It stays distinct from the `min-base` rows — crossing this one caps a
+ * base, it never raises a minimum (research 24, must-not-state 7).
+ */
 export const thresholdKindLabels: Record<FiscalThreshold['kind'], string> = {
   registration: 'prag de înregistrare',
   tier_transition: 'treaptă de calcul',
-  over_limit: 'plafon',
+  over_limit: 'prag maxim',
   informational: 'informare',
 };

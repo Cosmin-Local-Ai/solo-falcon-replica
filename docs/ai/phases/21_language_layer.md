@@ -251,3 +251,49 @@ it. Open it with `copy.disclosure.sources` and the `Disclosure` component.
   `has no exported member` for names that `npx tsc --noEmit` resolves (exit 0) and that the Vitest suite
   imports at runtime. The barrel was switched from `export *` to explicit named re-exports, which cleared it.
   Treat `tsc` + the suite as authoritative here.
+
+## 13. Post-audit wording fixes (2026-10-09, after the user audited the copy)
+
+The user audited the Romanian and the logic of `src/ui/copy/` directly. The architecture held; the wording
+had real defects. Applied on the user's authority — semantics, `unknown` handling and every figure unchanged.
+
+### Fixed — verifiable defects
+
+| key | was | now | why |
+| --- | --- | --- | --- |
+| `notes.runRateProjection` | `pentru întreaga an` | `pentru întreg anul` | gender error: *an* is masculine. Made to agree with `measuredBasisLabels['annual-projected']`, which already read `întreg anul` — the user confirmed that form is correct, so `notes.ts` moved, not `thresholds.ts` |
+| `notes.runRateProjection` | `nu o sume încasată` | `nu o sumă încasată` | the singular article `o` with the plural `sume` — number disagreement |
+| `sources.foreignInsuranceProof` | `din Cod fiscal` | `din Codul fiscal` | definite article required |
+| `sources.foreignInsuranceProof` | `exceptia nu produce nimic` | `excepția nu produce nimic` | missing ț |
+| `sources.salarySixSm` | `Sub acest prag diferența de 2.430 lei se datorează` | `Sub acest prag se datorează diferența până la baza de 6 salarii minime brute — 10 % din acel deficit, deci maximum 2.430 lei în 2026, valoare atinsă doar când baza este zero.` | **factual error in user-facing text**: 2.430 lei is the maximum of `10 % × (6 SM − baza)`, reached only when the base is zero. The old sentence stated the ceiling as the amount owed |
+| `sources.salarySixSm` | `(art. 118 alin. (2) lit. b))` as a bare parenthetical | the article quoted: `art. 118 alin. (2) lit. b) o exclude expres („cu excepția diferenței de contribuție de asigurări sociale de sănătate prevăzută la art. 174 alin. (6)”))` | the citation was challenged as unverified. **It is verified** — `docs/ai/research/21_expense_deductibility_framework_2026.md` quotes art. 118 alin. (2) lit. b) verbatim and that text expressly excludes the alin. (6) difference; the same doc's legislative history (OUG 128/2024, applicable „începând cu veniturile aferente anului 2025") puts it in force for FY2026. Kept, now with the words that carry it |
+| `sources.pensionSuspension` | `Faptă înregistrată, fără efect juridic:` | `Fapta consemnată; efectul juridic nu este stabilit de nicio prevedere verificată` | the old wording asserted as fact that there is **no** legal effect. What is verified (research 25 gap 1) is that no verified provision **states** one. `Fapta` per the user |
+| `sources.eFacturaDeadline` | `Termenul legal de transmitere a unei e-Facturi este de maximum 5 zile de la emitere.` | `OUG 120/2021 art. 10 alin. (7): termenul-limită pentru transmiterea unei facturi în sistemul național RO e-Factura este de 5 zile lucrătoare de la data emiterii facturii (modificat de OUG 89/2025 pct. 2 art. X, în vigoare de la 01-01-2026).` | a statute sentence in the **sources** block with **no citation at all**, and an ambiguous unit. Cited and unit fixed from `docs/ai/research/16_efactura_term_and_fiscal_term_computation_2026.md` §Q2 (CONFIRMED, verbatim, Portal Legislativ doc 310662, consolidare 01.06.2026): **zile lucrătoare**, not calendaristice. No deadline-engine change — `src/domain/deadlines.ts` carries no e-Factura deadline (grep: zero occurrences) |
+| `thresholdKindLabels.over_limit` | `plafon` | `prag maxim` | one concept, two names on one screen: `thresholdRowLabels['max-base']` already reads `Prag maxim …`. `over_limit` is the 72-SM ceiling on the CASS base (art. 170 alin. (1)), i.e. that same row. Stays distinct from the `min-base` rows (research 24 must-not-state 7). Not rendered today — `thresholdKindLabels` has no `.tsx` consumer — so this is a forward fix for TASK 8, and no test moved (`thresholds.test.ts:337` pins `plafon` in the **domain** consequence sentence, untouched) |
+| `thresholds.ts` header + `thresholdDomainLabels` | claimed every map is exhaustive | states plainly that this one is not | `FiscalThreshold.affectedDomain` is an open `string` in `src/domain/thresholds.ts` (`// e.g. 'pfa-revenue'`), so `Record<string, string>` is forced and `ThresholdSection.tsx:92` keeps a `?? t.affectedDomain` fallback — the leak path the header claimed was gone. Closing `affectedDomain` to a union is a domain change and was not made here |
+
+### Left as-is, awaiting the user's native-speaker judgement
+
+Raised in the audit and deliberately **not** changed, so the call stays with the user. Proposed wording is
+given so a yes/no settles each.
+
+| key | current | proposed |
+| --- | --- | --- |
+| `notes.cassZeroYear` | `raportează diferența ca nedeasă` | `ca nedecisă` — the participle of *a decide* is *decis*; `nedeasă` looks like a nonword |
+| `sources.regimeOffered` | `… art. 123 alin. (1). impozit pe profit nu este oferit: …` | starts lowercase after a full stop → `Impozitul pe profit nu este oferit` |
+| `notes.previousYearRoute` | `Art. 174 alin. (8) cere o faptă din anul precedent` | a provision does not "ask for a fact" → `se întemeiază pe o faptă din anul precedent` |
+| `notes.warningBand` | `nu primește nicio citare legală` | calque → `nu are nicio bază legală` |
+| `notes.cassFlagUnverified` vs `notes.applicabilityUndecided` | `lasă linia de verificat` / `marchează linia ca fiind de verificat` | one state, one phrasing — unify on the second |
+| `provenance.*` | `digest`, `digestului`, `adresării prin digest` | developer jargon in user-facing Romanian → `amprentă` / `amprenta de conținut`; `unpinned` especially needs a rewrite a non-developer can follow. Keep `digest` / `contentHash` in identifiers and comments |
+| `thresholds.description` | `Praguri fiscale față de valorile curente` | incomplete phrase → e.g. `Praguri fiscale măsurate pe valorile înregistrate acum` |
+| `sources.establishmentDate`, `sources.vatExceedanceDate` | `Necompletat = …` | no `=` in prose → `Dacă nu se completează, …` |
+| `sources.capReadingChoice`, `records.capAppliedReading` | `«înregistrată»` | the app's own quote style is `„…”` → `„înregistrată”` |
+
+Explicitly **not** changed, on the user's ruling: `întreg anul` (correct as it stands), `nici o parte`
+(*nici* + the indefinite article = „not even one part", which is what the sentence asserts), `Codul CAEN`
+(the articulated form of *cod CAEN*, standard business usage) and `Fapta este încasarea din an, nu statutul.`
+in `sources.pensionReceipt` (the legal register is right in the statute-text block).
+
+**Re-run after these edits:** `tsc` 0 · guard 5 tests pass · `npm run test` **62 files / 1076 tests**
+(unchanged — no assertion moved, because no test pinned any of the changed strings) · `npm run build` 0 ·
+`npx playwright test` **36 passed**.

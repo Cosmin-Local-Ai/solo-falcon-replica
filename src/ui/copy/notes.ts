@@ -56,7 +56,7 @@ export const notes = {
     'Codul fiscal exprimă acest prag în multipli de salariu minim, nu în lei, iar valoarea salariului minim pe care o folosește aplicația vine din pachetul de reguli, nu din lege.',
   /** A run-rate projection is an assumption about the rest of the year. */
   runRateProjection:
-    'Restul anului nu este încă înregistrat, așa că aplicația proiectează ritmul curent pentru întreaga an și spune că această cifră este o presupunere, nu o sume încasată.',
+    'Restul anului nu este încă înregistrat, așa că aplicația proiectează ritmul curent pentru întreg anul și spune că această cifră este o presupunere, nu o sumă încasată.',
   /** The money-conversion report: rounding direction (CF art. 66 alin. (1)). */
   roundingDirection:
     'Legea nu spune cum se rotunjesc sumele la conversie, așa că aplicația rotunjește la banul cel mai apropiat, jumătate în jos — aceeași direcție pe care o folosește art. 66 alin. (1).',
@@ -74,13 +74,13 @@ export const sources = {
   establishmentDate:
     'Art. 118 alin. (3): venitul realizat într-o fracțiune de an se consideră venit anual — baza nu se proratează. Necompletat = profil fără dată de înființare.',
   salarySixSm:
-    'Art. 174 alin. (7) lit. a): diferența de la alin. (6) nu se datorează dacă salariul anual este cel puțin 6 salarii minime brute (24.300 lei în 2026). Sub acest prag diferența de 2.430 lei se datorează și nu se deduce (art. 118 alin. (2) lit. b)).',
+    'Art. 174 alin. (7) lit. a): diferența de la alin. (6) nu se datorează dacă salariul anual este cel puțin 6 salarii minime brute (24.300 lei în 2026). Sub acest prag se datorează diferența până la baza de 6 salarii minime brute — 10 % din acel deficit, deci maximum 2.430 lei în 2026, valoare atinsă doar când baza este zero. Diferența de la alin. (6) nu se deduce din venitul net anual impozabil: art. 118 alin. (2) lit. b) o exclude expres („cu excepția diferenței de contribuție de asigurări sociale de sănătate prevăzută la art. 174 alin. (6)”).',
   pensionerStatus:
     'Art. 150 alin. (1) din Codul fiscal: calitatea de pensionar este temeiul pentru care nu se datorează CAS pe venitul din activități independente. Nu este temeiul pentru CASS — art. 174 alin. (7) lit. c) se decide pe sumele primite ca pensii în anul fiscal, nu pe acest statut. Valoarea „nu este înregistrat" înseamnă că aplicația nu știe, nu că persoana nu este pensionară.',
   pensionReceipt:
     'Art. 174 alin. (7) lit. c) coroborat cu art. 99 alin. (1) din Codul fiscal: diferența de contribuție până la baza de 6 salarii minime brute nu se datorează dacă în anul fiscal persoana a primit cel puțin o sumă ca pensie. Fapta este încasarea din an, nu statutul. Cuantumul nu contează — lit. c) nu are niciun prag valoric, spre deosebire de lit. a) și lit. b). Excepția elimină doar diferența: contribuția de 10 % pe venitul net rămâne datorată.',
   pensionSuspension:
-    'Faptă înregistrată, fără efect juridic: nicio prevedere verificată (Cod fiscal, HG 1/2016, OPANAF 2.736/2025) nu spune ce produce suspendarea asupra art. 174 alin. (7) lit. c). Aplicația consemnează lunile și nu trage nicio concluzie din ele.',
+    'Fapta consemnată; efectul juridic nu este stabilit de nicio prevedere verificată (Cod fiscal, HG 1/2016, OPANAF 2.736/2025 nu spun ce produce suspendarea asupra art. 174 alin. (7) lit. c)). Aplicația consemnează lunile și nu trage nicio concluzie din ele.',
   previousYearException:
     'Art. 174 alin. (8) din Codul fiscal extinde excepția de la alin. (7) și la persoanele care în anul precedent s-au încadrat în art. 154 alin. (1) lit. a), b), e) sau f). Lista este închisă și NU include pensionarii, deci acest răspuns nu se deduce din calitatea de pensionar.',
   previousYearOption:
@@ -88,13 +88,13 @@ export const sources = {
   foreignInsurance:
     'Art. 153 alin. (2) din Codul fiscal: persoana asigurată pentru boală și maternitate în alt stat UE/SEE/Elvețian sau cu acord bilateral nu are calitatea de contribuabil la CASS — dar numai dacă face și dovada valabilității asigurării. Nu are legătură cu pensia.',
   foreignInsuranceProof:
-    'Art. 153 alin. (2) din Cod fiscal cere ambele: asigurarea și „dovada valabilității asigurării" stabilită prin ordin comun A.N.A.F. / C.N.A.S. Fără dovadă, exceptia nu produce nimic.',
+    'Art. 153 alin. (2) din Codul fiscal cere ambele: asigurarea și „dovada valabilității asigurării" stabilită prin ordin comun A.N.A.F. / C.N.A.S. Fără dovadă, excepția nu produce nimic.',
   cassStatus:
     'CASS: „exceptat" (art. 154 alin. (1) — o listă închisă de categorii, niciuna nu acoperă un PFA cu activitate independentă) și „nu se datorează" sunt ambele neconfirmate ca temei pentru un PFA. Titlul V nu folosește termenul „scutire" — de aceea nici acest formular nu-l folosește.',
   vatExceedanceDate:
     'Data la care cifra de afaceri a depășit pragul de TVA (art. 310 alin. (1)); obligația de înregistrare intervine cel târziu la această dată (art. 316 alin. (1) lit. b)). Necompletat = aplicația nu cunoaște data și nu afișează niciun termen de înregistrare — nu inventează unul.',
   eFacturaDeadline:
-    'Termenul legal de transmitere a unei e-Facturi este de maximum 5 zile de la emitere.',
+    'OUG 120/2021 art. 10 alin. (7): termenul-limită pentru transmiterea unei facturi în sistemul național RO e-Factura este de 5 zile lucrătoare de la data emiterii facturii (modificat de OUG 89/2025 pct. 2 art. X, în vigoare de la 01-01-2026).',
   capReadingChoice:
     'Plafonul este măsurat pe baza art. 68 alin. (6) sub interpretarea «înregistrată» (pre-plafon): baza scade cheltuielile deductibile așa cum au fost înregistrate, nu așa cum rămân după celelalte plafoane alin. (5). Legea nu stabilește care interpretare se aplică — nicio normă nu prescrie o ordine — deci ambele cifre sunt afișate. Cea aplicată este mai puțin generoasă și nu poate produce subimpozitare.',
 } as const;
