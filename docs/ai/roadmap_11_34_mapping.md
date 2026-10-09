@@ -84,7 +84,7 @@ Document blobs: **confirmed in-record.** `seed.ts:86-96` stores `content: 'data:
 
 **C4 — TASK 10 (currency + FX store) is missing from the new roadmap.** Defects **B-32** (`Revenue`/`Expense` carry no currency field; the only `moneda` is unread free-text on `BankAccount`; no FX layer in `src/`) and **B-33** (no FY2026 BNR annual average exists yet, so any 2026 euro figure is provisional). It is a **prerequisite** for the seven art. 68 euro caps that Phase 12A's acceptance depends on, and for representing a EUR-collected invoice at all. It is queued next, before Phases 11–34.
 
-**C5 — Scout concurrency.** The new contract permits parallel Scouts; this environment has one engine slot, a 262k context with roughly 390 MiB of headroom, and gets SIGKILLed under load. Scouts have been run **sequentially** for that reason, and two Workers have been SIGKILLed mid-run. Parallel Scouts should stay off unless the engine headroom changes.
+**C5 — Scout concurrency. RESOLVED (user, 2026-10-10).** Scouts stay **sequential**, as currently run. The roadmap's permission to run Scouts in parallel is **not adopted**: one engine slot, ~390 MiB of headroom, and two Workers already SIGKILLed mid-run. Every future brief keeps rule 4 — one Scout at a time, wait for the report before the next.
 
 ---
 
@@ -114,3 +114,16 @@ This is Phase 11's acceptance ("a clean first-run user does not mistake sample d
 - FY2026 only; no 2025 history, no implied future-year support.
 - One Worker at a time.
 - **D1 stays open until a phase explicitly closes it.** A first-run user must not receive `seedData` without it being labelled, or at all.
+
+---
+
+## 5. Open decisions — to be put to the user when they say **resume**
+
+What `partial` means in §2, in plain terms: **the phase is not finished, and the unfinished parts are listed one by one below rather than left for the Worker to rediscover.**
+
+1. **C1 — severity words.** Keep `none | low | medium | high` (what the app ships now), or map back onto `info | warning | danger` as the roadmap asks? Both cannot exist.
+2. **C2 — rule `version` numbers.** The roadmap wants revisions bumped off `version: 1`; TASK 6 left all 48 at 1 because bumping them would invent history that cannot be reconstructed. Which stands?
+3. **C3 — where phase docs go.** `docs/ai/phases/` (current, unbroken) or `docs/ai/steps/NN_*.md` as the roadmap says — the latter would overwrite unrelated frozen files, e.g. `steps/15_tax_engine.md`.
+4. **C4 — where currency/FX sits.** It is not in the new roadmap but the euro caps depend on it. Confirm it runs before Phase 11.
+5. **D1 — first-run seed.** Should a clean install start empty, or start with a clearly-labelled demo the user chooses?
+6. **Phase gaps to confirm or drop:** the hero not separating annual / YTD / projected (21); Phase 24's section names and top-three cap; the chart having no non-colour actual/projected treatment (22); the estimate having no nested sources disclosure (20).
