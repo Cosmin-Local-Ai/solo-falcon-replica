@@ -3,6 +3,8 @@ import { act, render } from '@testing-library/react';
 import { StoreProvider, useStore } from './store';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import { createCalculationSnapshot } from '../domain/snapshots/snapshot';
+import { ruleSetDigest } from '../domain/fiscal/ruleSetDigest';
+import { parseAppData } from './schema';
 import type { PfaProfile } from '../domain/models';
 import type { FiscalRule, RuleRelease } from '../domain/fiscal/rules';
 import { lei, type Bani } from '../domain/money';
@@ -177,5 +179,35 @@ describe('snapshot persistence (Step 12)', () => {
     const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as { snapshots: unknown };
     expect(Array.isArray(persisted.snapshots)).toBe(true);
     expect(persisted.snapshots).toEqual([]);
+  });
+
+  /*
+   * TASK 6 — the digest has to survive the two places it can silently disappear: the write, and the zod
+   * gate on read. zod strips undeclared keys, so a `ruleSetHash` that is not declared in
+   * `taxCalculationSnapshotSchema` would come back as absent and the record would quietly stop claiming
+   * which rules produced it.
+   */
+  it('the ruleSetHash survives the save path and the zod gate', async () => {
+    render(
+      <StoreProvider>
+        <Probe />
+      </StoreProvider>,
+    );
+    const store = storeRef!;
+    const snap = await makeSnapshot({});
+    expect(snap.ruleSetHash).toBe(ruleSetDigest(rules2025));
+
+    act(() => {
+      store.addSnapshot(snap);
+    });
+
+    const raw = localStorage.getItem(STORAGE_KEY)!;
+    const persisted = JSON.parse(raw) as { snapshots: { ruleSetHash?: string | null }[] };
+    expect(persisted.snapshots[0].ruleSetHash).toBe(ruleSetDigest(rules2025));
+
+    const reparsed = parseAppData(raw);
+    expect(reparsed).not.toBeNull();
+    expect(reparsed!.snapshots?.[0].ruleSetHash).toBe(snap.ruleSetHash);
+    expect(reparsed!.snapshots?.[0].inputsHash).toBe(snap.inputsHash);
   });
 });

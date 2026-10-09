@@ -3,6 +3,7 @@ import { calculatorRegistry } from './calculators';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './package2026';
 import { PFA_2026_RELEASE } from './release2026';
 import { selectApplicableRules } from './select';
+import { ruleSetDigest } from './ruleSetDigest';
 import { lei } from '../money';
 
 describe('PFA 2026 system-real package', () => {
@@ -567,5 +568,58 @@ describe('calc-cass — salaried PFA below the 6 SM floor (art. 174 alin. (6) + 
       salaryIncomeLei: lei(100_000),
     });
     expect(result).toMatchObject({ value: lei(4_000) });
+  });
+});
+
+/*
+ * TASK 6 — the release identity, pinned.
+ *
+ * `releaseId: 'PFA_2026_SYSTEM_REAL'` and `createdAt: '2026-01-01'` were the whole identity, and neither
+ * moved across the CAS, CASS and income-tax corrections. These assertions are what stop that recurring
+ * quietly: the release now carries a digest of its own rules, `createdAt` is an instant rather than the
+ * effective date copied twice, and the citations stay citations.
+ */
+describe('PFA 2026 release identity (TASK 6)', () => {
+  it('createdAt is a real ISO instant, not a bare calendar date', () => {
+    expect(PFA_2026_RELEASE.createdAt).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z|[+-]\d{2}:\d{2})$/,
+    );
+  });
+
+  it('createdAt is not the effective date — the law biting and the record being made are different facts', () => {
+    expect(PFA_2026_RELEASE.createdAt).not.toBe(PFA_2026_RELEASE.effectiveFrom);
+    expect(PFA_2026_RELEASE.effectiveFrom).toBe('2026-01-01');
+  });
+
+  it('the release carries the digest of the rule set it names', () => {
+    expect(PFA_2026_RELEASE.contentHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(PFA_2026_RELEASE.contentHash).toBe(ruleSetDigest(PFA_2026_SYSTEM_REAL_PACKAGE));
+  });
+
+  it('the release declares a lifecycle, a version and an open window', () => {
+    expect(PFA_2026_RELEASE.lifecycle).toBe('ACTIVE');
+    expect(PFA_2026_RELEASE.version).toBe(1);
+    expect(PFA_2026_RELEASE.effectiveTo).toBeNull();
+    expect(PFA_2026_RELEASE.supersededBy).toBeUndefined();
+  });
+
+  it('every rule sits on the lifecycle ladder and carries a usable version', () => {
+    const ladder = ['PROPOSED', 'VALIDATED', 'STAGED', 'SCHEDULED', 'ACTIVE', 'SUPERSEDED'];
+    for (const rule of PFA_2026_SYSTEM_REAL_PACKAGE) {
+      expect(ladder, `${rule.ruleId} status`).toContain(rule.status);
+      expect(Number.isInteger(rule.version), `${rule.ruleId} version`).toBe(true);
+      expect(rule.version).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('no rule cites a project document as its legal source — a hash pins parameters, the citation stays authoritative', () => {
+    for (const rule of PFA_2026_SYSTEM_REAL_PACKAGE) {
+      expect(rule.sourceUrl, `${rule.ruleId} sourceUrl`).toMatch(/^https?:\/\//);
+      expect(rule.sourceUrl).not.toContain('research/');
+      expect(rule.sourceUrl).not.toContain('decisions/');
+    }
+    for (const url of PFA_2026_RELEASE.evidence) {
+      expect(url).toMatch(/^https?:\/\//);
+    }
   });
 });

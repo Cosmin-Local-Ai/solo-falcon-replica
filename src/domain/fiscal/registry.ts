@@ -128,6 +128,12 @@ export interface RuleReleaseRegistry {
   register(release: RuleRelease, rules: readonly FiscalRule[]): RuleSetEntry;
   /** Mark a registered release SUPERSEDED by another. Lifecycle only — the content address never moves. */
   supersede(releaseId: string, byReleaseId: string, effectiveTo: string): RuleSetEntry;
+  /**
+   * Move a release one step up the ladder. The only way a release becomes ACTIVE, which is what makes
+   * the ladder real: a revision is staged, the release it replaces is superseded, and only then does the
+   * new one take force. Skipping a step, or going back, throws.
+   */
+  advance(releaseId: string, to: ReleaseLifecycle): RuleSetEntry;
   entries(taxYear?: number): RuleSetEntry[];
   entryByReleaseId(releaseId: string): RuleSetEntry | undefined;
   /** Superseded releases stay readable forever: an old snapshot must still be interpretable. */
@@ -294,6 +300,21 @@ export function createRuleReleaseRegistry(): RuleReleaseRegistry {
       return next;
     },
 
+    advance(releaseId, to) {
+      const entry = entries.find((e) => e.release.releaseId === releaseId);
+      if (!entry) throw new RuleReleaseValidationError(`Unknown rule release '${releaseId}'.`);
+      assertLifecycleTransition(entry.release.lifecycle as ReleaseLifecycle, to);
+      // Checked before the swap, so a rejected transition leaves the registry exactly as it was.
+      if (to === 'ACTIVE') checkSingleActive({ ...entry.release, lifecycle: 'ACTIVE' });
+      const next: RuleSetEntry = {
+        release: deepFreeze({ ...entry.release, lifecycle: to }),
+        rules: entry.rules,
+        digest: entry.digest,
+      };
+      entries[entries.indexOf(entry)] = next;
+      return next;
+    },
+
     entries(taxYear) {
       const copy = [...entries];
       return taxYear === undefined ? copy : copy.filter((e) => e.release.taxYear === taxYear);
@@ -312,18 +333,25 @@ export function createRuleReleaseRegistry(): RuleReleaseRegistry {
     },
 
     activeEntry(taxYear, asOfDate) {
+      // "In force on this date" is a window question first. A SUPERSEDED release still counts inside its
+      // own window — that is what "superseded releases stay readable" means for a date selector: on
+      // 2026-03-01 the law WAS R1, and answering with R2 would be re-binding a past date to a later law.
+      // A release that has not reached ACTIVE yet (PROPOSED…SCHEDULED) is never in force.
       const inForce = entries.filter(
         (e) =>
           e.release.taxYear === taxYear &&
-          e.release.lifecycle === 'ACTIVE' &&
+          (e.release.lifecycle === 'ACTIVE' || e.release.lifecycle === 'SUPERSEDED') &&
           e.release.effectiveFrom <= asOfDate &&
           (e.release.effectiveTo === null ||
             e.release.effectiveTo === undefined ||
             e.release.effectiveTo >= asOfDate),
       );
       if (inForce.length === 0) return undefined;
-      // `checkSingleActive` makes more than one impossible; the sort only keeps the choice deterministic.
-      return inForce.sort((a, b) =>
+      // `checkSingleActive` makes two ACTIVE releases impossible, so at most one candidate is ACTIVE and
+      // it wins outright; the sort only keeps any residual choice deterministic.
+      const active = inForce.filter((e) => e.release.lifecycle === 'ACTIVE');
+      const pool = active.length > 0 ? active : inForce;
+      return pool.sort((a, b) =>
         a.release.effectiveFrom === b.release.effectiveFrom
           ? a.release.releaseId < b.release.releaseId
             ? -1
@@ -331,7 +359,7 @@ export function createRuleReleaseRegistry(): RuleReleaseRegistry {
           : a.release.effectiveFrom < b.release.effectiveFrom
             ? -1
             : 1,
-      )[inForce.length - 1];
+      )[pool.length - 1];
     },
   };
 

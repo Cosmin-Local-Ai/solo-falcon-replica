@@ -413,11 +413,14 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // bytes the save effect put back into localStorage.
     const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}'), STORAGE_KEY);
     // The payload entered at v4; the chain ran `money-bani` (4→5), `expense-category` (5→6),
-    // `tax-reserve` (6→7) and, since TASK 5, `pension-facts` (7→8). The save effect stamps the version
-    // this build writes, so the bytes written back are v8 — and the notice below is what proves the
-    // migration report survived the write rather than being recomputed on the next load. `tax-reserve`
-    // backfills nothing, so the payload gains a version number and no money.
-    expect(saved.version).toBe(8);
+    // `tax-reserve` (6→7), `pension-facts` (7→8) and, since TASK 6, `rule-set-digest` (8→9). The save
+    // effect stamps the version this build writes, so the bytes written back are v9 — and the notice
+    // below is what proves the migration report survived the write rather than being recomputed on the
+    // next load. Neither `tax-reserve` nor `rule-set-digest` backfills anything: this payload carries no
+    // snapshots at all, so the version moves and no money and no digest does.
+    // Re-pinned 2026-10-09 (TASK 6): 8 → 9, because the rule-set-digest step widened the stored snapshot
+    // shape. Nothing else in this assertion changed.
+    expect(saved.version).toBe(9);
     // TASK 5: the legacy profile entered this test with the pre-v8 `pensionStatus` key. The step folds it
     // into `pensionerStatus` and removes the old key — a rename of the status fact, never an inference
     // from it about pension sums received in the year.

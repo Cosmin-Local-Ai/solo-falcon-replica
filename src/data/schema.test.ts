@@ -199,6 +199,81 @@ describe('parseAppData — valid payloads', () => {
     expect(lines[1].reviewRequired).toBeUndefined();
   });
 
+  /*
+   * TASK 6 — `ruleSetHash` and the widened release fields have to be DECLARED in the zod schema, not
+   * merely present in the TypeScript type. zod strips undeclared keys, so an undeclared digest would come
+   * back absent: a record that silently stops claiming which rules produced it, which is the exact
+   * failure this phase is about.
+   */
+  it('keeps ruleSetHash and the TASK 6 release fields through the persisted schema', () => {
+    const snapshots = [
+      {
+        calculationId: 'calc-2026-task6',
+        taxYear: 2026,
+        calculatedAt: '2026-10-09T00:00:00.000Z',
+        ruleRelease: {
+          ...validRelease,
+          lifecycle: 'ACTIVE',
+          version: 1,
+          effectiveTo: null,
+          contentHash: 'c'.repeat(64),
+        },
+        inputSnapshot: { profile: seedData.profile, revenues: lei(1000), expenses: lei(0) },
+        inputsHash: 'abc123',
+        ruleSetHash: 'd'.repeat(64),
+        calculationLines: [{ label: 'Total taxe', value: lei(0) }],
+        output: { total: lei(0) },
+        status: 'computed',
+      },
+    ];
+    const parsed = parseAppData(write({ snapshots }));
+    expect(parsed).not.toBeNull();
+    const snap = parsed!.snapshots![0];
+    expect(snap.ruleSetHash).toBe('d'.repeat(64));
+    expect(snap.ruleRelease.contentHash).toBe('c'.repeat(64));
+    expect(snap.ruleRelease.lifecycle).toBe('ACTIVE');
+    expect(snap.ruleRelease.version).toBe(1);
+    expect(snap.ruleRelease.effectiveTo).toBeNull();
+  });
+
+  it('accepts ruleSetHash: null — a record saying its rules cannot be reconstructed', () => {
+    const snapshots = [
+      {
+        calculationId: 'calc-2025-old',
+        taxYear: 2025,
+        calculatedAt: '2025-06-01T00:00:00.000Z',
+        ruleRelease: validRelease,
+        inputSnapshot: { profile: seedData.profile, revenues: lei(1000), expenses: lei(0) },
+        inputsHash: 'abc123',
+        ruleSetHash: null,
+        calculationLines: [],
+        output: { total: lei(0) },
+        status: 'computed',
+      },
+    ];
+    const parsed = parseAppData(write({ snapshots }));
+    expect(parsed).not.toBeNull();
+    expect(parsed!.snapshots![0].ruleSetHash).toBeNull();
+  });
+
+  it('returns null for a ruleSetHash that is neither a string nor null', () => {
+    const snapshots = [
+      {
+        calculationId: 'calc-2026-bad',
+        taxYear: 2026,
+        calculatedAt: '2026-10-09T00:00:00.000Z',
+        ruleRelease: validRelease,
+        inputSnapshot: { profile: seedData.profile, revenues: lei(1000), expenses: lei(0) },
+        inputsHash: 'abc123',
+        ruleSetHash: 17,
+        calculationLines: [],
+        output: { total: lei(0) },
+        status: 'computed',
+      },
+    ];
+    expect(parseAppData(write({ snapshots }))).toBeNull();
+  });
+
   it('accepts a person-only profile (empty company identity)', () => {
     const profile = {
       ...seedData.profile,
