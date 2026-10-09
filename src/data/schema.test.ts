@@ -401,8 +401,24 @@ describe('parseAppData — corrupt payloads return null', () => {
   });
 
   it('returns null for an invalid declaration entry', () => {
-    const declarations = [{ ...seedData.declarations[0], status: 'saptamanal' }];
+    // TASK 9: built from a local fixture instead of `seedData.declarations[0]`, which the seed no longer
+    // carries. Spreading `undefined` would have left this test asserting that `{status: 'saptamanal'}`
+    // fails to parse — true for the wrong reason (it is missing every required field), and it would have
+    // stopped testing the status enum, which is the thing under test.
+    const declaration = {
+      id: 'd1',
+      an: 2026,
+      luna: 3,
+      venituri: 1250000,
+      cheltuieli: 180000,
+      status: 'inregistrata',
+      dataInregistrare: '2026-04-10',
+    };
+    const declarations = [{ ...declaration, status: 'saptamanal' }];
     expect(parseAppData(write({ declarations }))).toBeNull();
+    // The same record with a valid status does parse, so the rejection above is the status and not the
+    // shape.
+    expect(parseAppData(write({ declarations: [declaration] }))).not.toBeNull();
   });
 
   it('returns null for an invalid statement entry', () => {

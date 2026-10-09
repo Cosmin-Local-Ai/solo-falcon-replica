@@ -147,11 +147,25 @@ describe('save effect — multiple save cycles', () => {
     persisted = read();
     expect(persisted.clients.find(c => c.id === 'c1')!.denumire).toBe('Presta Consulting S.R.L.');
 
-    // Cycle 5 — update a declaration.
-    const d2 = storeRef!.declarations.find(d => d.id === 'd2')!;
-    act(() => storeRef!.updateDeclaration({ ...d2, status: 'transmisa' }));
+    // Cycle 5 — add a declaration, then update it.
+    // TASK 9 re-pin (replaced, not deleted): this cycle used to update the seed's `d2`. The seed holds no
+    // declaration records now — the three it carried recorded monthly filings that do not exist for this
+    // profile (see the note in `data/seed.ts`). The save-cycle coverage is unchanged: a declaration is
+    // still written and then updated, it is just created by this cycle instead of being assumed.
+    act(() =>
+      storeRef!.addDeclaration({
+        an: 2026,
+        luna: 6,
+        venituri: lei(14200),
+        cheltuieli: lei(2100),
+        status: 'in-asteptare',
+        dataInregistrare: '2026-07-08',
+      }),
+    );
+    const addedDeclId = storeRef!.declarations[storeRef!.declarations.length - 1]!.id;
+    act(() => storeRef!.updateDeclaration({ ...storeRef!.declarations.find(d => d.id === addedDeclId)!, status: 'transmisa' }));
     persisted = read();
-    expect(persisted.declarations.find(d => d.id === 'd2')!.status).toBe('transmisa');
+    expect(persisted.declarations.find(d => d.id === addedDeclId)!.status).toBe('transmisa');
 
     // After every cycle the persisted blob matches the live in-memory state
     // exactly — no stale or corrupted intermediate writes.

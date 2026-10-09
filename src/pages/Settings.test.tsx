@@ -7,8 +7,12 @@ import Settings from './Settings';
 import { lei } from '../domain/money';
 
 // Must match seedData.settings.company.denumire in src/data/seed.ts.
-const SEED_DENUMIRE = 'Popescu Consulting SRL';
-const NEW_DENUMIRE = 'Popescu Consulting SRL (regres)';
+// TASK 9 re-pin (replaced, not deleted): 'Popescu Consulting SRL' → 'Popescu Andrei PFA'. The seed
+// taxpayer is a persoană fizică autorizată, which is what every rule, deadline and estimate in the app
+// already resolves. The regression this test guards — a saved identity reaching localStorage instead of
+// being dropped — is unchanged.
+const SEED_DENUMIRE = 'Popescu Andrei PFA';
+const NEW_DENUMIRE = 'Popescu Andrei PFA (regres)';
 
 function readStoredDenumire(): string {
   const raw = localStorage.getItem(STORAGE_KEY);

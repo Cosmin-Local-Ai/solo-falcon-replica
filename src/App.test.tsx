@@ -43,7 +43,10 @@ describe('App shell identity and recovery (Phase 7)', () => {
         <App />
       </StoreProvider>,
     );
-    expect(document.querySelector('.sidebar-identity')?.textContent).toBe('Popescu Consulting SRL');
+    // TASK 9 re-pin (replaced, not deleted): the seed identity is a PFA, so the sidebar names the
+    // person's trading name. Old value: 'Popescu Consulting SRL'. The exact-match query below still
+    // matches only the topbar, because 'Popescu Andrei PFA' is not 'Popescu Andrei'.
+    expect(document.querySelector('.sidebar-identity')?.textContent).toBe('Popescu Andrei PFA');
     // The person's full name stays unique to the topbar: no duplicate identity
     // state, and no ambiguous text query for the tests below or for e2e.
     expect(screen.getAllByText('Popescu Andrei')).toHaveLength(1);

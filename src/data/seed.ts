@@ -25,9 +25,16 @@ export const seedData: AppData = {
       adresa: 'Str. Libertății 12, Cluj-Napoca',
       telefon: '0750 123 456',
       email: 'andrei@popescuconsulting.ro',
-      denumire: 'Popescu Consulting SRL',
+      // TASK 9 (identity hygiene): this block described an SRL — `denumire: 'Popescu Consulting SRL'`,
+      // `formaJuridica: 'SRL'` — while every rule, deadline, threshold and estimate in the app resolves
+      // the profile as a persoană fizică autorizată (`regime: 'impozit_pe_venit'`, CF Titlul VI in
+      // sistem real, CAS/CASS under art. 150/174, the D212). A demo that names the taxpayer an SRL
+      // teaches a form the rest of the app contradicts, and an SRL does not file a D212 at all. The
+      // trading name of a PFA is the person's own name; `numarRegComert` stays because a PFA IS registered
+      // at ONRC, and `J40/1234/2020` is what makes `pfaStartYear: 2020` coherent rather than a stray year.
+      denumire: 'Popescu Andrei PFA',
       cui: 'RO4455667788990',
-      formaJuridica: 'SRL',
+      formaJuridica: 'Persoană fizică autorizată',
       numarRegComert: 'J40/1234/2020',
       adresaSocietate: 'Str. Libertății 12, Cluj-Napoca',
       telefonSocietate: '0750 123 456',
@@ -71,23 +78,49 @@ export const seedData: AppData = {
     { id: 'c2', denumire: 'Andrei Popescu', cui: '1234567890123', email: 'andrei.popescu@mail.ro', telefon: '0731 333 444', oras: 'Cluj-Napoca' },
     { id: 'c3', denumire: 'Marius Ionescu', cui: '9876543210987', email: 'm.ionescu@mail.ro', telefon: '0742 555 666', oras: 'Timișoara' },
   ],
-  declarations: [
-    { id: 'd1', an: 2026, luna: 3, venituri: lei(12500), cheltuieli: lei(1800), status: 'transmisa', dataInregistrare: '2026-04-10', dataTrimitere: '2026-04-15' },
-    { id: 'd2', an: 2026, luna: 6, venituri: lei(14200), cheltuieli: lei(2100), status: 'in-asteptare', dataInregistrare: '2026-07-08' },
-    { id: 'd3', an: 2026, luna: 9, venituri: lei(9680), cheltuieli: lei(546), status: 'inregistrata', dataInregistrare: '2026-09-28' },
-  ],
+  // TASK 9 (seed hygiene) — the three monthly declaration records that used to sit here (2026-03
+  // „transmisa”, 2026-06 „in-asteptare”, 2026-09 „inregistrata”) are GONE, and deliberately so.
+  //
+  // They recorded filings that do not exist. For a PFA în sistem real the statutory return is the
+  // Declarația Unică 212, ONCE a year, by 25 May of the following year — CF art. 122 alin. (3); and
+  // art. 120 / 120¹, the estimated-advance filings, were abrogated by OUG 128/2024 from 01-01-2025
+  // (docs/ai/research/12_quarterly_payment_deadlines_2026.md §6 rates `d212_filing` „the *only* real
+  // deadline” of the six the app once modelled). There is no monthly, quarterly or nil-return filing
+  // obligation for this profile for these rows to be a record OF.
+  //
+  // They were also the only place in the demo whose figures contradicted the registers: 2026-09 claimed
+  // venituri 9.680,00 lei and cheltuieli 546,00 lei, while September's recorded documents total 7.700,00
+  // lei net revenue and 205,50 lei of expenses. A "summary" that does not summarise is a fabricated fact.
+  //
+  // NOT replaced by anything. A nil return would be a filing that was never due — the same mistake in a
+  // cleaner uniform — and the annual D212 for FY2026 cannot be stored honestly in a monthly `{an, luna}`
+  // shape at all. That shape is the model defect: recorded in docs/ai/phases/23_provenance_hygiene.md §5
+  // and left for a later phase, not patched here. The deadline itself is untouched and correct — the
+  // rule-driven engine emits `PFA_DEADLINE_2026` / `d212_filing` at 2027-05-25, and no seed record is
+  // allowed to become a second source of a deadline.
+  declarations: [],
   documents: [
     { id: 'doc1', nume: 'FCT-2026-001.pdf', data: '2026-09-02', categoria: 'Facturi' },
-    { id: 'doc2', nume: 'Declarația 220 – Q2 2026.pdf', data: '2026-07-10', categoria: 'Declarații' },
+    { id: 'doc2', nume: 'Declarația 212 – venitul anului 2025.pdf', data: '2026-05-20', categoria: 'Declarații' },
     { id: 'doc3', nume: 'Contract Presta Consulting.pdf', data: '2026-08-20', categoria: 'Contracte' },
   ],
   companyDocs: {
+    // TASK 9 (seed hygiene): the quarterly D100 and D220 artefacts are gone.
+    //   D100 is the return for payroll obligations (rețineri pe venit și contribuții pentru personal
+    //   angajat). This profile records no employees anywhere in AppData, so it owes no D100; and
+    //   research/12 §3 puts it beside D112 (CF art. 147): the payroll return „does not apply to a PFA's
+    //   own CAS”.
+    //   D220 no longer exists: Declarația Unică 212 replaced form 232 (venit) and form 220
+    //   (contribuții sociale) with effect from 1 April 2018 (docs/ai/research/06_2026_fiscal_research.md
+    //   §3 row 1). A 2026 D220 is a form that has not existed for eight years.
+    // What replaces them is the one return this profile actually files: the D212 for the 2025 year,
+    // filed inside the 25 May 2026 term (CF art. 122 alin. (3)). It sits under `im` because it is one
+    // form covering the income AND the social contributions — `cs` is left empty rather than given a
+    // second copy of the same document, and an empty section renders its own empty state.
     im: [
-      { id: 'im1', nume: 'Declarația 100 – Q2 2026.pdf', tip: 'factura', content: 'data:text/plain;base64,SW1wb3ppdCBwZSB2ZW5pdQ==', marime: 48210, data: '2026-07-05', dataDepunere: '2026-07-05', depunere: 'ANAF', perioada: 'Q2 2026' },
+      { id: 'im1', nume: 'Declarația 212 – venitul anului 2025.pdf', tip: 'factura', content: 'data:text/plain;base64,SW1wb3ppdCBwZSB2ZW5pdQ==', marime: 48210, data: '2026-05-20', dataDepunere: '2026-05-20', depunere: 'ANAF', perioada: '2025' },
     ],
-    cs: [
-      { id: 'cs1', nume: 'Declarația 220 – Q2 2026.pdf', tip: 'factura', content: 'data:text/plain;base64,Q29udHJpYnV0aWkgc29jaWFsZQ==', marime: 51340, data: '2026-07-10', dataDepunere: '2026-07-10', depunere: 'ANAF', perioada: 'Q2 2026' },
-    ],
+    cs: [],
     tva: [
       { id: 'tva1', nume: 'Declarația 300 – August 2026.pdf', tip: 'factura', content: 'data:text/plain;base64,VERWQSBkZWNsYXJhdGlvbg==', marime: 39870, data: '2026-09-15', dataDepunere: '2026-09-15', depunere: 'ANAF', perioada: 'August 2026' },
     ],
@@ -98,20 +131,38 @@ export const seedData: AppData = {
     ],
   },
   statements: [
-    { id: 's1', tip: '100', perioada: '2026-Q2', depunere: 'SOLO', dataDepunere: '2026-07-05' },
-    { id: 's2', tip: '220', perioada: '2026-Q2', depunere: 'SOLO', dataDepunere: '2026-07-10' },
+    // TASK 9: the two quarterly statements (tip '100' and tip '220', both '2026-Q2', both filed 'SOLO')
+    // recorded the same two obligations the companyDocs entry above records — see the note there for why
+    // neither is an obligation of this profile. One entry remains: the annual D212 for the 2025 year.
+    // `depunere: 'personală'` because a persoană fizică files the D212 in their own name; 'SOLO' is the
+    // payroll/employer transmission channel.
+    // The D300 row below is NOT touched by this task, and that is a deliberate non-fix: CF art. 322
+    // alin. (1)-(4) makes the fiscal period the QUARTER for a taxpayer whose previous-year taxable
+    // supplies stayed under the 100.000 € equivalent, and the month only otherwise. Which of those this
+    // profile is depends on its VAT registration date and prior-year turnover — facts the seed does not
+    // record anywhere. Changing 'August 2026' to a quarter would invent one half of that choice; leaving
+    // it is the honest state of a demo whose input fact is missing. Registered as a finding in
+    // docs/ai/phases/23_provenance_hygiene.md §5.
+    { id: 's1', tip: '212', perioada: '2025', depunere: 'personală', dataDepunere: '2026-05-20' },
     { id: 's3', tip: '300', perioada: '2026-08', depunere: 'personală', dataDepunere: '2026-09-15' },
   ],
   snapshots: [],
   settings: {
     cotaTva: 9,
     company: {
-      denumire: 'Popescu Consulting SRL',
+      // TASK 9: the legacy block, kept parseable for pre-Phase-7 payloads (decision D-1) and the source
+      // `legacyProfileFromSettings` absorbs from. It carried the same SRL/PFA contradiction as
+      // `profile.identity`, so it is corrected to match — `store.migration.chain.test.tsx` asserts the
+      // migrated identity against these very fields, so the two blocks cannot disagree.
+      denumire: 'Popescu Andrei PFA',
       cui: 'RO4455667788990',
       numarRegComert: 'J40/1234/2020',
       adresa: 'Str. Libertății 12, Cluj-Napoca',
-      cnp: 'RO4455667788990',
-      formaJuridica: 'SRL',
+      // A CUI in a CNP field. Nothing in src/ reads `settings.company.cnp` — `identity.cnp` is absorbed
+      // from `settings.personal.cnp` — but a PFA has no legal personality separate from the person, so
+      // the only CNP this block could honestly carry is the person's.
+      cnp: '1234567890123',
+      formaJuridica: 'Persoană fizică autorizată',
       codFiscal: 'RO4455667788990',
       codCAEN: '6201',
       regComerț: 'J40/1234/2020',

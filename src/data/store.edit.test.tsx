@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, render } from '@testing-library/react';
 import { StoreProvider, useStore } from './store';
+import { CURRENT_DATA_VERSION } from './migration';
 import { seedData } from './seed';
 import type { Client, Declaration } from './types';
 import { lei } from '../domain/money';
@@ -35,6 +36,27 @@ function persistedData() {
   const raw = localStorage.getItem(STORAGE_KEY);
   expect(raw).not.toBeNull();
   return JSON.parse(raw!) as { clients: Client[]; declarations: Declaration[] };
+}
+
+/**
+ * TASK 9: the seed no longer carries declaration records — the three it used to carry (2026-03
+ * „transmisa”, 2026-06 „in-asteptare”, 2026-09 „inregistrata”) recorded monthly filings that do not
+ * exist for this profile; see the note in `data/seed.ts`. `updateDeclaration` is store behaviour, not a
+ * seed fact, so these tests now bring their own records. Written at the current data version so the load
+ * path runs no migration and the money fields stay in bani.
+ */
+const DECLARATION_FIXTURES: Declaration[] = [
+  { id: 'd1', an: 2026, luna: 3, venituri: lei(12500), cheltuieli: lei(1800), status: 'transmisa', dataInregistrare: '2026-04-10', dataTrimitere: '2026-04-15' },
+  { id: 'd2', an: 2026, luna: 6, venituri: lei(14200), cheltuieli: lei(2100), status: 'in-asteptare', dataInregistrare: '2026-07-08' },
+  { id: 'd3', an: 2026, luna: 9, venituri: lei(9680), cheltuieli: lei(546), status: 'inregistrata', dataInregistrare: '2026-09-28' },
+];
+
+function renderStoreWithDeclarations() {
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({ ...seedData, version: CURRENT_DATA_VERSION, declarations: DECLARATION_FIXTURES }),
+  );
+  renderStore();
 }
 
 describe('updateClient', () => {
@@ -100,7 +122,7 @@ describe('updateClient', () => {
 
 describe('updateDeclaration', () => {
   it('updates the matching declaration in place, preserving its id', () => {
-    renderStore();
+    renderStoreWithDeclarations();
     const original = storeRef!.declarations.find(d => d.id === 'd2')!;
 
     act(() => {
@@ -114,11 +136,11 @@ describe('updateDeclaration', () => {
     expect(updated.venituri).toBe(original.venituri);
     expect(updated.cheltuieli).toBe(original.cheltuieli);
     expect(updated.dataInregistrare).toBe(original.dataInregistrare);
-    expect(storeRef!.declarations).toHaveLength(seedData.declarations.length);
+    expect(storeRef!.declarations).toHaveLength(DECLARATION_FIXTURES.length);
   });
 
   it('leaves other declarations untouched', () => {
-    renderStore();
+    renderStoreWithDeclarations();
     const d1 = storeRef!.declarations.find(d => d.id === 'd1')!;
     const d3 = storeRef!.declarations.find(d => d.id === 'd3')!;
 
@@ -131,7 +153,7 @@ describe('updateDeclaration', () => {
   });
 
   it('persists the updated declaration to localStorage', () => {
-    renderStore();
+    renderStoreWithDeclarations();
     const d2 = storeRef!.declarations.find(d => d.id === 'd2')!;
 
     act(() => {
@@ -140,11 +162,11 @@ describe('updateDeclaration', () => {
 
     const persisted = persistedData();
     expect(persisted.declarations.find(d => d.id === 'd2')!.status).toBe('transmisa');
-    expect(persisted.declarations).toHaveLength(seedData.declarations.length);
+    expect(persisted.declarations).toHaveLength(DECLARATION_FIXTURES.length);
   });
 
   it('is a safe no-op for an unknown id (no crash, no new entry)', () => {
-    renderStore();
+    renderStoreWithDeclarations();
     const before = storeRef!.declarations;
 
     act(() => {
@@ -160,6 +182,6 @@ describe('updateDeclaration', () => {
     });
 
     expect(storeRef!.declarations).toEqual(before);
-    expect(storeRef!.declarations).toHaveLength(seedData.declarations.length);
+    expect(storeRef!.declarations).toHaveLength(DECLARATION_FIXTURES.length);
   });
 });

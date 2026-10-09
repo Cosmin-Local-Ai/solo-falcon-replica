@@ -382,7 +382,11 @@ describe('getActionItems (sync)', () => {
     }
   });
 
-  it('surfaces the four unresolved seed records as actions, each with a target that reaches the record', () => {
+  it('surfaces the three unresolved seed records as actions, each with a target that reaches the record', () => {
+    // TASK 9 re-pin (replaced, not deleted): this test used to cover four records, the fourth being the
+    // seed's `d2`. The seed no longer holds declaration records — the three it carried recorded monthly
+    // filings that do not exist for this profile (see the note in `data/seed.ts`). The declaration case
+    // is still covered, against a fixture this file owns.
     const items = getActionItems(seedData, AS_OF_INSTANT);
     const byId = new Map(items.map(i => [i.id, i]));
 
@@ -400,7 +404,14 @@ describe('getActionItems (sync)', () => {
     expect(e3.description).toContain('Document neconform');
     expect(e3.target?.href).toBe('/expenses#!/rejected?f=e3');
 
-    const d2 = byId.get('record-declaration-d2')!;
+    // No declaration row is produced from the seed, because the seed holds no declaration record.
+    expect(byId.has('record-declaration-d2')).toBe(false);
+
+    const withDeclaration = getActionItems(
+      { ...seedData, declarations: [declaration({ id: 'd2', an: 2026, luna: 6, status: 'in-asteptare', dataInregistrare: '2026-07-08' })] },
+      AS_OF_INSTANT,
+    );
+    const d2 = withDeclaration.find(i => i.id === 'record-declaration-d2')!;
     expect(d2.state).toBe('not_submitted');
     expect(d2.description).toContain('08.07.2026');
     expect(d2.description).not.toContain('nu a fost depusă');

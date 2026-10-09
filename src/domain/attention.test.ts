@@ -23,6 +23,7 @@ import {
 } from './attention';
 import { lei } from './money';
 import { seedData } from '../data/seed';
+import type { Declaration } from '../data/types';
 
 function item(overrides: Partial<AttentionItem> = {}): AttentionItem {
   return {
@@ -193,11 +194,25 @@ describe('deadline severity is a distance decision made once, in the domain', ()
 });
 
 describe('the record family: what the seed actually holds', () => {
+  // TASK 9: the seed no longer carries declaration records, because the three it used to carry recorded
+  // monthly filings that do not exist for this profile (see the note in `data/seed.ts`). The declaration
+  // case is domain behaviour, not a seed fact, so it is now tested against a fixture the test owns — the
+  // assertions are unchanged, only where the record comes from.
+  const declarationFixture: Declaration[] = [
+    { id: 'd1', an: 2026, luna: 3, venituri: lei(12500), cheltuieli: lei(1800), status: 'transmisa', dataInregistrare: '2026-04-10', dataTrimitere: '2026-04-15' },
+    { id: 'd2', an: 2026, luna: 6, venituri: lei(14200), cheltuieli: lei(2100), status: 'in-asteptare', dataInregistrare: '2026-07-08' },
+    { id: 'd3', an: 2026, luna: 9, venituri: lei(9680), cheltuieli: lei(546), status: 'inregistrata', dataInregistrare: '2026-09-28' },
+  ];
+  const seedWithDeclarations = { ...seedData, declarations: declarationFixture };
+
   const records = unresolvedRecords(seedData);
   const byId = new Map(records.map(r => [r.id, r]));
+  const withDeclarations = new Map(unresolvedRecords(seedWithDeclarations).map(r => [r.id, r]));
 
-  it('surfaces the four genuinely unresolved seed records', () => {
-    expect([...byId.keys()].sort()).toEqual(['d2', 'e3', 'r2', 'r3']);
+  it('surfaces the three genuinely unresolved seed records', () => {
+    // TASK 9 re-pin (replaced, not deleted): old `['d2', 'e3', 'r2', 'r3']`. `d2` is gone because the
+    // record it came from is gone — it described a monthly filing that was never due.
+    expect([...byId.keys()].sort()).toEqual(['e3', 'r2', 'r3']);
   });
 
   it('r2 is awaiting acceptance, and the reason is the e-Factura status the record carries', () => {
@@ -224,7 +239,7 @@ describe('the record family: what the seed actually holds', () => {
   });
 
   it('d2 has no recorded submission, and the app does not claim it was not filed', () => {
-    const d2 = byId.get('d2')!;
+    const d2 = withDeclarations.get('d2')!;
     expect(d2.kind).toBe('declaration');
     expect(d2.state).toBe('not_submitted');
     expect(d2.registeredOn).toBe('2026-07-08');
@@ -239,14 +254,14 @@ describe('the record family: what the seed actually holds', () => {
     // record does not carry. `d2` is `in-asteptare` — the record's own "not settled" marker — and that
     // is what makes it an item.
     for (const settled of ['r1', 'r4', 'e1', 'e2', 'd1', 'd3']) {
-      expect(byId.has(settled)).toBe(false);
+      expect(withDeclarations.has(settled)).toBe(false);
     }
   });
 
   it('a declaration that carries a submission date is settled even when its status is not `transmisa`', () => {
     const withSubmission = unresolvedRecords({
       ...seedData,
-      declarations: [{ ...seedData.declarations[1], dataTrimitere: '2026-07-20' }],
+      declarations: [{ ...declarationFixture[1]!, dataTrimitere: '2026-07-20' }],
     });
     expect(withSubmission.some(d => d.id === 'd2')).toBe(false);
   });
