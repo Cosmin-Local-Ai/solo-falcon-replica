@@ -25,6 +25,7 @@ const validRevenue: Revenue = {
 
 function writePayload(overrides: Record<string, unknown> = {}) {
   const base: AppData = {
+    reservedAmount: null,
     profile: seedData.profile,
     revenues: [],
     expenses: [],

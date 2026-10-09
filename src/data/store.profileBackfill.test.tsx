@@ -90,6 +90,7 @@ function legacyPayload(): Record<string, unknown> {
   void pfaStartDate;
   void salaryIncomeLei;
   const base: AppData = {
+    reservedAmount: null,
     profile: prePhase6Profile,
     revenues,
     expenses,

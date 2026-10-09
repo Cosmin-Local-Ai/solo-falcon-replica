@@ -49,6 +49,7 @@ function profile(overrides: Partial<PfaProfile> = {}): PfaProfile {
 
 function makeData(overrides: Partial<AppData> = {}): AppData {
   return {
+    reservedAmount: null,
     profile: profile(),
     revenues: [],
     expenses: [],

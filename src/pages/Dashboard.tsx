@@ -128,7 +128,7 @@ export default function DashboardPage() {
 
           {/* 6. Lower sections — Rezervă fiscală (Step 21); thresholds, deadlines, completeness, actions (Step 22) */}
           <div className="grid grid-2">
-            <TaxReserve reserve={data.reserve} />
+            <TaxReserve reserve={data.reserve} onRecord={appData.setReservedAmount} />
             <ThresholdSection thresholds={data.thresholds} />
             <DeadlineSection deadlines={data.deadlines} asOfDate={data.snapshot.asOf} />
             <CompletenessSection completeness={data.completeness} />

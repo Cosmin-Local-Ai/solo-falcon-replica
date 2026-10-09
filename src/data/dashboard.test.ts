@@ -14,13 +14,16 @@ import {
   buildThresholdBases,
   buildDashboardData,
   getUpcomingDeadlines,
+  getTaxReserve,
 } from './dashboard';
+import { selectEstimateOperands } from '../domain/estimateBasis';
+import { PFA_2026_SYSTEM_REAL_PACKAGE } from '../domain/fiscal';
 import { seedData } from './seed';
 import { selectYtd } from '../domain/aggregation';
 import { computeInputsHashSync } from '../domain/snapshots/hashSync';
 import { backfillSnapshotIdentity } from './migration';
 import { THRESHOLD_SPECS } from '../domain/thresholds';
-import { lei } from '../domain/money';
+import { lei, subBani, type Bani } from '../domain/money';
 
 const AS_OF = '2026-10-01';
 // B-23 standing rule: no test may read the wall clock. `buildDashboardData` and `getActionItems` take an
@@ -68,6 +71,7 @@ function profile(overrides: Partial<PfaProfile> = {}): PfaProfile {
 
 function makeData(overrides: Partial<AppData> = {}): AppData {
   return {
+    reservedAmount: null,
     profile: profile(),
     revenues: [],
     expenses: [],
@@ -682,5 +686,149 @@ describe('getTaxEstimate - the projected basis enters the engine and the snapsho
     expect(backfilled).toBe(est.snapshot); // nothing to add -> the same object, digest intact
     expect(backfilled.preMigrationInputsHash).toBeUndefined();
     expect(computeInputsHashSync(backfilled.inputSnapshot)).toBe(backfilled.inputsHash);
+  });
+});
+
+/**
+ * TASK 3 — the reserve is persisted, and BOTH read sites consume it.
+ *
+ * Before this task both sites hardcoded `createTaxReserveState(null)`, so the „Rezervă fiscală sub
+ * țintă” warning could never be cleared: whatever the user had actually set aside, the app reported
+ * nothing reserved. The two properties pinned here are:
+ *  1. the tri-state survives — `null` („no reserve recorded”) is not `0` („recorded nothing”); and
+ *  2. the liability the reserve reports is the total of the estimate it was handed, never one it
+ *     derived for itself. After TASK 2d a self-derived reserve can disagree with the dashboard by
+ *     exactly the two alin. (6) ceilings apart, with nothing on screen saying which figure is right.
+ *
+ * Every figure below is hand-derived: the seed at 2026-10-31 gives total 3.249,00 lei over the 3
+ * remaining months of the fiscal year (the same arithmetic the e2e suite pins at 1.083,00 lei/month).
+ */
+describe('TASK 3 — the persisted reserve feeds both read sites', () => {
+  const AS_OF = '2026-10-31';
+  // `buildDashboardData` derives its asOfDate from an injectable instant (B-23: no test reads the
+  // wall clock). 12:00 Europe/Bucharest on the same calendar day as AS_OF.
+  const INSTANT = new Date('2026-10-31T12:00:00+03:00');
+
+  const withReserve = (reservedAmount: Bani | null): AppData => ({ ...seedData, reservedAmount });
+
+  it('an unrecorded reserve stays null at both sites, and the target is the whole liability', async () => {
+    const data = withReserve(null);
+    const est = await getTaxEstimate(data, AS_OF);
+    if (est.status !== 'computed') throw new Error('expected a computed estimate');
+    expect(est.output.total).toBe(lei(3249));
+
+    const rec = getTaxReserve(data, AS_OF, est);
+    expect(rec.estimatedTaxLiability).toBe(lei(3249));
+    // null, not 0: the user recorded nothing, and the card must say so rather than show 0,00 lei.
+    expect(rec.reservedAmount).toBeNull();
+    expect(rec.remainingTarget).toBe(lei(3249));
+    expect(rec.monthsRemaining).toBe(3);
+    expect(rec.recommendedMonthlyReserve).toBe(lei(1083));
+
+    const view = buildDashboardData(data, est, INSTANT);
+    expect(view.reserve.reservedAmount).toBeNull();
+    expect(view.snapshot.taxReserve.gapBani).toBe(lei(3249));
+  });
+
+  it('an explicit 0 lei reserve is a different fact from null', async () => {
+    const data = withReserve(lei(0));
+    const est = await getTaxEstimate(data, AS_OF);
+    const rec = getTaxReserve(data, AS_OF, est);
+    // The arithmetic coincides with the null case — and that is exactly why the STATE has to survive:
+    // a reader must be able to tell „recorded nothing” from „never recorded anything”.
+    expect(rec.reservedAmount).toBe(lei(0));
+    expect(rec.reservedAmount).not.toBeNull();
+    expect(rec.remainingTarget).toBe(lei(3249));
+    expect(buildDashboardData(data, est, INSTANT).reserve.reservedAmount).toBe(lei(0));
+  });
+
+  it('a recorded reserve shrinks the target at BOTH sites, by the same amount', async () => {
+    const data = withReserve(lei(1050));
+    const est = await getTaxEstimate(data, AS_OF);
+    if (est.status !== 'computed') throw new Error('expected a computed estimate');
+
+    const rec = getTaxReserve(data, AS_OF, est);
+    // 3.249,00 − 1.050,00 = 2.199,00 lei over 3 months = 733,00 lei/month, exact.
+    expect(rec.reservedAmount).toBe(lei(1050));
+    expect(rec.remainingTarget).toBe(lei(2199));
+    expect(rec.recommendedMonthlyReserve).toBe(lei(733));
+
+    // Site #2 — the snapshot that feeds the „Rezervă fiscală sub țintă” insight. It used to report 0
+    // reserved no matter what, which is why the warning was unclearable.
+    const view = buildDashboardData(data, est, INSTANT);
+    expect(view.snapshot.taxReserve.currentReserveBani).toBe(lei(1050));
+    expect(view.snapshot.taxReserve.gapBani).toBe(lei(2199));
+    // The two sites cannot disagree: same persisted value, same handed-in estimate.
+    expect(view.snapshot.taxReserve.gapBani).toBe(view.reserve.remainingTarget);
+    expect(view.snapshot.taxReserve.currentReserveBani).toBe(view.reserve.reservedAmount);
+  });
+
+  it('a reserve larger than the liability leaves a zero target, never a negative one', async () => {
+    const data = withReserve(lei(5000));
+    const est = await getTaxEstimate(data, AS_OF);
+    const rec = getTaxReserve(data, AS_OF, est);
+    expect(rec.remainingTarget).toBe(lei(0));
+    expect(rec.recommendedMonthlyReserve).toBe(lei(0));
+    // Over-reserving is a fact the user recorded, so it is reported verbatim, not clamped away.
+    expect(rec.reservedAmount).toBe(lei(5000));
+    // And the warning is gone: the gap is 0, which is what makes it clearable at all.
+    expect(buildDashboardData(data, est, INSTANT).snapshot.taxReserve.gapBani).toBe(lei(0));
+  });
+
+  it('the reserve consumes the estimate it is handed — it never re-derives one', async () => {
+    const data = withReserve(null);
+    const est = await getTaxEstimate(data, AS_OF);
+    if (est.status !== 'computed') throw new Error('expected a computed estimate');
+    // A total the data cannot produce (9.999,99 lei is not the seed estimate at any date). If either
+    // site re-ran the estimate instead of reading the result it was given, this figure could not
+    // appear — it would report 3.249,00 lei.
+    const doctored = { ...est, output: { ...est.output, total: lei(9999.99) } };
+    const rec = getTaxReserve(data, AS_OF, doctored);
+    expect(rec.estimatedTaxLiability).toBe(lei(9999.99));
+    expect(rec.remainingTarget).toBe(lei(9999.99));
+    expect(buildDashboardData(data, doctored, INSTANT).snapshot.taxReserve.projectedLiabilityBani).toBe(
+      lei(9999.99),
+    );
+  });
+
+  it('on a profile with a struck alin. (6) ceiling the reserve reports the ENGINE total, not a re-derived one', async () => {
+    // TASK 2d is why this is pinned: the operative alin. (6) base is pre-cap, so the engine's total for
+    // a profile holding a capped expense is LOWER than the other reading's. A reserve that re-ran the
+    // caps, or re-projected, would disagree with the dashboard by exactly the two ceilings apart.
+    const capped: AppData = {
+      ...seedData,
+      reservedAmount: lei(500),
+      expenses: [
+        ...seedData.expenses,
+        {
+          id: 'e-cap',
+          tip: 'factura',
+          nr: 'FCT-CAP-1',
+          date: '2026-06-10',
+          furnizor: 'Furnizor Test',
+          cui: 'RO00000000',
+          valoareFaraTva: lei(1000),
+          tva: lei(190),
+          status: 'inregistrata',
+          category: 'protocol',
+        },
+      ],
+    };
+    // Hand-derived at 2026-12-31 (projection = identity, revenuesNet 7.700,00 lei):
+    //   alin. (6) base (pre-cap) = 7.700,00 − 120,00 (e1, the only uncapped deductible) = 7.580,00 lei
+    //   protocol ceiling         = floor(7.580,00 × 2 %) = 151,60 lei; claimed 1.000,00 → allowed 151,60
+    //   deductible total         = 120,00 + 151,60 = 271,60 lei
+    const operands = selectEstimateOperands(capped, '2026-12-31', PFA_2026_SYSTEM_REAL_PACKAGE);
+    if (operands.kind !== 'run') throw new Error('expected the estimate to run');
+    expect(operands.capAdjustments).toHaveLength(1); // the profile genuinely exercises a ceiling
+
+    const est = await getTaxEstimate(capped, '2026-12-31');
+    if (est.status !== 'computed') throw new Error('expected a computed estimate');
+    expect(est.bases.cheltuieliDeductibile).toBe(lei(271.6));
+
+    const rec = getTaxReserve(capped, '2026-12-31', est);
+    // The reserve's liability IS the engine's total — the capped, pre-cap-base one the dashboard shows.
+    expect(rec.estimatedTaxLiability).toBe(est.output.total);
+    expect(rec.remainingTarget).toBe(subBani(est.output.total, lei(500)));
   });
 });

@@ -66,8 +66,20 @@ export const DATA_VERSION_MONEY_BANI = 5;
  * honest state and the safe one for the user's money.
  */
 export const DATA_VERSION_EXPENSE_CATEGORY = 6;
+/**
+ * TASK 3 step 7: the dataset may carry a recorded tax reserve (`AppData.reservedAmount`, integer bani,
+ * `null` = no reserve recorded). See `migrateReservedAmountV7` and
+ * `docs/ai/phases/17_tax_reserve_persistence.md`.
+ *
+ * The fourth pure schema-widening step in the chain (after `payment-dates`, `vat-exceedance-date` and
+ * `expense-category`): it backfills NOTHING. A reserve is a fact about money the user has physically
+ * set aside, and no legacy field records it — inventing `0` would assert that the user recorded they
+ * had set aside nothing, which is a different fact from never having recorded anything, and it would
+ * silently clear the „Rezervă fiscală sub țintă” warning the task exists to make clearable.
+ */
+export const DATA_VERSION_TAX_RESERVE = 7;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_EXPENSE_CATEGORY;
+export const CURRENT_DATA_VERSION = DATA_VERSION_TAX_RESERVE;
 
 export interface MigrationStep {
   readonly from: number;
@@ -494,6 +506,23 @@ export function migrateExpenseCategoryV6(data: PersistedAppData): PersistedAppDa
   return { ...data, version: DATA_VERSION_EXPENSE_CATEGORY };
 }
 
+/**
+ * TASK 3: the v6→v7 step widens the dataset with `reservedAmount` and NOTHING MORE.
+ *
+ * It backfills nothing, deliberately. `reservedAmount` is tri-state — `null` means „no reserve
+ * recorded”, `0` means the user recorded an explicit zero — and the two are different facts. Writing
+ * `0` into an old payload would manufacture a claim about the user's cash that no legacy field ever
+ * recorded, and it would do so in the one place a reader cannot argue with: a stored number. Absence
+ * is carried forward unchanged and the load path (`store.tsx` `toAppData`) reads it as `null`.
+ *
+ * The step touches no bytes and cannot move a stored `inputSnapshot` digest: `buildInputSnapshot`
+ * hashes `profile` plus two aggregate numbers, not the rest of `AppData`, so a new top-level field
+ * never reaches `canonicalize`.
+ */
+export function migrateReservedAmountV7(data: PersistedAppData): PersistedAppData {
+  return { ...data, version: DATA_VERSION_TAX_RESERVE };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -542,6 +571,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Cheltuielile pot avea acum o categorie de deductibilitate (CF art. 68). Nimic nu a fost completat: o cheltuială fără categorie este exclusă din totalul deductibil și raportată ca neclasificată, nu clasificată prin ghicit.',
     apply: migrateExpenseCategoryV6,
+  },
+  {
+    from: DATA_VERSION_EXPENSE_CATEGORY,
+    to: DATA_VERSION_TAX_RESERVE,
+    name: 'tax-reserve',
+    summary:
+      'Datele pot înregistra acum suma pusă deoparte pentru impozit (null = nicio sumă înregistrată). Nimic nu a fost completat: o rezervă de 0 lei este o faptă înregistrată de utilizator, nu o presupunere despre banii lui.',
+    apply: migrateReservedAmountV7,
   },
 ];
 

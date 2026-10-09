@@ -202,6 +202,21 @@ export interface AppData {
   snapshots: TaxCalculationSnapshot[];
   settings: SettingsState;
   /**
+   * TASK 3: the cash the user has actually set aside for this year's taxes, in integer **bani**.
+   *
+   * Tri-state, and the two empty states are NOT the same fact:
+   * - `null` — **no reserve recorded**. The user has never entered an amount; it renders as
+   *   „Nicio sumă înregistrată”, never as `0,00 lei`;
+   * - `0` — an explicit, real fact: the user recorded that they have set aside nothing.
+   *
+   * Required on the runtime object (never `undefined`) so a consumer cannot mistake „absent from an
+   * old payload” for a fourth state: the load path normalises an absent stored field to `null`, and
+   * the migration chain backfills nothing — the v6→v7 step invents no money.
+   *
+   * Strictly DOWNSTREAM of the estimate: nothing in the tax calculation may read this field.
+   */
+  reservedAmount: Bani | null;
+  /**
    * Phase 10 (B-26): the report the `money-bani` step produced when a stored value could not be
    * reproduced exactly as an integer number of bani. It lives on the **loaded dataset**, not only on the
    * migration result, because the save effect spreads this object back into localStorage — a report that

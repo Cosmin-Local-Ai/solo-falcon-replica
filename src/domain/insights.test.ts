@@ -469,6 +469,7 @@ describe('completeness', () => {
 
   it('works with real assessCompleteness output (integration)', () => {
     const emptyData: AppData = {
+      reservedAmount: null,
       profile: null as unknown as PfaProfile,
       revenues: [],
       expenses: [],

@@ -51,6 +51,7 @@ const emptySettings: SettingsState = {
 
 function makeData(overrides: Partial<AppData> = {}): AppData {
   return {
+    reservedAmount: null,
     profile: profile(),
     revenues: [],
     expenses: [],

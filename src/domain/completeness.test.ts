@@ -152,6 +152,7 @@ function makeSnapshot(status: TaxCalculationSnapshot['status']): TaxCalculationS
 /** Fully-populated AppData — every completeness check should pass. */
 function makeData(overrides: Partial<AppData> = {}): AppData {
   return {
+    reservedAmount: null,
     profile: makeProfile(),
     revenues: [
       makeRevenue(),
@@ -178,6 +179,7 @@ function makeData(overrides: Partial<AppData> = {}): AppData {
 /** Empty AppData (seed-like: snapshots: []) — every check should fail. */
 function makeEmptyData(): AppData {
   return {
+    reservedAmount: null,
     profile: null as unknown as PfaProfile,
     revenues: [],
     expenses: [],

@@ -77,6 +77,10 @@ describe('save effect — serialization contract', () => {
       'documents',
       'expenses',
       'profile',
+      // TASK 3: the recorded tax reserve is part of AppData, so it is serialized like the rest of the
+      // dataset. It is written as `null` when nothing was recorded — the key is present and its value
+      // says so, which is the honest state, and it is NOT written as 0.
+      'reservedAmount',
       'revenues',
       'settings',
       'snapshots',

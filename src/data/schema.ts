@@ -268,6 +268,18 @@ export interface PersistedAppData {
   snapshots?: TaxCalculationSnapshot[];
   settings: SettingsState;
   /**
+   * TASK 3: the recorded tax reserve, in integer bani. `null` means "no reserve recorded" and `0`
+   * means the user recorded an explicit zero — the two are different facts and must not collapse.
+   *
+   * Optional on the PAYLOAD because absence is honest: a pre-v7 payload never recorded a reserve, and
+   * the `tax-reserve` migration step backfills nothing. The load path turns absence into `null`, not
+   * into `0`.
+   *
+   * Declared here rather than left off, because **zod strips undeclared keys**: an undeclared reserve
+   * would be erased on the next load, which is the "surface, not vanish" rule failing silently.
+   */
+  reservedAmount?: Bani | null;
+  /**
    * Phase 10: the report produced by the `money-bani` step when a stored value could not be converted to
    * an integer number of bani losslessly. Declared here rather than left on the object because **zod strips
    * undeclared keys**: an undeclared report would be erased on the next load, which is the "surface, not
@@ -293,6 +305,11 @@ export const persistedAppDataSchema = z.object({
   statements: z.array(taxStatementSchema).optional(),
   snapshots: z.array(taxCalculationSnapshotSchema).optional(),
   settings: settingsSchema,
+  // TASK 3. The one money field in this schema that is allowed to be `null`: `null` is the recorded
+  // state "no reserve", which is NOT the same as `0` (an explicit zero) and NOT the same as absent
+  // (a pre-v7 payload). Absent stays absent through the chain; the load path maps it to `null`.
+  // A negative reserve is rejected rather than clamped — corrupt money must quarantine, not guess.
+  reservedAmount: bani(nonNegative).nullable().optional(),
   // Phase 10. `converted` is omitted (never null) when the value could not be represented at all.
   moneyNotices: z
     .array(

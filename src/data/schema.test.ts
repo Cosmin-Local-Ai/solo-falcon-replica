@@ -8,6 +8,7 @@ import { lei } from '../domain/money';
 /** A minimal-but-valid persisted dataset, used as the test baseline. */
 function baseline(): AppData {
   return {
+    reservedAmount: null,
     profile: seedData.profile,
     revenues: [
       {
@@ -105,6 +106,37 @@ describe('parseAppData — valid payloads', () => {
     // quietly becoming a free-text field the classifier would answer `undetermined` for.
     const parsed = parseAppData(write({ expenses: [{ ...seedData.expenses[0], category: 'aleatoriu' }] }));
     expect(parsed).toBeNull();
+  });
+
+  // TASK 3: `reservedAmount` is declared in `persistedAppDataSchema` for the same reason `category`
+  // and `moneyNotices` are — zod STRIPS undeclared keys, so a reserve that lived only on the TS type
+  // would be erased on the next load and the „Rezervă fiscală sub țintă” warning would silently come
+  // back. This is the gate that makes the reload acceptance criterion possible at all.
+  it('keeps a recorded reserve through the parse gate', () => {
+    const parsed = parseAppData(write({ reservedAmount: lei(250) }));
+    expect(parsed?.reservedAmount).toBe(lei(250));
+  });
+
+  // The tri-state, at the gate. `null` is a recorded state („no reserve”), `0` is a different recorded
+  // state („recorded nothing”), and absence is a third (a pre-v7 payload). Collapsing any two of them
+  // is the defect this task exists to close.
+  it('keeps an explicit null reserve — null is a recorded state, not corruption and not 0', () => {
+    const parsed = parseAppData(write({ reservedAmount: null }));
+    expect(parsed).not.toBeNull();
+    expect(parsed?.reservedAmount).toBeNull();
+    expect(parsed?.reservedAmount).not.toBe(0);
+  });
+
+  it('keeps an explicit 0 lei reserve, distinct from null', () => {
+    const parsed = parseAppData(write({ reservedAmount: 0 }));
+    expect(parsed).not.toBeNull();
+    expect(parsed?.reservedAmount).toBe(0);
+  });
+
+  it('refuses a negative reserve instead of clamping it — corrupt money quarantines, it does not guess', () => {
+    // Clamping on the way IN would rewrite the user's ledger without telling them; the load path
+    // quarantines the payload and preserves the bytes instead.
+    expect(parseAppData(write({ reservedAmount: -1 }))).toBeNull();
   });
 
   it('accepts an empty revenues array (valid, not corrupt)', () => {

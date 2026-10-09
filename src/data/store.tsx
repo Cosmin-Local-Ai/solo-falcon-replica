@@ -8,6 +8,7 @@ import type { PfaProfile } from '../domain/models';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import { todayISO } from './types';
 import { epochMs, isoCalendarDateProblemText, toInstantISO } from '../domain/date';
+import { maxBani, type Bani } from '../domain/money';
 import { seedData } from './seed';
 import { parseAppDataResult, validateRecordDates, type PersistedAppData, type RecordKind } from './schema';
 import {
@@ -96,6 +97,12 @@ interface StoreValue extends AppData {
   getSnapshot: (id: string) => TaxCalculationSnapshot | undefined;
   updateProfile: (patch: Partial<PfaProfile>) => void;
   updateSettings: (patch: Partial<SettingsState> | ((current: SettingsState) => SettingsState)) => void;
+  /**
+   * TASK 3: record how much cash the user has actually set aside for taxes, in integer bani.
+   * `null` records „no reserve recorded” (the tri-state, not a deletion of the field); `0` records an
+   * explicit zero. A negative amount is clamped at 0 — a withdrawal below zero is not a fact.
+   */
+  setReservedAmount: (amount: Bani | null) => void;
   toast: (kind: ToastKind, text: string) => void;
   dismissToast: (id: string) => void;
 }
@@ -118,6 +125,10 @@ function toAppData(parsed: PersistedAppData): AppData {
     statements: parsed.statements ?? [],
     snapshots: parsed.snapshots ?? [],
     settings: parsed.settings,
+    // TASK 3: an absent stored field becomes `null` — „no reserve recorded” — and never `0`.
+    // The `tax-reserve` migration step backfills nothing, so this is the only place absence is
+    // resolved, and it resolves it to the honest state rather than to an invented amount.
+    reservedAmount: parsed.reservedAmount ?? null,
     // B-26: the migration report rides along with the data it describes. The save effect spreads this
     // object back into localStorage, so carrying it here is what keeps it alive past the first write.
     // Left `undefined` when absent so the key is not written at all for healthy data.
@@ -328,6 +339,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     updateSettings: patch => setData(d => ({
       ...d,
       settings: typeof patch === 'function' ? patch(d.settings) : { ...d.settings, ...patch },
+    })),
+
+    // TASK 3: the reserve is a stored fact about the user's cash, so it lives on `AppData` and is
+    // written through the same save effect as everything else. It is strictly downstream of the tax
+    // estimate — nothing in the calculation path reads it back.
+    setReservedAmount: amount => setData(d => ({
+      ...d,
+      reservedAmount: amount === null ? null : maxBani(amount, 0 as Bani),
     })),
   };
 

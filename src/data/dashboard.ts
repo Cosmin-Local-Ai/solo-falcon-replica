@@ -196,12 +196,25 @@ export function getUpcomingDeadlines(data: AppData, asOfDate: string): Deadline[
   );
 }
 
+/**
+ * The reserve read site #1 — the one the cockpit cards and the „Rezervă fiscală” card render from.
+ *
+ * TASK 3: the reserved amount is read from the persisted dataset (`AppData.reservedAmount`), not
+ * invented here. `null` stays `null` („no reserve recorded”) and `0` stays `0` (an explicit zero the
+ * user recorded); `createTaxReserveState` carries the tri-state through verbatim.
+ *
+ * `tax` is the estimate the caller already computed — the same `TaxEstimateResult` the tax figures on
+ * the screen come from. This function must never re-derive it: re-running `selectEstimateOperands`
+ * here would re-run `selectYtd` inside `selectProjectionV1` and strike the annual ceilings on a
+ * different output, so the reserve could disagree with the dashboard by exactly the two ceilings
+ * apart (TASK 2d made that gap real) with nothing in the UI to say which figure is right.
+ */
 export function getTaxReserve(
   data: AppData,
   asOfDate: string,
   tax: TaxEstimateResult,
 ): TaxReserveRecommendation {
-  const state = createTaxReserveState(null); // honest "no data recorded"
+  const state = createTaxReserveState(data.reservedAmount);
   return computeTaxReserve(tax, state, {
     asOfDate,
     fiscalYear: data.profile.fiscalYear,
@@ -295,7 +308,10 @@ function buildSnapshot(
   // Single source for both the snapshot rows and `DashboardData.thresholds` — the inline
   // duplicate that used to live here is what let the two paths drift.
   const thresholds = getThresholdStatuses(data, asOfDate, tax);
-  const reserve = computeTaxReserve(tax, createTaxReserveState(null), {
+  // Reserve read site #2. It used to hardcode `createTaxReserveState(null)`, which is why the
+  // „Rezervă fiscală sub țintă” warning could never be cleared: even with a recorded reserve, this
+  // path reported nothing reserved. Same persisted value as site #1, same already-computed `tax`.
+  const reserve = computeTaxReserve(tax, createTaxReserveState(data.reservedAmount), {
     asOfDate,
     fiscalYear: taxYear,
   });
@@ -337,6 +353,11 @@ function buildSnapshot(
     taxReserve: {
       projectedLiabilityBani: reserve.estimatedTaxLiability ?? (0 as Bani),
       targetReserveBani: reserve.remainingTarget,
+      // The snapshot aggregate is a numeric cash-planning aggregate, so an unrecorded reserve counts
+      // as 0 *in the arithmetic only* — exactly what `computeTaxReserve` already does for
+      // `remainingTarget`. The tri-state itself is not collapsed anywhere a user reads: the card
+      // renders `TaxReserveRecommendation.reservedAmount`, which stays `null`. Nothing consumes
+      // `currentReserveBani` for display (insights.ts reads `projectedLiabilityBani` and `gapBani`).
       currentReserveBani: reserve.reservedAmount ?? (0 as Bani),
       gapBani: reserve.remainingTarget,
       coverageMonths: reserve.monthsRemaining,

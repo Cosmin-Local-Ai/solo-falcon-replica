@@ -42,6 +42,7 @@ const validRelease: RuleRelease = {
 
 function writePayload(overrides: Record<string, unknown> = {}) {
   const base: AppData = {
+    reservedAmount: null,
     profile: seedData.profile,
     revenues: [validRevenue],
     expenses: [],

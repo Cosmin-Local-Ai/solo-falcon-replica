@@ -132,4 +132,9 @@ export const seedData: AppData = {
       dateContact: '2026-09-01',
     },
   },
+  // TASK 3: the seed records no reserve. `null` is the honest state — nothing has been set aside that
+  // anyone recorded — and it is what the seed dashboard renders („Nicio sumă înregistrată”). Seeding
+  // `0` would assert an explicit zero the seed has no basis for, and would change the reserve figures
+  // every e2e pin depends on.
+  reservedAmount: null,
 };
