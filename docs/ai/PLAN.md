@@ -657,9 +657,9 @@ numbering stays readable.
     Option (c) (storage-only, domain stays in lei) was rejected outright: a permanent lei↔bani boundary is the drift
     mechanism this phase exists to remove.
 
-## Pre-Phase-11 corrections round (2026-10-09) — recorded here because PLAN.md's phase table stops at 10
+## Multi-currency and the FX rate store (2026-10-09) — TASK 10a, the first half of Phase 10 of the roadmap
 
-Ten tightly-scoped corrections landed between Phase 10 and Phase 11, each with its own brief and phase
+Eleven tightly-scoped corrections landed between Phase 10 and Phase 11, each with its own brief and phase
 doc. They are **not** new phases and no phase boundary was invented for them:
 
 | Task | What it corrected | Phase doc |
@@ -675,6 +675,7 @@ doc. They are **not** new phases and no phase boundary was invented for them:
 | **TASK 7** | **no copy layer existed; sentences were inline and `Settings.tsx` rendered the literal `review_required`** | `phases/21_language_layer.md` |
 | **TASK 8** | **one `severity` field carried legal weight, urgency and kind at once (`c6a2d5d`, `bab4a46`)** | `phases/22_prioritisation_severity.md` |
 | **TASK 9** | **provenance existed as copy and as a domain function and reached no surface; the seed taught filings the law does not ask of it and called the taxpayer an SRL; two card systems and a chart wider than its box** | `phases/23_provenance_hygiene.md` |
+| **TASK 10a** | **a money record carried no currency, so a EUR invoice was silently lei; there was no FX rate store and no conversion rule** | `phases/24_currency_fx_store.md` |
 
 **TASK 6 — the recorded decision and its shape (2026-10-09).** The decision was already made and was not
 reopened: **content-address the rule set; do not redesign the release model.** `releaseId` and
@@ -749,3 +750,77 @@ the whole time because the page did not overflow; the chart was simply cut off.
 year-end 3.112,00, each re-derived by hand in `phases/23_provenance_hygiene.md` §4.6; `64 files / 1149
 tests`, `tsc` 0, `build` 0, **`e2e` 37** (the new spec is the reserve surviving a reload), with every
 re-pin recorded old → new in `phases/23_provenance_hygiene.md` §7.
+
+**TASK 10a — the recorded decision and its shape (2026-10-09).** The landmine the brief named was the
+**snapshot digest**, and it was answered by reading the canonicalisation rather than inferring it from a
+comment. `canonicalize` (`src/domain/snapshots/serialize.ts`) emits **every own enumerable key** in sorted
+order — no allow-list, no stripping — but what it is handed is `inputSnapshot`, and `CalculationInput` is
+`{ profile: PfaProfile; revenues: Bani; expenses: Bani }`: **aggregate lei totals, not `Revenue[]` /
+`Expense[]`**. A currency stamped on a record is therefore **unreachable from the digest bytes**, so the
+normalisation is pinned, **no stored `inputsHash` moves, no re-hash happens, and `record-currency` writes no
+`preMigrationInputsHash`** — that field exists for steps that legitimately re-derive a digest because the
+hashed bytes changed, and writing it here would assert that this step changed them. The two ways the task
+*could* have moved a digest were avoided on purpose: adding a field to `PfaProfile` (which `canonicalize`
+emits) and adding a key to `inputSnapshot` (already forbidden by `snapshots.test.ts:437`). A historical
+snapshot stays interpretable because its aggregates are still bare numbers and its digest still verifies
+against the inputs beside it — asserted, not explained, in `src/data/migration.currency.test.ts` (19 tests).
+
+**Money is a value, not a number with a label bolted on.** `Money<C> { amount: Bani; currency: C }`, integer
+minor units throughout (bani, cents), and the enforcement is in the signature:
+`addMoney<A extends CurrencyCode, B extends A>` makes `addMoney(ron(100), eur(100))` a **`tsc` error**, pinned
+by `@ts-expect-error` so an unused directive fails the build if the signature ever loosens. `requireRon` is
+the explicit boundary and it **asserts, it does not convert** — converting there would pick a rate, and picking
+a rate is a legal decision the money layer may not make. Data version **9 → 10**, chain step
+**`record-currency`**, a **value-preserving no-op**: every existing figure stays bit-identical and gains
+`currency: 'RON'`, which is honest because they were always treated as RON.
+
+**The FX store refuses to invent.** `FxRateRecord` keeps the rate as the **printed decimal string** (`5.3470`,
+never a double — a rate that drifts in the last decimal is B-17 reappearing inside a conversion) with mandatory
+provenance, because BNR's licence requires *indicarea sursei*. `SERIES_CODE_STATUS` separates the two EUR codes
+read off the BNR series page (`CURSZ_EUR`, `CURSA_EURM` — verified) from every other code, which is
+pattern-derived and rendered `CURSZ_USD-PATTERN` — deliberate ugliness, because a code that looks official and
+was never read from the page is exactly the figure this repo refuses to assert. **No annual average is ever
+computed**: BNR's printed methodology is the average of the 12 monthly averages, so a mean of daily rates is a
+*different number*, and the schema has no field one could compute an average into (asserted against
+`Object.keys(fxRateRecordSchema.shape)`). A current-year average is `provisional` **by construction** — the flag
+is derived from the year, not from the entrant remembering — because no FY2026 average exists yet.
+
+**The fetcher is one boundary, and reads are pure.** `FxRateProvider` has two **synchronous** reads, which
+removes *by type* the temptation to re-fetch on every call; loading is a separate explicit write
+(`loadDailyRates`). The cache test is the rule stated as a count: one fetch, 25 reads, fetch count still 1.
+**No test performs a network call** — `fetchBnrXml` takes an injected `FetchText`. Endpoints are
+`curs.bnr.ro` only; `www.bnr.ro/nbrfxrates.xml` has been **dead since 6 August 2026**, so it is not a fallback,
+it is a bug. „XSD-validated" is stated honestly: there is no XSD processor in the dependency set, so what ships
+is a **structural validator enforcing the elements the XSD requires**, reporting every drift at once, and it is
+not described on screen as conformance.
+
+**Conversion requires a named basis, and the conflict stays open.** `ConversionAnchor` is a discriminated union
+over `payment_date_daily` (CF art. 9 alin. (3) lit. b) + alin. (4); art. 68 alin. (2) lit. a) „sumele încasate"),
+`payment_year_annual_average` (HG 1/2016 Titlul IV Cap. II pct. 7 alin. (6) — „cursul mediu comunicat de Banca
+Națională a României pentru anul în care s-a efectuat plata") and
+`income_realisation_year_annual_average` (the 25.000 EUR threshold, „anului de realizare a venitului"). The last
+two anchor to **different years**, and a test converts one 2026 payment of 2025 income under both and shows the
+amounts differ. **There is no default basis, because choosing one *is* resolving the hierarchy conflict** —
+`CONVERSION_HIERARCHY_CONFLICT` records both readings with `status: 'unresolved'` and the UI states them even
+when no rate is recorded. The carry-forward over a non-publication date is **app policy by analogy**: the rule
+exists at art. 68^3 alin. (4) and art. 85 alin. (4) — **exactly twice in the whole Codul fiscal, both inside the
+CASS articles** — and art. 9 alin. (4) admits only methods „prevăzute expres în **prezentul cod**", so it is
+surfaced through `InterpretationNote` naming the analogy, never as a statute sentence. Rounding is to the nearest
+ban, and `ROUNDING_CHOICE` records that art. 66 whole-leu rounding was **not** applied to the intermediate
+product, with the reason — a 5-bani conversion would have become 0 lei on that unverified reading.
+
+**Two production bugs surfaced while adapting tests, and both were fixed in the code, not in the assertion:**
+the money object branch of the load schema used `bani(z.number())`, so a **negative** amount inside
+`{ amount, currency }` loaded instead of quarantining (now `bani(nonNegative)`, the rule the bare-number branch
+already enforced); and a raw v4 fixture spread the seed and handed the `money-bani` step an object, which it
+reported as `[object Object]` and turned into a second notice — fixtures are payloads, not values, exactly as
+Phase 10 §3.3(4) warns. `LegacyRevenue` / `LegacyExpense` / `LegacyAppData` now type those fixtures, so a
+pre-v10 payload is written in the shape that *arrives* and the chain still has something to migrate.
+
+**No money figure moved** — deductible 120,00 / 144,00, VNA 9.096,00, impozit 819,00, total 3.249,00, reserve
+1.083,00, year-end 3.112,00, hero 51.510 lei. `72 files / 1271 tests` (+122), `tsc` 0, `build` 0, **`e2e` 37**.
+Every assertion change is one kind — `toBe(lei(N))` → `toEqual(ron(N))` on a field whose value type changed,
+every `N` unchanged and the currency now also asserted — and the single version re-pin is
+`e2e/settings.spec.ts` `saved.version` **9 → 10**, the same precedent already written in that test.
+**TASK 10b** computes the seven euro caps at `payment_year_annual_average` and drives the provisional → final
+lifecycle; it must not re-derive the bases, the citations, the carry-forward policy or the digest decision.
