@@ -92,6 +92,16 @@ interface Literal {
   rendered: boolean;
 }
 
+/**
+ * The explicit allow-list. Each entry is a `<glob key>:<line>` where a sentence-shaped literal is
+ * knowingly still inline in a component or page. It may only SHRINK: an entry needs a reason recorded in
+ * `docs/ai/phases/21_language_layer.md`, and the last test in this file fails if an entry stops matching
+ * a real violation, so a settled exception cannot linger as cover for the next one.
+ *
+ * It is empty. TASK 7 finished the sweep instead of parking exceptions.
+ */
+const ALLOW_LIST: readonly string[] = [];
+
 /** Every literal in one file, with whether the renderer would print it. */
 function literals(path: string, source: string): Literal[] {
   const sf = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -144,11 +154,25 @@ describe('the language layer (TASK 7)', () => {
     for (const file of surfaces) {
       for (const lit of literals(file, SURFACES[file])) {
         if (isRomanianSentence(lit.text)) {
-          violations.push(`${file}:${lit.line}  „${lit.text.replace(/\s+/g, ' ').slice(0, 110)}”`);
+          const key = `${file}:${lit.line}`;
+          if (ALLOW_LIST.includes(key)) continue;
+          violations.push(`${key}  „${lit.text.replace(/\s+/g, ' ').slice(0, 110)}”`);
         }
       }
     }
     expect(violations, 'sentences belong in src/ui/copy, not in components or pages').toEqual([]);
+  });
+
+  it('the allow-list earns its place', () => {
+    // An entry that no longer corresponds to a real violation must be deleted, not kept "just in case".
+    const live = new Set<string>();
+    for (const file of surfaces) {
+      for (const lit of literals(file, SURFACES[file])) {
+        if (isRomanianSentence(lit.text)) live.add(`${file}:${lit.line}`);
+      }
+    }
+    const stale = ALLOW_LIST.filter(key => !live.has(key));
+    expect(stale, 'these allow-list entries no longer match anything — delete them').toEqual([]);
   });
 
   it('no internal snake_case token is rendered as text', () => {

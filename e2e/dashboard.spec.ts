@@ -367,7 +367,10 @@ test.describe('Dashboard — section content (seed data)', () => {
     await page.goto('/dashboard');
 
     const actions = sectionWith(page, 'Ce trebuie să faci');
-    await expect(actions.getByText('3 item de rezolvat')).toBeVisible();
+    // TASK 7 re-pin (replaced, not deleted): the count used to read `3 item de rezolvat` — an English
+    // plural dropped into Romanian, the calque class the grammar sweep targets. The count and the
+    // assertion are otherwise identical: three items.
+    await expect(actions.getByText('3 elemente de rezolvat')).toBeVisible();
     // ActionSection renders one .action-label per item (not .item-row).
     await expect(actions.locator('.action-label')).toHaveCount(3);
 
@@ -859,7 +862,10 @@ test.describe('Dashboard — computed tax state (PFA sistem real seed)', () => {
 
     const hero = sectionWith(page, 'Estimare impozit');
     // The computed value is rendered in the hero (not the em-dash empty state).
-    await expect(hero.getByText(/51\.510/)).toBeVisible();
+    // TASK 7 re-pin (replaced, not deleted): the section now also carries the breakdown disclosure
+    // („Cum am ajuns la această sumă”), which repeats the same figure in a table row, so the bare
+    // getByText became ambiguous. Scoped to the hero element; the asserted figure is unchanged.
+    await expect(hero.locator('.tax-hero-value')).toHaveText(/51\.510/);
   });
 
   test('Rezervă fiscală section shows the computed estimate and monthly reserve', async ({ page }) => {
