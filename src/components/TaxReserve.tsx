@@ -83,7 +83,7 @@ export default function TaxReserve({ reserve, onRecord }: TaxReserveProps) {
 
   return (
     <section className="card">
-      <div className="card-head">
+      <div className="card-header">
         <h2 className="card-title">{reserveCopy.title}</h2>
       </div>
       <div className="card-body">

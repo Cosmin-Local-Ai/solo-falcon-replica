@@ -90,14 +90,30 @@ a:hover { text-decoration: underline; }
 }
 
 /* ---------- Cards ---------- */
+/* TASK 9 — one card system. There were three shells with two paddings and two title sizes: a
+   `.card-header` (14px 18px, bordered) beside a `.card-body` (18px), and a `.card-head` (no padding,
+   `margin-bottom: 12px`) inside one, with titles at 14px or 15px depending on which file wrote them.
+   Every card now emits `.card-header` + `.card-body`, and every card title carries `.card-title`. */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
 .card-header {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 14px 18px; border-bottom: 1px solid var(--border);
 }
-.card-header h3 { font-size: 14px; font-weight: 600; }
+.card-title { margin: 0; font-size: 15px; font-weight: 600; }
 .card-body { padding: 18px; overflow-wrap: break-word; display: grid; gap: 12px; }
 .card-body.flush { padding: 0; }
+
+/* TASK 9 — rule provenance. One component renders it everywhere, so it has one style. The state is
+   exposed on `data-provenance-state` for tests and for a reader inspecting the DOM; it is deliberately
+   not colour-coded, because the severity/state decision belongs to the domain, not to CSS. */
+.rule-provenance {
+  display: grid; gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+.rule-provenance .mono { word-break: break-all; font-size: 12px; }
+.provenance-citations { display: grid; gap: 4px; }
+.provenance-citations ul { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--text-2); }
 
 /* ---------- Stat cards ---------- */
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 20px; }
@@ -168,7 +184,6 @@ a:hover { text-decoration: underline; }
   .main-content { padding: 16px; }
   .grid-5 { grid-template-columns: 1fr; }
   .stat-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
-  .chart-scroll > * { min-width: 480px; }
 }
 
 .row { display: flex; align-items: center; gap: 8px; }
@@ -188,15 +203,18 @@ a:hover { text-decoration: underline; }
 .banner-details { margin-top: 8px; font-size: 12px; }
 .banner-details summary { cursor: pointer; color: var(--text-2); }
 .greeting { margin: 0 0 16px; font-size: 14px; color: var(--text-2); }
-.card-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
-.card-title { margin: 0; font-size: 15px; font-weight: 600; }
 .tax-hero-value { font-size: 28px; font-weight: 700; }
 .num { text-align: right; }
 
-/* Financial chart (Step 20) */
+/* Financial chart (Step 20).
+   TASK 9: `.chart-scroll > *` used to force `min-width: 640px` (480px under the 640px breakpoint).
+   Inside a 390px viewport the card body is ~358px wide, so the chart rendered ~657px and was clipped by
+   its own scroll container — the page did not overflow, the chart was simply cut off. The chart now
+   sizes to its container: `ResponsiveContainer width="100%"` gets the real width and nothing forces a
+   wider one. Verified in a real browser at 390px, not by reading this rule. */
 .chart-scroll { overflow-x: auto; scrollbar-width: thin; }
 .chart-scroll::-webkit-scrollbar { height: 8px; }
-.chart-scroll > * { min-width: 640px; }
+.chart-scroll > * { min-width: 0; width: 100%; }
 .chart-range-group { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .chart-range-btn { border: 0; background: transparent; padding: 4px 10px; font-size: 12px; color: var(--text-2); cursor: pointer; }
 .chart-range-btn[aria-pressed='true'] { background: var(--primary); color: #fff; }

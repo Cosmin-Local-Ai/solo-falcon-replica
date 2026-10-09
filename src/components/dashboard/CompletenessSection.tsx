@@ -19,13 +19,16 @@ export interface CompletenessSectionProps {
 export default function CompletenessSection({ completeness }: CompletenessSectionProps) {
   const { checks, satisfiedCount, totalCount } = completeness;
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{completenessCopy.title}</CardTitle>
-        <CardDescription>
-          {satisfiedCount} {completenessCopy.ofWord} {totalCount} {completenessCopy.checksSatisfied}
-        </CardDescription>
-      </CardHeader>
+    <Card
+      header={
+        <CardHeader>
+          <CardTitle>{completenessCopy.title}</CardTitle>
+          <CardDescription>
+            {satisfiedCount} {completenessCopy.ofWord} {totalCount} {completenessCopy.checksSatisfied}
+          </CardDescription>
+        </CardHeader>
+      }
+    >
       {checks.length === 0 ? (
         <p className="hint">{completenessCopy.empty}</p>
       ) : (

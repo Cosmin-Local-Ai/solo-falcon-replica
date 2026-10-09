@@ -28,6 +28,7 @@
  */
 import type { ThresholdSeverity } from './thresholds';
 import type { Bani } from './money';
+import type { SnapshotRuleProvenance } from './snapshots/ruleProvenance';
 
 /**
  * Dimension 1. Deliberately the SAME union the threshold rows use (TASK 4), so there is one urgency
@@ -112,6 +113,26 @@ export interface AttentionItem {
   action?: string;
   /** Where to do it. `null` when there is no surface in this app to act on. */
   target: AttentionTarget | null;
+  /**
+   * TASK 9 — which rule package stands behind the figure this row is about, and whether the digest the
+   * record carries still verifies. Attached by the data layer (`getAttentionItems`), never by a
+   * component, and only for the families that report a computed figure (`FIGURE_SOURCES` below). A row
+   * about a document or a date has no calculation behind it and carries `null` — that is not a missing
+   * value to fill in, it is the honest answer.
+   */
+  provenance?: SnapshotRuleProvenance | null;
+}
+
+/**
+ * TASK 9 — the attention families whose row reports a **computed figure**, and so can be attributed to
+ * a rule package: the estimate itself, the reserve built from it, and the threshold rows measured
+ * against the registered rules. A rejected invoice or an open deadline is not a computed figure and gets
+ * no provenance line, because attaching one would claim a calculation that never happened.
+ */
+export const FIGURE_SOURCES: readonly AttentionSource[] = ['tax', 'reserve', 'threshold'];
+
+export function isFigureSource(source: AttentionSource): boolean {
+  return FIGURE_SOURCES.includes(source);
 }
 
 // ── The deduplication rule ────────────────────────────────

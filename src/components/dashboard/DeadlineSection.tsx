@@ -39,13 +39,16 @@ export default function DeadlineSection({ deadlines, asOfDate }: DeadlineSection
   const upcoming = deadlines.filter((d) => classifyDeadline(d, asOfDate) === 'upcoming');
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{deadlineCopy.title}</CardTitle>
-        <CardDescription>
-          {deadlineCopy.descriptionLead} {formatRoCalendarDate(asOfDate)}
-        </CardDescription>
-      </CardHeader>
+    <Card
+      header={
+        <CardHeader>
+          <CardTitle>{deadlineCopy.title}</CardTitle>
+          <CardDescription>
+            {deadlineCopy.descriptionLead} {formatRoCalendarDate(asOfDate)}
+          </CardDescription>
+        </CardHeader>
+      }
+    >
       {upcoming.length === 0 ? (
         <p className="hint">{deadlineCopy.empty}</p>
       ) : (

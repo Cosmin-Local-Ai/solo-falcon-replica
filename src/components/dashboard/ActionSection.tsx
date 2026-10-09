@@ -5,6 +5,7 @@ import {
   attention as attentionCopy,
 } from '../../ui/copy';
 import { severityBadgeClass, severityLabel } from '../ui/severityBadge';
+import { RuleProvenance } from '../ui/RuleProvenance';
 
 /**
  * Ce trebuie să faci — the action surface of the attention model.
@@ -30,13 +31,16 @@ export interface ActionSectionProps {
 
 export default function ActionSection({ actions }: ActionSectionProps) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{actionsCopy.title}</CardTitle>
-        <CardDescription>
-          {actions.length === 0 ? actionsCopy.emptyDescription : actionsCopy.count(actions.length)}
-        </CardDescription>
-      </CardHeader>
+    <Card
+      header={
+        <CardHeader>
+          <CardTitle>{actionsCopy.title}</CardTitle>
+          <CardDescription>
+            {actions.length === 0 ? actionsCopy.emptyDescription : actionsCopy.count(actions.length)}
+          </CardDescription>
+        </CardHeader>
+      }
+    >
       {actions.length === 0 ? (
         <p className="muted">{actionsCopy.emptyBody}</p>
       ) : (
@@ -68,6 +72,9 @@ export default function ActionSection({ actions }: ActionSectionProps) {
             {/* The reason the record carries, on the row itself: "a rejected document" is not
                 actionable, "rejected: CUI nevalid" is. */}
             <div className="hint">{item.description}</div>
+            {/* TASK 9: only the rows that report a computed figure carry provenance — an action about a
+                document or a date has no calculation behind it to attribute. */}
+            {item.provenance ? <RuleProvenance view={item.provenance} /> : null}
           </div>
         ))
       )}

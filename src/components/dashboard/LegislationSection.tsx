@@ -1,7 +1,9 @@
 import type { LegislationItem, LegislationState } from '../../data/dashboard';
 import { fmtDate } from '../../data/types';
 import { Card, CardDescription, CardHeader, CardTitle } from '../ui/card';
-import { legislation as legislationCopy } from '../../ui/copy';
+import { Disclosure } from '../ui/Disclosure';
+import { RuleProvenance } from '../ui/RuleProvenance';
+import { legislation as legislationCopy, provenance as provenanceCopy } from '../../ui/copy';
 
 interface LegislationSectionProps {
   state: LegislationState;
@@ -26,15 +28,18 @@ interface LegislationSectionProps {
 export default function LegislationSection({ state }: LegislationSectionProps) {
   return (
     <div className="stack" data-monitor={state.monitor}>
-      <Card>
-        <CardHeader>
-          <CardTitle>{legislationCopy.title}</CardTitle>
-          <CardDescription>
-            {state.monitor === 'unavailable'
-              ? legislationCopy.monitorUnavailable
-              : legislationCopy.monitorActive}
-          </CardDescription>
-        </CardHeader>
+      <Card
+        header={
+          <CardHeader>
+            <CardTitle>{legislationCopy.title}</CardTitle>
+            <CardDescription>
+              {state.monitor === 'unavailable'
+                ? legislationCopy.monitorUnavailable
+                : legislationCopy.monitorActive}
+            </CardDescription>
+          </CardHeader>
+        }
+      >
         {state.items.length === 0 ? null : (
           <p className="hint">{legislationCopy.fromRulePackage}</p>
         )}
@@ -55,20 +60,23 @@ function impactBadgeClass(affects: LegislationItem['impact']['affects']): string
 function LegislationCard({ item }: { item: LegislationItem }) {
   const isCurrent = item.status === 'CURRENT';
   return (
-    <Card>
-      <CardHeader>
-        <div className="row">
-          <CardTitle>
-            {isCurrent ? legislationCopy.cardTitleCurrent : legislationCopy.cardTitleUpcoming}
-          </CardTitle>
-          <span
-            className={`badge ${impactBadgeClass(item.impact.affects)}`}
-            data-impact={item.impact.affects}
-          >
-            {legislationCopy.affectsLabels[item.impact.affects]}
-          </span>
-        </div>
-      </CardHeader>
+    <Card
+      header={
+        <CardHeader>
+          <div className="row">
+            <CardTitle level="h3">
+              {isCurrent ? legislationCopy.cardTitleCurrent : legislationCopy.cardTitleUpcoming}
+            </CardTitle>
+            <span
+              className={`badge ${impactBadgeClass(item.impact.affects)}`}
+              data-impact={item.impact.affects}
+            >
+              {legislationCopy.affectsLabels[item.impact.affects]}
+            </span>
+          </div>
+        </CardHeader>
+      }
+    >
       <h4>{item.summary}</h4>
       <p className="hint" data-impact={item.impact.affects}>
         {legislationCopy.impactLabel}: {item.impact.note}
@@ -89,6 +97,14 @@ function LegislationCard({ item }: { item: LegislationItem }) {
         <dt>{legislationCopy.affectedArea}</dt>
         <dd>{item.affectedArea}</dd>
       </dl>
+      {/* TASK 9: these rows are read out of the app's own rule package, so the card says which package
+          that is and whether its recorded digest still verifies. The card already names the act; the
+          digest is shown beside it, never in place of it. */}
+      {item.provenance ? (
+        <Disclosure label={provenanceCopy.labelRules} className="legislation-provenance">
+          <RuleProvenance view={item.provenance} />
+        </Disclosure>
+      ) : null}
     </Card>
   );
 }

@@ -18,7 +18,7 @@ function StatCard({ label, value, tone }: { label: string; value: string; tone?:
 export default function FinancialSummary({ summary }: FinancialSummaryProps) {
   return (
     <section className="card">
-      <div className="card-head">
+      <div className="card-header">
         <h2 className="card-title">{summaryCopy.title}</h2>
       </div>
       <div className="card-body">

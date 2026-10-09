@@ -31,7 +31,17 @@ import {
   type TaxReserveRecommendation,
 } from '../domain/taxReserve';
 import { getInsights as buildInsights } from '../domain/insights';
-import { partitionAttention, type AttentionItem, type AttentionSurfaces } from '../domain/attention';
+import {
+  isFigureSource,
+  partitionAttention,
+  type AttentionItem,
+  type AttentionSurfaces,
+} from '../domain/attention';
+import {
+  describeSnapshotRuleProvenance,
+  noRulePackageProvenance,
+  type SnapshotRuleProvenance,
+} from '../domain/snapshots/ruleProvenance';
 import { recordAttentionItems } from './attention';
 import { legislation as legislationCopy } from '../ui/copy';
 import { selectTaxDerived } from '../domain/derived';
@@ -108,6 +118,11 @@ export interface DashboardData {
   insights: AttentionItem[];
   pendingCounts: PendingCounts;
   legislation: LegislationState;
+  /**
+   * TASK 9 — which rule package produced the figure the hero shows, and whether the digest that record
+   * carries still verifies against the registered rules. `null` when there is no calculation to ask.
+   */
+  provenance: SnapshotRuleProvenance | null;
 }
 
 function isoToday(instant: Date = now()): string {
@@ -358,7 +373,29 @@ export function getAttentionItems(
   snapshot: DashboardSnapshot,
   tax?: TaxEstimateResult,
 ): AttentionSurfaces {
-  return partitionAttention([...getInsights(data, snapshot, tax), ...recordAttentionItems(data)]);
+  // TASK 9 — the rows that report a computed figure carry the rule provenance of that calculation. One
+  // view, computed once, attached to every figure-bearing row, so two rows about the same number can
+  // never disagree about which package produced it. A row about a document or a date carries nothing.
+  const provenance = estimateProvenance(tax) ?? noRulePackageProvenance();
+  const items = [...getInsights(data, snapshot, tax), ...recordAttentionItems(data)].map((item) =>
+    isFigureSource(item.source) ? { ...item, provenance } : item,
+  );
+  return partitionAttention(items);
+}
+
+/**
+ * TASK 9 — the provenance of the calculation this dashboard is showing.
+ *
+ * `null` is a real answer, not a gap: a `review_required` result carries no snapshot (the engine
+ * withheld one) and `unavailable` is the absence of any calculation, so in both cases there is no
+ * record to attribute and the surfaces say so instead of showing a digest. This function never
+ * constructs a snapshot, never re-hashes one and never fills in a `ruleSetHash`.
+ */
+export function estimateProvenance(
+  tax?: TaxEstimateResult | TaxEstimateWithBasis | null,
+): SnapshotRuleProvenance | null {
+  if (!tax || tax.status !== 'computed') return null;
+  return describeSnapshotRuleProvenance(tax.snapshot);
 }
 
 /**
@@ -394,6 +431,13 @@ export interface LegislationItem {
     affects: 'yes' | 'no' | 'unknown';
     note: string;
   };
+  /**
+   * TASK 9 — the rule package these rows were read out of, and whether its recorded digest verifies.
+   * The card's `source` names the act; this says which registered rule set the app actually applied and
+   * whether that rule set still hashes to what the calculation recorded. Optional so a fixture can
+   * describe a card without inventing a calculation behind it.
+   */
+  provenance?: SnapshotRuleProvenance | null;
 }
 
 export interface LegislationState {
@@ -425,7 +469,11 @@ const SM_ANCHOR_CITATION = 'art. 135¹ alin. (3)';
  * against the 1 January value. Saying only „the minimum wage rose” would leave the user to guess the
  * part that matters; saying only „it does not affect you” would hide a real published change.
  */
-function rulePackageLegislation(data: AppData, asOfDate: string): LegislationItem[] {
+function rulePackageLegislation(
+  data: AppData,
+  asOfDate: string,
+  provenance: SnapshotRuleProvenance | null,
+): LegislationItem[] {
   const rules = selectionRules(data, asOfDate);
   const taxYear = data.profile.fiscalYear;
   return readMinimumWageVintages(rules, taxYear).map((v) => {
@@ -439,6 +487,7 @@ function rulePackageLegislation(data: AppData, asOfDate: string): LegislationIte
       status,
       affectedArea: legislationCopy.minimumWageArea,
       summary: legislationCopy.minimumWageSummary(formatBaniLei(v.valueBani), v.from, v.act),
+      provenance,
       impact: isAnchor
         ? {
             affects: 'yes',
@@ -452,14 +501,18 @@ function rulePackageLegislation(data: AppData, asOfDate: string): LegislationIte
   });
 }
 
-export function getLegislationState(data: AppData, asOfDate: string): LegislationState {
+export function getLegislationState(
+  data: AppData,
+  asOfDate: string,
+  provenance: SnapshotRuleProvenance | null = null,
+): LegislationState {
   // AppData has no legislation data — there is no ingestion and no monitor, and that is what the
   // section has to say. What is reported here is narrower and honest: the changes the rule package
   // under this calculation already carries, each with whether it re-anchors this fiscal year.
   return {
     updatedAt: null,
     monitor: 'unavailable',
-    items: rulePackageLegislation(data, asOfDate),
+    items: rulePackageLegislation(data, asOfDate, provenance),
   };
 }
 
@@ -584,6 +637,7 @@ export function buildDashboardData(
     reserve: getTaxReserve(data, asOfDate, estimate),
     insights: attention.observations,
     pendingCounts: getPendingCounts(data),
-    legislation: getLegislationState(data, asOfDate),
+    legislation: getLegislationState(data, asOfDate, estimateProvenance(estimate)),
+    provenance: estimateProvenance(estimate),
   };
 }

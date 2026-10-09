@@ -1,10 +1,17 @@
 /**
- * TASK 7 — copy keys for the two tasks that come after this one. **Nothing here is wired yet.**
+ * TASK 7 wrote these keys; **TASK 9 wired them.** They are what the surfaces render from
+ * `snapshotRuleState(snapshot)` / `resolveSnapshotRules(snapshot)` /
+ * `describeSnapshotRuleProvenance(snapshot)` (`src/domain/snapshots/ruleProvenance.ts`). All four
+ * record states plus `no_release` are renderable, and the rule TASK 9 must not break is written into
+ * the copy: a digest is a content address, never a legal citation, so the article stays on screen next
+ * to it, not instead of it.
  *
- * - `provenance` is what TASK 9 renders from `snapshotRuleState(snapshot)` /
- *   `resolveSnapshotRules(snapshot)` (`src/domain/snapshots/ruleProvenance.ts`). All four states must
- *   be renderable, and the rule TASK 9 must not break is written into the copy: a digest is a content
- *   address, never a legal citation, so the article stays on screen next to it, not instead of it.
+ * Wording note (TASK 9): `noRelease` used to read `Acest prag nu este legat…`. It is now generic
+ * because it is rendered by every attention row and by the legislation card, not only by a threshold
+ * row. `digest` stays `digest` here: `phases/21_language_layer.md` §13 lists the `digest` → `amprentă`
+ * question as awaiting the user's native-speaker ruling, and half-renaming the family would be worse
+ * than leaving it consistent.
+ *
  * - `severity` is what TASK 8 renders from `FiscalThreshold.severity` / `Insight.severity`. TASK 7
  *   supplies the words; TASK 8 decides what ranks first and how it is styled.
  */
@@ -13,6 +20,8 @@ import type { ThresholdSeverity } from '../../domain/thresholds';
 export const provenance = {
   /** The disclosure caption TASK 9 opens for a figure. */
   label: 'Regulile din spatele acestei cifre',
+  /** The same disclosure on a card that lists rows rather than one figure (Legislație). */
+  labelRules: 'Regulile din spatele acestor rânduri',
   /** `pinned` — the release is registered and the recorded digest verifies. */
   pinned: (releaseId: string): string =>
     `Calculul folosește pachetul de reguli ${releaseId}, iar digestul înregistrat se potrivește cu cel al pachetului.`,
@@ -31,8 +40,17 @@ export const provenance = {
   /** Shown wherever a digest appears next to the article it rests on. */
   digestIsNotACitation:
     'Digestul este o adresă de conținut, nu o prevedere legală; articolul rămâne afișat alături de el.',
-  /** `FiscalThreshold.ruleRelease` is `string | null` — TASK 9 must render both. */
-  noRelease: 'Acest prag nu este legat de un pachet de reguli înregistrat.',
+  /**
+   * `no_release` — this surface has no calculation record to ask, so there is no digest to verify.
+   * `FiscalThreshold.ruleRelease` is `string | null` for exactly this case.
+   */
+  noRelease: 'Această cifră nu este legată de un pachet de reguli înregistrat.',
+  /** Labels the digest the RECORD carries — the one nothing may overwrite. */
+  digestRecorded: 'Digest consemnat în înregistrare',
+  /** Labels the digest the registered package hashes to today. Display only; never written back. */
+  digestRegisteredNow: 'Digestul pachetului înregistrat acum',
+  /** The provisions the money-producing rules cite — printed beside the digest, never after it. */
+  citationsLabel: 'Prevederi pe care se sprijină calculul',
 } as const;
 
 /**

@@ -1,6 +1,7 @@
 import type { AttentionItem } from '../domain/attention';
 import { insights as insightCopy, attention as attentionCopy } from '../ui/copy';
 import { severityBadgeClass, severityLabel } from './ui/severityBadge';
+import { RuleProvenance } from './ui/RuleProvenance';
 
 interface InsightsProps {
   insights: AttentionItem[];
@@ -23,7 +24,7 @@ export default function Insights({ insights }: InsightsProps) {
 
   return (
     <section className="card">
-      <div className="card-head">
+      <div className="card-header">
         <h2 className="card-title">{insightCopy.title}</h2>
       </div>
       <div className="card-body">
@@ -51,6 +52,10 @@ export default function Insights({ insights }: InsightsProps) {
                   : ''}
               </a>
             ) : null}
+            {/* TASK 9: a row that reports a computed figure says which rule package produced it, and
+                whether the digest that record carries still verifies. The data layer attaches it; this
+                component decides nothing about it. */}
+            {item.provenance ? <RuleProvenance view={item.provenance} /> : null}
           </div>
         ))}
       </div>

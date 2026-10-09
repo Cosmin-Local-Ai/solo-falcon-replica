@@ -5,16 +5,20 @@ import { useStore } from '../data/store';
 export function Card({ title, action, children, flush }: {
   title?: string; action?: ReactNode; children: ReactNode; flush?: boolean;
 }) {
+  // TASK 9: the same shell as `components/ui/card.tsx` — a `.card-header` sibling of a `.card-body`,
+  // with the title carrying `.card-title`. It used to render a bare `<h3>` (styled at 14px by
+  // `.card-header h3`) inside a `<div>`, while the dashboard cards rendered `<h2 className="card-
+  // title">` (15px) inside a `<section>`.
   return (
-    <div className="card">
+    <section className="card">
       {title && (
         <div className="card-header">
-          <h3>{title}</h3>
+          <h2 className="card-title">{title}</h2>
           {action}
         </div>
       )}
       <div className={`card-body${flush ? ' flush' : ''}`}>{children}</div>
-    </div>
+    </section>
   );
 }
 

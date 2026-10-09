@@ -55,11 +55,14 @@ export interface ThresholdSectionProps {
 
 export default function ThresholdSection({ thresholds }: ThresholdSectionProps) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{thresholdCopy.title}</CardTitle>
-        <CardDescription>{thresholdCopy.description}</CardDescription>
-      </CardHeader>
+    <Card
+      header={
+        <CardHeader>
+          <CardTitle>{thresholdCopy.title}</CardTitle>
+          <CardDescription>{thresholdCopy.description}</CardDescription>
+        </CardHeader>
+      }
+    >
       {thresholds.length === 0 ? (
         <p className="hint">{thresholdCopy.empty}</p>
       ) : (

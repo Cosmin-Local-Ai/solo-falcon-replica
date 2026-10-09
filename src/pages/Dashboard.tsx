@@ -5,8 +5,9 @@ import { identityGreeting } from '../domain/profile';
 import { fmtDate } from '../data/types';
 import { formatBaniRON } from '../domain/money';
 import { estimateBasisExplanation, estimateBasisLabel } from '../domain/estimateBasis';
-import { copy, dashboard as dashboardCopy, estimateState as estimateStateCopy } from '../ui/copy';
+import { copy, dashboard as dashboardCopy, estimateState as estimateStateCopy, provenance as provenanceCopy } from '../ui/copy';
 import { Disclosure } from '../components/ui/Disclosure';
+import { RuleProvenance } from '../components/ui/RuleProvenance';
 import FinancialChart from '../components/FinancialChart';
 import FinancialSummary from '../components/FinancialSummary';
 import TaxReserve from '../components/TaxReserve';
@@ -30,7 +31,7 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint?:
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="card">
-      <div className="card-head">
+      <div className="card-header">
         <h2 className="card-title">{title}</h2>
       </div>
       <div className="card-body">{children}</div>
@@ -166,6 +167,16 @@ export default function DashboardPage() {
                 {/* A run-rate projection is an assumption, not a forecast; the wording says so. */}
                 {data.tax ? <p className="hint">{estimateBasisExplanation(data.tax.basis)}</p> : null}
               </Disclosure>
+              {/* TASK 9: the figure is attributed. Which rule package produced it, and whether the digest
+                  that calculation recorded still matches the registered rules, is its own disclosure —
+                  separate from the arithmetic above because it answers a different question. When there
+                  is no calculation there is nothing to attribute, so the disclosure is not mounted: the
+                  estimate state already says the figure is missing or withheld. */}
+              {data.provenance ? (
+                <Disclosure label={provenanceCopy.label} className="estimate-provenance">
+                  <RuleProvenance view={data.provenance} />
+                </Disclosure>
+              ) : null}
             </div>
           </SectionCard>
 

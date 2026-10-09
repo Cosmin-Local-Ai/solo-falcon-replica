@@ -141,7 +141,7 @@ export default function FinancialChart() {
 
   return (
     <section className="card" aria-label={chartCopy.title}>
-      <div className="card-head">
+      <div className="card-header">
         <h2 className="card-title">{chartCopy.title}</h2>
       </div>
 
