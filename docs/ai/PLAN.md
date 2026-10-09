@@ -676,6 +676,7 @@ doc. They are **not** new phases and no phase boundary was invented for them:
 | **TASK 8** | **one `severity` field carried legal weight, urgency and kind at once (`c6a2d5d`, `bab4a46`)** | `phases/22_prioritisation_severity.md` |
 | **TASK 9** | **provenance existed as copy and as a domain function and reached no surface; the seed taught filings the law does not ask of it and called the taxpayer an SRL; two card systems and a chart wider than its box** | `phases/23_provenance_hygiene.md` |
 | **TASK 10a** | **a money record carried no currency, so a EUR invoice was silently lei; there was no FX rate store and no conversion rule** | `phases/24_currency_fx_store.md` |
+| **TASK 10b** | **the seven euro caps could not be measured, and a rate carried a `provisional` flag that nothing read — B-33** | `phases/25_euro_caps_provisional_rates.md` |
 
 **TASK 6 — the recorded decision and its shape (2026-10-09).** The decision was already made and was not
 reopened: **content-address the rule set; do not redesign the release model.** `releaseId` and
@@ -824,3 +825,57 @@ every `N` unchanged and the currency now also asserted — and the single versio
 `e2e/settings.spec.ts` `saved.version` **9 → 10**, the same precedent already written in that test.
 **TASK 10b** computes the seven euro caps at `payment_year_annual_average` and drives the provisional → final
 lifecycle; it must not re-derive the bases, the citations, the carry-forward policy or the digest decision.
+
+**TASK 10b — the recorded decision and its shape (2026-10-09).** A ceiling stated in euro is not a number the
+app can look up; it is **a reading**. HG 1/2016 Titlul IV Cap. II pct. 7 alin. (6) converts the *limit* at the
+BNR annual average of the **payment year**, which makes it one lei ceiling per category per year, while CF art.
+9 alin. (3) lit. b) + alin. (4) converts at the **payment date** and gives a different one. `src/domain/fx/capCeiling.ts`
+strikes **both**, applies pct. 7 alin. (6), and carries the art. 9 result as `ceilingAlt` / `euro.alternative` —
+with the statement that the law does not settle which applies held as the rule's own `conflict` parameter
+(TASK 2c's mechanism), rendered verbatim, never written at the call site. Applying a reading is not ruling that
+the other is wrong; the hierarchy stays unresolved.
+
+**The currency is a property of the amount, not of the calculator** — `DeductibilityCap.currency` is read from
+the cap parameter's own `unit`, and `capAmount()` is the only place a rule's foreign figure becomes money, and it
+becomes `Money<'EUR'>`, never `Bani`. `paramBani` was **not** weakened: it still refuses any unit but `lei`, and
+the existing test that pins this is still green. But currency-generic is **not** a licence to invent: art. 68
+alin. (5) states its ceilings in euro and only in euro, so the seven enumerated from the package
+(400 / 400 / 400 / 400 / 100 / 4.000 / 400 EUR) are the whole set, **no USD cap exists**, and a test that strikes
+a USD ceiling says in its name that no rule states one.
+
+**Where USD actually bites is the record, not the cap** (USER_DECISIONS **D-FX-5** — the Orchestrator's answer
+to the currency question, and the brief under-specified it). `src/domain/fx/ledger.ts` normalises the ledger to
+lei before the deductibility assembly: an expense converts at its **payment** date and a revenue at its
+**collection** date (art. 68 alin. (2) lit. a) „sumele încasate"), because art. 9 alin. (3) lit. b) + alin. (4) is
+not EUR-specific. No half-conversion — a record with one missing field stays out whole, or its VAT base no longer
+matches its net; the pass is idempotent; a record with no rate stays `foreign_currency` **naming the date it
+asked for**. Daily USD is real (BNR's XML carries it); the USD annual-average code keeps its `-PATTERN` suffix and
+its unverified label. `recordFxRate` in `data/store.tsx` upserts by `rateKey` — the same key `RateStore.replace`
+and `loadDailyRates` use — and **this widens ingress deliberately**: the brief ruled out a *network* path, and
+nothing here fetches. A refused rate returns its field-level problems and is toasted, because a rate that vanishes
+is indistinguishable from one never entered.
+
+**B-33 is closed by the transition, not by the flag.** `provisional` travels from the rate record to
+`CapRateEvidence` to `AnnualCapAdjustment.euro` to the badge on the Expenses row, and the proof is a test that
+**replaces the rate and re-reads the ceiling** at three layers: 100 EUR × 5,3100 = **531,00 lei provisional** →
+× 5,4000 = **540,00 lei final**, deductible total moving with it, and the same flip asserted on screen. Every
+FY2026 average in these tests is labelled **test scaffolding** with `CURSA_EURM-TEST` and an `example.invalid`
+source URL — BNR publishes no FY2026 average, and where a test would have needed one the *expectation* changed,
+never the rate. `cap_counts_payments_from` (OUG 8/2026 art. 10 alin. (9)), recorded by TASK 2c and read by nobody
+until now, became load-bearing: a pensii facultative payment before 1 ianuarie 2026 is outside the window rather
+than folded into a ceiling that does not cover it.
+
+**Left refused, on purpose:** no default conversion basis, no annual average computed from daily rates, no
+hierarchy ruling, nearest-ban rounding on the conversion product. **Out of scope with reasons:** the 25.000 euro
+sistem-real threshold (research 23 item 7 — „anului de realizare a venitului", a **different year anchor**, so it
+needs a new `ConversionBasis` value plus a regime decision, not a shared call; regime selection is a boolean
+today) and `cheltuieli sociale` (5 % of a payroll base the app does not model; research 23 verified no euro
+equivalent — **no rate fixes this one**). **No money figure moved and no digest moved:** `inputSnapshot` is still
+exactly `{profile, revenues, expenses}`, no data version moved (`fxRates` and its load-gate entry already exist
+from 10a at v10, and the round trip is proven rather than assumed), and deductible 120,00 / 144,00 lei, VNA
+9.096,00, impozit 819,00, clock 3.249,00, reserve 1.083,00, year-end 3.112,00, hero 51.510 lei are all still
+pinned green — pinned twice in the new suite, once with a FY2026 average recorded, where the caps are now
+measurable and the total still does not move because no seed expense is in a capped category.
+`77 files / 1332 tests` (+5 files, +61 tests), `tsc` 0, `build` 0, **`e2e` 37 passed**, copy-guard allow-list
+still empty. **This is the last task of the pre-Phase-11 round**; Phases 11–34
+(`docs/ai/roadmap_11_34_mapping.md`) are next and were not started.
