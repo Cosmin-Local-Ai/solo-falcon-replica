@@ -1,12 +1,7 @@
 import type { LegislationItem, LegislationState } from '../../data/dashboard';
 import { fmtDate } from '../../data/types';
 import { Card, CardDescription, CardHeader, CardTitle } from '../ui/card';
-
-/** Status → Romanian badge text (raw enum values are never rendered). */
-const STATUS_LABEL: Record<LegislationItem['status'], string> = {
-  CURRENT: 'În vigoare',
-  UPCOMING: 'Viitoare',
-};
+import { legislation as legislationCopy } from '../../ui/copy';
 
 interface LegislationSectionProps {
   state: LegislationState;
@@ -17,8 +12,8 @@ export default function LegislationSection({ state }: LegislationSectionProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Legislație</CardTitle>
-          <CardDescription>Nicio modificare viitoare verificată.</CardDescription>
+          <CardTitle>{legislationCopy.title}</CardTitle>
+          <CardDescription>{legislationCopy.empty}</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -39,23 +34,25 @@ function LegislationCard({ item }: { item: LegislationItem }) {
     <Card>
       <CardHeader>
         <div className="row">
-          <CardTitle>{isCurrent ? 'Modificare legislativă care te afectează' : 'Modificare viitoare'}</CardTitle>
+          <CardTitle>
+            {isCurrent ? legislationCopy.cardTitleCurrent : legislationCopy.cardTitleUpcoming}
+          </CardTitle>
           <span className={isCurrent ? 'badge badge-danger' : 'badge badge-warning'}>
-            {STATUS_LABEL[item.status] ?? item.status}
+            {legislationCopy.statusLabels[item.status]}
           </span>
         </div>
       </CardHeader>
       <h4>{item.summary}</h4>
       <dl className="kv">
-        <dt>Sursă</dt>
+        <dt>{legislationCopy.source}</dt>
         <dd>{item.source}</dd>
-        <dt>Publicat</dt>
+        <dt>{legislationCopy.published}</dt>
         <dd>{fmtDate(item.publishedDate)}</dd>
-        <dt>În vigoare de la</dt>
+        <dt>{legislationCopy.effectiveFrom}</dt>
         <dd>{fmtDate(item.effectiveDate)}</dd>
-        <dt>Stare</dt>
-        <dd>{STATUS_LABEL[item.status] ?? item.status}</dd>
-        <dt>Zonă afectată</dt>
+        <dt>{legislationCopy.state}</dt>
+        <dd>{legislationCopy.statusLabels[item.status]}</dd>
+        <dt>{legislationCopy.affectedArea}</dt>
         <dd>{item.affectedArea}</dd>
       </dl>
     </Card>

@@ -5,6 +5,8 @@ import { identityGreeting } from '../domain/profile';
 import { fmtDate } from '../data/types';
 import { formatBaniRON } from '../domain/money';
 import { estimateBasisExplanation, estimateBasisLabel } from '../domain/estimateBasis';
+import { copy, dashboard as dashboardCopy } from '../ui/copy';
+import { Disclosure } from '../components/ui/Disclosure';
 import FinancialChart from '../components/FinancialChart';
 import FinancialSummary from '../components/FinancialSummary';
 import TaxReserve from '../components/TaxReserve';
@@ -54,66 +56,81 @@ export default function DashboardPage() {
   return (
     <div className="dashboard">
       <div className="row between">
-        <h1>Tablou de bord</h1>
+        <h1>{dashboardCopy.title}</h1>
         <span className="muted">
-          An fiscal {snapshot.taxYear} · actualizat la {fmtDate(snapshot.asOf)}
+          {dashboardCopy.fiscalYearPrefix} {snapshot.taxYear} {dashboardCopy.updatedAt} {fmtDate(snapshot.asOf)}
         </span>
       </div>
       {/* Phase 7: the greeting reads the same identity store as the sidebar and
           the topbar. It uses the given name, not the full name the topbar shows. */}
-      {greeting && <p className="greeting">Bună, {greeting}</p>}
+      {greeting && <p className="greeting">{dashboardCopy.greeting} {greeting}</p>}
 
       {!hasData ? (
         <div className="empty-state">
-          <h2>Începe înregistrarea activității</h2>
-          <p>
-            Adaugă prima factură de venit și prima cheltuială pentru a vedea estimarea taxelor, termenele
-            limită și recomandarea de rezervă lunară.
-          </p>
+          <h2>{dashboardCopy.onboarding.title}</h2>
+          <p>{dashboardCopy.onboarding.body}</p>
           <div className="row">
-            <a className="btn btn-primary" href="/revenues">Adaugă un venit</a>
-            <a className="btn" href="/expenses">Adaugă o cheltuială</a>
+            <a className="btn btn-primary" href="/revenues">{dashboardCopy.onboarding.addRevenue}</a>
+            <a className="btn" href="/expenses">{dashboardCopy.onboarding.addExpense}</a>
           </div>
         </div>
       ) : (
         <>
           {/* 1. Cockpit strip — headline numbers */}
           <div className="grid grid-5">
-            <StatCard label="Venituri PFA (an)" value={formatBaniRON(snapshot.pfaRevenue)} />
+            <StatCard label={dashboardCopy.cards.revenueYear} value={formatBaniRON(snapshot.pfaRevenue)} />
             <StatCard
-              label="Impozit estimat"
-              value={taxTotal === null ? '—' : formatBaniRON(taxTotal)}
-              hint="de pus deoparte"
+              label={dashboardCopy.cards.taxEstimate}
+              value={taxTotal === null ? copy.ui.noValue : formatBaniRON(taxTotal)}
+              hint={dashboardCopy.cards.taxEstimateHint}
             />
-            <StatCard label="Rezervă lunară" value={formatBaniRON(reserve.recommendedMonthlyReserve)} />
-            <StatCard label="Rămâne de pus deoparte" value={formatBaniRON(reserve.remainingTarget)} />
+            <StatCard label={dashboardCopy.cards.monthlyReserve} value={formatBaniRON(reserve.recommendedMonthlyReserve)} />
+            <StatCard label={dashboardCopy.cards.remainingToSetAside} value={formatBaniRON(reserve.remainingTarget)} />
             <StatCard
-              label="Date complete"
+              label={dashboardCopy.cards.completeness}
               value={`${completeness.satisfiedCount}/${completeness.totalCount}`}
-              hint="verificări"
+              hint={dashboardCopy.cards.checksHint}
             />
           </div>
 
           {/* 2. Tax hero — estimate, completeness, reserve */}
-          <SectionCard title="Estimare impozit">
+          <SectionCard title={dashboardCopy.estimate.title}>
             <div className="stack">
               <div className="row between">
                 {/* Task 1: the label carries the basis, so an annual run-rate figure can never be read as
                     money already collected. `estimateBasisLabel` says YTD only for actuals. */}
                 <span className="muted">
-                  {estimateBasisLabel(tax.basis)} · An fiscal {snapshot.taxYear}
+                  {estimateBasisLabel(tax.basis)} · {dashboardCopy.fiscalYearPrefix} {snapshot.taxYear}
                 </span>
                 <span className="muted">
-                  Date complete: {completeness.satisfiedCount}/{completeness.totalCount}
+                  {dashboardCopy.estimate.completenessPrefix} {completeness.satisfiedCount}/{completeness.totalCount}
                 </span>
               </div>
-              <div className="tax-hero-value mono">{taxTotal === null ? '—' : formatBaniRON(taxTotal)}</div>
+              <div className="tax-hero-value mono">{taxTotal === null ? copy.ui.noValue : formatBaniRON(taxTotal)}</div>
               <p className="hint">
-                Impozit estimat de pus deoparte. Pune deoparte{' '}
-                <strong className="mono">{formatBaniRON(reserve.recommendedMonthlyReserve)}</strong> pe lună.
+                {dashboardCopy.estimate.setAsideLead}{' '}
+                <strong className="mono">{formatBaniRON(reserve.recommendedMonthlyReserve)}</strong>{' '}
+                {dashboardCopy.estimate.setAsideTail}
               </p>
-              {/* A run-rate projection is an assumption, not a forecast; the wording says so. */}
-              <p className="hint">{estimateBasisExplanation(tax.basis)}</p>
+              {/* TASK 7: the arithmetic behind the hero number is collapsed behind a real disclosure —
+                  keyboard-operable, state visible, content in the DOM — never behind a hover. The lines
+                  themselves are the engine's, with their own citations; nothing here re-derives them. */}
+              <Disclosure label={copy.disclosure.breakdown} className="estimate-breakdown">
+                {tax.status === 'computed' && tax.lines.length > 0 ? (
+                  <table className="breakdown-table">
+                    <tbody>
+                      {tax.lines.map((line) => (
+                        <tr key={line.label}>
+                          <th scope="row">{line.label}</th>
+                          <td className="mono">{formatBaniRON(line.value)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : null}
+                {/* A run-rate projection is an assumption, not a forecast; the wording says so. */}
+                <p className="hint">{estimateBasisExplanation(tax.basis)}</p>
+              </Disclosure>
             </div>
           </SectionCard>
 

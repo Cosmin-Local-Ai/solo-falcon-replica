@@ -1,6 +1,6 @@
 import type { CompletenessReport } from '../../domain/completeness';
 import { Card, CardHeader, CardTitle, CardDescription } from '../ui/card';
-import { checkLabel } from './checkLabels';
+import { checkLabel, completeness as completenessCopy } from '../../ui/copy';
 
 /**
  * CompletenessSection (Step 22, upgraded in Step 31) — presentational only.
@@ -21,13 +21,13 @@ export default function CompletenessSection({ completeness }: CompletenessSectio
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Completitudine date</CardTitle>
+        <CardTitle>{completenessCopy.title}</CardTitle>
         <CardDescription>
-          {satisfiedCount} din {totalCount} verificări îndeplinite
+          {satisfiedCount} {completenessCopy.ofWord} {totalCount} {completenessCopy.checksSatisfied}
         </CardDescription>
       </CardHeader>
       {checks.length === 0 ? (
-        <p className="hint">Nicio verificare de completitudine</p>
+        <p className="hint">{completenessCopy.empty}</p>
       ) : (
         checks.map((c) => (
           <div key={c.key} className={`row between check-row${c.satisfied ? '' : ' missing'}`}>
@@ -36,7 +36,7 @@ export default function CompletenessSection({ completeness }: CompletenessSectio
               <div className="hint">{c.detail}</div>
             </div>
             <span className={c.satisfied ? 'badge badge-success' : 'badge badge-danger'}>
-              {c.satisfied ? 'Complet' : 'Lipsă'}
+              {c.satisfied ? completenessCopy.satisfiedBadge : completenessCopy.unsatisfiedBadge}
             </span>
           </div>
         ))

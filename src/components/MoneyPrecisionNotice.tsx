@@ -1,5 +1,7 @@
 import type { MoneyPrecisionNotice } from '../data/migration';
 import { formatBaniLei } from '../domain/money';
+import { disclosure, moneyPrecision } from '../ui/copy';
+import { Disclosure } from './ui/Disclosure';
 
 /**
  * Phase 10, B-26 — the money-conversion report reaching a screen.
@@ -23,39 +25,6 @@ import { formatBaniLei } from '../domain/money';
  * three tax lines, so saying „leu" here would overstate what was done to the user's money by 100×.
  */
 
-const COLLECTION_LABEL: Record<MoneyPrecisionNotice['collection'], string> = {
-  revenues: 'venituri',
-  expenses: 'cheltuieli',
-  declarations: 'declarații',
-  profile: 'profil',
-  snapshot: 'calcul salvat',
-};
-
-/**
- * Romanian agreement. The counts are per kind (adjusted vs carried), so a noun and its verb have to follow
- * the number they belong to — "1 valoare au fost rotunjite" is the kind of slip that makes a tax notice read
- * like machine output, and it is easy to introduce when a count is interpolated.
- */
-function noun(n: number): string {
-  return n === 1 ? 'valoare' : 'valori';
-}
-
-function headline(n: number): string {
-  return n === 1 ? 'O sumă nu a putut fi reprodusă exact.' : `${n} sume nu au putut fi reproduse exact.`;
-}
-
-function adjustedSentence(n: number): string {
-  return n === 1
-    ? `${n} ${noun(n)} a fost rotunjită la banul cel mai apropiat (0,01 lei), jumătate în jos — aceeași direcție pe care o folosește art. 66 alin. (1).`
-    : `${n} ${noun(n)} au fost rotunjite la banul cel mai apropiat (0,01 lei), jumătate în jos — aceeași direcție pe care o folosește art. 66 alin. (1).`;
-}
-
-function carriedSentence(n: number): string {
-  return n === 1
-    ? `${n} ${noun(n)} nu este un număr valid și a fost păstrată neschimbată, nu înlocuită cu 0.`
-    : `${n} ${noun(n)} nu sunt numere valide și au fost păstrate neschimbate, nu înlocuite cu 0.`;
-}
-
 /**
  * The stored value, exactly as it was written. Deliberately not `formatBani*`: this is a pre-conversion
  * amount in lei, and showing `674.504` is the point — the reader has to be able to compare it against what
@@ -74,22 +43,21 @@ export function MoneyPrecisionNoticeBanner({ notices }: { notices: MoneyPrecisio
 
   return (
     <div className="banner banner-warn" role="status">
-      <strong>{headline(notices.length)}</strong>{' '}
-      {adjusted > 0 && <>{adjustedSentence(adjusted)} </>}
-      {carried > 0 && <>{carriedSentence(carried)} </>}
-      Nicio sumă nu a fost ștearsă.
-      <details className="banner-details">
-        <summary>Ce sume anume</summary>
+      <strong>{moneyPrecision.headline(notices.length)}</strong>{' '}
+      {adjusted > 0 && <>{moneyPrecision.adjusted(adjusted)} </>}
+      {carried > 0 && <>{moneyPrecision.carried(carried)} </>}
+      {moneyPrecision.nothingDeleted}
+      <Disclosure label={disclosure.whichAmounts}>
         <ul>
           {notices.map((n, i) => (
             <li key={`${n.collection}:${n.id}:${n.field}:${i}`}>
-              {COLLECTION_LABEL[n.collection]} · {n.id} · {n.field}: {storedLei(n.original)} lei (așa cum a
-              fost salvat) →{' '}
-              {n.converted === undefined ? 'păstrată neschimbată' : formatBaniLei(n.converted)}
+              {moneyPrecision.collectionLabels[n.collection]} · {n.id} · {n.field}:{' '}
+              {storedLei(n.original)} {moneyPrecision.storedValueTail}{' '}
+              {n.converted === undefined ? moneyPrecision.keptUnchanged : formatBaniLei(n.converted)}
             </li>
           ))}
         </ul>
-      </details>
+      </Disclosure>
     </div>
   );
 }

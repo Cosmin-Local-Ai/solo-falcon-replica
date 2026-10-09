@@ -1,6 +1,6 @@
 import type { ActionItem } from '../../data/dashboard';
 import { Card, CardHeader, CardTitle, CardDescription } from '../ui/card';
-import { checkLabel } from './checkLabels';
+import { actionAppliesToLabels, actions as actionsCopy, checkLabel } from '../../ui/copy';
 
 /**
  * ActionSection (Step 22, upgraded in Step 31) — presentational only.
@@ -16,30 +16,6 @@ import { checkLabel } from './checkLabels';
  * panel.
  */
 
-/** Presentation-only source labels (the data layer defines the sources). */
-const SOURCE_LABEL: Record<ActionItem['source'], string> = {
-  deadline: 'Termen limită',
-  completeness: 'Completitudine',
-  tax: 'Impozit',
-};
-
-/** Presentation-only Romanian labels for deadline `appliesTo` keys.
- *
- * Phase 9b removed `cas_quarterly`, `cass_quarterly` and `pfa_estimated_declaration`: those
- * obligations do not exist in fiscal year 2026 (see the `DeadlineEventType` doc comment in
- * src/domain/deadlines.ts). `new_pfa` keeps its key but no longer reads "Declarație estimativă
- * PFA" — that label named an obligation abrogated on 01-01-2025, and no rule emits `new_pfa` today.
- */
-const DEADLINE_LABELS: Record<string, string> = {
-  pfa: 'PFA',
-  new_pfa: 'PFA nou',
-  'vat-registered-pfa': 'Înregistrare în scop de TVA',
-  cas_annual: 'CAS anual',
-  cass_annual: 'CASS anual',
-  vat_periodic: 'TVA periodic',
-  vat_registration: 'Înregistrare în scop de TVA',
-};
-
 export interface ActionSectionProps {
   actions: ActionItem[];
 }
@@ -47,27 +23,27 @@ export interface ActionSectionProps {
 export default function ActionSection({ actions }: ActionSectionProps) {
   const labelFor = (item: ActionItem): string => {
     if (item.source === 'completeness') return checkLabel(item.label);
-    if (item.source === 'deadline') return DEADLINE_LABELS[item.label] ?? item.label;
+    if (item.source === 'deadline') {
+      return actionAppliesToLabels[item.label] ?? item.label;
+    }
     return item.label;
   };
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Ce trebuie să faci</CardTitle>
+        <CardTitle>{actionsCopy.title}</CardTitle>
         <CardDescription>
-          {actions.length === 0
-            ? 'Nimic nu necesită atenția ta în acest moment.'
-            : `${actions.length} item de rezolvat`}
+          {actions.length === 0 ? actionsCopy.emptyDescription : actionsCopy.count(actions.length)}
         </CardDescription>
       </CardHeader>
       {actions.length === 0 ? (
-        <p className="muted">Totul este la zi — nimic nu necesită atenție.</p>
+        <p className="muted">{actionsCopy.emptyBody}</p>
       ) : (
         actions.map((item) => (
           <div key={item.id} className="row between">
             <span className="action-label">{labelFor(item)}</span>
-            <span className="badge badge-neutral">{SOURCE_LABEL[item.source]}</span>
+            <span className="badge badge-neutral">{actionsCopy.sourceLabels[item.source]}</span>
           </div>
         ))
       )}

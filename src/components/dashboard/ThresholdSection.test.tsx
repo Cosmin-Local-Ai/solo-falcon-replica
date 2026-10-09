@@ -282,11 +282,16 @@ describe('ThresholdSection (TASK 4 — kind, applicability and severity are sepa
   });
 
   it('labels the 10 % warning band as application policy, and only when it is what triggered the row', () => {
-    const policyLine = /politică de afișare a aplicației, nu o prevedere legală/;
+    // TASK 7: the band is now stated by the one reusable „Notă de interpretare", in one sentence that
+    // names both what the law does not settle and what the app does. Re-pinned from
+    // /politică de afișare a aplicației, nu o prevedere legală/.
+    const policyLine = /politică de afișare a aplicației și nu primește nicio citare legală/;
     const { rerender } = render(
       <ThresholdSection thresholds={[makeThreshold({ status: 'warning', severity: 'medium' })]} />,
     );
     expect(screen.getByText(policyLine)).toBeInTheDocument();
+    // The note carries the shared label, so no site can rename it.
+    expect(screen.getByText('Notă de interpretare')).toBeInTheDocument();
 
     rerender(<ThresholdSection thresholds={[makeThreshold({ status: 'ok', severity: 'none' })]} />);
     expect(screen.queryByText(policyLine)).not.toBeInTheDocument();

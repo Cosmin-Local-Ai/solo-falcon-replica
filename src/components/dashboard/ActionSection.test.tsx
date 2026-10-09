@@ -20,7 +20,9 @@ describe('ActionSection (Step 31 — ActionItem-driven)', () => {
     render(<ActionSection actions={makeActions()} />);
     expect(screen.getByText('PFA')).toBeInTheDocument();
     expect(screen.getByText('Revizuire estimări fiscale')).toBeInTheDocument();
-    expect(screen.getByText('4 item de rezolvat')).toBeInTheDocument();
+    // TASK 7 grammar pass: `item` was an English calque; Romanian counts these as `element` and
+    // agrees the plural with the numeral. Re-pinned from '4 item de rezolvat'.
+    expect(screen.getByText('4 elemente de rezolvat')).toBeInTheDocument();
   });
 
   it('shows the source badge for each item (deadline / completeness / tax)', () => {
@@ -46,7 +48,8 @@ describe('ActionSection (Step 31 — ActionItem-driven)', () => {
       />,
     );
     expect(screen.getByText('futureKey')).toBeInTheDocument();
-    expect(screen.getByText('1 item de rezolvat')).toBeInTheDocument();
+    // Re-pinned from '1 item de rezolvat' (TASK 7 grammar pass).
+    expect(screen.getByText('1 element de rezolvat')).toBeInTheDocument();
   });
 
   it('shows the honest up-to-date state when there are no action items', () => {

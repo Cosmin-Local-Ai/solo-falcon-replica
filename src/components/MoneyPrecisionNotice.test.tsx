@@ -82,7 +82,10 @@ it('agrees in number: one value gets singular, several get plural', () => {
   one.unmount();
 
   const many = render(<MoneyPrecisionNoticeBanner notices={[subBan, { ...subBan, id: 'r-2' }]} />);
-  expect(many.container.textContent).toContain('2 sume nu au putut fi reproduse exact.');
+  // TASK 7 grammar pass: the headline takes the article a Romanian reader expects — „Sumele…", not a
+  // bare „2 sume…". The count is carried by the sentence that agrees with a noun anyway.
+  // Re-pinned from '2 sume nu au putut fi reproduse exact.'
+  expect(many.container.textContent).toContain('Sumele nu au putut fi reproduse exact.');
   expect(many.container.textContent).toContain('2 valori au fost rotunjite');
 });
 

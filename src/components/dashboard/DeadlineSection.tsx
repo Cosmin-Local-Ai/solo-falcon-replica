@@ -2,6 +2,7 @@ import type { Deadline } from '../../domain/deadlines';
 import { classifyDeadline, daysRemaining } from '../../domain/deadlines';
 import { formatRoCalendarDate } from '../../domain/date';
 import { Card, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import { deadlineAppliesToLabels, deadlines as deadlineCopy } from '../../ui/copy';
 
 /**
  * DeadlineSection (Step 22, verified Step 31) — presentational only.
@@ -15,40 +16,16 @@ import { Card, CardHeader, CardTitle, CardDescription } from '../ui/card';
  * `filterUpcoming`).
  */
 
-/** Status → badge class. */
-const STATUS_BADGE: Record<Deadline['status'], string> = {
-  active: 'badge-info',
-  not_applicable: 'badge-neutral',
-};
-
-/** Status → Romanian badge text (raw enum values are never rendered). */
-const STATUS_LABEL: Record<Deadline['status'], string> = {
-  active: 'Activ',
-  not_applicable: 'Neaplicabil',
-};
-
-/** Romanian labels for raw applies-to keys (never render raw keys). */
-const APPLIES_TO_LABEL: Record<string, string> = {
-  pfa: 'PFA',
-  new_pfa: 'PFA nou',
-  'vat-registered-pfa': 'PFA înregistrat în scop de TVA',
-};
-
 /** Human-readable label derived from the event type (presentation only).
  *
  * Phase 9b removed the four cases whose obligations do not exist in fiscal year 2026 —
  * `cas_quarterly`, `cass_quarterly`, `income_tax_advance` and `pfa_estimated_declaration`. See the
- * `DeadlineEventType` doc comment in src/domain/deadlines.ts for the abrogation evidence. The switch
- * is exhaustive over `DeadlineEventType`, so a label can no longer exist for an event type that has
- * no rule behind it.
+ * `DeadlineEventType` doc comment in src/domain/deadlines.ts for the abrogation evidence. The map is
+ * `Record<DeadlineEventType, string>`, so a label can no longer exist for an event type that has no
+ * rule behind it, and an event type cannot be rendered without a label.
  */
 function labelFor(d: Deadline): string {
-  switch (d.eventType) {
-    case 'd212_filing':
-      return 'Depunere D212';
-    case 'vat_registration':
-      return 'Înregistrare TVA';
-  }
+  return deadlineCopy.eventLabels[d.eventType];
 }
 
 export interface DeadlineSectionProps {
@@ -64,11 +41,13 @@ export default function DeadlineSection({ deadlines, asOfDate }: DeadlineSection
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Termene limită</CardTitle>
-        <CardDescription>Termene limită viitoare de depunere, la data de {formatRoCalendarDate(asOfDate)}</CardDescription>
+        <CardTitle>{deadlineCopy.title}</CardTitle>
+        <CardDescription>
+          {deadlineCopy.descriptionLead} {formatRoCalendarDate(asOfDate)}
+        </CardDescription>
       </CardHeader>
       {upcoming.length === 0 ? (
-        <p className="hint">Niciun termen limită viitor</p>
+        <p className="hint">{deadlineCopy.empty}</p>
       ) : (
         upcoming.map((d) => {
           // Guard: after the filter d.date is non-null; kept defensively.
@@ -77,14 +56,16 @@ export default function DeadlineSection({ deadlines, asOfDate }: DeadlineSection
             <div key={d.deadlineId} className="item-row">
               <div>
                 <strong className="item-title">{labelFor(d)}</strong>
-                <div className="hint">{APPLIES_TO_LABEL[d.appliesTo] ?? d.appliesTo}</div>
+                <div className="hint">{deadlineAppliesToLabels[d.appliesTo] ?? d.appliesTo}</div>
                 <div className="item-meta">
                   {d.date === null || days === null
-                    ? 'Neaplicabil'
-                    : `${formatRoCalendarDate(d.date)} (${days === 1 ? '1 zi rămasă' : `${days} zile rămase`})`}
+                    ? deadlineCopy.notApplicable
+                    : `${formatRoCalendarDate(d.date)} (${days === 1 ? deadlineCopy.oneDayLeft : deadlineCopy.daysLeft(days)})`}
                 </div>
               </div>
-              <span className={`badge ${STATUS_BADGE[d.status]}`}>{STATUS_LABEL[d.status] ?? d.status}</span>
+              <span className={`badge ${d.status === 'active' ? 'badge-info' : 'badge-neutral'}`}>
+                {deadlineCopy.statusLabels[d.status]}
+              </span>
             </div>
           );
         })

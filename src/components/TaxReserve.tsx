@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { TaxReserveRecommendation } from '../domain/taxReserve';
 import { formatBaniRON, leiInputValue, parseLeiInput, type Bani } from '../domain/money';
+import { copy, reserve as reserveCopy } from '../ui/copy';
 
 interface TaxReserveProps {
   reserve: TaxReserveRecommendation;
@@ -44,7 +45,7 @@ function ReserveEntry({
   return (
     <div className="reserve-entry">
       <label className="label" htmlFor="reserve-input">
-        Cât ai pus deoparte pentru impozit (lei)
+        {reserveCopy.inputLabel}
       </label>
       <div className="row">
         <input
@@ -52,11 +53,11 @@ function ReserveEntry({
           className="input"
           inputMode="decimal"
           value={text}
-          placeholder="ex: 1500"
+          placeholder={reserveCopy.inputPlaceholder}
           onChange={(e) => setText(e.target.value)}
         />
         <button type="button" className="btn btn-primary" onClick={save}>
-          Salvează
+          {copy.ui.save}
         </button>
         {reservedAmount !== null ? (
           <button
@@ -68,15 +69,11 @@ function ReserveEntry({
               onRecord(null);
             }}
           >
-            Șterge înregistrarea
+            {reserveCopy.clear}
           </button>
         ) : null}
       </div>
-      {refused ? (
-        <div className="hint">
-          Suma nu este o valoare validă în lei — nimic nu a fost salvat.
-        </div>
-      ) : null}
+      {refused ? <div className="hint">{reserveCopy.refusedAmount}</div> : null}
     </div>
   );
 }
@@ -87,33 +84,31 @@ export default function TaxReserve({ reserve, onRecord }: TaxReserveProps) {
   return (
     <section className="card">
       <div className="card-head">
-        <h2 className="card-title">Rezervă fiscală</h2>
+        <h2 className="card-title">{reserveCopy.title}</h2>
       </div>
       <div className="card-body">
         {liability === null ? (
-          <p className="hint">
-            Nu există o estimare fiscală disponibilă — rezerva recomandată nu poate fi calculată.
-          </p>
+          <p className="hint">{reserveCopy.noEstimate}</p>
         ) : (
           <>
             <div className="stat-card">
-              <div className="label">Recomandat de pus deoparte lunar</div>
+              <div className="label">{reserveCopy.recommendedMonthly}</div>
               <div className="tax-hero-value mono">{formatBaniRON(reserve.recommendedMonthlyReserve)}</div>
               <div className="hint">
                 {reserve.remainingTarget > 0
                   ? reserve.monthsRemaining > 0
-                    ? `Rămâne de pus deoparte ${formatBaniRON(reserve.remainingTarget)} în următoarele ${reserve.monthsRemaining} luni.`
-                    : `Rămâne de pus deoparte ${formatBaniRON(reserve.remainingTarget)}.`
-                  : 'Rezerva este complet acoperită.'}
+                    ? `${reserveCopy.remainingLead} ${formatBaniRON(reserve.remainingTarget)} ${reserveCopy.remainingMonthsTail(reserve.monthsRemaining)}`
+                    : `${reserveCopy.remainingLead} ${formatBaniRON(reserve.remainingTarget)}.`
+                  : reserveCopy.fullyCovered}
               </div>
             </div>
             <div className="grid grid-2">
               <div className="stat-card">
-                <div className="label">Rezervat deja</div>
+                <div className="label">{reserveCopy.alreadyReserved}</div>
                 {reserve.reservedAmount === null ? (
                   <>
-                    <div className="value mono">—</div>
-                    <div className="hint">Nicio sumă înregistrată.</div>
+                    <div className="value mono">{copy.ui.noValue}</div>
+                    <div className="hint">{reserveCopy.nothingRecorded}</div>
                   </>
                 ) : (
                   <div className={reserve.reservedAmount < 0 ? 'value mono neg' : 'value mono'}>
@@ -122,7 +117,7 @@ export default function TaxReserve({ reserve, onRecord }: TaxReserveProps) {
                 )}
               </div>
               <div className="stat-card">
-                <div className="label">Estimare obligație fiscală</div>
+                <div className="label">{reserveCopy.estimatedLiability}</div>
                 <div className="hint mono">{formatBaniRON(liability)}</div>
               </div>
             </div>

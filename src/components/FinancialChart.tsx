@@ -13,6 +13,7 @@ import { useDashboardData } from '../data/dashboardAdapter';
 import { getProjectedFinancialSeries } from '../data/dashboard';
 import { estimateFigureLabel } from '../domain/estimateBasis';
 import { formatBaniAxis, formatBaniRON, formatBaniRONOrDash, isBani, type Bani } from '../domain/money';
+import { chart as chartCopy } from '../ui/copy';
 
 
 type Range = 'monthly' | 'ytd' | 'year';
@@ -20,15 +21,15 @@ type Range = 'monthly' | 'ytd' | 'year';
 type MetricKey = 'revenue' | 'expenses' | 'net';
 
 const METRICS: ReadonlyArray<{ key: MetricKey; label: string; color: string }> = [
-  { key: 'revenue', label: 'Venituri', color: '#1d4ed8' },
-  { key: 'expenses', label: 'Cheltuieli', color: '#f04438' },
-  { key: 'net', label: 'Profit net', color: '#12b76a' },
+  { key: 'revenue', label: chartCopy.metrics.revenue, color: '#1d4ed8' },
+  { key: 'expenses', label: chartCopy.metrics.expenses, color: '#f04438' },
+  { key: 'net', label: chartCopy.metrics.net, color: '#12b76a' },
 ];
 
 const RANGES: ReadonlyArray<{ value: Range; label: string }> = [
-  { value: 'monthly', label: 'Lunar' },
-  { value: 'ytd', label: 'YTD' },
-  { value: 'year', label: 'An' },
+  { value: 'monthly', label: chartCopy.ranges.monthly },
+  { value: 'ytd', label: chartCopy.ranges.ytd },
+  { value: 'year', label: chartCopy.ranges.annual },
 ];
 
 const MONTH_LABELS = ['Ian', 'Feb', 'Mar', 'Apr', 'Mai', 'Iun', 'Iul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
@@ -40,7 +41,7 @@ function monthLabel(month: string, withYear: boolean): string {
 }
 
 function stateLabel(kind: 'actual' | 'projected'): string {
-  return kind === 'actual' ? 'Realizat' : 'Proiecție';
+  return kind === 'actual' ? chartCopy.state.actual : chartCopy.state.projected;
 }
 
 interface ChartRow {
@@ -139,14 +140,14 @@ export default function FinancialChart() {
   const rangeLabel = RANGES.find((r) => r.value === range)?.label ?? '';
 
   return (
-    <section className="card" aria-label="Grafic financiar">
+    <section className="card" aria-label={chartCopy.title}>
       <div className="card-head">
-        <h2 className="card-title">Grafic financiar</h2>
+        <h2 className="card-title">{chartCopy.title}</h2>
       </div>
 
       <div className="card-body">
         <div className="row between">
-          <div className="chart-range-group" aria-label="Interval afișat">
+          <div className="chart-range-group" aria-label={chartCopy.rangeGroupAria}>
             {RANGES.map((r) => (
               <button
                 key={r.value}
@@ -162,7 +163,7 @@ export default function FinancialChart() {
           {range === 'monthly' ? (
             <select
               className="chart-month-select"
-              aria-label="Lună selectată"
+              aria-label={chartCopy.monthSelectAria}
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
             >
@@ -180,7 +181,7 @@ export default function FinancialChart() {
         <div className="chart-scroll">
           <div
             role="img"
-            aria-label={`Grafic ${rangeLabel} — venituri, cheltuieli și profit net în lei; segmente solide = realizat, segmente punctate = proiecție.`}
+            aria-label={chartCopy.imageAria(rangeLabel)}
           >
             <ResponsiveContainer width="100%" height={320}>
               <LineChart data={rows} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
@@ -231,7 +232,7 @@ export default function FinancialChart() {
           ))}
           <span className="chart-legend-item">
             <span className="chart-legend-swatch dashed projection" />
-            Proiecție (linia punctată)
+            {chartCopy.projectedLegend}
           </span>
         </div>
 
@@ -242,7 +243,7 @@ export default function FinancialChart() {
             <strong className="mono">{formatBaniRON(tax.output.total)}</strong>
           </p>
         ) : (
-          <p className="chart-tax-note">Estimare impozit: revizuire necesară — {tax.reason}</p>
+          <p className="chart-tax-note">{chartCopy.taxNoteReview} {tax.reason}</p>
         )}
 
         <div className="visually-hidden">
@@ -250,17 +251,16 @@ export default function FinancialChart() {
           <div>
             <table>
             <caption>
-            Grafic financiar — interval {rangeLabel}. Perioadă, venituri, cheltuieli, profit net (lei) și
-            stare (realizat/proiecție).
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">Perioadă</th>
-              <th scope="col">Venituri</th>
-              <th scope="col">Cheltuieli</th>
-              <th scope="col">Profit net</th>
-            </tr>
-          </thead>
+              {chartCopy.tableCaption(rangeLabel)}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{chartCopy.columns.period}</th>
+                <th scope="col">{chartCopy.columns.revenue}</th>
+                <th scope="col">{chartCopy.columns.expenses}</th>
+                <th scope="col">{chartCopy.columns.net}</th>
+              </tr>
+            </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.month}>
