@@ -73,7 +73,7 @@ So the Researcher **is** required here (reversing the earlier call). What resear
 
 **Design:**
 
-1. **Controlled category vocabulary on `Expense`.** Today it carries free-text `categoria`, which is why nothing can be derived from it. Replace with a controlled vocabulary; keep the free text as a note.
+1. **Controlled category vocabulary on `Expense`.** Corrected by TASK 2a: `Expense` (`src/data/types.ts:39`) carries **no category field at all** — the `categoria: string` my first draft referred to exists only on `DocumentItem` (`types.ts:93`), an unrelated document list. TASK 2b must **add** the field, not replace one.
 2. **A deductibility rule set in the rule store** — not a generic rule engine. Each rule maps `category + context → deductible | non_deductible | capped(percentage) | undetermined`, and carries the same provenance every other rule carries (`sourceAct`, `sourceArticle`, `sourceUrl`, `verifiedAt`, `status`, `version`). This is what makes Task 6 pay for itself: a corrected or newly verified per-category rule is a **new rule release**, and classification improves with no user action.
 3. **Classification is automatic** for every category the rules cover. The estimate's breakdown names each category **and the rule that justified it**, so "explain the deductible total" is answered by data, not by a guess.
 4. **Only the undetermined residue surfaces**, as a count with one action ("N cheltuieli fără încadrare — alege categoria"), never a form per expense and never a checklist the user must clear.
@@ -85,7 +85,11 @@ So the Researcher **is** required here (reversing the earlier call). What resear
 
 **Out of scope:** building a VAT treatment system, and any per-record "is this business-related" interrogation of the user.
 
-#### 3.1.1 Legal basis as actually verified — `research/21_expense_deductibility_framework_2026.md`
+#### 3.1.0 Status — TASK 2a DONE (`1583d9e`)
+
+39 rules in `src/domain/fiscal/deductibility2026.ts`, all `taxRegime: 'expense-deductibility'`, each citing its own litera of CF art. 68 or Normele HG 1/2016 pct. 7. Package 9 → 48. Pure classifier `classifyExpenseDeductibility(...)` returns treatment **+ the rule that produced it**, with a `refused` state for art. 68^3. Suite 50 files / 810 tests. No stored snapshot digest moved; no migration added.
+
+### 3.1.1 Legal basis as actually verified — `research/21_expense_deductibility_framework_2026.md`
 
 The Researcher's findings **overturned the premise of this task**, and the correction matters:
 
