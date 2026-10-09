@@ -56,6 +56,10 @@ The audit is external and its verification limits are stated in it (it could not
 | Seed is a **2020** PFA with a 2025 D212, against the Phase 11 spec of a 2026-start PFA | `src/data/seed.ts:7` `pfaStartYear: 2020`, with the coherence reasoning at `:31-34` |
 | e2e has date-dependent assertions valid only before 25 May 2027 | `e2e/dashboard.spec.ts:318` `25.05.2027`, `:340` `15.01.2027`, `:472` |
 
+**Already registered before the audit said it.** Two of the audit's HIGH findings are defects this repo recorded on 2026-10-09 from research 21 and had deliberately left open: **Finding 3 (activity-specific treatment) is B-29** and **§5 (fixed assets and depreciation) is B-31**. The auditor had not seen the defect register. That does not make the findings wrong — both are confirmed — but it means the plan must not re-mint ids for them, and the reason they were left open (B-29 needs a CAEN→activity-family decision; B-31 needs a depreciation model decision) is the reason they are now phases rather than oversights.
+
+Four open defects the audit **missed** are carried in §4: **B-30** (input-VAT deductibility), **B-16 remainder** (fiscal-loss persistence), **B-27** (a fake async boundary) and **B-28** (the em dash meaning two opposite things on one screen).
+
 **Not independently verified — treat as reported, re-verify inside the phase that acts on it:** the exact place where operand evidence is dropped (`data/dashboard.ts` destructuring); the other-income ratios sitting at 1; the fixed-asset threshold not being encoded; the SM-vintage claim's reach into the *calculation* as opposed to the display.
 
 ---
@@ -68,16 +72,49 @@ The audit is external and its verification limits are stated in it (it could not
 | **B-37** | The financial summary/graph and the tax estimate use different currency handling: aggregation skips non-lei records, the estimate normalises them. One user, two revenue totals | **10c** |
 | **B-38** | Payment and collection dates are modelled (`paid?`, `collected?`) but not enterable; a document in December paid in January can be attributed to the wrong fiscal year | **12C** |
 | **B-39** | Per-expense facts the classifier needs (vehicle exclusive/partly/not for the activity, supporting documentation present) are not persisted; unknown vehicle use defaults to non-exclusive, applying 50 % without a recorded fact | **12D** |
-| **B-40** | The `no_expense_engine` refusal exists in the classifier but the profile's activity family is never passed to the estimate, so the normal path may apply the ordinary actual-expense method to an activity with a different statutory method | **12E** |
+| ~~B-40~~ | **WITHDRAWN — this is B-29, already open since research 21.** The audit's Finding 3 is the hospitality / activity-family defect: TASK 2b built the channel (`activityFamily: 'cazare'` ⇒ `no_expense_engine` ⇒ `review_required` naming `EXPENSE_ENGINE_CAZARE_2026`), and **no caller supplies the fact**. Needs a CAEN→activity-family decision, not more plumbing | **12E** |
 | **B-41** | Other-income flags are collected but the amounts those calculations depend on are not modelled; the estimate can look complete while a material input is absent | **12F** |
-| **B-42** | Fixed assets and depreciation: the classifier can refuse the whole purchase price, but there is no asset model and the OUG 8/2026 threshold is not encoded, so the expense neither depreciates nor visibly stays unresolved | **12G** |
+| ~~B-42~~ | **WITHDRAWN — this is B-31, already open since research 21.** No asset or depreciation model, so a capital purchase is deducted as if it were an ordinary expense; CF art. 68 alin. (7) lit. h) makes the purchase of depreciable goods **never** a direct expense, only depreciation under art. 28 is | **12G** |
 | **B-43** | The estimate result loses the evidence that produced it — classifications, exclusion reasons, cap adjustments, FX conversions — so the calculation-detail view and the persisted snapshot cannot explain the expense total | **15**, **20** |
 | **B-44** | Projection divides by fiscal-year elapsed months and multiplies by 12, ignoring the PFA's actual active period; a PFA starting in October is projected as if it had been trading since 1 January | **12** |
 | **B-45** | The FY2026 minimum-wage vintage is recorded UNVERIFIED and is labelled on thresholds, but the same uncertainty applies wherever SM-derived values feed the **calculation**; the assumption is not identifiable later from the calculation record | **17**, **15** |
 | **B-46** | UTC-based date defaults in page forms, and e2e assertions that only pass while today is before 25 May 2027 | **12C** (defaults), **32** (inject a controlled date) |
 | **B-47** | The seed tells two product stories: a 2020-start PFA with a 2025 filing history, against a product specified as starting in 2026 with no prior-year history | **11** (needs the §9 decision) |
 
+### Already open in `STATE.md` — carried forward, not re-minted
+
+The audit did not mention four of these. They are live defects and each now has an owner phase.
+
+| Id | Defect | Closed by |
+|---|---|---|
+| **B-16** (remainder) | Fiscal losses: the rule and surfacing are closed, but the **record is not persisted and prior-year losses are not read back** into CF art. 118 alin. (2) lit. a) | **13** |
+| **B-27** | `computeTaxEstimate` is declared `async` with no I/O behind it, so a pending state exists that can never resolve meaningfully | **21** (compute synchronously in the hook, together with B-28) |
+| **B-28** | The em dash carries two opposite meanings on one screen — `—` for "no value" and `—` for "refused" | **21** |
+| **B-29** | Art. 68^3 forfetar cazare is not modelled; the refusal channel exists but **no caller supplies the activity-family fact** | **12E** |
+| **B-30** | The deductible expense is net of *actually deductible* VAT, not of all VAT on the invoice — `tax.ts:144` picks `expensesNet` whenever the profile is not `vatExempt`, which assumes every leu of input VAT is recoverable | **13** |
+| **B-31** | No asset or depreciation model, so a capital purchase is deducted as an ordinary expense | **12G** |
+| **B-34** | `Declaration` is monthly `{an, luna}` and cannot hold the one annual filing this profile makes | **18A** |
+| **B-35** | D300 periodicity is undetermined by the seed's own facts; no VAT registration date is recorded | **18B** |
+| **D1** | A clean first run is handed `seedData` (`store.tsx:166-167`) and only `'quarantined'` renders a banner (`App.tsx:275`) | **11**, proven in **26** |
+
+B-46's content is the list B-23 recorded as *not touched, recorded instead* when it closed: `pages/Documents.tsx:426` `getFullYear()`; `pages/Revenues.tsx:28`, `pages/Expenses.tsx:26`, `pages/Declarations.tsx:28` taking a UTC date where the app's rule is the Romanian local date; `pages/Settings.tsx:226` `Date.now()` for an id; and the four `e2e/dashboard.spec.ts:216,219,223,289` assertions that hold only while today is before 2027-05-25.
+
 Already open from before: **B-34** (`Declaration` is monthly `{an, luna}` and cannot hold an annual D212) → **18A**; **B-35** (D300 periodicity undetermined; `vatExempt` boolean insufficient) → **18B**; **D1** (a clean first run is handed `seedData` and never told, `store.tsx:166-167`) → **11**, verified in **26**.
+
+## 4b. Open questions from `STATE.md` that constrain these phases
+
+These are **not** research gaps to re-open. Check the register before a brief asks for one — a Researcher's UNVERIFIED label is not a new open question if the register already closed it (the TASK 4 lesson, recorded in the register itself).
+
+| Question | State | Effect on the plan |
+|---|---|---|
+| **Q-VAT-PERIOD** | Not a research gap — **a missing input**. CF art. 322 alin. (3)-(4) turns on a pro-rated estimate the taxpayer makes | **18B cannot be closed by research.** It needs the §9 supported-scope decision, or an explicit refusal to assert a period |
+| **Q-MULTI-SOURCE** | Would require inventing income categories the sources of record do not name | Bounds **12F**: model only what the sources name, refuse the rest |
+| **Q-ROLLOVER-FIXED-DATE** | Still open, evidence on both sides. Adopted app position: surface the statutory date, treat any extension as an explicit dated sourced override | **Blocks any working-day primitive** in 18B, 24, 32 |
+| **Q-WORKING-DAY-DEF** | Closed — Reg. 1182/71 art. 2 alin. (2): Saturday is **not** a working day | Only where a term is expressed în zile lucrătoare |
+| **Q-ANAF-SAMBITA** | Authority gap, not knowledge gap — no ANAF instrument states how the current 5-working-day term is counted | Do not present a counting method as settled |
+| **Q-PENDING-B4-2026**, **Q-PENDING-10MAI** | Pending bills, **not law** | Never encode; recorded so "no pending change" is never claimed |
+| **Q-RESEARCHER-WRITE** | The `researcher` agent has **no file-write tool** | **Every Researcher report must be transcribed to `docs/ai/research/NN_*.md` by the Orchestrator before anything else is done**, or it is lost on compaction |
+| **Q-METHOD-NOTECOUNTS** | Portal Legislativ publishes no note count | Doc id + consolidation date are the anchor; never a count |
 
 ---
 
@@ -94,10 +131,10 @@ Phases in **bold** are new, inserted by the audit. The rest keep the user's numb
 | 12B | Pension fact for CASS | **DONE** (TASK 5) — gap-check only | — |
 | **12C** | **Payment / collection dates enterable, and date defaults** | not started | B-38, B-46 |
 | **12D** | **Per-expense facts the classifier needs** | not started | B-39 |
-| **12E** | **Activity family wired to the estimate, or explicit refusal** | not started | B-40 |
+| **12E** | **Activity family wired to the estimate, or explicit refusal** | not started | B-29 |
 | **12F** | **Other income: model the amounts or refuse** | not started | B-41 |
-| **12G** | **Fixed assets and depreciation boundary** | not started | B-42 |
-| 13 | Annual tax estimate pipeline | largely done — gate it | — |
+| **12G** | **Fixed assets and depreciation boundary** | not started | B-31 |
+| 13 | Annual tax estimate pipeline | largely done — gate it | B-16 remainder, B-30 |
 | 14 | Automatic recalculation | done — extend the triggers | — |
 | 15 | Snapshots + rule-release versioning | partial | B-43, B-45 |
 | 16 | Tax reserve persistence | **DONE** (TASK 3) | — |
@@ -107,7 +144,7 @@ Phases in **bold** are new, inserted by the audit. The rest keep the user's numb
 | 18 | Deadline semantics | **DONE** (Phase 9b) — re-check after 18A/18B | — |
 | 19 | Unified issue/severity/action | **DONE** (TASK 8) — vocabulary decision | — |
 | 20 | Calculation detail + disclosure policy | partial | B-43 |
-| 21 | Tax estimate hero | mostly done | — |
+| 21 | Tax estimate hero | mostly done | B-27, B-28 |
 | 22 | Financial graph | partial (no non-colour actual/projected cue) | — |
 | 23 | Summary + reserve + threshold UI | partial | — |
 | 24 | Deadline + completeness + action UI | largely unsatisfied | depends on 18A |
@@ -156,7 +193,8 @@ Phases in **bold** are new, inserted by the audit. The rest keep the user's numb
 - Apply vehicle rules to the individual expense, never a profile-wide assumption.
 
 ### 12E — Activity family *(new)*
-- Either establish the applicable activity family from a verified mapping before calculating, or **explicitly decline** when the profile's activity could require a different statutory method. The `no_expense_engine` refusal already exists in the rules; it is simply never reachable from the profile (B-40).
+- This is **B-29**, open since research 21. The channel already exists: `activityFamily: 'cazare'` ⇒ `no_expense_engine` ⇒ the estimate returns `review_required` naming `EXPENSE_ENGINE_CAZARE_2026` / art. 68^3 instead of computing. **No caller supplies the fact** — `ActivityFamily` appears nowhere in `estimateBasis.ts`, `data/derived.ts` or `data/dashboard.ts` (verified 2026-10-10).
+- Closing it needs a **CAEN → activity-family decision**, which research 21 §7(c) leaves undecided, not more plumbing. Either establish the family from a verified mapping before calculating, or **explicitly decline** when the profile's activity could require a different statutory method.
 - Never apply the ordinary actual-expense method to an activity with another statutory calculation.
 
 ### 12F — Other income *(new)*
@@ -164,10 +202,13 @@ Phases in **bold** are new, inserted by the audit. The rest keep the user's numb
 - The app must not accept a profile implying a more complex situation, ignore the missing quantities, and return a confident estimate.
 
 ### 12G — Fixed assets and depreciation *(new)*
-- Encode the verified 2026 asset threshold (OUG 8/2026) and the asset facts, or make the expense **visibly unresolved**. Refusing the whole purchase price is not the same as modelling depreciation (B-42).
+- This is **B-31**, open since research 21: CF art. 68 alin. (7) lit. h) makes the purchase or manufacture of depreciable goods **never** a direct expense — only depreciation under art. 28 is. TASK 2a classifies the category as capital; the depreciation model itself was never built.
+- Encode the verified 2026 asset threshold (OUG 8/2026) and the asset facts, or make the expense **visibly unresolved**. Refusing the whole purchase price is not the same as modelling depreciation (B-31).
 
 ### 13 — Annual pipeline
 - Largely satisfied. **Gate:** do not declare it complete while required profile facts, FX rates or material expense classifications can be omitted without an incomplete/review state. Depends on 10c, 12C–12G.
+- **B-30:** `tax.ts:144` selects `expensesNet` whenever the profile is not `vatExempt`, which assumes every leu of input VAT is recoverable. For a VAT-registered PFA it is not. The deductible expense must be net of *actually deductible* VAT, or the difference stays visibly unresolved.
+- **B-16 remainder:** persist the fiscal-loss record and read prior-year losses back into CF art. 118 alin. (2) lit. a). The rule and surfacing closed in Phase 5; the persistence never happened.
 
 ### 14 — Automatic recalculation
 - Extend the invalidation triggers to payment/collection dates, expense classifications, vehicle facts, profile facts and **FX rate changes**. No manual recalculate button, no second engine; historical snapshots never mutate.
@@ -189,6 +230,11 @@ Phases in **bold** are new, inserted by the audit. The rest keep the user's numb
 
 ### 20 — Calculation detail
 - The breakdown must show or link everything §15 persists. Today the hero disclosure renders the engine's lines, and `copy.disclosure.sources` is wired on Settings, Expenses and thresholds but **not on the estimate**.
+
+### 21 — Hero
+- Mostly satisfied: `estimate-state` badge, `—` rather than `0` when `taxTotal === null`, a different hint per state.
+- **B-27 and B-28 together:** compute the estimate synchronously in the hook so the pending state stops existing, and make `—` mean one thing. Today the same dash renders for "no value" and for "refused".
+- Gaps from the mapping: the hero does not separate estimated annual tax from actual YTD and projected full-year in the hierarchy, and the run-rate assumption lives only inside the disclosure.
 
 ### 22 — Graph
 - Add a non-colour actual/projected cue (dashed or equivalent). Today the distinction is in data and label text only.
@@ -220,6 +266,8 @@ Phases in **bold** are new, inserted by the audit. The rest keep the user's numb
 8. Copy goes in `src/ui/copy/`; `src/domain` never imports from it.
 9. Phase docs in `docs/ai/phases/NN_*.md`; **never** write to `docs/ai/steps/` (frozen archive — §9 decision 3).
 10. Report only validations actually run.
+11. Transcribe every Researcher report to `docs/ai/research/NN_*.md` immediately — the agent cannot write files and its output dies with compaction.
+12. Before briefing a gap into a Worker, check the `STATE.md` open-questions register: it may already be closed.
 
 ---
 
