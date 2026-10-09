@@ -137,8 +137,9 @@ export interface InterpretationNoteProps {
 Rendered as `role="note"` with `data-note="interpretare"`, the label from the copy constant `noteLabel`
 („Notă de interpretare"), so no site renames it. Two rules by construction: the label is a constant, and
 `note` is one sentence from `copy.notes.*`. **A note may explain an uncertainty; it may never resolve one.**
-Used by `ThresholdSection`, `Settings`, `Expenses` (the art. 68 alin. (6) pre-cap / post-cap choice) — the
-sites that previously improvised their own wording.
+Sites: `ThresholdSection` (3 direct), `Expenses` (2 direct — the art. 68 alin. (6) pre-cap / post-cap choice
+and the cap-conflict banner), and `Settings`, where the local `FieldLegal` wrapper renders it for **22** field
+sites. The sites that previously improvised their own wording now all pass through the one component.
 
 ## 6. Disclosure, never hover
 
@@ -156,9 +157,9 @@ export interface DisclosureProps {
 
 Native `<details>` / `<summary>`: keyboard-operable with no script, state visible and announced, content
 present in the DOM when closed. Captions are `copy.disclosure.breakdown` („Cum am ajuns la această sumă") and
-`copy.disclosure.sources` („Surse și note de interpretare"). Used by `Dashboard`, `Settings`, `Expenses`,
-`ThresholdSection`, `MoneyPrecisionNotice`. No `title=` tooltip and no CSS `:hover` reveal is used anywhere
-for this content.
+`copy.disclosure.sources` („Surse și note de interpretare"). Five direct uses — `Dashboard`, `Settings`,
+`Expenses`, `ThresholdSection`, `MoneyPrecisionNotice` — and no `title=` tooltip or CSS `:hover` reveal is used
+anywhere for this content (`grep ':hover' src/*.css` finds no display/opacity/visibility reveal).
 
 ## 7. Grammar sweep — phrases changed and why
 
