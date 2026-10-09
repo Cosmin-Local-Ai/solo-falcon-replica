@@ -63,6 +63,7 @@ export const settings = {
     inProgress: 'În progres',
     preferences: 'Preferințe e-Factura',
     sending: 'Trimitere e-Factura',
+    sendingHint: 'Alege cât de repede trimite aplicația; termenul legal rămâne același indiferent de alegere.',
     sendWithinTwoDays: 'În decurs de 2 zile de la emitere',
     sendAsap: 'Cât mai repede după emitere',
     contactData: 'Date de contact',
@@ -97,6 +98,7 @@ export const settings = {
     regimeNotComputable: (regime: string): string => `${regime} — nu poate fi calculat`,
     profile: 'Profil fiscal',
     regime: 'Regim fiscal',
+    regimeHint: 'Un PFA nu poate alege impozit pe profit; temeiurile sunt în „Surse și note de interpretare”.',
     caen: 'Cod CAEN',
     caenHint: 'Codul CAEN nu schimbă regimul fiscal.',
     startYear: 'Anul începerii activității',
@@ -126,6 +128,8 @@ export const settings = {
     foreignInsuranceProof: 'Dovada asigurării din alt stat a fost făcută',
     foreignInsuranceProofHint: 'Fără dovadă, excepția nu produce nimic.',
     cassStatus: 'Asigurări sociale de sănătate',
+    cassStatusHint:
+      'Dintre cele trei valori, doar „Contribuția este datorată” este un temei confirmat pentru un PFA; celelalte două lasă linia de verificat și nu schimbă calculul.',
     cassStatusOptions: {
       obligatoriu: 'Contribuția este datorată',
       exempt: 'Exceptat (art. 154 alin. (1))',

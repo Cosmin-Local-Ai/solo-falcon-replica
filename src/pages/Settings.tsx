@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { leiInputValue, parseLeiInput } from '../domain/money';
 import { useStore } from '../data/store';
 import { Card, Badge, Modal } from '../components/ui';
+import { Disclosure } from '../components/ui/Disclosure';
+import { InterpretationNote } from '../components/ui/InterpretationNote';
+import { copy, fields, settings as settingsCopy, validation } from '../ui/copy';
 import {
   isSelectableRegime,
   regimeRefusalReason,
@@ -20,13 +23,37 @@ import type {
 // `fiscal` is NOT in the live SOLO page: it is where this replica edits the
 // PfaProfile contract (Phase 6) — the profile had no write path at all before.
 const TABS = [
-  { key: 'company', label: 'PFA' },
-  { key: 'fiscal', label: 'Regim fiscal' },
-  { key: 'einvoice', label: 'e-Factura' },
-  { key: 'bankaccounts', label: 'Conturi bancare' },
-  { key: 'account', label: 'Personal' },
+  { key: 'company', label: settingsCopy.tabs.pfa },
+  { key: 'fiscal', label: settingsCopy.tabs.fiscal },
+  { key: 'einvoice', label: settingsCopy.tabs.eFactura },
+  { key: 'bankaccounts', label: settingsCopy.tabs.bankAccounts },
+  { key: 'account', label: settingsCopy.tabs.personal },
 ] as const;
 type TabKey = (typeof TABS)[number]['key'];
+
+/**
+ * TASK 7 — the one shape a legal hint takes in this form.
+ *
+ * A person filling a form gets one plain sentence about what the field means. Where the law does not
+ * settle something, the reusable „Notă de interpretare" says what is undecided and what the app does
+ * about it. The Cod fiscal text itself — which used to sit in the middle of every field, and at the
+ * CASS field printed the internal token `review_required` — moves behind „Surse și note de
+ * interpretare", a real `<details>` control, keyboard-operable, with the citation kept. Nothing was
+ * deleted; it is no longer inline.
+ */
+function FieldLegal({ hint, note, source }: { hint: string; note?: string; source?: string }) {
+  return (
+    <>
+      <span className="hint">{hint}</span>
+      {note ? <InterpretationNote note={note} /> : null}
+      {source ? (
+        <Disclosure label={copy.disclosure.sources}>
+          <p className="hint">{source}</p>
+        </Disclosure>
+      ) : null}
+    </>
+  );
+}
 
 interface SettingsProps {
   initialTab?: string;
@@ -171,38 +198,38 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
 
   function saveCompany() {
     updateIdentity(company);
-    toast('success', 'Datele PFA au fost salvate');
+    toast('success', settingsCopy.toasts.pfaSaved);
   }
 
   function savePersonal() {
     const nume = personal.nume.trim();
     if (!nume) {
-      toast('error', 'Numele nu poate fi gol');
+      toast('error', validation.nameRequired);
       return;
     }
     updateIdentity({ ...personal, nume });
-    toast('success', 'Datele personale au fost salvate');
+    toast('success', settingsCopy.toasts.personalSaved);
   }
 
   function saveMentiuni() {
     updateIdentity({ mentiuniFactura: mentiuni.trim() });
-    toast('success', 'Mențiuni pe factură salvate');
+    toast('success', settingsCopy.toasts.invoiceNotesSaved);
   }
 
   function saveEf() {
     updateSettings(s => ({ ...s, eFactura: ef }));
-    toast('success', 'Setările e-Factura au fost salvate');
+    toast('success', settingsCopy.toasts.eFacturaSaved);
   }
 
   function saveFiscal() {
     const e: Record<string, string> = {};
     const year = Number(fiscal.pfaStartYear);
     if (!Number.isInteger(year) || year < 2000 || year > 2100) {
-      e.pfaStartYear = 'An invalid (2000–2100).';
+      e.pfaStartYear = validation.yearInvalid;
     }
     const fy = Number(fiscal.fiscalYear);
     if (!Number.isInteger(fy) || fy < 2000 || fy > 2100) {
-      e.fiscalYear = 'An invalid (2000–2100).';
+      e.fiscalYear = validation.yearInvalid;
     }
     if (fiscal.pfaStartDate) {
       const problem = isoCalendarDateProblem(fiscal.pfaStartDate);
@@ -222,25 +249,25 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     const salary = fiscal.salaryIncomeLei.trim() === '' ? undefined : parseLeiInput(fiscal.salaryIncomeLei);
     if (fiscal.salaryStatus === 'da') {
       if (salary === undefined) {
-        e.salaryIncomeLei = 'Venitul brut anual din salarii este necesar pentru pragul de 6 salarii minime.';
+        e.salaryIncomeLei = validation.salaryAmountNeededForSixSm;
       } else if (salary === null || salary < 0) {
-        e.salaryIncomeLei = 'Valoare invalidă (lei, ≥ 0).';
+        e.salaryIncomeLei = validation.leiInvalid;
       }
     }
     const cash = parseLeiInput(fiscal.cashFloorLei);
-    if (cash === null || cash < 0) e.cashFloorLei = 'Valoare invalidă (lei, ≥ 0).';
+    if (cash === null || cash < 0) e.cashFloorLei = validation.leiInvalid;
     // A suspension is recorded as months, because that is the fact; whether those months change
     // anything under art. 174 alin. (7) is UNVERIFIED and is not decided here.
     const suspensionMonths = parseSuspensionMonths(fiscal.pensionSuspensionMonths);
     if (suspensionMonths === null) {
-      e.pensionSuspensionMonths = 'Luni invalide: numere întregi 1-12, separate prin virgulă (ex: 3,4).';
+      e.pensionSuspensionMonths = validation.monthsInvalid;
     }
     if (!isSelectableRegime(fiscal.regime)) {
-      e.regime = 'Regimul salvat nu poate fi calculat; alege un regim valabil pentru un PFA.';
+      e.regime = validation.regimeNotComputable;
     }
     setErrors(e);
     if (Object.keys(e).length > 0) {
-      toast('error', 'Verifică datele din formular');
+      toast('error', validation.checkForm);
       return;
     }
     // Both money fields above already recorded an error when they could not be parsed, so a null
@@ -299,14 +326,14 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
         ],
       },
     });
-    toast('success', 'Profilul fiscal a fost salvat');
+    toast('success', settingsCopy.toasts.fiscalProfileSaved);
   }
 
   function copyAdresa() {
     navigator.clipboard
       ?.writeText(identity.adresaSocietate)
-      .then(() => toast('success', 'Adresă copiată în clipboard'))
-      .catch(() => toast('error', 'Nu am putut copia adresa'));
+      .then(() => toast('success', settingsCopy.toasts.addressCopied))
+      .catch(() => toast('error', settingsCopy.toasts.addressCopyFailed));
   }
 
   function openTva() {
@@ -323,12 +350,12 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
   function addTva() {
     updateIdentity({ codTvaIntra: tvaCode.trim() });
     setTvaOpen(false);
-    toast('success', 'Cod TVA intracomunitar adăugat');
+    toast('success', settingsCopy.toasts.vatCodeAdded);
   }
 
   function addBank() {
     if (!newBank.banca.trim()) {
-      toast('error', 'Introdu denumirea băncii');
+      toast('error', validation.bankNameRequired);
       return;
     }
     updateSettings(s => ({
@@ -340,35 +367,35 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     }));
     setNewBank({ banca: '', moneda: 'RON' });
     setBankOpen(false);
-    toast('success', 'Cont bancar adăugat');
+    toast('success', settingsCopy.toasts.bankAdded);
   }
 
   return (
     <div>
       <div className="page-header">
         <div>
-          <h1>Setări</h1>
-          <p className="sub">Datele PFA, regim fiscal, e-Factura, conturi bancare și cont personal</p>
+          <h1>{settingsCopy.title}</h1>
+          <p className="sub">{settingsCopy.subtitle}</p>
         </div>
         <div className="actions">
           {tab === 'company' && (
             <button className="btn btn-primary" onClick={saveCompany}>
-              Salvează
+              {copy.ui.save}
             </button>
           )}
           {tab === 'fiscal' && (
             <button className="btn btn-primary" onClick={saveFiscal}>
-              Salvează
+              {copy.ui.save}
             </button>
           )}
           {tab === 'einvoice' && (
             <button className="btn btn-primary" onClick={saveEf}>
-              Salvează
+              {copy.ui.save}
             </button>
           )}
           {tab === 'account' && (
             <button className="btn btn-primary" onClick={savePersonal}>
-              Salvează
+              {copy.ui.save}
             </button>
           )}
         </div>
@@ -391,10 +418,10 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
 
       {tab === 'company' && (
         <div style={{ display: 'grid', gap: 16, maxWidth: 720 }}>
-          <Card title="Date de identificare">
+          <Card title={settingsCopy.pfaCard.identity}>
             <div className="form-grid">
               <div className="field">
-                <label>Denumire</label>
+                <label>{settingsCopy.pfaCard.denumire}</label>
                 <input
                   className="input"
                   value={company.denumire}
@@ -402,7 +429,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                 />
               </div>
               <div className="field">
-                <label>CUI</label>
+                <label>{settingsCopy.pfaCard.cui}</label>
                 <input
                   className="input"
                   value={company.cui}
@@ -410,7 +437,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                 />
               </div>
               <div className="field">
-                <label>Număr registrul comerțului</label>
+                <label>{settingsCopy.pfaCard.regCom}</label>
                 <input
                   className="input"
                   value={company.numarRegComert}
@@ -418,7 +445,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                 />
               </div>
               <div className="field">
-                <label>Adresa</label>
+                <label>{settingsCopy.pfaCard.adresa}</label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
                     className="input"
@@ -426,14 +453,14 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                     onChange={e => setCompany({ ...company, adresaSocietate: e.target.value })}
                   />
                   <button className="btn btn-outline" onClick={copyAdresa}>
-                    Copiază
+                    {settingsCopy.pfaCard.copy}
                   </button>
                 </div>
               </div>
             </div>
           </Card>
 
-          <Card title="Codurile tale CAEN">
+          <Card title={settingsCopy.pfaCard.caen}>
             <div
               style={{
                 display: 'flex',
@@ -444,7 +471,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                 borderRadius: 8,
               }}
             >
-              <Badge kind="info">Principal</Badge>
+              <Badge kind="info">{settingsCopy.pfaCard.caenPrincipal}</Badge>
               <span style={{ fontWeight: 600 }}>{identity.caen?.[0]?.cod}</span>
               <span style={{ color: 'var(--text-2)', fontSize: 13 }}>
                 {identity.caen?.[0]?.descriere}
@@ -452,27 +479,25 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
             </div>
           </Card>
 
-          <Card title="Mențiuni pe factură">
+          <Card title={settingsCopy.pfaCard.invoiceNotes}>
             <div className="field">
               <input
                 className="input"
                 value={mentiuni}
-                placeholder="Text afișat pe factura (opțional)"
+                placeholder={settingsCopy.pfaCard.invoiceNotesPlaceholder}
                 onChange={e => setMentiuni(e.target.value)}
               />
             </div>
             <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
               <button className="btn btn-primary" onClick={saveMentiuni}>
-                Salvează
+                {copy.ui.save}
               </button>
             </div>
           </Card>
 
-          <Card title="Cod TVA intracomunitar">
+          <Card title={settingsCopy.pfaCard.vatCode}>
             <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 12px' }}>
-              Firmele neplătitoare de TVA care vor colabora cu firme din Uniunea Europeană au
-              nevoie de acest cod special. Dacă ai deja un cod de TVA intracomunitar, te rugăm să
-              îl introduci aici.
+              {settingsCopy.pfaCard.vatCodeIntro}
             </p>
             {identity.codTvaIntra ? (
               <div
@@ -485,12 +510,12 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                   borderRadius: 8,
                 }}
               >
-                <Badge kind="success">Adăugat</Badge>
+                <Badge kind="success">{settingsCopy.pfaCard.vatCodeAddedBadge}</Badge>
                 <span style={{ fontWeight: 600 }}>{identity.codTvaIntra}</span>
               </div>
             ) : (
               <button className="btn btn-outline" onClick={openTva}>
-                Am cod TVA intracomunitar
+                {settingsCopy.pfaCard.vatCodeAdd}
               </button>
             )}
           </Card>
@@ -499,45 +524,43 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
 
       {tab === 'einvoice' && (
         <div style={{ display: 'grid', gap: 16, maxWidth: 720 }}>
-          <Card title="Conectare e-Factura">
+          <Card title={settingsCopy.eFactura.connect}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 13, color: 'var(--text-2)' }}>
-                Contul este conectat la platforma e-Factura
+                {settingsCopy.eFactura.connected}
               </span>
-              <Badge kind="warning">În progres</Badge>
+              <Badge kind="warning">{settingsCopy.eFactura.inProgress}</Badge>
             </div>
           </Card>
 
-          <Card title="Preferințe e-Factura">
+          <Card title={settingsCopy.eFactura.preferences}>
             <div className="form-grid" style={{ gridTemplateColumns: '1fr' }}>
               <div className="field">
-                <label>Trimitere e-Factura</label>
+                <label>{settingsCopy.eFactura.sending}</label>
                 <select
                   className="input"
                   value={ef.trimitere}
                   onChange={e => setEf({ ...ef, trimitere: e.target.value as typeof ef.trimitere })}
                 >
-                  <option value="2-zile">În decurs de 2 zile de la emitere</option>
-                  <option value="imediat">Cât mai repede după emitere</option>
+                  <option value="2-zile">{settingsCopy.eFactura.sendWithinTwoDays}</option>
+                  <option value="imediat">{settingsCopy.eFactura.sendAsap}</option>
                 </select>
-                <span className="hint">
-                  Termenul legal de transmitere a unei e-Facturi este de maximum 5 zile de la
-                  emitere.
-                </span>
+                <FieldLegal
+                  hint={settingsCopy.eFactura.sendingHint}
+                  source={copy.sources.eFacturaDeadline}
+                />
               </div>
               <div className="field">
-                <label>Date de contact</label>
+                <label>{settingsCopy.eFactura.contactData}</label>
                 <select
                   className="input"
                   value={ef.dateContact}
                   onChange={e => setEf({ ...ef, dateContact: e.target.value as typeof ef.dateContact })}
                 >
-                  <option value="nu">Nu sunt incluse în e-Factura</option>
-                  <option value="da">Include e-mail și telefon în e-Factura</option>
+                  <option value="nu">{settingsCopy.eFactura.contactOmitted}</option>
+                  <option value="da">{settingsCopy.eFactura.contactIncluded}</option>
                 </select>
-                <span className="hint">
-                  Nu este obligatoriu să incluzi datele tale de contact în e-Factura.
-                </span>
+                <span className="hint">{settingsCopy.eFactura.contactHint}</span>
               </div>
             </div>
           </Card>
@@ -546,26 +569,25 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
 
       {tab === 'bankaccounts' && (
         <div style={{ display: 'grid', gap: 16, maxWidth: 720 }}>
-          <Card title="Securitatea datelor personale">
+          <Card title={settingsCopy.security.title}>
             <p style={{ fontSize: 13, color: 'var(--text-2)', margin: 0 }}>
-              Pentru a efectua modificări ale conturilor bancare îți vom trimite un cod de
-              securitate prin SMS.
+              {settingsCopy.security.bankBody}
             </p>
           </Card>
 
           <Card
-            title="Conturi bancare"
+            title={settingsCopy.bank.title}
             action={
               <button className="btn btn-primary btn-sm" onClick={() => setBankOpen(true)}>
-                Adaugă cont bancar
+                {settingsCopy.bank.add}
               </button>
             }
           >
             <table className="table">
               <thead>
                 <tr>
-                  <th>Banca</th>
-                  <th>Moneda</th>
+                  <th>{settingsCopy.bank.bank}</th>
+                  <th>{settingsCopy.bank.currency}</th>
                 </tr>
               </thead>
               <tbody>
@@ -578,7 +600,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                 {settings.bankAccounts.length === 0 && (
                   <tr>
                     <td colSpan={2} style={{ color: 'var(--text-3)' }}>
-                      Niciun cont bancar înregistrat.
+                      {settingsCopy.bank.empty}
                     </td>
                   </tr>
                 )}
@@ -590,11 +612,11 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                 onClick={() =>
                   toast(
                     'info',
-                    'Un cont bancar de PFA este recomandat pentru separarea finanțelor personale de cele profesionale.'
+                    settingsCopy.toasts.bankAdvice
                   )
                 }
               >
-                Îmi trebuie cont bancar de PFA?
+                {settingsCopy.bank.why}
               </button>
             </div>
           </Card>
@@ -603,17 +625,16 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
 
       {tab === 'account' && (
         <div style={{ display: 'grid', gap: 16, maxWidth: 720 }}>
-          <Card title="Securitatea datelor personale">
+          <Card title={settingsCopy.security.title}>
             <p style={{ fontSize: 13, color: 'var(--text-2)', margin: 0 }}>
-              Pentru modificări ale datelor personale îți vom trimite un cod de securitate prin
-              SMS.
+              {settingsCopy.security.personalBody}
             </p>
           </Card>
 
-          <Card title="Date personale">
+          <Card title={settingsCopy.personal.card}>
             <div className="form-grid">
               <div className="field">
-                <label>Nume</label>
+                <label>{fields.name}</label>
                 <input
                   className="input"
                   value={personal.nume}
@@ -621,7 +642,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                 />
               </div>
               <div className="field">
-                <label>Email</label>
+                <label>{fields.email}</label>
                 <input
                   className="input"
                   value={personal.email}
@@ -629,7 +650,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                 />
               </div>
               <div className="field">
-                <label>Telefon</label>
+                <label>{fields.phone}</label>
                 <input
                   className="input"
                   value={personal.telefon}
@@ -639,19 +660,19 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
             </div>
           </Card>
 
-          <Card title="Opțiuni cont">
+          <Card title={settingsCopy.personal.options}>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 className="btn btn-outline"
-                onClick={() => toast('info', 'Schimbare parolă — simulare (versiune locală)')}
+                onClick={() => toast('info', settingsCopy.toasts.passwordSimulated)}
               >
-                Schimbă parola
+                {settingsCopy.personal.changePassword}
               </button>
               <button
                 className="btn btn-outline"
-                onClick={() => toast('info', 'Gestionare cookies — simulare (versiune locală)')}
+                onClick={() => toast('info', settingsCopy.toasts.cookiesSimulated)}
               >
-                Gestionează cookies
+                {settingsCopy.personal.manageCookies}
               </button>
             </div>
           </Card>
@@ -661,17 +682,17 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       {tab === 'fiscal' && (
         <div style={{ display: 'grid', gap: 16, maxWidth: 720 }}>
           {!isSelectableRegime(fiscal.regime) && (
-            <Card title="Regim fiscal nesusținut">
+            <Card title={settingsCopy.fiscal.unsupported}>
               <p style={{ fontSize: 13, color: 'var(--danger)', margin: 0 }}>
                 {regimeRefusalReason(fiscal.regime)}
               </p>
             </Card>
           )}
 
-          <Card title="Profil fiscal">
+          <Card title={settingsCopy.fiscal.profile}>
             <div className="form-grid">
               <div className="field">
-                <label>Regim fiscal <span className="req">*</span></label>
+                <label>{settingsCopy.fiscal.regime} <span className="req">*</span></label>
                 <select
                   className="input"
                   value={fiscal.regime}
@@ -679,35 +700,35 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                 >
                   {!isSelectableRegime(fiscal.regime) && (
                     <option value={fiscal.regime} disabled>
-                      {fiscal.regime} — nu poate fi calculat
+                      {settingsCopy.fiscal.regimeNotComputable(fiscal.regime)}
                     </option>
                   )}
                   {regimeOptions.map(r => (
                     <option key={r.value} value={r.value}>{r.label}</option>
                   ))}
                 </select>
-                <span className="hint">
-                  Cod fiscal art. 123 alin. (1). impozit pe profit nu este oferit: art. 13 alin. (1),
-                  art. 14 și art. 15 rezervă Titlul II persoanelor juridice, iar art. 120 a fost abrogat.
-                </span>
+                <FieldLegal
+                  hint={settingsCopy.fiscal.regimeHint}
+                  source={copy.sources.regimeOffered}
+                />
                 {errors.regime && <span className="error">{errors.regime}</span>}
               </div>
 
               <div className="field">
-                <label>Cod CAEN</label>
+                <label>{settingsCopy.fiscal.caen}</label>
                 <input
                   className="input"
                   value={fiscal.caen}
                   onChange={e => setFiscal({ ...fiscal, caen: e.target.value })}
                 />
-                <span className="hint">
-                  Codul CAEN nu schimbă regimul fiscal; nu susține o normă de venit (nicio regulă de
-                  normă nu a fost verificată pentru 2026).
-                </span>
+                <FieldLegal
+                  hint={settingsCopy.fiscal.caenHint}
+                  source={copy.sources.caenDoesNotChangeRegime}
+                />
               </div>
 
               <div className="field">
-                <label>Anul începerii activității <span className="req">*</span></label>
+                <label>{settingsCopy.fiscal.startYear} <span className="req">*</span></label>
                 <input
                   className="input"
                   value={fiscal.pfaStartYear}
@@ -717,7 +738,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>An fiscal de referință <span className="req">*</span></label>
+                <label>{settingsCopy.fiscal.fiscalYear} <span className="req">*</span></label>
                 <input
                   className="input"
                   value={fiscal.fiscalYear}
@@ -727,179 +748,177 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>Data înființării (fracțiune de an)</label>
+                <label>{settingsCopy.fiscal.establishmentDate}</label>
                 <input
                   className="input"
                   type="date"
                   value={fiscal.pfaStartDate}
                   onChange={e => setFiscal({ ...fiscal, pfaStartDate: e.target.value })}
                 />
-                <span className="hint">
-                  Art. 118 alin. (3): venitul realizat într-o fracțiune de an se consideră venit anual —
-                  baza nu se proratează. Necompletat = profil fără dată de înființare.
-                </span>
+                <FieldLegal
+                  hint={settingsCopy.fiscal.establishmentDateHint}
+                  source={copy.sources.establishmentDate}
+                />
                 {errors.pfaStartDate && <span className="error">{errors.pfaStartDate}</span>}
               </div>
 
               <div className="field">
-                <label>Venit din salarii</label>
+                <label>{settingsCopy.fiscal.salaryStatus}</label>
                 <select
                   className="input"
                   value={fiscal.salaryStatus}
                   onChange={e => setFiscal({ ...fiscal, salaryStatus: e.target.value as PfaSalaryStatus })}
                 >
-                  <option value="nu">nu</option>
-                  <option value="da">da</option>
+                  <option value="">{copy.ui.answerUnrecorded}</option>
+                  <option value="nu">{copy.ui.answerNo}</option>
+                  <option value="da">{copy.ui.answerYes}</option>
                 </select>
               </div>
 
               <div className="field">
-                <label>Venit brut anual din salarii (lei)</label>
+                <label>{settingsCopy.fiscal.salaryAmount}</label>
                 <input
                   className="input"
                   value={fiscal.salaryIncomeLei}
                   disabled={fiscal.salaryStatus !== 'da'}
                   onChange={e => setFiscal({ ...fiscal, salaryIncomeLei: e.target.value })}
                 />
-                <span className="hint">
-                  Art. 174 alin. (7) lit. a): diferența de la alin. (6) nu se datorează dacă salariul
-                  anual este cel puțin 6 salarii minime brute (24.300 lei în 2026). Sub acest prag
-                  diferența de 2.430 lei se datorează și nu se deduce (art. 118 alin. (2) lit. b)).
-                </span>
+                <FieldLegal
+                  hint={settingsCopy.fiscal.salaryAmountHint}
+                  note={
+                    fiscal.salaryStatus === 'da' && fiscal.salaryIncomeLei.trim() === ''
+                      ? copy.notes.salaryWithoutAmount
+                      : undefined
+                  }
+                  source={copy.sources.salarySixSm}
+                />
                 {errors.salaryIncomeLei && <span className="error">{errors.salaryIncomeLei}</span>}
               </div>
 
               <div className="field">
-                <label>Calitate de pensionar</label>
+                <label>{settingsCopy.fiscal.pensionerStatus}</label>
                 <select
                   className="input"
                   value={fiscal.pensionerStatus}
                   onChange={e => setFiscal({ ...fiscal, pensionerStatus: e.target.value as TriState })}
                 >
-                  <option value="">nu este înregistrat</option>
-                  <option value="nu">nu</option>
-                  <option value="da">da</option>
+                  <option value="">{copy.ui.answerUnrecorded}</option>
+                  <option value="nu">{copy.ui.answerNo}</option>
+                  <option value="da">{copy.ui.answerYes}</option>
                 </select>
-                <span className="hint">
-                  Art. 150 alin. (1) din Codul fiscal: calitatea de pensionar este temeiul pentru care nu
-                  se datorează CAS pe venitul din activități independente. Nu este temeiul pentru CASS —
-                  art. 174 alin. (7) lit. c) se decide pe sumele primite ca pensii în anul fiscal, nu pe
-                  acest statut. Valoarea „nu este înregistrat" înseamnă că aplicația nu știe, nu că persoana
-                  nu este pensionară.
-                </span>
+                <FieldLegal
+                  hint={settingsCopy.fiscal.pensionerStatusHint}
+                  source={copy.sources.pensionerStatus}
+                />
               </div>
 
               <div className="field">
-                <label>Sume primite ca pensii în anul fiscal</label>
+                <label>{settingsCopy.fiscal.pensionReceipt}</label>
                 <select
                   className="input"
                   value={fiscal.pensionReceipt}
                   onChange={e => setFiscal({ ...fiscal, pensionReceipt: e.target.value as TriState })}
                 >
-                  <option value="">nu este înregistrat</option>
-                  <option value="nu">nu</option>
-                  <option value="da">da</option>
+                  <option value="">{copy.ui.answerUnrecorded}</option>
+                  <option value="nu">{copy.ui.answerNo}</option>
+                  <option value="da">{copy.ui.answerYes}</option>
                 </select>
-                <span className="hint">
-                  Art. 174 alin. (7) lit. c) coroborat cu art. 99 alin. (1) din Codul fiscal: diferența de
-                  contribuție până la baza de 6 salarii minime brute nu se datorează dacă în anul fiscal
-                  persoana a primit cel puțin o sumă ca pensie. Fapta este încasarea din an, nu statutul.
-                  Cuantumul nu contează — lit. c) nu are niciun prag valoric, spre deosebire de lit. a) și
-                  lit. b). Excepția elimină doar diferența: contribuția de 10 % pe venitul net rămâne
-                  datorată.
-                </span>
+                <FieldLegal
+                  hint={settingsCopy.fiscal.pensionReceiptHint}
+                  note={fiscal.pensionReceipt === '' ? copy.notes.cassPensionReceipt : undefined}
+                  source={copy.sources.pensionReceipt}
+                />
               </div>
 
               <div className="field">
-                <label>Luni cu pensia suspendată (anul fiscal)</label>
+                <label>{settingsCopy.fiscal.suspensionMonths}</label>
                 <input
                   className="input"
                   value={fiscal.pensionSuspensionMonths}
-                  placeholder="ex: 3,4"
+                  placeholder={settingsCopy.fiscal.suspensionPlaceholder}
                   onChange={e => setFiscal({ ...fiscal, pensionSuspensionMonths: e.target.value })}
                 />
-                <span className="hint">
-                  Faptă înregistrată, fără efect juridic: nicio prevedere verificată (Cod fiscal, HG
-                  1/2016, OPANAF 2.736/2025) nu spune ce produce suspendarea asupra art. 174 alin. (7)
-                  lit. c). Aplicația consemnează lunile și nu trage nicio concluzie din ele.
-                </span>
+                <FieldLegal
+                  hint={settingsCopy.fiscal.suspensionHint}
+                  note={copy.notes.pensionSuspension}
+                  source={copy.sources.pensionSuspension}
+                />
                 {errors.pensionSuspensionMonths && <span className="error">{errors.pensionSuspensionMonths}</span>}
               </div>
 
               <div className="field">
-                <label>Excepție art. 154 alin. (1) lit. a), b), e) sau f) în anul precedent</label>
+                <label>{settingsCopy.fiscal.previousYearException}</label>
                 <select
                   className="input"
                   value={fiscal.previousYearExcepted}
                   onChange={e => setFiscal({ ...fiscal, previousYearExcepted: e.target.value as TriState })}
                 >
-                  <option value="">nu este înregistrat</option>
-                  <option value="nu">nu</option>
-                  <option value="da">da</option>
+                  <option value="">{copy.ui.answerUnrecorded}</option>
+                  <option value="nu">{copy.ui.answerNo}</option>
+                  <option value="da">{copy.ui.answerYes}</option>
                 </select>
-                <span className="hint">
-                  Art. 174 alin. (8) din Codul fiscal extinde excepția de la alin. (7) și la persoanele
-                  care în anul precedent s-au încadrat în art. 154 alin. (1) lit. a), b), e) sau f). Lista
-                  este închisă și NU include pensionarii, deci acest răspuns nu se deduce din calitatea de
-                  pensionar.
-                </span>
+                <FieldLegal
+                  hint={settingsCopy.fiscal.previousYearExceptionHint}
+                  note={fiscal.previousYearExcepted === '' ? copy.notes.previousYearRoute : undefined}
+                  source={copy.sources.previousYearException}
+                />
               </div>
 
               <div className="field">
-                <label>Opțiune pentru CASS (art. 180 alin. (1)) în anul precedent</label>
+                <label>{settingsCopy.fiscal.previousYearOption}</label>
                 <select
                   className="input"
                   value={fiscal.previousYearOption}
                   onChange={e => setFiscal({ ...fiscal, previousYearOption: e.target.value as TriState })}
                 >
-                  <option value="">nu este înregistrat</option>
-                  <option value="nu">nu</option>
-                  <option value="da">da</option>
+                  <option value="">{copy.ui.answerUnrecorded}</option>
+                  <option value="nu">{copy.ui.answerNo}</option>
+                  <option value="da">{copy.ui.answerYes}</option>
                 </select>
-                <span className="hint">
-                  Art. 174 alin. (8) lit. b) din Codul fiscal: aceeași cale pentru persoanele care au
-                  optat pentru plata contribuției potrivit art. 180 alin. (1) în anul precedent.
-                </span>
+                <FieldLegal
+                  hint={settingsCopy.fiscal.previousYearOptionHint}
+                  note={fiscal.previousYearOption === '' ? copy.notes.previousYearRoute : undefined}
+                  source={copy.sources.previousYearOption}
+                />
               </div>
 
               <div className="field">
-                <label>Asigurare de sănătate în alt stat (art. 153 alin. (2))</label>
+                <label>{settingsCopy.fiscal.foreignInsurance}</label>
                 <select
                   className="input"
                   value={fiscal.foreignInsuranceHeld}
                   onChange={e => setFiscal({ ...fiscal, foreignInsuranceHeld: e.target.value as TriState })}
                 >
-                  <option value="">nu este înregistrat</option>
-                  <option value="nu">nu</option>
-                  <option value="da">da</option>
+                  <option value="">{copy.ui.answerUnrecorded}</option>
+                  <option value="nu">{copy.ui.answerNo}</option>
+                  <option value="da">{copy.ui.answerYes}</option>
                 </select>
-                <span className="hint">
-                  Art. 153 alin. (2) din Codul fiscal: persoana asigurată pentru boală și maternitate în
-                  alt stat UE/SEE/Elvețian sau cu acord bilateral nu are calitatea de contribuabil la CASS
-                  — dar numai dacă face și dovada valabilității asigurării. Nu are legătură cu pensia.
-                </span>
+                <FieldLegal
+                  hint={settingsCopy.fiscal.foreignInsuranceHint}
+                  source={copy.sources.foreignInsurance}
+                />
               </div>
 
               <div className="field">
-                <label>Dovada asigurării din alt stat a fost făcută</label>
+                <label>{settingsCopy.fiscal.foreignInsuranceProof}</label>
                 <select
                   className="input"
                   value={fiscal.foreignInsuranceProved}
                   onChange={e => setFiscal({ ...fiscal, foreignInsuranceProved: e.target.value as TriState })}
                 >
-                  <option value="">nu este înregistrat</option>
-                  <option value="nu">nu</option>
-                  <option value="da">da</option>
+                  <option value="">{copy.ui.answerUnrecorded}</option>
+                  <option value="nu">{copy.ui.answerNo}</option>
+                  <option value="da">{copy.ui.answerYes}</option>
                 </select>
-                <span className="hint">
-                  Art. 153 alin. (2) din Codul fiscal cere ambele: asigurarea și „dovada valabilității
-                  asigurării” stabilită prin ordin comun A.N.A.F. / C.N.A.S. Fără dovadă, exceptia nu
-                  produce nimic.
-                </span>
+                <FieldLegal
+                  hint={settingsCopy.fiscal.foreignInsuranceProofHint}
+                  note={fiscal.foreignInsuranceProved !== 'da' ? copy.notes.foreignInsuranceProof : undefined}
+                  source={copy.sources.foreignInsuranceProof}
+                />
               </div>
 
               <div className="field">
-                <label>Asigurări sociale de sănătate</label>
+                <label>{settingsCopy.fiscal.cassStatus}</label>
                 <select
                   className="input"
                   value={fiscal.socialInsuranceStatus}
@@ -907,51 +926,51 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                     setFiscal({ ...fiscal, socialInsuranceStatus: e.target.value as PfaSocialInsuranceStatus })
                   }
                 >
-                  <option value="obligatoriu">obligatoriu</option>
-                  <option value="exempt">exceptat (art. 154 alin. (1))</option>
-                  <option value="neplata">nu se datorează</option>
+                  <option value="obligatoriu">{settingsCopy.fiscal.cassStatusOptions.obligatoriu}</option>
+                  <option value="exempt">{settingsCopy.fiscal.cassStatusOptions.exempt}</option>
+                  <option value="neplata">{settingsCopy.fiscal.cassStatusOptions.neplata}</option>
                 </select>
-                <span className="hint">
-                  CASS: „exceptat" (art. 154 alin. (1) — o listă închisă de categorii, niciuna nu
-                  acoperă un PFA cu activitate independentă) și „nu se datorează" sunt ambele
-                  neconfirmate ca temei pentru un PFA. Motorul marchează linia CASS cu
-                  „review_required" pentru că nu a găsit nicio regulă aplicabilă; valoarea calculată
-                  rămâne 0 lei. Titlul V nu folosește termenul „scutire" — de aceea nici acest
-                  formular nu-l folosește.
-                </span>
+                {/* TASK 7, the loudest instance of the defect: this hint used to print the internal token
+                    `review_required` to the user, next to a paragraph of the Cod fiscal. The person is now
+                    told what is uncertain and what the app does, and the statute text sits behind the
+                    sources disclosure with its citation kept. The withheld conclusion itself did not move:
+                    the row is still undecided and the computed amount is still 0 lei. */}
+                <FieldLegal
+                  hint={settingsCopy.fiscal.cassStatusHint}
+                  note={copy.notes.cassExemptionUnconfirmed}
+                  source={copy.sources.cassStatus}
+                />
               </div>
 
               <div className="field">
-                <label>Scutire de TVA</label>
+                <label>{settingsCopy.fiscal.vatExempt}</label>
                 <select
                   className="input"
                   value={fiscal.vatExempt}
                   onChange={e => setFiscal({ ...fiscal, vatExempt: e.target.value })}
                 >
-                  <option value="nu">nu</option>
-                  <option value="da">da</option>
+                  <option value="nu">{copy.ui.answerNo}</option>
+                  <option value="da">{copy.ui.answerYes}</option>
                 </select>
               </div>
 
               <div className="field">
-                <label>Data depășirii pragului de TVA</label>
+                <label>{settingsCopy.fiscal.vatExceedanceDate}</label>
                 <input
                   className="input"
                   type="date"
                   value={fiscal.vatExceedanceDate}
                   onChange={e => setFiscal({ ...fiscal, vatExceedanceDate: e.target.value })}
                 />
-                <span className="hint">
-                  Data la care cifra de afaceri a depășit pragul de TVA (art. 310 alin. (1));
-                  obligația de înregistrare intervine cel târziu la această dată (art. 316 alin. (1)
-                  lit. b)). Necompletat = aplicația nu cunoaște data și nu afișează niciun termen de
-                  înregistrare — nu inventează unul.
-                </span>
+                <FieldLegal
+                  hint={settingsCopy.fiscal.vatExceedanceDateHint}
+                  source={copy.sources.vatExceedanceDate}
+                />
                 {errors.vatExceedanceDate && <span className="error">{errors.vatExceedanceDate}</span>}
               </div>
 
               <div className="field">
-                <label>Prag plăți în numerar (lei)</label>
+                <label>{settingsCopy.fiscal.cashFloor}</label>
                 <input
                   className="input"
                   value={fiscal.cashFloorLei}
@@ -966,40 +985,39 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
 
       {tvaOpen && (
         <Modal
-          title="Cod TVA intracomunitar"
+          title={settingsCopy.vatModal.title}
           onClose={() => setTvaOpen(false)}
           footer={
             <>
               <button className="btn btn-ghost" onClick={() => setTvaOpen(false)}>
-                Renunță
+                {copy.ui.discard}
               </button>
               <button className="btn btn-primary" onClick={searchTva}>
-                Caută codul
+                {settingsCopy.vatModal.search}
               </button>
               {tvaFound && (
                 <button className="btn btn-primary" onClick={addTva}>
-                  Adaugă codul
+                  {settingsCopy.vatModal.add}
                 </button>
               )}
             </>
           }
         >
           <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 12px' }}>
-            Introdu codul unic de identificare fiscală obținut de la ANAF în scop de TVA
-            intracomunitar
+            {settingsCopy.vatModal.intro}
           </p>
           <div className="field">
             <input
               className="input"
               value={tvaCode}
-              placeholder="RO123456789"
+              placeholder={settingsCopy.vatModal.placeholder}
               onChange={e => {
                 setTvaCode(e.target.value);
                 setTvaFound(false);
               }}
             />
             {tvaFound && (
-              <span className="hint">Cod validat (căutare simulată ANAF)</span>
+              <span className="hint">{settingsCopy.vatModal.validated}</span>
             )}
           </div>
         </Modal>
@@ -1007,31 +1025,31 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
 
       {bankOpen && (
         <Modal
-          title="Adaugă cont bancar"
+          title={settingsCopy.bank.add}
           onClose={() => setBankOpen(false)}
           footer={
             <>
               <button className="btn btn-ghost" onClick={() => setBankOpen(false)}>
-                Renunță
+                {copy.ui.discard}
               </button>
               <button className="btn btn-primary" onClick={addBank}>
-                Adaugă
+                {copy.ui.add}
               </button>
             </>
           }
         >
           <div className="form-grid" style={{ gridTemplateColumns: '1fr' }}>
             <div className="field">
-              <label>Banca</label>
+              <label>{settingsCopy.bank.bank}</label>
               <input
                 className="input"
                 value={newBank.banca}
-                placeholder="ex. CEC Bank"
+                placeholder={settingsCopy.bank.bankPlaceholder}
                 onChange={e => setNewBank({ ...newBank, banca: e.target.value })}
               />
             </div>
             <div className="field">
-              <label>Moneda</label>
+              <label>{settingsCopy.bank.currency}</label>
               <select
                 className="input"
                 value={newBank.moneda}
