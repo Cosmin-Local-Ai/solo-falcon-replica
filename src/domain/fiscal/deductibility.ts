@@ -1,5 +1,6 @@
 import type { FiscalRule } from './rules';
 import { selectApplicableRules, type RuleQuery } from './select';
+import { majorToMinor, money, type CurrencyCode, type Money } from '../money';
 
 /**
  * TASK 2a — the expense-deductibility classifier.
@@ -165,9 +166,27 @@ export type DeductibilityCap = {
   percent?: number;
   /** Annual euro cap. Never converted to lei here — the law states it in EUR. */
   eur?: number;
+  /**
+   * TASK 10b — the currency the ceiling is stated in, and the amount in that currency, read from the
+   * parameter's own `unit`/`value` pair instead of hardcoded in the calculator. CF art. 68 alin. (5)
+   * states its ceilings in euro and ONLY in euro, so every rule in this package resolves to `EUR` here.
+   * The pair exists so a future *verified* non-euro ceiling would travel through the same conversion
+   * rather than a new one — it is not a licence to invent a ceiling the law does not state.
+   *
+   * `eur` is kept beside it because TASK 2c pinned it and because the euro letters are the whole set.
+   */
+  currency?: Exclude<CurrencyCode, 'RON'>;
+  amount?: number;
   base: CapBase;
   /** The article that states the cap base, for the explanation layer. */
   baseArticle: string;
+  /**
+   * TASK 10b — the earliest payment the CEILING counts. OUG 8/2026 art. 10 alin. (9) makes the FY2026
+   * 400 EUR test for pensii facultative count payments from 1 ianuarie 2026, while the neighbouring
+   * letters bite from 1 martie. That is a cap-aggregation window, not a rule-availability date, so it is
+   * NOT `effectiveFrom` and must not be read as one. Written by TASK 2c, load-bearing from TASK 10b.
+   */
+  countsPaymentsFrom?: string;
 };
 
 export type ClassifiedExpense = {
@@ -258,17 +277,59 @@ function isSpecific(rule: FiscalRule): boolean {
   return c !== undefined && c !== 'always';
 }
 
+/**
+ * The currency-bearing ceiling parameter, if the rule states one. The currency comes from the
+ * parameter's `unit`, which is the same fact `paramBani` refuses on: a parameter whose unit is not
+ * 'lei' can never be read as money, so a ceiling in a foreign currency stays a ceiling until an
+ * explicit conversion turns it into a lei one.
+ */
+const CAP_CURRENCY_UNITS: Record<string, Exclude<CurrencyCode, 'RON'>> = {
+  eur: 'EUR',
+  usd: 'USD',
+  gbp: 'GBP',
+  huf: 'HUF',
+};
+
+function capCurrencyParam(rule: FiscalRule): { currency: Exclude<CurrencyCode, 'RON'>; major: number } | undefined {
+  for (const p of rule.parameters) {
+    const currency = CAP_CURRENCY_UNITS[p.unit];
+    if (currency === undefined) continue;
+    if (typeof p.value !== 'number') continue;
+    return { currency, major: p.value };
+  }
+  return undefined;
+}
+
 function capFor(rule: FiscalRule): DeductibilityCap | undefined {
   const percent = numberParam(rule, 'cap_percent');
   const eur = numberParam(rule, 'cap_eur');
-  if (percent === undefined && eur === undefined) return undefined;
+  const currencyParam = capCurrencyParam(rule);
+  if (percent === undefined && eur === undefined && currencyParam === undefined) return undefined;
   const base = textParam(rule, 'cap_base') ?? 'expense_itself';
+  const countsPaymentsFrom = textParam(rule, 'cap_counts_payments_from');
   return {
     ...(percent !== undefined ? { percent } : {}),
     ...(eur !== undefined ? { eur } : {}),
+    ...(currencyParam !== undefined ? { currency: currencyParam.currency, amount: currencyParam.major } : {}),
     base: base as CapBase,
     baseArticle: textParam(rule, 'cap_base_article') ?? rule.sourceArticle,
+    ...(countsPaymentsFrom !== undefined ? { countsPaymentsFrom } : {}),
   };
+}
+
+/**
+ * The ceiling as a money amount in the currency the law states it in — the ONLY place a rule's foreign
+ * ceiling becomes a `Money`, and it is never a lei one. `paramBani` still refuses any parameter whose
+ * unit is not 'lei', and the lei ceiling exists only after `strikeCapCeiling` converts this.
+ *
+ * Returns `null` for a cap with no currency parameter, which is every percentage cap: a percentage is
+ * not an amount and must never be dressed as one.
+ */
+export function capAmount(cap: DeductibilityCap): Money<Exclude<CurrencyCode, 'RON'>> | null {
+  const currency = cap.currency;
+  const major = cap.amount;
+  if (currency === undefined || major === undefined) return null;
+  return money(majorToMinor(major, currency), currency);
 }
 
 // ── The public entry points ─────────────────────────────────────────────────

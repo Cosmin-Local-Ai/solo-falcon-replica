@@ -28,12 +28,16 @@ import type { AppData, Expense } from '../data/types';
 import {
   classifyExpenseDeductibility,
   expenseEngineRefusal,
+  capAmount,
   type DeductibilityCap,
   type ExpenseCategory,
   type ExpenseClassificationContext,
   type RefusedExpense,
 } from './fiscal/deductibility';
 import type { FiscalRule } from './fiscal/rules';
+import { strikeCapCeiling, type CapCeilingStrike } from './fx/capCeiling';
+import { normaliseLedgerToRon, type LedgerConversion, type UnconvertedLedgerRecord } from './fx/ledger';
+import { RateStore, type FxRateProvider } from './fx/provider';
 import { addBani, applyRateDecimal, isRon, lei, money, requireRon, subBani, type Bani } from './money';
 import { selectProjectionV1, type ProjectionV1 } from './projection';
 import type { TaxEstimateResult } from './tax';
@@ -248,6 +252,12 @@ export interface AnnualCapLine {
   records: Expense[];
   /** The unresolved conflict the rule carries, when it carries one. */
   conflict?: string;
+  /**
+   * TASK 10b — for a ceiling stated in a foreign currency: the lei ceiling, the rate that produced it,
+   * and the competing reading. Absent while no rate is recorded, in which case the records behind the
+   * line are excluded as `cap_unresolved` rather than held.
+   */
+  euro?: CapCeilingStrike;
 }
 
 /**
@@ -277,6 +287,14 @@ export interface AnnualCapAdjustment {
   baseAlt?: MeasurePair;
   ceilingAlt?: MeasurePair;
   conflict?: string;
+  /**
+   * TASK 10b — a ceiling stated in a foreign currency exists as a lei number only through a conversion,
+   * so the number has to say which rate produced it, at which basis, for which payment year, and whether
+   * that rate is provisional. `ceilingAlt` carries the competing reading's ceiling (CF art. 9 alin. (3)
+   * lit. b) + alin. (4), the daily rate on the payment date) when it can be struck at all; when it
+   * cannot, `euro.alternative` says why.
+   */
+  euro?: CapCeilingStrike & { countsPaymentsFrom?: string };
 }
 
 export interface DeductibleExpenseCounts {
@@ -299,6 +317,14 @@ export interface DeductibleExpenseSet {
   annualCapped: AnnualCapLine[];
   excluded: ExcludedExpenseRecord[];
   counts: DeductibleExpenseCounts;
+  /**
+   * TASK 10b — the ledger records that entered the lei base only because a recorded BNR rate converted
+   * them, each with the rate, the date it was keyed to and its provenance. A converted figure that cannot
+   * name its rate is the same defect B-32 was.
+   */
+  conversions: LedgerConversion[];
+  /** TASK 10b — foreign-currency records with no rate to convert them at, revenues included. */
+  unconverted: UnconvertedLedgerRecord[];
   /** Art. 68^3: the activity has no expense engine at all, so nothing was classified (defect B-29). */
   refusal: RefusedExpense | null;
 }
@@ -348,24 +374,52 @@ function zeroPair(): MeasurePair {
 }
 
 /**
+ * TASK 10b — the rates this assembler may use are exactly the rates the app stores.
+ *
+ * `AppData.fxRates` is the persisted boundary, and every record on it has already passed
+ * `fxRateRecordSchema` at the load gate (`data/schema.ts`). `RateStore.replace` is the keyed upsert
+ * `loadDailyRates` itself uses, keyed by `rateKey` (currency, kind, date-or-year), which is what makes a
+ * final annual average overwrite the provisional one it stands for. Nothing here fetches: `FxRateProvider`
+ * is synchronous by design, so a rate is a stored fact and never something a render re-derives.
+ */
+function rateProviderFor(data: AppData): FxRateProvider {
+  const store = new RateStore();
+  for (const record of data.fxRates ?? []) store.replace(record);
+  return store;
+}
+
+/** The year a payment falls in — art. 68 alin. (4) lit. b) attributes by payment, not by invoice. */
+function paymentYearOf(fiscalDate: string): number | undefined {
+  const match = /^(\d{4})-\d{2}-\d{2}$/.exec(fiscalDate);
+  return match ? Number(match[1]) : undefined;
+}
+
+/**
  * The sentence naming why a cap base cannot be measured here. It must name the DATUM and the RULE,
  * and must not convert "the app holds no such datum" into "the base is zero" — for cheltuieli sociale
  * that difference is the whole answer (research 22 §4: the zero ceiling is an arithmetic consequence of
  * having no personnel, which is a fact the app does not hold, not a fact it can assert).
  */
-function unresolvedCapDetail(cap: DeductibilityCap | undefined, rule: FiscalRule): string {
+function unresolvedCapDetail(
+  cap: DeductibilityCap | undefined,
+  sourceArticle: string,
+  paymentYear?: number,
+): string {
   const base = cap ? cap.base : 'nesetată';
-  const article = cap ? cap.baseArticle : rule.sourceArticle;
+  const article = cap ? cap.baseArticle : sourceArticle;
   let missing: string;
   if (base === 'annual_eur_per_person') {
     missing =
-      'lipsă datele: plafonul este exprimat în euro, iar aplicația nu stochează niciun curs BNR. '
+      'lipsă datele: plafonul este exprimat în euro, iar aplicația nu stochează niciun curs BNR'
+      + (paymentYear !== undefined ? ` pentru anul plății ${paymentYear}` : '')
+      + '. '
       + 'Regula de conversie este HG 1/2016, Norme, Titlul IV, Cap. II, Secțiunea a 2-a, pct. 7 alin. (6) '
       + '— „cursul mediu comunicat de Banca Națională a României pentru anul în care s-a efectuat plata"; '
       + 'art. 9 alin. (3) lit. b) și alin. (4) CF indică însă cursul BNR de la data plății, cu excepția '
       + 'doar a cazurilor „prevăzute expres în prezentul cod", iar normele nu sunt „prezentul cod". '
       + 'Niciun text primar nu împacă cele două reguli, deci aplicația nu alege niciuna și nu fixează '
-      + 'niciun curs: un curs scris în cod ar fi o regulă inventată.';
+      + 'niciun curs: un curs scris în cod ar fi o regulă inventată, iar media anuală nu se calculează '
+      + 'din cursurile zilnice.';
   } else if (base === 'annual_salary_expense') {
     missing =
       'lipsă datele: baza este „valoarea anuală a cheltuielilor efectuate cu salariile personalului", '
@@ -377,6 +431,20 @@ function unresolvedCapDetail(cap: DeductibilityCap | undefined, rule: FiscalRule
       + 'sunt excluse din total, nu deduse cu o valoare ghicită.';
   }
   return `Plafonul se calculează pe baza „${base}” (${article}) — ${missing}`;
+}
+
+/**
+ * A payment outside the window the CEILING counts. OUG 8/2026 art. 10 alin. (9) fixes that window for the
+ * FY2026 400 EUR test (from 1 ianuarie 2026 for pensii facultative); a payment before it belongs to a
+ * ceiling this app does not model, so the honest answer is to keep the record out and say which window
+ * excluded it — never to fold it into a ceiling that does not cover it.
+ */
+function capWindowDetail(cap: DeductibilityCap, window: string, fiscalDate: string): string {
+  return (
+    `Plafonul categoriei numără plățile de la ${window} încolo (${cap.baseArticle}), iar plata din ${fiscalDate} ` +
+    'este în afara acestei ferestre. Plafonul anului anterior nu este modelat în aplicație, deci a include ' +
+    'plata aici ar însemna a ghici la ce plafon aparține; înregistrarea iese din total și este raportată.'
+  );
 }
 
 /** The record as it may enter the engine, with a per-expense cap applied to both money fields. */
@@ -426,6 +494,8 @@ export function selectDeductibleExpenses(
     annualCapped: [],
     excluded: [],
     counts: { entered: 0, undetermined: 0, nonDeductible: 0, capUnresolved: 0, annualCapped: 0, foreignCurrency: 0 },
+    conversions: [],
+    unconverted: [],
     refusal: null,
   };
 
@@ -433,6 +503,14 @@ export function selectDeductibleExpenses(
   // resolve, and classifying into nothing would produce a confident wrong number (defect B-29).
   const refusal = expenseEngineRefusal(context, rules, { taxYear: fiscalYear, asOfDate });
   if (refusal) return { ...empty, refusal };
+
+  // TASK 10b — the ledger is read in lei. A record written in a foreign currency is converted at the BNR
+  // daily reference rate on the date it was paid or received (CF art. 9 alin. (3) lit. b) + alin. (4)),
+  // which is the rule the research verified for both directions and which is not EUR-specific, so USD
+  // travels it with the same authority as EUR. A record with no rate for that date stays out and is
+  // reported below — TASK 10a's exclusion is not deleted, it is now reached by a lookup.
+  const provider = rateProviderFor(data);
+  const ledger = normaliseLedgerToRon(data, provider);
 
   const records: Expense[] = [];
   const excluded: ExcludedExpenseRecord[] = [];
@@ -447,15 +525,15 @@ export function selectDeductibleExpenses(
     foreignCurrency: 0,
   };
 
-  for (const e of data.expenses) {
+  for (const e of ledger.data.expenses) {
     const fiscalDate = expenseFiscalDate(e);
     if (e.status !== 'inregistrata' || !inPeriod(fiscalDate, asOfDate, fiscalYear)) continue;
 
-    // TASK 10a (B-32). The deductible base is a lei quantity — every ceiling struck here is a lei ceiling
-    // and every figure the engine consumes is lei. A record written in another currency has no lei amount
-    // until a BNR rate, a date or year to key it to and a legal basis are attached to it, and this build
-    // attaches none. So it is excluded and counted, with the missing datum named — never added to a lei
-    // total as though its cents were bani, which is precisely the defect this step removes.
+    // TASK 10a (B-32), still standing. The deductible base is a lei quantity — every ceiling struck here
+    // is a lei ceiling and every figure the engine consumes is lei. A record that survived the conversion
+    // pass above is still foreign only because the store holds no rate for its currency on its payment
+    // date, so it is excluded and counted with the missing datum named — never added to a lei total as
+    // though its cents were bani, which is precisely the defect this step removes.
     if (!isRon(e.valoareFaraTva) || !isRon(e.tva)) {
       counts.foreignCurrency += 1;
       excluded.push({
@@ -466,9 +544,10 @@ export function selectDeductibleExpenses(
         sourceArticle: 'CF art. 9 alin. (3) lit. b) și alin. (4)',
         detail:
           `inregistrarea este în ${e.valoareFaraTva.currency}, iar baza deductibilă este în lei. ` +
-          'Lipsește cursul BNR de aplicat: art. 9 alin. (3) lit. b) și alin. (4) indică cursul comunicat de BNR ' +
-          'valabil la data la care s-a plătit suma, dar aplicația nu are încă un curs atașat acestei înregistrări. ' +
-          'Un curs scris de la sine ar fi o cifră inventată, așa că înregistrarea iese din total și este raportată.',
+          'Lipsește cursul BNR de aplicat: art. 9 alin. (3) lit. b) și alin. (4) indică cursul comunicat de BNR '
+          + `valabil la data la care s-a plătit suma (${fiscalDate}), iar registrul de cursuri nu conține niciun curs `
+          + `${e.valoareFaraTva.currency} pentru această dată. Un curs scris de la sine ar fi o cifră inventată, ` 
+          + 'așa că înregistrarea iese din total și este raportată.',
       });
       continue;
     }
@@ -544,7 +623,14 @@ export function selectDeductibleExpenses(
         cap !== undefined &&
         cap.percent !== undefined &&
         (cap.base === 'art68_alin6_base' || cap.base === 'gross_income');
-      if (!cap || (!computableHere && !computableByAssembler)) {
+      // TASK 10b — a ceiling stated in a foreign currency is measurable once the store holds the rate
+      // pct. 7 alin. (6) asks for. The currency comes from the rule's own parameter unit, so nothing here
+      // is EUR-specific; the package states euro only because CF art. 68 alin. (5) states euro only, and
+      // no USD ceiling may be invented to exercise the generic path.
+      const capMoney = cap !== undefined ? capAmount(cap) : null;
+      const computableByConversion =
+        cap !== undefined && cap.base === 'annual_eur_per_person' && capMoney !== null;
+      if (!cap || (!computableHere && !computableByAssembler && !computableByConversion)) {
         counts.capUnresolved += 1;
         excluded.push({
           id: e.id,
@@ -552,11 +638,26 @@ export function selectDeductibleExpenses(
           reason: 'cap_unresolved',
           ruleId: c.rule.ruleId,
           sourceArticle: c.rule.sourceArticle,
-          detail: unresolvedCapDetail(cap, c.rule),
+          detail: unresolvedCapDetail(cap, c.rule.sourceArticle, paymentYearOf(fiscalDate)),
         });
         continue;
       }
-      if (computableByAssembler) {
+      // TASK 10b — the window the CEILING counts, read from the rule (`cap_counts_payments_from`), not
+      // from a date in code. A payment outside it belongs to a ceiling this build does not model.
+      const window = cap.countsPaymentsFrom;
+      if (computableByConversion && window !== undefined && fiscalDate < window) {
+        counts.capUnresolved += 1;
+        excluded.push({
+          id: e.id,
+          category: c.category,
+          reason: 'cap_unresolved',
+          ruleId: c.rule.ruleId,
+          sourceArticle: c.rule.sourceArticle,
+          detail: capWindowDetail(cap, window, fiscalDate),
+        });
+        continue;
+      }
+      if (computableByAssembler || computableByConversion) {
         // Held back, not dropped: the assembler strikes the ceiling in its second pass and adds back
         // what the ceiling allows. Counting it as `entered` here would claim a total the ceiling has not
         // yet bounded; counting it as `capUnresolved` would say the law is unmeasurable when it is not.
@@ -619,6 +720,49 @@ export function selectDeductibleExpenses(
     byCategory.set(category, line);
   }
 
+  // TASK 10b — a ceiling stated in a foreign currency is a lei number only through a rate the app may not
+  // invent. The category was held on the assumption that the store supplies the annual average pct. 7
+  // alin. (6) names; if it does not, every record behind it goes back to `excluded` with the datum, the
+  // payment year and the rule named — TASK 2c's treatment, reached now by a lookup instead of by a
+  // rule-shape test. Nothing is converted at a guessed rate, and no average is ever computed here.
+  const unresolvedEuro: { line: AnnualCapLine; detail: string }[] = [];
+  for (const line of cappedByCategory.values()) {
+    if (line.cap.base !== 'annual_eur_per_person') continue;
+    const amount = capAmount(line.cap);
+    if (amount === null) {
+      unresolvedEuro.push({ line, detail: unresolvedCapDetail(line.cap, line.sourceArticle) });
+      continue;
+    }
+    const attempt = strikeCapCeiling({
+      cap: amount,
+      paymentDates: line.records.map(expenseFiscalDate),
+      provider,
+    });
+    if (attempt.ok) {
+      line.euro = attempt.strike;
+      continue;
+    }
+    unresolvedEuro.push({
+      line,
+      detail: unresolvedCapDetail(line.cap, line.sourceArticle, attempt.paymentYear),
+    });
+  }
+  for (const { line, detail } of unresolvedEuro) {
+    cappedByCategory.delete(line.category);
+    counts.annualCapped -= line.count;
+    counts.capUnresolved += line.count;
+    for (const e of line.records) {
+      excluded.push({
+        id: e.id,
+        category: line.category,
+        reason: 'cap_unresolved',
+        ruleId: line.ruleId,
+        sourceArticle: line.sourceArticle,
+        detail,
+      });
+    }
+  }
+
   return {
     records,
     // Deterministic order, so the explanation of a total is the same text on every run.
@@ -626,6 +770,8 @@ export function selectDeductibleExpenses(
     annualCapped: [...cappedByCategory.values()].sort((a, b) => a.category.localeCompare(b.category)),
     excluded,
     counts,
+    conversions: ledger.conversions,
+    unconverted: ledger.unconverted,
     refusal: null,
   };
 }
@@ -641,8 +787,9 @@ export function selectDeductibleExpenses(
  * back into each other, which is exactly what alin. (6) exists to prevent.
  *
  * The order inside the pass is forced, not chosen: the alin. (5) lit. q) ceiling is measured on the
- * gross, so it needs nothing; the alin. (6) base is measured after the other alin. (5) caps (the
- * post-cap reading, decision 4), so it needs lit. q)'s answer first.
+ * gross, so it needs nothing; the ceilings stated in a foreign currency (Pass A2, TASK 10b) are measured
+ * on a converted statutory amount, so they need only a rate; and the alin. (6) base is measured after the
+ * other alin. (5) caps, so it needs both of their answers first.
  *
  * WHICH BASIS THE CEILING IS STRUCK ON — the decision, and it is load-bearing. The ceiling is an
  * ANNUAL one: art. 65 alin. (1) makes the fiscal year the calendar year, and art. 68 alin. (4) lit. b)
@@ -674,11 +821,13 @@ function applyAnnualDeductibilityCaps(
   let actual: EstimateAmounts = { ...basis.actual };
 
   const adjustments: AnnualCapAdjustment[] = [];
-  // lit. q) as RECORDED and as ALLOWED. TASK 2d: the operative alin. (6) base subtracts the RECORDED
-  // amount, so `profClaimed` is load-bearing arithmetic, not bookkeeping; `profAllowed` survives so the
-  // post-cap reading can still be computed and shown as the alternative.
-  const profAllowed = zeroPair();
-  const profClaimed = zeroPair();
+  // The alin. (5) categories that are HELD OUT of the record set but still belong to the alin. (6) base —
+  // lit. q) and, from TASK 10b, the ceilings stated in a foreign currency. As RECORDED and as ALLOWED:
+  // TASK 2d makes the operative alin. (6) base subtract the RECORDED amount, so the claimed figure is
+  // load-bearing arithmetic, not bookkeeping; the allowed figure survives so the post-cap reading can still
+  // be computed and shown as the alternative.
+  const cappedAllowed = zeroPair();
+  const cappedClaimed = zeroPair();
 
   // ── Pass A — the caps measured on the gross (art. 68 alin. (5) lit. q)).
   for (const { line, claimed } of claims) {
@@ -692,8 +841,8 @@ function applyAnnualDeductibilityCaps(
       allowed[m] = minBani(claimed[m], ceiling[m]);
       annual = withDeductible(annual, m, addBani(deductibleOf(annual, m), allowed[m]));
       actual = withDeductible(actual, m, addBani(deductibleOf(actual, m), minBani(line[m], ceiling[m])));
-      profAllowed[m] = addBani(profAllowed[m], allowed[m]);
-      profClaimed[m] = addBani(profClaimed[m], line[m]);
+      cappedAllowed[m] = addBani(cappedAllowed[m], allowed[m]);
+      cappedClaimed[m] = addBani(cappedClaimed[m], line[m]);
     }
     adjustments.push({
       category: line.category,
@@ -703,6 +852,52 @@ function applyAnnualDeductibilityCaps(
       claimed,
       ceiling,
       allowed,
+      ...(line.conflict ? { conflict: line.conflict } : {}),
+    });
+  }
+
+  // ── Pass A2 — the ceilings stated in a foreign currency, converted (TASK 10b).
+  // HG 1/2016 Titlul IV Cap. II pct. 7 alin. (6) converts the LIMIT, not the payment: the lei ceiling is
+  // one number for the whole year, struck once at the BNR annual average of the year of payment, and the
+  // same ceiling bounds both money measures because a statutory ceiling is not a VAT-sensitive quantity.
+  // The competing reading — CF art. 9 alin. (3) lit. b) + alin. (4), the daily rate on the payment date —
+  // is struck alongside it and travels as `ceilingAlt`, the same "show the reading that was not applied"
+  // discipline TASK 2d established for the alin. (6) base. Applying one is not a finding that the other
+  // is wrong: the conflict itself travels on the rule as `conflict`, and on the adjustment.
+  for (const { line, claimed } of claims) {
+    if (line.cap.base !== 'annual_eur_per_person') continue;
+    const strike = line.euro;
+    // No rate in the store: pass 1 already excluded these records as `cap_unresolved`, so there is no
+    // ceiling to strike and nothing to add back. This is not a silent zero — the exclusion says so.
+    if (strike === undefined) continue;
+    const ceiling = zeroPair();
+    const allowed = zeroPair();
+    const ceilingAlt = zeroPair();
+    const alternative = strike.alternative;
+    for (const m of MEASURES) {
+      ceiling[m] = strike.ceiling;
+      if (alternative.ok) ceilingAlt[m] = alternative.ceiling;
+      allowed[m] = minBani(claimed[m], ceiling[m]);
+      annual = withDeductible(annual, m, addBani(deductibleOf(annual, m), allowed[m]));
+      actual = withDeductible(actual, m, addBani(deductibleOf(actual, m), minBani(line[m], ceiling[m])));
+      cappedAllowed[m] = addBani(cappedAllowed[m], allowed[m]);
+      cappedClaimed[m] = addBani(cappedClaimed[m], line[m]);
+    }
+    adjustments.push({
+      category: line.category,
+      ruleId: line.ruleId,
+      sourceArticle: line.sourceArticle,
+      cap: line.cap,
+      claimed,
+      ceiling,
+      allowed,
+      ...(alternative.ok ? { ceilingAlt } : {}),
+      euro: {
+        ...strike,
+        ...(line.cap.countsPaymentsFrom !== undefined
+          ? { countsPaymentsFrom: line.cap.countsPaymentsFrom }
+          : {}),
+      },
       ...(line.conflict ? { conflict: line.conflict } : {}),
     });
   }
@@ -721,14 +916,16 @@ function applyAnnualDeductibilityCaps(
   // carry no annual ceiling plus what Pass A allowed in: burse private and protocol are absent from it,
   // which is precisely what alin. (6) asks for. The base is still struck ONCE, before Pass B, so neither
   // alin. (6) letter can move it and there is still no iteration.
-  const base = zeroPair(); // operative — PRE-cap: lit. q) subtracted as RECORDED
-  const baseAlt = zeroPair(); // alternative — POST-cap: lit. q) subtracted as ALLOWED
+  const base = zeroPair(); // operative — PRE-cap: the held-out alin. (5) categories subtracted as RECORDED
+  const baseAlt = zeroPair(); // alternative — POST-cap: the same categories subtracted as ALLOWED
   const ceilingAlt = zeroPair();
   for (const m of MEASURES) {
     const postCap = nonNegativeBani(subBani(grossOf(annual, m), deductibleOf(annual, m)));
     baseAlt[m] = postCap;
-    // Subtract the lit. q) excess Pass A disallowed, i.e. subtract the category as it was RECORDED.
-    base[m] = nonNegativeBani(subBani(postCap, subBani(profClaimed[m], profAllowed[m])));
+    // Subtract the excess Pass A / Pass A2 disallowed, i.e. subtract those categories as RECORDED. Burse
+    // private and protocol are absent from the base entirely — alin. (6) removes them by name — so they
+    // need no correction; lit. q) and the converted euro ceilings do, because alin. (6) keeps them.
+    base[m] = nonNegativeBani(subBani(postCap, subBani(cappedClaimed[m], cappedAllowed[m])));
   }
   for (const { line, claimed } of claims) {
     if (line.cap.base !== 'art68_alin6_base') continue;
@@ -807,6 +1004,8 @@ export type EstimateOperands =
       deductible: DeductibleExpenseSet;
       /** TASK 2c — the annual ceilings that were struck, each with the base it was struck on. */
       capAdjustments: AnnualCapAdjustment[];
+      /** TASK 10b — ledger records that entered the operands only because a recorded rate converted them. */
+      conversions: LedgerConversion[];
     }
   | {
       kind: 'refused';
@@ -815,6 +1014,7 @@ export type EstimateOperands =
       result: TaxEstimateResult;
       deductible: DeductibleExpenseSet;
       capAdjustments: AnnualCapAdjustment[];
+      conversions: LedgerConversion[];
     };
 
 export function selectEstimateOperands(
@@ -823,7 +1023,18 @@ export function selectEstimateOperands(
   rules: FiscalRule[],
   context: ExpenseClassificationContext = {},
 ): EstimateOperands {
-  const deductible = selectDeductibleExpenses(data, asOfDate, rules, context);
+  // TASK 10b — the ledger is read in lei BEFORE anything is aggregated, so the gross, the deductible set,
+  // the projection and the ceilings are all struck on the SAME record set. Converting after aggregation
+  // would be the Phase 10 drift class in a new costume.
+  const provider = rateProviderFor(data);
+  const ledger = normaliseLedgerToRon(data, provider);
+  const deductible = {
+    ...selectDeductibleExpenses(ledger.data, asOfDate, rules, context),
+    // The assembler's own pass covers revenues as well as expenses, so the audit trail it reports is the
+    // wider one; the inner pass would report only the expenses it could still see.
+    conversions: ledger.conversions,
+    unconverted: ledger.unconverted,
+  };
 
   if (deductible.refusal) {
     const reason = estimateRefusalReason(deductible.refusal);
@@ -833,6 +1044,7 @@ export function selectEstimateOperands(
       result: { status: 'review_required', reason, lines: [] },
       deductible,
       capAdjustments: [],
+      conversions: ledger.conversions,
     };
   }
 
@@ -840,7 +1052,7 @@ export function selectEstimateOperands(
   // annual ceiling: art. 68 alin. (6) removes burse private and protocol from its own base, so the base
   // must be struck on exactly this set. `selectProjectionV1` re-runs `selectYtd` internally, so both
   // selectors get the SAME object — a subset applied to only one of them is the Phase 10 drift class.
-  const scoped: AppData = { ...data, expenses: deductible.records };
+  const scoped: AppData = { ...ledger.data, expenses: deductible.records };
   const ytd = selectYtd(scoped, asOfDate);
   const projection = selectProjectionV1(scoped, asOfDate);
   const basisBeforeCaps = selectTaxEstimateBasis(projection, ytd);
@@ -852,6 +1064,7 @@ export function selectEstimateOperands(
       amounts: amountsForEstimate(basisBeforeCaps),
       deductible,
       capAdjustments: [],
+      conversions: ledger.conversions,
     };
   }
 
@@ -863,7 +1076,14 @@ export function selectEstimateOperands(
     claimed: claimAnnualMeasure(data, asOfDate, line, canProject),
   }));
   const { basis, adjustments } = applyAnnualDeductibilityCaps(basisBeforeCaps, claims);
-  return { kind: 'run', basis, amounts: amountsForEstimate(basis), deductible, capAdjustments: adjustments };
+  return {
+    kind: 'run',
+    basis,
+    amounts: amountsForEstimate(basis),
+    deductible,
+    capAdjustments: adjustments,
+    conversions: ledger.conversions,
+  };
 }
 
 /**

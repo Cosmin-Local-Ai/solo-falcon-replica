@@ -156,9 +156,14 @@ const NORME = (article: string): Pick<DeductibilityRuleSpec, 'sourceAct' | 'sour
  * h), p), r), s) contains a conversion clause. HG 1/2016 Norme, Titlul IV, Cap. II, Secțiunea a 2-a,
  * pct. 7 alin. (6) does convert them, at the BNR annual average for the payment year. CF art. 9 alin.
  * (3) lit. b) + alin. (4) convert at the BNR rate on the payment date, excepting only „cazurile
- * prevăzute expres în prezentul cod" — and the norms are not „prezentul cod". The app therefore
- * converts nothing: picking a rate would be picking a side in a conflict no primary text resolves, and
- * the app stores no BNR rate at all.
+ * prevăzute expres în prezentul cod" — and the norms are not „prezentul cod".
+ *
+ * TASK 10b changed what the app DOES with that conflict, not the conflict itself. It now applies pct. 7
+ * alin. (6) — the basis ANAF itself cites when it tells taxpayers which rate it uses — and shows the
+ * art. 9 ceiling beside it. What has not changed is that no rate is fixed in code and no average is ever
+ * computed: the rate comes from the store, and with no rate in the store the ceiling stays unresolved.
+ * Applying one reading is not a finding that the other is wrong, and this sentence is what stops the
+ * applied figure from being read as settled law.
  */
 const EUR_CONVERSION_CONFLICT =
   'CONFLICT NEREZOLVAT (research 22 §1): HG 1/2016, Norme, Titlul IV, Cap. II, Secțiunea a 2-a, pct. 7 '
@@ -166,8 +171,10 @@ const EUR_CONVERSION_CONFLICT =
   + 'pentru anul în care s-a efectuat plata", iar art. 9 alin. (3) lit. b) și alin. (4) CF folosesc '
   + 'cursul BNR „valabil pentru datele respective" al plății, cu excepția doar a cazurilor „prevăzute '
   + 'expres în prezentul cod" — normele nu sunt „prezentul cod". Niciun text primar citit nu împacă cele '
-  + 'două reguli. Aplicația nu alege niciuna și nu convertește nimic: nu stochează niciun curs BNR, iar '
-  + 'un curs fixat în cod ar fi o regulă inventată.';
+  + 'două reguli. Aplicația aplică pct. 7 alin. (6) și afișează alături plafonul celeilalte citiri, '
+  + 'pentru că legea nu stabilește care dintre ele se aplică; cursul vine din registrul de cursuri, '
+  + 'niciodată calculat de aplicație, iar fără curs înregistrat plafonul rămâne nemăsurat — un curs '
+  + 'fixat în cod ar fi o regulă inventată.';
 
 /**
  * research 22 §2. „pentru fiecare persoană" is not settled to mean per taxpayer or per insured/covered
