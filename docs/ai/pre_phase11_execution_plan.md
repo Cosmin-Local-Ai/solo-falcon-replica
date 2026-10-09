@@ -45,6 +45,9 @@ Strictly sequential, one Worker each. Scouts in parallel inside a task.
 
 ## 2. Standing rules for every Worker in this round
 
+**OVERRIDE — Scouts are SEQUENTIAL (user instruction, 2026-10-09).** Rule 4 of the global contract ("Scouts may run in parallel when their questions are independent") is **suspended** from the next Worker onward: **spawn Scouts one at a time, waiting for each report before spawning the next.** The user is measuring whether sequential scouting is faster on their machine, so the comparison must be clean — do not parallelise Scouts, and do not run a Researcher concurrently with a Worker. Workers remain sequential (rule 1, unchanged). TASK 2c (`task2c-annual-caps`) was briefed **before** this override and is exempt; every brief from 18 on carries it.
+
+
 These are additions to the global contract, learned from Phases 1-10.
 
 1. **Date stamps come from the tool, never typed.** `date +%F` or `git log -1 --format=%cd --date=short`. The second audit caught ~40 `STATE.md` lines dated 2026-10-08 against a last commit of 7 Oct. It is provenance hygiene, not tampering, and it is now a rule.
