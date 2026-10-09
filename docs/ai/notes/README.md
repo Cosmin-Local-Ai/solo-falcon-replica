@@ -4,6 +4,14 @@ Raw in-flight notes from the Phase 5 and Phase 6 Workers, copied out of `/tmp` s
 restart. They are **working notes, not sources of record**: they contain superseded line numbers,
 mid-task assumptions, and claims the Workers later corrected in their own handoffs.
 
+Three more arrivals, all moved here by **TASK 9 docs hygiene (2026-10-09)** so that
+`docs/ai/phases/` holds only phases of record and `docs/ai/briefs/` holds one brief per number:
+
+- `working_notes_phase10.md` — was `docs/ai/phases/_WORKING_NOTES_phase10.md`;
+- `working_notes_task1.md` — was `docs/ai/phases/_WORKING_NOTES_task1.md`;
+- `brief14_projection_tax_estimate_superseded.md` — was `docs/ai/briefs/14_projection_tax_estimate.md`,
+  the worker-facing twin of the surviving `docs/ai/briefs/14_task1_projection_estimate.md`.
+
 - Source of record for law: `docs/ai/research/08_art118_income_tax_2026.md`,
   `docs/ai/research/09_u8_amendment_scan_and_optare.md`.
 - Source of record for what shipped: `docs/ai/phases/NN_*.md`.

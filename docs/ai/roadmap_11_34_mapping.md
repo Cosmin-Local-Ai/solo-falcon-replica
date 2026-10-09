@@ -4,7 +4,7 @@
 
 Method note: a type, a component, a copy key or a doc statement is **not** proof of end-to-end behaviour. Where the evidence below is a grep or a doc statement rather than a run behaviour, it says so.
 
-Evidence baseline: `bab4a46` (TASK 8), **63 files / 1121 tests**, `tsc` 0, `build` 0, `e2e` 36. TASK 9 (`task9-provenance-hygiene`) in flight at time of writing.
+Evidence baseline: `76b50ca` + `dd7f812` (TASK 9, `task9-provenance-hygiene` — **done 2026-10-09**), **64 files / 1149 tests**, `tsc` 0, `build` 0, **`e2e` 37**. Previous baseline: `bab4a46` (TASK 8), 63 files / 1121 tests, `e2e` 36. TASK 9 evidence: `phases/23_provenance_hygiene.md`.
 
 ---
 

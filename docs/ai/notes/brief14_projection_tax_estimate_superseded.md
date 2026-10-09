@@ -1,5 +1,12 @@
 # BRIEF 14 — The annual tax estimate must be fed by the projection, not by raw YTD
 
+> **SUPERSEDED / RETIRED — TASK 9 docs hygiene, 2026-10-09.** `docs/ai/briefs/` held **two briefs
+> numbered 14**: this one (`14_projection_tax_estimate.md`) and `14_task1_projection_estimate.md`.
+> The survivor is **`docs/ai/briefs/14_task1_projection_estimate.md`** — it is the brief the record
+> cites (`phases/12_projection_annual_estimate.md:3`, `STATE.md`, `notes/working_notes_task1.md`).
+> This file is the worker-facing variant of the same assignment, nothing referenced it, and it is kept
+> here as an archive copy so the brief sequence in `briefs/` is unambiguous. Its content is unchanged.
+
 Owner: Worker 1 of 4 (orchestrator plan: projection→estimate, expense deductibility, tax-reserve
 persistence, threshold semantics). This brief is the whole of your assignment. Do not start the next one.
 

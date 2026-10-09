@@ -1,5 +1,10 @@
 # WORKING NOTES - TASK 1 (projection feeds the annual tax estimate)
 
+> **Moved 2026-10-09 (TASK 9 docs hygiene):** `docs/ai/phases/_WORKING_NOTES_task1.md` →
+> `docs/ai/notes/working_notes_task1.md`. `docs/ai/phases/` is for phases of record; these are
+> in-flight notes. Content unchanged, including the self-references below, which point at the old
+> path. Source of record for what shipped stays `docs/ai/phases/12_projection_annual_estimate.md`.
+
 **STATUS: TASK 1 COMPLETE.** The deliverable is `docs/ai/phases/12_projection_annual_estimate.md`
 (13 sections, all figures measured). This file is kept as the working record - the scout findings in
 section 1 are the projection model's semantics as found, which the phase doc summarises. The TODO list

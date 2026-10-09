@@ -1,5 +1,10 @@
 # PHASE 10 — WORKING NOTES (survive compaction)
 
+> **Moved 2026-10-09 (TASK 9 docs hygiene):** `docs/ai/phases/_WORKING_NOTES_phase10.md` →
+> `docs/ai/notes/working_notes_phase10.md`. `docs/ai/phases/` is for phases of record; these are
+> in-flight notes. Content unchanged. Source of record for what shipped stays
+> `docs/ai/phases/10_money_precision.md`.
+
 **If my context is compacted: re-read `/home/agent/workspace/solo-falcon-replica/docs/ai/briefs/12_phase10_money.md`
 FIRST. It is the authoritative scope. Then resume from this file.**
 

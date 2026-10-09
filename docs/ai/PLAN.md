@@ -673,6 +673,8 @@ doc. They are **not** new phases and no phase boundary was invented for them:
 | TASK 5 | one boolean answered three legal questions; the CASS relief keyed on status (`649e0f1`) | `phases/19_pension_cass_input_model.md` |
 | **TASK 6** | **a snapshot pinned release *metadata*, not the rules that produced it** | `phases/20_rule_release_immutability.md` |
 | **TASK 7** | **no copy layer existed; sentences were inline and `Settings.tsx` rendered the literal `review_required`** | `phases/21_language_layer.md` |
+| **TASK 8** | **one `severity` field carried legal weight, urgency and kind at once (`c6a2d5d`, `bab4a46`)** | `phases/22_prioritisation_severity.md` |
+| **TASK 9** | **provenance existed as copy and as a domain function and reached no surface; the seed taught filings the law does not ask of it and called the taxpayer an SRL; two card systems and a chart wider than its box** | `phases/23_provenance_hygiene.md` |
 
 **TASK 6 — the recorded decision and its shape (2026-10-09).** The decision was already made and was not
 reopened: **content-address the rule set; do not redesign the release model.** `releaseId` and
@@ -709,3 +711,41 @@ widened to `Bani \| null`: no UI path reads it, and the card already renders the
 `TaxReserveRecommendation.reservedAmount`. **No money figure moved** — deductible 120,00 / 144,00, VNA
 9.096,00, clock 3.249,00, reserve 1.083,00, hero 51.510 lei; `62 files / 1076 tests`, `tsc` 0, `build` 0,
 `e2e` 36 with two re-pins, both replaced not deleted.
+
+> TASK 8 (`phases/22_prioritisation_severity.md`) is in the table above for completeness; it left no
+> PLAN.md or STATE.md prose of its own, and the counts it ended on — `63 files / 1121 tests`, `e2e` 36 —
+> are the baseline TASK 9 inherited.
+
+**TASK 9 — the recorded decision and its shape (2026-10-09).** Two halves, one failure: **a figure on
+screen whose origin the app could not state.** Provenance became a view, not a re-design:
+`describeSnapshotRuleProvenance` / `noRulePackageProvenance` over **five** states
+(`pinned | drifted | unregistered | unpinned | no_release` — the fifth for a row about a figure the engine
+*refused*, which has no calculation record and must not borrow one), rendered by
+`src/components/ui/RuleProvenance.tsx` on the estimate hero, `Observații`, `Ce trebuie să faci` and
+`Legislație`. Three refusals carry the weight: `recordedHash` is `snapshot.ruleSetHash` **verbatim, never
+minted** (`unpinned` is where most of this app's history lives); `registeredHash` is the digest of the
+**effective applied** set, never `RuleRelease.contentHash`; and **`drifted` is surfaced and never
+repaired** — re-hashing would destroy the only evidence of an in-place edit of a published release.
+Citations travel only with `pinned`/`drifted`, and the article stays **beside** every digest.
+`FIGURE_SOURCES = ['tax','reserve','threshold']` is the one place that decides which rows carry it.
+**Citations:** the two minimum-wage acts moved from the `legalteka.ro` mirror to Portal Legislativ — HG
+1.506 *din 27 noiembrie 2024* is doc **291450** (28.11.2024 is the MO issue, not the signing date), HG
+146/2026 is doc **308231** — and the register cross-references itself: HG 146/2026 art. 2 hyperlinks
+291450 when it abrogates it. **No 2025 or H1-2026 wage act exists between them**, which is why the
+1 January 2026 anchor stands. `ruleSetDigest` excludes citations by design („a hash is not a legal
+citation”), so **no digest, snapshot or data version moved**. **Seed:** the identity became a PFA in both
+`profile.identity` and the legacy `settings.company` block; `declarations: []`, because the three monthly
+records described filings that do not exist (CF art. 122 alin. (3) — one annual D212 by 25 May; art. 120 /
+120¹ abrogated by OUG 128/2024 from 01-01-2025) *and* contradicted the registers (2026-09 claimed
+9.680 / 546 against 7.700 / 205,50 recorded). **No nil return was minted** — a nil return is a filing that
+was never due. The quarterly D100 / D220 artefacts became the one return this profile files: **D212 for
+the 2025 year, filed 20.05.2026**. Two model defects are **recorded, not fixed** — `D-DECL-1` (a monthly
+`{an, luna}` shape cannot hold an annual D212) and `D-VAT-1` (the D300 row's periodicity depends on facts
+the seed does not record) — because either fix is a model change, and this was a hygiene task. **Layout:**
+one card system (`ui/card.tsx`, `CardTitle` → `h2.card-title`, `.card-head` deleted), and the chart that
+was **640px inside a 356px box** at 390px now sizes to its container — the old overflow tests had passed
+the whole time because the page did not overflow; the chart was simply cut off.
+**No money figure moved** — deductible 120,00 / 144,00, VNA 9.096,00, clock 3.249,00, reserve 1.083,00,
+year-end 3.112,00, each re-derived by hand in `phases/23_provenance_hygiene.md` §4.6; `64 files / 1149
+tests`, `tsc` 0, `build` 0, **`e2e` 37** (the new spec is the reserve surviving a reload), with every
+re-pin recorded old → new in `phases/23_provenance_hygiene.md` §7.
