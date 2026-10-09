@@ -1,5 +1,6 @@
 import type { FiscalRule } from './rules';
 import { lei } from '../money';
+import { DEDUCTIBILITY_RULES_2026 } from './deductibility2026';
 
 const PROVENANCE_2026 = {
   jurisdiction: 'RO',
@@ -318,4 +319,9 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     sourceArticle: 'art. 316 alin. (1) lit. b) ("cel târziu la data depășirii plafonului"); efect înregistrare art. 316 alin. (1^1) lit. b); plafon art. 310 alin. (1)',
     sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/312601',
   },
+  // TASK 2a: the expense-deductibility rule set (CF art. 68). It lives in this package so that a
+  // corrected or newly verified per-category treatment is a NEW RULE RELEASE, not a code change.
+  // It carries a fresh taxRegime ('expense-deductibility'), so none of the three taxRegime lookups
+  // in tax.ts, nor THRESHOLD_SPECS, nor the deadline rules, can see or be shadowed by it.
+  ...DEDUCTIBILITY_RULES_2026,
 ];

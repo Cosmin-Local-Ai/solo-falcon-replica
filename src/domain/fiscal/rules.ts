@@ -1,4 +1,15 @@
-export type FiscalRegime = 'cass' | 'cas' | 'income-tax' | 'vat' | 'deadlines' | 'wage-reference';
+// 'expense-deductibility' (TASK 2a) is deliberately a FRESH regime string rather than a reuse of
+// 'cas' / 'cass' / 'income-tax': tax.ts resolves those three with applicable.find(r => r.taxRegime
+// === ...), so a second rule sharing one of them would be silently shadowed by whichever ruleId
+// sorts first. 'deadlines' and 'wage-reference' were added the same way.
+export type FiscalRegime =
+  | 'cass'
+  | 'cas'
+  | 'income-tax'
+  | 'vat'
+  | 'deadlines'
+  | 'wage-reference'
+  | 'expense-deductibility';
 
 export type FiscalRuleStatus =
   | 'PROPOSED'
@@ -16,7 +27,11 @@ export type FiscalParameter = {
   // written in code. `days` is a day-count offset (the deadline rules' `offset_days`); `text` is a
   // short machine-readable token (a deadline rule's `event_type` / `event` / `applies_to`).
   // Nothing renders `unit`; it is metadata for humans and for validation.
-  unit: 'lei' | 'percent' | 'date' | 'count' | 'days' | 'text';
+  // 'eur' exists so a cap the LAW states in euro (CF art. 68 alin. (5), the 400 euro annual
+  // equivalents) can be carried as data without being silently reinterpreted as lei. It is NOT a
+  // money unit for the engine: paramBani in calculators.ts refuses any unit other than 'lei', which
+  // is exactly the guard that keeps a euro figure out of a bani calculation.
+  unit: 'lei' | 'percent' | 'date' | 'count' | 'days' | 'text' | 'eur';
   description?: string;
 };
 

@@ -6,8 +6,13 @@ import { selectApplicableRules } from './select';
 import { lei } from '../money';
 
 describe('PFA 2026 system-real package', () => {
-  it('contains exactly 9 rules', () => {
-    expect(PFA_2026_SYSTEM_REAL_PACKAGE).toHaveLength(9);
+  // 9 fiscal-parameter rules (CAS/CASS/income-tax/VAT/wage/deadlines) + 39 expense-deductibility
+  // rules added by TASK 2a under taxRegime 'expense-deductibility' (CF art. 68). The count moved from
+  // 9 because the deductibility rule set is data in this package, which is what makes a later legal
+  // correction a new rule release rather than a code change. No parameter value, formula or computed
+  // figure in the original 9 rules changed.
+  it('contains exactly 48 rules (9 fiscal + 39 expense-deductibility)', () => {
+    expect(PFA_2026_SYSTEM_REAL_PACKAGE).toHaveLength(48);
   });
 
   it('every rule has 16 defined fields and valid provenance', () => {
@@ -63,12 +68,15 @@ describe('PFA 2026 system-real package', () => {
 });
 
 describe('selectApplicableRules', () => {
-  it('returns 8 rules for a date in H1 2026 (H2 wage rule not yet effective)', () => {
+  // 48 - 1 = 47: only GENERAL_MINIMUM_WAGE_2026_H2 is outside the window on 2026-03-15. The two
+  // art. 68 alin. (5) letters added by OUG 8/2026 (g^1 occupational pensions, g^2 PEPP) ARE selected
+  // here because they take effect 2026-03-01 - contributions paid before that date must not reach them.
+  it('returns 47 rules for a date in H1 2026 (H2 wage rule not yet effective)', () => {
     const selected = selectApplicableRules(PFA_2026_SYSTEM_REAL_PACKAGE, {
       taxYear: 2026,
       asOfDate: '2026-03-15',
     });
-    expect(selected).toHaveLength(8);
+    expect(selected).toHaveLength(47);
   });
 
   it('excludes the H1 minimum wage rule after 2026-06-30', () => {
@@ -79,7 +87,8 @@ describe('selectApplicableRules', () => {
     const ids = selected.map((r) => r.ruleId);
     expect(ids).not.toContain('GENERAL_MINIMUM_WAGE_2026_H1');
     expect(ids).toContain('GENERAL_MINIMUM_WAGE_2026_H2');
-    expect(selected).toHaveLength(8);
+    // 48 - 1 = 47: only GENERAL_MINIMUM_WAGE_2026_H1 has expired by 2026-09-01.
+    expect(selected).toHaveLength(47);
   });
 
   it('returns nothing for a year without rules', () => {

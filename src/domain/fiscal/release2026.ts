@@ -16,6 +16,49 @@ export const PFA_2026_RELEASE: RuleRelease = {
     'VAT_THRESHOLD_2026',
     'PFA_DEADLINE_2026',
     'VAT_REGISTRATION_DEADLINE_2026',
+    // TASK 2a - the expense-deductibility rule set, CF art. 68. Each id is one litera of art. 68
+    // (or of the Normele HG 1/2016 that supplies it), so a corrected per-category treatment lands as
+    // a new rule release rather than a code change. See
+    // docs/ai/phases/13_expense_deductibility_ruleset.md.
+    'EXPENSE_PERSONAL_USE_2026',
+    'EXPENSE_NON_TAXABLE_INCOME_2026',
+    'EXPENSE_OWN_INCOME_TAX_2026',
+    'EXPENSE_PERSONAL_INSURANCE_2026',
+    'EXPENSE_DONATION_2026',
+    'EXPENSE_FINE_OR_PENALTY_2026',
+    'EXPENSE_LOAN_PRINCIPAL_2026',
+    'EXPENSE_DEPRECIABLE_ASSET_PURCHASE_2026',
+    'EXPENSE_INVENTORY_SHORTAGE_2026',
+    'EXPENSE_TAX_FOR_BENEFICIARY_2026',
+    'EXPENSE_DEPRECIATION_PERSONAL_PATRIMONY_2026',
+    'EXPENSE_SPONSORSHIP_2026',
+    'EXPENSE_CORRUPTION_2026',
+    'EXPENSE_OWNER_SOCIAL_CONTRIBUTIONS_2026',
+    'EXPENSE_DOCUMENTATION_ABSENT_2026',
+    'EXPENSE_EMPLOYER_CONTRIBUTIONS_2026',
+    'EXPENSE_RENT_BUSINESS_SPACE_2026',
+    'EXPENSE_BANK_INTEREST_2026',
+    'EXPENSE_POSTAL_TELECOM_2026',
+    'EXPENSE_ENERGY_WATER_2026',
+    'EXPENSE_BUSINESS_SPACE_UPKEEP_2026',
+    'EXPENSE_DEPRECIATION_BUSINESS_ASSET_2026',
+    'EXPENSE_VEHICLE_EXCLUSIVE_USE_2026',
+    'EXPENSE_VEHICLE_MIXED_USE_2026',
+    'EXPENSE_VEHICLE_NOT_USED_2026',
+    'EXPENSE_PROTOCOL_2026',
+    'EXPENSE_SOCIAL_EXPENSES_2026',
+    'EXPENSE_PRIVATE_SCHOLARSHIP_2026',
+    'EXPENSE_PRIVATE_PENSION_2026',
+    'EXPENSE_OCCUPATIONAL_PENSION_2026',
+    'EXPENSE_PEPP_2026',
+    'EXPENSE_VOLUNTARY_HEALTH_INSURANCE_2026',
+    'EXPENSE_SPORTS_SUBSCRIPTION_2026',
+    'EXPENSE_PROFESSIONAL_BODY_DUES_2026',
+    'EXPENSE_PROFESSIONAL_CONTRIBUTION_2026',
+    'EXPENSE_ETF_PURCHASE_2026',
+    'EXPENSE_HOME_OFFICE_SHARED_2026',
+    'EXPENSE_COMODAT_SHARE_2026',
+    'EXPENSE_ENGINE_CAZARE_2026',
   ],
   status: 'SAFE_ACTIVATION',
   effectiveFrom: '2026-01-01',
@@ -42,11 +85,21 @@ export const PFA_2026_RELEASE: RuleRelease = {
     // Minimum-wage reference acts (unchanged from the original package).
     'https://www.legalteka.ro/act/1506/2024',
     'https://www.legalteka.ro/act/146/2026',
+    // Added with the TASK 2a deductibility rules: the consolidated Normele metodologice HG 1/2016
+    // (pct. 7 alin. (4)-(8), pct. 68) and the consolidated OUG nr. 8/2026 that added art. 68
+    // alin. (5) lit. g^1), g^2) and s).
+    'https://legislatie.just.ro/Public/DetaliiDocument/307847',
+    'https://legislatie.just.ro/Public/DetaliiDocumentAfis/307580',
   ],
   notes:
     'Provenance verified 2026-10-05 against primary sources; see docs/ai/phases/02_fiscal_baseline.md, ' +
     'which supersedes docs/ai/research/06_2026_fiscal_research.md. Legislation ingestion WAS applied to ' +
     'provenance metadata only — no formula, calculator or parameter-value change. Residual UNVERIFIED ' +
     'items U-1..U-7 are recorded there and in code comments; U-1 (non-deductible TVA for a neplătitor de ' +
-    'TVA) must remain REVIEW_REQUIRED, never a computed rule.',
+    'TVA) must remain REVIEW_REQUIRED, never a computed rule. ' +
+    'TASK 2a adds the 39 expense-deductibility rules under taxRegime "expense-deductibility". They ' +
+    'are read only by classifyExpenseDeductibility, never by tax.ts, so no computed figure in this ' +
+    'release moves. Their legal basis is CF art. 68 - NOT art. 21 and not art. 123: Titlul IV ' +
+    'contains zero references to art. 21 and the corporate general rule is art. 25 alin. (1). No ' +
+    'corporate-only Titlul II limit is encoded for a PFA beyond the named borrowings art. 68 makes.',
 };
