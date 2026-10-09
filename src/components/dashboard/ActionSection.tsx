@@ -43,23 +43,31 @@ export default function ActionSection({ actions }: ActionSectionProps) {
         actions.map((item) => (
           <div
             key={item.id}
-            className="row between attention-row"
+            className="attention-row"
             data-severity={item.severity}
             data-state={item.state}
             data-source={item.source}
           >
-            <span className="action-label">{item.title}</span>
-            <span className="row attention-controls">
-              <span className={`badge ${severityBadgeClass(item.severity)}`}>
-                {severityLabel(item.severity)}
+            <div className="row between">
+              <span className="action-label">{item.title}</span>
+              <span className="row attention-controls">
+                <span className={`badge ${severityBadgeClass(item.severity)}`}>
+                  {severityLabel(item.severity)}
+                </span>
+                <span className="badge badge-neutral">{actionsCopy.sourceLabels[item.source]}</span>
+                {item.target ? (
+                  <a className="attention-target" href={item.target.href}>
+                    {attentionCopy.openTarget}
+                    {item.target.record
+                      ? ` ${attentionCopy.recordReference(item.target.record.reference)}`
+                      : ''}
+                  </a>
+                ) : null}
               </span>
-              <span className="badge badge-neutral">{actionsCopy.sourceLabels[item.source]}</span>
-              {item.target ? (
-                <a className="attention-target" href={item.target.href}>
-                  {attentionCopy.openTarget}
-                </a>
-              ) : null}
-            </span>
+            </div>
+            {/* The reason the record carries, on the row itself: "a rejected document" is not
+                actionable, "rejected: CUI nevalid" is. */}
+            <div className="hint">{item.description}</div>
           </div>
         ))
       )}

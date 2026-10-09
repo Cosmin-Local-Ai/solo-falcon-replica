@@ -92,6 +92,14 @@ describe('ActionSection (TASK 8 — the action surface)', () => {
     );
   });
 
+  it('shows the reason the record itself carries, on the row', () => {
+    // "A rejected document" is not actionable. "Rejected: CUI nevalid" is. The reason comes from the
+    // record (`statusDetail`), verbatim — the domain invents nothing when the record holds none.
+    render(<ActionSection actions={makeActions()} />);
+    expect(screen.getByText(/NF-2026-003 din 18\.09\.2026 este respins: CUI nevalid\./)).toBeInTheDocument();
+    expect(screen.getByText(/Deschide înregistrarea NF-2026-003/)).toBeInTheDocument();
+  });
+
   it('renders an item with no target without a link', () => {
     render(
       <ActionSection

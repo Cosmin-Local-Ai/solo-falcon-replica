@@ -363,32 +363,78 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(completeness.getByText('Lipsă', { exact: true })).toHaveCount(1);
   });
 
-  test('Ce trebuie să faci: renders the 3 pending action items', async ({ page }) => {
+  test('Ce trebuie să faci: renders the 6 pending action items', async ({ page }) => {
     await page.goto('/dashboard');
 
     const actions = sectionWith(page, 'Ce trebuie să faci');
     // TASK 7 re-pin (replaced, not deleted): the count used to read `3 item de rezolvat` — an English
-    // plural dropped into Romanian, the calque class the grammar sweep targets. The count and the
-    // assertion are otherwise identical: three items.
-    await expect(actions.getByText('3 elemente de rezolvat')).toBeVisible();
+    // plural dropped into Romanian, the calque class the grammar sweep targets.
+    // TASK 8 re-pin (replaced, not deleted): 3 → 6. Old three = 1 deadline + 1 completeness + 1 tax
+    // review. The tax-review action is gone (the seed estimate computes, so there is nothing to
+    // review), and the four records the seed genuinely holds unresolved (r2, r3, e3, d2) now surface.
+    // New six = 4 records + 1 completeness + 1 deadline.
+    await expect(actions.getByText('6 elemente de rezolvat')).toBeVisible();
     // ActionSection renders one .action-label per item (not .item-row).
-    await expect(actions.locator('.action-label')).toHaveCount(3);
+    await expect(actions.locator('.action-label')).toHaveCount(6);
 
-    // 1 deadline action (D212 only — Phase 9b deleted the four non-existent quarterly obligations),
-    // 1 completeness, 1 tax review.
+    // Each record carries the reason its own row holds — `statusDetail` verbatim, nothing invented.
+    await expect(actions.getByText('Document de venit respins: NF-2026-003')).toBeVisible();
+    await expect(actions.getByText(/CUI nevalid/)).toBeVisible();
+    await expect(actions.getByText('Transmitere în așteptare: FCT-2026-002')).toBeVisible();
+    await expect(actions.getByText(/„În așteptare”/)).toBeVisible();
+    await expect(actions.getByText('Document de cheltuială respins: FCT-PRO-121')).toBeVisible();
+    await expect(actions.getByText(/Document neconform/)).toBeVisible();
+    await expect(actions.getByText('Declarație fără depunere înregistrată: 2026-06')).toBeVisible();
+    // The app states that no submission is recorded; it does not claim the return was not filed.
+    await expect(actions.getByText(/nu are nicio dată de depunere înregistrată/)).toBeVisible();
+
+    // Source badges — one per attention source. Old: deadline / completeness / tax only.
     await expect(actions.getByText('Termen limită', { exact: true })).toHaveCount(1);
-    await expect(actions.getByText('Completitudine', { exact: true })).toBeVisible();
-    await expect(actions.getByText('Revizuire estimări fiscale')).toBeVisible();
+    await expect(actions.getByText('Completitudine', { exact: true })).toHaveCount(1);
+    await expect(actions.getByText('Venit', { exact: true })).toHaveCount(2);
+    await expect(actions.getByText('Cheltuială', { exact: true })).toHaveCount(1);
+    await expect(actions.getByText('Declarație', { exact: true })).toHaveCount(1);
+    await expect(actions.getByText('Revizuire estimări fiscale')).toHaveCount(0);
+
+    // Severity is the domain's decision, and the row is styled from it alone.
+    await expect(actions.getByText('prioritate ridicată', { exact: true })).toHaveCount(1);
+    await expect(actions.getByText('prioritate medie', { exact: true })).toHaveCount(4);
+    await expect(actions.getByText('prioritate scăzută', { exact: true })).toHaveCount(1);
   });
 
-  test('Legislație: renders the empty state when no verified changes exist', async ({ page }) => {
+  test('Legislație: says the monitor is unavailable, and reports the rule package changes with their effect', async ({ page }) => {
     await page.goto('/dashboard');
 
     const legislation = sectionWith(page, 'Legislație');
-    await expect(legislation.getByText('Nicio modificare viitoare verificată.')).toBeVisible();
+    // TASK 8 re-pin (replaced, not deleted). Old: `Nicio modificare viitoare verificată.`
+    // `getLegislationState` sits on a placeholder boundary — no ingestion, no monitor — and "no
+    // verified change" is not the same statement as "nothing to know". The honest one is about the
+    // monitor.
+    await expect(
+      legislation.getByText(
+        'Monitorul de modificări legislative nu este activ: aplicația nu verifică nicio sursă, deci nu poate spune nici că există o modificare, nici că nu există.',
+      ),
+    ).toBeVisible();
+    await expect(legislation.getByText('Nicio modificare viitoare verificată.')).toHaveCount(0);
+
+    // The change the rule package already carries, with the half that matters: HG 146/2026 raised the
+    // minimum wage to 4.325,00 lei on 1 iulie 2026 and does NOT re-anchor FY2026, because CF art. 135¹
+    // alin. (3) takes the value in force on 1 January of the year the income is earned.
+    const sm = page.locator('section.card').filter({ has: page.locator('h4', { hasText: 'HG 146/2026' }) });
+    await expect(
+      sm.getByText('Salariul minim brut pe țară este 4.325,00 lei de la 2026-07-01 (HG 146/2026).'),
+    ).toBeVisible();
+    await expect(sm.getByText('Nu te afectează în acest an fiscal')).toBeVisible();
+    await expect(sm.getByText(/art\. 135¹ alin\. \(3\)/)).toBeVisible();
+    // The 1 January vintage is the anchor the thresholds are measured on, and it says so. Scoped to the
+    // card's own summary line: the Praguri card cites the same act, so a bare text filter would match
+    // two cards.
+    const anchor = page.locator('section.card').filter({ has: page.locator('h4', { hasText: 'HG 1506/2024' }) });
+    await expect(anchor.getByText('4.050,00 lei')).toBeVisible();
+    await expect(anchor.getByText('Te afectează')).toBeVisible();
   });
 
-  test('Observații: renders all 4 insights with severity badges', async ({ page }) => {
+  test('Observații: renders the 2 observations with severity badges', async ({ page }) => {
     await page.goto('/dashboard');
 
     const insights = sectionWith(page, 'Observații', 'h2');
@@ -400,16 +446,24 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(insights.getByText('Termen depășit: PFA')).toHaveCount(0);
     await expect(insights.getByText('Termen apropiat: PFA')).toHaveCount(0);
 
-    // Completeness + tax insights. The tax insight is now the COMPUTED variant, not the
-    // review_required one, because the seed regime computes (B-14).
-    await expect(insights.getByText('Date incomplete')).toBeVisible();
-    await expect(insights.getByText('Lipsă: Estimare impozit.')).toBeVisible();
-    await expect(insights.getByText('Estimare impozit', { exact: true })).toBeVisible();
-    await expect(insights.getByText('Estimarea totală a impozitului:')).toBeVisible();
+    // Completeness + tax insights. TASK 8 re-pin (replaced, not deleted): this test asserted FOUR
+    // insights — `Date incomplete`, `Lipsă: Estimare impozit.`, `Estimarea totală a impozitului:` and
+    // `Rezervă fiscală sub țintă`. Two of those were the same problem the action list already showed
+    // (a missing tax snapshot, a tax estimate), which is the duplicate card + action the task removes.
+    // The completeness checks are now one action per check in *Ce trebuie să faci*, and a computed
+    // estimate is not an attention item at all. Two observations remain: the CASS/CAS level and the
+    // reserve shortfall.
+    await expect(insights.getByText('Date incomplete')).toHaveCount(0);
+    await expect(insights.getByText('Lipsă: Estimare impozit.')).toHaveCount(0);
+    await expect(insights.getByText('Estimarea totală a impozitului:')).toHaveCount(0);
     await expect(insights.getByText('Estimarea impozitului necesită verificare')).toHaveCount(0);
-    // A recommended reserve with nothing reserved yet is its own warning — it only exists because the
-    // estimate is computed.
+    // A recommended reserve with nothing reserved yet is its own observation — it only exists because
+    // the estimate is computed.
     await expect(insights.getByText('Rezervă fiscală sub țintă')).toBeVisible();
+    // And the missing check appears exactly once, on the action surface.
+    const actionSection = sectionWith(page, 'Ce trebuie să faci');
+    await expect(actionSection.getByText('Date lipsă: Estimare impozit')).toBeVisible();
+    await expect(insights.getByText('Date lipsă: Estimare impozit')).toHaveCount(0);
 
     // TASK 4 re-pinned: the two contribution FLOORS (CAS_MIN_BASE, CASS_MIN_BASE) no longer reach
     // Observații as `Prag depășit:` / `Urgent`. Being below a contribution floor is not a breach —
@@ -423,13 +477,17 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(insights.getByText(/limita fiscală/)).toHaveCount(0);
     await expect(insights.getByText(/dezcalificare|schimbare de regim/)).toHaveCount(0);
 
-    // Severity badges — TASK 4 re-pinned. Before: 1 Urgent + 2 Atenție + 1 Info. The floor rows are
-    // no longer `danger`, so: 0 Urgent, 3 Atenție (the collapsed CASS/CAS level change + completeness
-    // + reserve), 1 Info (tax). Severity is decided in `thresholds.ts` `severityFor`, which never
-    // reads the legal kind — it is not a relabelling of the status badge.
+    // Severity badges — TASK 8 re-pin. Before TASK 4: 1 Urgent + 2 Atenție + 1 Info. After TASK 4:
+    // 0 Urgent + 3 Atenție + 1 Info. The words themselves were the collapse: three badges for the
+    // four-level scale TASK 7 shipped in `copy.severity`, with `high→danger / medium→warning / low→info`
+    // translated in `insights.ts`. That translation is deleted, so the badges now read the domain's own
+    // words: the collapsed CASS/CAS level change and the reserve shortfall are both `medium`.
     await expect(insights.getByText('Urgent', { exact: true })).toHaveCount(0);
-    await expect(insights.getByText('Atenție', { exact: true })).toHaveCount(3);
-    await expect(insights.getByText('Info', { exact: true })).toHaveCount(1);
+    await expect(insights.getByText('Atenție', { exact: true })).toHaveCount(0);
+    await expect(insights.getByText('Info', { exact: true })).toHaveCount(0);
+    await expect(insights.getByText('prioritate ridicată', { exact: true })).toHaveCount(0);
+    await expect(insights.getByText('prioritate medie', { exact: true })).toHaveCount(2);
+    await expect(insights.getByText('prioritate scăzută', { exact: true })).toHaveCount(0);
   });
 });
 
