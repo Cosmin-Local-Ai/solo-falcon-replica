@@ -685,12 +685,47 @@ function smReference(rules: FiscalRule[], taxYear: number): { valueBani: Bani; a
 
 /** Every SM vintage the package carries for the fiscal year — the H1/H2 pair, with its acts. */
 function smVintages(rules: FiscalRule[], taxYear: number): SmVintage[] {
+  return readMinimumWageVintages(rules, taxYear).map((v) => ({
+    valueBani: v.valueBani,
+    act: v.act,
+    from: v.from,
+  }));
+}
+
+/**
+ * TASK 8 — the minimum-wage vintages the rule package carries for a fiscal year, with the window each
+ * one is in force over.
+ *
+ * `smVintages` above is the threshold row's view: value, act, start date. The legislation surface also
+ * needs the end of the window, because „în vigoare acum” and „a fost înlocuită în cursul anului” are
+ * different statements, and because the one that matters for this user is the one that started
+ * mid-year — the one that does NOT re-anchor the year.
+ *
+ * Read from the package, never hardcoded: the same two rules the threshold rows already measure
+ * against (HG 1506/2024 from 2026-01-01, HG 146/2026 from 2026-07-01 for FY2026).
+ */
+export interface MinimumWageVintage {
+  valueBani: Bani;
+  act: string;
+  from: string;
+  to: string | null;
+}
+
+export function readMinimumWageVintages(
+  rules: FiscalRule[],
+  taxYear: number,
+): MinimumWageVintage[] {
   return rules
     .filter((r) => r.taxYear === taxYear && r.taxRegime === 'wage-reference')
     .filter((r) => r.parameters.some((p) => p.id === 'monthly'))
     .map((r) => {
       const param = r.parameters.find((p) => p.id === 'monthly')!;
-      return { valueBani: param.value as Bani, act: r.sourceAct, from: r.effectiveFrom };
+      return {
+        valueBani: param.value as Bani,
+        act: r.sourceAct,
+        from: r.effectiveFrom,
+        to: r.effectiveTo,
+      };
     })
     .sort((a, b) => a.from.localeCompare(b.from));
 }

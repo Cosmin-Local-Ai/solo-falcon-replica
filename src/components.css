@@ -151,3 +151,39 @@
 .kv { display: grid; grid-template-columns: 180px 1fr; gap: 8px 16px; font-size: 13px; }
 .kv dt { color: var(--text-3); }
 .kv dd { margin: 0; color: var(--text); font-weight: 500; }
+
+/* ---------- TASK 8 — attention surfaces, styled from `severity` ----------
+ *
+ * Every rule here keys off `data-severity`, which the components set from `AttentionItem.severity` —
+ * the value the domain decided. Nothing in this file may key off `data-state`, `data-source`, a
+ * threshold `kind` or a distance: that would put the severity decision back into the presentation
+ * layer, which is the collapse TASK 8 removed. `data-state` / `data-source` are exposed for tests and
+ * for a reader inspecting the DOM, and are deliberately unstyled.
+ */
+.attention-row {
+  border-left: 3px solid transparent;
+  padding-left: 10px;
+}
+.attention-row[data-severity="high"]   { border-left-color: var(--danger-text); }
+.attention-row[data-severity="medium"] { border-left-color: var(--warning-text); }
+.attention-row[data-severity="low"]    { border-left-color: var(--primary); }
+
+.threshold-row[data-severity="high"]   { border-left: 3px solid var(--danger-text); padding-left: 10px; }
+.threshold-row[data-severity="medium"] { border-left: 3px solid var(--warning-text); padding-left: 10px; }
+.threshold-row[data-severity="low"]    { border-left: 3px solid var(--primary); padding-left: 10px; }
+
+.attention-controls { gap: 6px; align-items: center; }
+.attention-target {
+  font-size: 12.5px; font-weight: 600; color: var(--primary);
+  text-decoration: underline; text-underline-offset: 2px;
+}
+
+/* The three epistemic states of the estimate are three shapes, not one number with a footnote. */
+.estimate-state { letter-spacing: 0.01em; }
+[data-estimate-state="unavailable"] .tax-hero-value,
+.tax-hero-value[data-estimate-state="unavailable"] { color: var(--text-4); }
+.estimate-state-note[data-estimate-state="review_required"] { color: var(--warning-text); }
+.estimate-state-note[data-estimate-state="unavailable"] { color: var(--text-3); font-style: italic; }
+
+/* The record an attention target pointed at. */
+.row-focus { background: var(--warning-soft); box-shadow: inset 3px 0 0 var(--warning-text); }

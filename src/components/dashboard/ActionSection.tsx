@@ -1,34 +1,34 @@
-import type { ActionItem } from '../../data/dashboard';
+import type { AttentionItem } from '../../domain/attention';
 import { Card, CardHeader, CardTitle, CardDescription } from '../ui/card';
-import { actionAppliesToLabels, actions as actionsCopy, checkLabel } from '../../ui/copy';
+import {
+  actions as actionsCopy,
+  attention as attentionCopy,
+} from '../../ui/copy';
+import { severityBadgeClass, severityLabel } from '../ui/severityBadge';
 
 /**
- * ActionSection (Step 22, upgraded in Step 31) — presentational only.
+ * Ce trebuie să faci — the action surface of the attention model.
  *
- * Renders the real action items from the deterministic data layer
- * (`ActionItem[]` — sources: 'deadline' | 'completeness' | 'tax'). No
- * actions are invented, none are dropped: every item is listed with its
- * source, in the data layer's order. Completeness items carry the raw
- * check key as `label`; it is mapped to a plain-language display label
- * here (presentation only). Deadline items carry the raw `appliesTo` key;
- * it is mapped to a Romanian display label here as well. When there are
- * no action items, an honest "up to date" state is shown — never a blank
- * panel.
+ * This list used to be computed by `getActionItems` from the deadlines and the completeness checks,
+ * while `insights.ts` computed the same two families again for Observații. The two pipelines could not
+ * see each other, so one problem reached the screen twice: a missing tax snapshot was a card
+ * („Date incomplete”) and an action („Estimare impozit”), a deadline was an alert and an action, the
+ * tax estimate was a card and an action.
+ *
+ * Now the data layer produces one list and `partitionAttention` routes each item to exactly one
+ * surface from its `state` (`domain/attention.ts` `surfaceFor`). This component renders whatever it is
+ * handed and decides nothing: the severity badge is styled from `item.severity`, which the domain
+ * decided, and is never re-derived here from the item's kind, its status or how far away its date is.
+ *
+ * The empty state stays a single line rather than a card body: an empty action list is a fact worth
+ * one sentence, not a panel.
  */
 
 export interface ActionSectionProps {
-  actions: ActionItem[];
+  actions: AttentionItem[];
 }
 
 export default function ActionSection({ actions }: ActionSectionProps) {
-  const labelFor = (item: ActionItem): string => {
-    if (item.source === 'completeness') return checkLabel(item.label);
-    if (item.source === 'deadline') {
-      return actionAppliesToLabels[item.label] ?? item.label;
-    }
-    return item.label;
-  };
-
   return (
     <Card>
       <CardHeader>
@@ -41,9 +41,25 @@ export default function ActionSection({ actions }: ActionSectionProps) {
         <p className="muted">{actionsCopy.emptyBody}</p>
       ) : (
         actions.map((item) => (
-          <div key={item.id} className="row between">
-            <span className="action-label">{labelFor(item)}</span>
-            <span className="badge badge-neutral">{actionsCopy.sourceLabels[item.source]}</span>
+          <div
+            key={item.id}
+            className="row between attention-row"
+            data-severity={item.severity}
+            data-state={item.state}
+            data-source={item.source}
+          >
+            <span className="action-label">{item.title}</span>
+            <span className="row attention-controls">
+              <span className={`badge ${severityBadgeClass(item.severity)}`}>
+                {severityLabel(item.severity)}
+              </span>
+              <span className="badge badge-neutral">{actionsCopy.sourceLabels[item.source]}</span>
+              {item.target ? (
+                <a className="attention-target" href={item.target.href}>
+                  {attentionCopy.openTarget}
+                </a>
+              ) : null}
+            </span>
           </div>
         ))
       )}

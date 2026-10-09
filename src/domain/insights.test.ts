@@ -1,32 +1,38 @@
 /**
- * Tests for the dashboard insights engine (`getInsights`) — emission contract:
+ * Tests for the attention families (`getInsights`) — emission contract:
  *
  * | Source       | Condition                                   | Severity |
  * |--------------|---------------------------------------------|----------|
- * | Threshold    | domain severity 'high'                      | danger   |
- * | Threshold    | domain severity 'medium'                    | warning  |
- * | Threshold    | domain severity 'low'                       | info     |
+ * | Threshold    | domain severity 'high'                      | high     |
+ * | Threshold    | domain severity 'medium'                    | medium   |
+ * | Threshold    | domain severity 'low'                       | low      |
  * | Threshold    | domain severity 'none' (inapplicable, far)  | —        |
  * | Threshold    | CASS + CAS both alerting                     | one canonical alert |
- * | Deadline     | daysUntil < 0 / === 0                        | danger   |
- * | Deadline     | 1..30                                        | warning  |
- * | Deadline     | > 30 / non-finite / empty date               | —        |
- * | Reserve      | projectedLiabilityBani > 0 && gapBani > 0   | warning  |
- * | Completeness | missing.length > 0                           | warning  |
- * | Tax          | review_required / computed                   | info     |
+ * | Deadline     | daysUntil < 0 / === 0                        | high     |
+ * | Deadline     | 1..7 / 8..30                                 | high / medium |
+ * | Deadline     | > 30                                         | low      |
+ * | Deadline     | non-finite daysUntil / empty date            | —        |
+ * | Reserve      | projectedLiabilityBani > 0 && gapBani > 0   | medium   |
+ * | Completeness | one item per unsatisfied check               | medium   |
+ * | Tax          | review_required                              | high     |
+ * | Tax          | computed                                     | —        |
  *
- * TASK 4 changed the threshold rows: the severity is decided in the domain (`thresholds.ts`
- * `severityFor`, which never reads the legal kind) and this layer only translates the vocabulary and
- * filters out `none`. The old `breached → danger` / `ratio >= 0.8 → warning` rows were a SECOND copy
- * of the same application policy, written here without a citation, and they made a contribution FLOOR
- * look like a fiscal limit that had been exceeded.
+ * TASK 4 put the threshold severity decision in the domain (`thresholds.ts` `severityFor`, which never
+ * reads the legal kind). TASK 8 removed the translation this layer used to apply on top of it —
+ * `high → danger`, `medium → warning`, `low → info` — because folding four levels into three is the
+ * collapse this task exists to remove. The row's severity is now read verbatim.
+ *
+ * The deadline family widened on purpose: it used to stop at 30 days because it only ever fed an
+ * alert, and it now feeds the action list too, so a term 200 days away still appears — at `low`.
+ * A legal duty that is far away is not no duty.
  *
  * Invariants: raw keys never leak into user-facing strings, all strings are
- * Romanian, output is sorted danger → warning → info, engine is deterministic.
+ * Romanian, output is sorted high → medium → low, engine is deterministic.
  */
 import { describe, expect, it } from 'vitest';
 import { getInsights } from './insights';
-import type { Insight, InsightInput } from './insights';
+import type { InsightInput } from './insights';
+import type { AttentionItem } from './attention';
 import type { DashboardSnapshot, ExcludedFiscalDate, Threshold } from './aggregation';
 import type { TaxEstimateResult } from './tax';
 import type { TaxCalculationSnapshot } from './snapshots/types';
@@ -110,7 +116,7 @@ function taxReviewRequired(reason: string): TaxEstimateResult {
 
 // Helpers
 
-function texts(insights: Insight[]): string {
+function texts(insights: AttentionItem[]): string {
   return insights.map((i) => `${i.title} ${i.description} ${i.action}`).join('\n');
 }
 
@@ -144,7 +150,7 @@ describe('tier_transition threshold alerts (CF art. 148 alin. (2))', () => {
     expect(insights).toHaveLength(1);
     // Nothing went wrong — the contribution is simply computed on a higher floor, so this is not
     // a `danger`.
-    expect(insights[0].severity).toBe('warning');
+    expect(insights[0].severity).toBe('medium');
     expect(insights[0].id).toBe('threshold-CAS_TIER2_FLOOR');
     expect(insights[0].title).toContain('Nivel de calcul modificat');
     expect(insights[0].description).toContain('art. 148 alin. (2) lit. b)');
@@ -171,7 +177,7 @@ describe('tier_transition threshold alerts (CF art. 148 alin. (2))', () => {
     );
 
     expect(insights).toHaveLength(1);
-    expect(insights[0].severity).toBe('warning');
+    expect(insights[0].severity).toBe('medium');
     expect(insights[0].title).toContain('Aproape de prag');
   });
 
@@ -219,7 +225,7 @@ describe('tier_transition threshold alerts (CF art. 148 alin. (2))', () => {
     );
 
     expect(insights).toHaveLength(1);
-    expect(insights[0].severity).toBe('warning');
+    expect(insights[0].severity).toBe('medium');
     expect(insights[0].description).toContain('art. 148 alin. (1) și (4)');
     expect(texts(insights)).not.toContain('Prag depășit');
     expect(texts(insights)).not.toContain('limita fiscală');
@@ -250,7 +256,7 @@ describe('thresholds', () => {
     );
 
     expect(insights).toHaveLength(1);
-    expect(insights[0].severity).toBe('danger');
+    expect(insights[0].severity).toBe('high');
     expect(insights[0].id).toBe('threshold-cass');
     // `over_limit` is the one kind whose crossing may be called a depășire: CF art. 170 alin. (1)
     // really does cap the base there.
@@ -270,7 +276,7 @@ describe('thresholds', () => {
     );
 
     expect(insights).toHaveLength(1);
-    expect(insights[0].severity).toBe('warning');
+    expect(insights[0].severity).toBe('medium');
     expect(insights[0].id).toBe('threshold-cass');
     expect(insights[0].title).toContain('Aproape de prag');
   });
@@ -304,7 +310,7 @@ describe('thresholds', () => {
     );
 
     expect(insights).toHaveLength(1);
-    expect(insights[0].severity).toBe('info');
+    expect(insights[0].severity).toBe('low');
   });
 
   it('emits nothing when the domain marks the row none', () => {
@@ -362,7 +368,7 @@ describe('thresholds', () => {
     );
 
     expect(insights).toHaveLength(1);
-    expect(insights[0].severity).toBe('danger');
+    expect(insights[0].severity).toBe('high');
     expect(insights[0].id).toBe('threshold-cass');
   });
 
@@ -379,7 +385,7 @@ describe('thresholds', () => {
     );
 
     expect(insights).toHaveLength(1);
-    expect(insights[0].severity).toBe('danger');
+    expect(insights[0].severity).toBe('high');
     expect(insights[0].id).toBe('threshold-cass');
   });
 
@@ -396,7 +402,7 @@ describe('thresholds', () => {
     );
 
     expect(insights).toHaveLength(1);
-    expect(insights[0].severity).toBe('warning');
+    expect(insights[0].severity).toBe('medium');
     expect(insights[0].id).toBe('threshold-cas');
   });
 
@@ -430,7 +436,7 @@ describe('deadlines', () => {
     );
 
     expect(insights).toHaveLength(1);
-    expect(insights[0].severity).toBe('danger');
+    expect(insights[0].severity).toBe('high');
     expect(insights[0].title).toContain('Termen depășit');
     expect(insights[0].description).toContain('a expirat pe');
   });
@@ -445,12 +451,27 @@ describe('deadlines', () => {
     );
 
     expect(insights).toHaveLength(1);
-    expect(insights[0].severity).toBe('danger');
+    expect(insights[0].severity).toBe('high');
     expect(insights[0].title).toContain('Termen depășit');
     expect(insights[0].description).toContain('este astăzi');
   });
 
-  it.each([1, 15, 30])('emits a warning for daysUntil = %i', (daysUntil) => {
+  it('emits a medium item for a term inside the month, and says which term it is', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          deadlines: [deadline({ id: 'pfa', label: 'pfa', daysUntil: 15 })],
+        }),
+      }),
+    );
+
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('medium');
+    expect(insights[0].state).toBe('deadline_open');
+    expect(insights[0].title).toContain('Termen limită');
+  });
+
+  it.each([1, 7])('emits a high item for a term inside the week (daysUntil = %i)', (daysUntil) => {
     const insights = getInsights(
       input({
         snapshot: snapshot({
@@ -460,11 +481,14 @@ describe('deadlines', () => {
     );
 
     expect(insights).toHaveLength(1);
-    expect(insights[0].severity).toBe('warning');
-    expect(insights[0].title).toContain('Termen apropiat');
+    expect(insights[0].severity).toBe('high');
+    expect(insights[0].state).toBe('deadline_open');
   });
 
-  it('emits nothing for daysUntil > 30', () => {
+  it('emits a low item for daysUntil > 30: a duty far away is still a duty', () => {
+    // Replaced, not deleted: this used to assert `[]`. The family stopped at 30 days because it only
+    // ever fed an alert. It now feeds the action list as well, and a filing term 206 days out — the
+    // D212 term on the seed — is a real obligation at a low urgency, not an absence of one.
     const insights = getInsights(
       input({
         snapshot: snapshot({
@@ -473,7 +497,10 @@ describe('deadlines', () => {
       }),
     );
 
-    expect(insights).toEqual([]);
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('low');
+    expect(insights[0].state).toBe('deadline_open');
+    expect(insights[0].source).toBe('deadline');
   });
 
   it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
@@ -526,7 +553,7 @@ describe('tax reserve', () => {
     const insights = getInsights(input({ snapshot: reserve(lei(250), lei(1000)) }));
 
     expect(insights).toHaveLength(1);
-    expect(insights[0].severity).toBe('warning');
+    expect(insights[0].severity).toBe('medium');
     expect(insights[0].id).toBe('reserve');
   });
 
@@ -550,21 +577,29 @@ describe('tax reserve', () => {
 // Completeness
 
 describe('completeness', () => {
-  it('emits one warning with the Romanian label for a known missing key', () => {
+  it('emits one medium item with the Romanian label for a known missing key', () => {
     const insights = getInsights(input({ snapshot: snapshot({ missing: ['profile'] }) }));
 
     expect(insights).toHaveLength(1);
-    expect(insights[0].severity).toBe('warning');
-    expect(insights[0].id).toBe('completeness');
+    expect(insights[0].severity).toBe('medium');
+    expect(insights[0].state).toBe('data_missing');
+    expect(insights[0].id).toBe('completeness-profile');
     expect(insights[0].description).toContain('Profil');
+    // TASK 8: an unsatisfied check is something the user can fix, so it carries the route that fixes it.
+    expect(insights[0].target?.href).toBe('/settings#!/fiscal');
   });
 
-  it('lists multiple known keys with their Romanian labels', () => {
+  it('emits one item per missing key, not one collapsed line', () => {
+    // Replaced, not deleted: the old behaviour collapsed every missing key into a single card
+    // („Lipsă: Profil, Venituri înregistrate”) while `getActionItems` emitted one action per key for the
+    // same data. One problem, two surfaces, two vocabularies. There is now one item per key, and
+    // `partitionAttention` sends it to exactly one of the two surfaces.
     const insights = getInsights(input({ snapshot: snapshot({ missing: ['profile', 'income'] }) }));
 
-    expect(insights).toHaveLength(1);
+    expect(insights).toHaveLength(2);
+    expect(insights.map(i => i.id)).toEqual(['completeness-profile', 'completeness-income']);
     expect(insights[0].description).toContain('Profil');
-    expect(insights[0].description).toContain('Venituri înregistrate');
+    expect(insights[1].description).toContain('Venituri înregistrate');
   });
 
   it('falls back to "date" for unknown keys', () => {
@@ -594,7 +629,7 @@ describe('completeness', () => {
     for (const [key, label] of Object.entries(labels)) {
       const insights = getInsights(input({ snapshot: snapshot({ missing: [key] }) }));
       expect(insights).toHaveLength(1);
-      expect(insights[0].severity).toBe('warning');
+      expect(insights[0].severity).toBe('medium');
       expect(insights[0].description).toContain(label);
     }
   });
@@ -619,12 +654,15 @@ describe('completeness', () => {
     expect(missing).toHaveLength(9); // every check fails on empty data
 
     const insights = getInsights(input({ snapshot: snapshot({ missing }) }));
-    expect(insights).toHaveLength(1);
-    expect(insights[0].severity).toBe('warning');
-    expect(insights[0].id).toBe('completeness');
-    // Every Romanian label must appear for the 9 missing keys.
-    expect(insights[0].description).toContain('Profil');
-    expect(insights[0].description).toContain('Estimare impozit');
+    expect(insights).toHaveLength(9);
+    for (const item of insights) {
+      expect(item.severity).toBe('medium');
+      expect(item.state).toBe('data_missing');
+    }
+    // Every Romanian label must appear, one per item now that each key is its own item.
+    const all = insights.map(i => i.description).join('\n');
+    expect(all).toContain('Profil');
+    expect(all).toContain('Estimare impozit');
   });
 });
 
@@ -635,32 +673,31 @@ describe('tax', () => {
     expect(getInsights(input({ snapshot: snapshot() }))).toEqual([]);
   });
 
-  it('emits exactly one info for review_required, without numbers or the raw reason', () => {
+  it('emits exactly one high item for review_required, without numbers or the raw reason', () => {
     const reason = 'CAS rule not found for tax year 2026';
     const insights = getInsights(input({ snapshot: snapshot(), tax: taxReviewRequired(reason) }));
 
     expect(insights).toHaveLength(1);
-    expect(insights[0].severity).toBe('info');
+    expect(insights[0].severity).toBe('high');
+    expect(insights[0].state).toBe('estimate_review_required');
     expect(insights[0].id).toBe('tax');
     const text = `${insights[0].title} ${insights[0].description}`;
     expect(text).not.toMatch(/[0-9]/);
     expect(text).not.toContain(reason);
+    // The item says the estimate needs attention; it does not resolve the withheld conclusion.
+    expect(text).not.toMatch(/calculul este|se poate calcula/);
   });
 
-  it('emits exactly one info with the formatted total for a computed tax', () => {
-    // 1 234,57 lei is exactly representable as integer bani. The expected string is written out
-    // LITERALLY here: this test used to define its own `Intl.NumberFormat` mirror and compare the
-    // app's text against that mirror, which meant the suite was asserting a formatter that is not
-    // the app's (Phase 10 §2.5 — the mirror is deleted, and a formatter regression can no longer
-    // hide behind two copies agreeing with each other).
+  it('emits nothing for a computed estimate: the figure is on the hero, not an alert', () => {
+    // Replaced, not deleted. This test used to assert an `info` card repeating the formatted total —
+    // a second copy of the hero number, in the attention surface, needing no attention at all. The
+    // estimate section now states `computed` / `review-required` / `unavailable` itself, so the
+    // attention model carries an item only when a conclusion was withheld.
     const total = lei(1234.57);
     const insights = getInsights(input({ snapshot: snapshot(), tax: taxComputed(total) }));
 
-    expect(insights).toHaveLength(1);
-    expect(insights[0].severity).toBe('info');
-    expect(insights[0].id).toBe('tax');
-    expect(insights[0].description).toContain('1.234,57 RON');
-    // the app's own single boundary turns integer bani into exactly that string
+    expect(insights).toEqual([]);
+    // The formatter the deleted assertion used to mirror is still the app's only one.
     expect(formatBaniRON(total)).toBe('1.234,57 RON');
   });
 });
@@ -716,7 +753,7 @@ describe('invariants', () => {
     }
   });
 
-  it('sorts danger → warning → info, stable within a severity', () => {
+  it('sorts high → medium → low, stable within a severity', () => {
     const insights = getInsights(
       input({
         snapshot: snapshot({
@@ -744,20 +781,20 @@ describe('invariants', () => {
     );
 
     expect(insights.map((i) => i.severity)).toEqual([
-      'danger',
-      'danger',
-      'warning',
-      'warning',
-      'warning',
-      'warning',
-      'info',
+      'high',
+      'high',
+      'medium',
+      'medium',
+      'medium',
+      'medium',
     ]);
-    // Within warnings: thresholds, deadlines, reserve, completeness (insertion order).
-    expect(insights.filter((i) => i.severity === 'warning').map((i) => i.id)).toEqual([
+    // Within the medium band: thresholds, deadlines, reserve, completeness (insertion order).
+    // The `tax` entry that used to sit at the end is gone: a computed estimate is not an alert.
+    expect(insights.filter((i) => i.severity === 'medium').map((i) => i.id)).toEqual([
       'threshold-vat',
       'deadline-vat',
       'reserve',
-      'completeness',
+      'completeness-profile',
     ]);
   });
 
@@ -799,7 +836,7 @@ describe('fiscal date integrity insight (B-21)', () => {
     const insights = getInsights(input({ fiscalDateIssues: [excluded({ field: 'collected' })] }));
     const row = insights.find(i => i.id === 'fiscal-dates');
     expect(row).toBeDefined();
-    expect(row!.severity).toBe('danger');
+    expect(row!.severity).toBe('high');
     expect(row!.title).toContain('1 înregistrare are o dată de verificat');
     expect(row!.description).toContain('Venit r1');
     // Raw property names are never rendered.
@@ -834,6 +871,6 @@ describe('fiscal date integrity insight (B-21)', () => {
         fiscalDateIssues: [excluded()],
       }),
     );
-    expect(insights.map(i => i.id)).toEqual(['fiscal-dates', 'completeness']);
+    expect(insights.map(i => i.id)).toEqual(['fiscal-dates', 'completeness-profile']);
   });
 });

@@ -1,54 +1,115 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import ActionSection from './ActionSection';
-import type { ActionItem } from '../../data/dashboard';
+import type { AttentionItem } from '../../domain/attention';
 
-function makeActions(): ActionItem[] {
-  // `label` is the deadline's `appliesTo` key, which ActionSection maps to Romanian. Phase 9b removed
-  // the quarterly keys (`cas_quarterly` etc.) because those obligations do not exist in 2026 — see the
-  // `DeadlineEventType` doc comment in src/domain/deadlines.ts.
+function makeActions(): AttentionItem[] {
+  // TASK 8: the action list is a projection of the attention model, so a row carries its own title,
+  // severity, state and target. The old fixtures carried a raw `label` (`pfa`, `profile`) that this
+  // component translated — the translation moved to the domain, where the item is built.
   return [
-    { id: 'deadline-PFA_DEADLINE_2026', label: 'pfa', source: 'deadline' },
-    { id: 'completeness-profile', label: 'profile', source: 'completeness' },
-    { id: 'completeness-statements', label: 'statements', source: 'completeness' },
-    { id: 'tax-review', label: 'Revizuire estimări fiscale', source: 'tax' },
+    {
+      id: 'deadline-PFA_DEADLINE_2026',
+      severity: 'low',
+      state: 'deadline_open',
+      source: 'deadline',
+      title: 'Termen limită: PFA',
+      description: 'Termenul PFA este pe 25.05.2027.',
+      target: { href: '/declarations' },
+    },
+    {
+      id: 'completeness-profile',
+      severity: 'medium',
+      state: 'data_missing',
+      source: 'completeness',
+      title: 'Date lipsă: Profil',
+      description: 'Această verificare de completitudine nu este îndeplinită: Profil.',
+      target: { href: '/settings#!/fiscal' },
+    },
+    {
+      id: 'completeness-statements',
+      severity: 'medium',
+      state: 'data_missing',
+      source: 'completeness',
+      title: 'Date lipsă: Declarații fiscale',
+      description: 'Această verificare de completitudine nu este îndeplinită: Declarații fiscale.',
+      target: { href: '/documents#!/statements' },
+    },
+    {
+      id: 'record-revenue-r3',
+      severity: 'high',
+      state: 'rejected',
+      source: 'revenue',
+      title: 'Document de venit respins: NF-2026-003',
+      description: 'Documentul NF-2026-003 din 18.09.2026 este respins: CUI nevalid.',
+      target: { href: '/revenues#!/rejected?f=r3', record: { kind: 'revenue', id: 'r3', reference: 'NF-2026-003' } },
+    },
   ];
 }
 
-describe('ActionSection (Step 31 — ActionItem-driven)', () => {
+describe('ActionSection (TASK 8 — the action surface)', () => {
   it('renders every real action item, in the data layer order', () => {
     render(<ActionSection actions={makeActions()} />);
-    expect(screen.getByText('PFA')).toBeInTheDocument();
-    expect(screen.getByText('Revizuire estimări fiscale')).toBeInTheDocument();
+    expect(screen.getByText('Termen limită: PFA')).toBeInTheDocument();
+    expect(screen.getByText('Document de venit respins: NF-2026-003')).toBeInTheDocument();
     // TASK 7 grammar pass: `item` was an English calque; Romanian counts these as `element` and
     // agrees the plural with the numeral. Re-pinned from '4 item de rezolvat'.
     expect(screen.getByText('4 elemente de rezolvat')).toBeInTheDocument();
   });
 
-  it('shows the source badge for each item (deadline / completeness / tax)', () => {
+  it('shows the source badge for each item, across every attention source', () => {
     render(<ActionSection actions={makeActions()} />);
     expect(screen.getByText('Termen limită')).toBeInTheDocument();
     expect(screen.getAllByText('Completitudine').length).toBe(2);
-    expect(screen.getByText('Impozit')).toBeInTheDocument();
+    expect(screen.getByText('Venit')).toBeInTheDocument();
   });
 
-  it('maps completeness raw keys to plain-language Romanian display labels', () => {
+  it('shows the severity badge the domain decided, styled from severity', () => {
     render(<ActionSection actions={makeActions()} />);
-    expect(screen.getByText('Profil')).toBeInTheDocument();
-    expect(screen.getByText('Declarații fiscale')).toBeInTheDocument();
-    // The raw keys are not shown as labels.
+    expect(screen.getByText('prioritate scăzută')).toBeInTheDocument();
+    // Two of the four fixtures are medium, so the word appears twice — the badge is per item.
+    expect(screen.getAllByText('prioritate medie')).toHaveLength(2);
+    expect(screen.getByText('prioritate ridicată')).toBeInTheDocument();
+
+    const rows = [...document.querySelectorAll('.attention-row')];
+    const byId = new Map(rows.map(r => [r.getAttribute('data-source'), r]));
+    expect(byId.get('deadline')!.querySelector('.badge')!.className).toContain('badge-info');
+    expect(byId.get('revenue')!.querySelector('.badge')!.className).toContain('badge-danger');
+  });
+
+  it('never shows a raw internal key as a label', () => {
+    render(<ActionSection actions={makeActions()} />);
     expect(screen.queryByText('profile')).not.toBeInTheDocument();
     expect(screen.queryByText('statements')).not.toBeInTheDocument();
+    expect(screen.queryByText('pfa')).not.toBeInTheDocument();
   });
 
-  it('falls back to the raw key for unknown completeness keys (no item dropped)', () => {
+  it('links each item to the place it can be acted on', () => {
+    render(<ActionSection actions={makeActions()} />);
+    const links = [...screen.getAllByRole('link')].map(l => l.getAttribute('href'));
+    expect(links).toEqual(
+      expect.arrayContaining(['/declarations', '/settings#!/fiscal', '/revenues#!/rejected?f=r3']),
+    );
+  });
+
+  it('renders an item with no target without a link', () => {
     render(
       <ActionSection
-        actions={[{ id: 'completeness-future', label: 'futureKey', source: 'completeness' }]}
+        actions={[
+          {
+            id: 'completeness-taxEstimate',
+            severity: 'medium',
+            state: 'data_missing',
+            source: 'completeness',
+            title: 'Date lipsă: Estimare impozit',
+            description: 'Această verificare de completitudine nu este îndeplinită: Estimare impozit.',
+            target: null,
+          },
+        ]}
       />,
     );
-    expect(screen.getByText('futureKey')).toBeInTheDocument();
-    // Re-pinned from '1 item de rezolvat' (TASK 7 grammar pass).
+    expect(screen.getByText('Date lipsă: Estimare impozit')).toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
     expect(screen.getByText('1 element de rezolvat')).toBeInTheDocument();
   });
 

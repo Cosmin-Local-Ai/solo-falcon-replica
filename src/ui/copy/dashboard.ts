@@ -6,8 +6,8 @@
  * label, the projection basis explanation) are produced by `src/domain` and `src/data` with their
  * citations and stay there — see the boundary note in `common.ts`.
  */
-import type { Insight } from '../../domain/insights';
-import type { ActionItem, LegislationItem } from '../../data/dashboard';
+import type { AttentionSource } from '../../domain/attention';
+import type { LegislationItem } from '../../data/dashboard';
 import type { Deadline, DeadlineEventType } from '../../domain/deadlines';
 import type { MoneyPrecisionNotice } from '../../data/migration';
 
@@ -82,14 +82,14 @@ export const summary = {
   net: 'Profit net',
 } as const;
 
+/**
+ * TASK 8 — the observations surface. The severity words moved to `copy.severity`
+ * (`ui/copy/provenance.ts`, the four-level scale TASK 7 supplied), and the empty sentence went with
+ * the empty card: a section with nothing to say is not mounted at all, so there is no large empty
+ * card to caption.
+ */
 export const insights = {
   title: 'Observații',
-  empty: 'Ești la zi. Nu există probleme de rezolvat în momentul de față.',
-  severityLabels: {
-    info: 'Info',
-    warning: 'Atenție',
-    danger: 'Urgent',
-  } satisfies Record<Insight['severity'], string>,
 } as const;
 
 export const reserve = {
@@ -118,11 +118,21 @@ export const actions = {
    * `e2e/dashboard.spec.ts`.
    */
   count: (n: number): string => `${n} ${n === 1 ? 'element de rezolvat' : 'elemente de rezolvat'}`,
+  /**
+   * Every attention source has a label, and the map is exhaustive over `AttentionSource`, so a new
+   * family is a compile error here rather than a raw key on screen.
+   */
   sourceLabels: {
     deadline: 'Termen limită',
     completeness: 'Completitudine',
     tax: 'Impozit',
-  } satisfies Record<ActionItem['source'], string>,
+    revenue: 'Venit',
+    expense: 'Cheltuială',
+    declaration: 'Declarație',
+    threshold: 'Prag fiscal',
+    reserve: 'Rezervă fiscală',
+    integrity: 'Integritatea datelor',
+  } satisfies Record<AttentionSource, string>,
 } as const;
 
 /**
@@ -202,8 +212,50 @@ export function checkLabel(key: string): string {
 
 export const legislation = {
   title: 'Legislație',
-  empty: 'Nicio modificare viitoare verificată.',
-  cardTitleCurrent: 'Modificare legislativă care te afectează',
+  /**
+   * TASK 8 — the honesty fix. `getLegislationState` sits on a placeholder boundary: there is no
+   * ingestion at all, so the section has never verified anything. „Nicio modificare viitoare
+   * verificată.” read as reassurance to a user who has no monitor: it stated the negative of a
+   * question nobody asked. The section now says what is absent — the monitor — not what is absent
+   * from the world.
+   */
+  monitorUnavailable:
+    'Monitorul de modificări legislative nu este activ: aplicația nu verifică nicio sursă, deci nu poate spune nici că există o modificare, nici că nu există.',
+  monitorActive: 'Modificări legislative verificate de aplicație.',
+  monitorLabel: 'Monitor',
+  /** What the section CAN report without a monitor: what the app's own rule package carries. */
+  fromRulePackage: 'Din pachetul de reguli pe care îl folosește calculul',
+  impactLabel: 'Efect pentru tine',
+  affectsLabels: {
+    yes: 'Te afectează',
+    no: 'Nu te afectează în acest an fiscal',
+    unknown: 'Efectul nu este stabilit de nicio prevedere verificată',
+  },
+  /**
+   * The minimum-wage case. The amount is stated as what the hotărâre de Guvern sets, with the act
+   * attached — it is not a Cod fiscal multiple, so it is not a computed lei amount either.
+   */
+  minimumWageSummary: (value: string, from: string, act: string): string =>
+    `Salariul minim brut pe țară este ${value} de la ${from} (${act}).`,
+  minimumWageArea: 'Salariul minim brut pe țară',
+  /**
+   * The vintage the year is actually anchored to. Stated because it is the reason the other one does
+   * not move anything: the thresholds on this screen are measured against this value.
+   */
+  minimumWageAnchor: (taxYear: number, citation: string, from: string): string =>
+    `Pragurile anului ${taxYear} sunt calculate pe această valoare, pentru că ${citation} ia în calcul salariul minim în vigoare la 1 ianuarie a anului de realizare a venitului (${from}).`,
+  /**
+   * The part that is the whole point: whether it changes anything for THIS user. It does not
+   * re-anchor the fiscal year, and the sentence names the provision that fixes the anchor.
+   */
+  minimumWageNoImpact: (taxYear: number, citation: string): string =>
+    `Nu recalcalează pragurile anului ${taxYear}: ${citation} ia în calcul valoarea în vigoare la 1 ianuarie a anului de realizare a venitului, indiferent de valorile folosite în cursul anului. Pragurile rămân calculate pe valoarea de la 1 ianuarie.`,
+  /**
+   * The card title states only what the item is. It used to read „Modificare legislativă care te
+   * afectează”, which asserted the impact before anything in the app had established one — and for the
+   * one real case in the rule store the assertion was false. The impact is its own field now.
+   */
+  cardTitleCurrent: 'Modificare legislativă în vigoare',
   cardTitleUpcoming: 'Modificare viitoare',
   source: 'Sursă',
   published: 'Publicat',
@@ -213,6 +265,7 @@ export const legislation = {
   statusLabels: {
     CURRENT: 'În vigoare',
     UPCOMING: 'Viitoare',
+    PAST: 'A fost în vigoare',
   } satisfies Record<LegislationItem['status'], string>,
 } as const;
 

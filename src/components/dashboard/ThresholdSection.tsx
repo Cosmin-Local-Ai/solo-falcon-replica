@@ -78,6 +78,7 @@ function ThresholdRow({ threshold: t }: { threshold: FiscalThreshold }) {
 
   return (
     <div
+      className="threshold-row"
       // TASK 4: the row carries its legal kind, its applicability and its severity in the DOM.
       // Severity is a separate dimension from the kind, and TASK 8 owns how it is styled —
       // hooking it here keeps the data visible to tests and to the styling pass without

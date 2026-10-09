@@ -42,6 +42,7 @@ export {
 } from './thresholds';
 export { notes, sources } from './notes';
 export { provenance, severity } from './provenance';
+export { attention, estimateState } from './attention';
 export { settings } from './settings';
 export {
   revenues,
@@ -67,6 +68,7 @@ import {
 } from './thresholds';
 import { notes, sources } from './notes';
 import { provenance, severity } from './provenance';
+import { attention, estimateState } from './attention';
 import { settings } from './settings';
 import {
   revenues, expenses, expenseCategoryLabels, clients, declarations, recordStatus, documents, eFactura,
@@ -81,6 +83,7 @@ export const copy = {
   thresholdRowLabels, thresholdKindLabels,
   notes, sources,
   provenance, severity,
+  attention, estimateState,
   settings,
   revenues, expenses, expenseCategoryLabels, clients, declarations, recordStatus, documents, eFactura,
 };

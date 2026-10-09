@@ -159,9 +159,11 @@ function ExpenseForm({ initial, onSave, onClose }: {
 interface ExpensesProps {
   initialTab?: (typeof TABS)[number]['key'];
   onTabChange?: (tab: (typeof TABS)[number]['key']) => void;
+  /** TASK 8 — the record an attention item pointed at; see `Revenues.tsx focusRecord`. */
+  focusRecord?: string;
 }
 
-export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
+export default function Expenses({ initialTab, onTabChange, focusRecord }: ExpensesProps) {
   const store = useStore();
   const { expenses, addExpense, updateExpense, deleteExpense, toast } = store;
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>(
@@ -192,6 +194,12 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
   const counts = (k: (typeof TABS)[number]['key']) =>
     expenses.filter(e => e.status === statusFor(k)).length;
   const sum = sumTotals(rows);
+
+  // TASK 8: land the focused record on screen, whatever page of the register it sits on.
+  const focusIndex = focusRecord ? rows.findIndex(e => e.id === focusRecord) : -1;
+  useEffect(() => {
+    if (focusIndex >= 0) setPage(Math.floor(focusIndex / PAGE_SIZE) + 1);
+  }, [focusIndex]);
 
   // TASK 2b — the residue the law cannot decide, counted where it can be acted on.
   // This is the SAME selector the tax estimate runs (`estimateBasis.ts selectDeductibleExpenses`), so
@@ -335,7 +343,12 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
               </thead>
               <tbody>
                 {pageRows.map(e => (
-                  <tr key={e.id} className="clickable" onClick={() => setEditing(e)}>
+                  <tr
+                    key={e.id}
+                    data-record-id={e.id}
+                    className={`clickable${e.id === focusRecord ? ' row-focus' : ''}`}
+                    onClick={() => setEditing(e)}
+                  >
                     <td style={{ fontWeight: 500, color: 'var(--text)' }}>{e.nr}</td>
                     <td>{e.tip === 'factura' ? expensesCopy.documentTypeCell.factura : expensesCopy.documentTypeCell.bon}</td>
                     <td>{e.furnizor}</td>

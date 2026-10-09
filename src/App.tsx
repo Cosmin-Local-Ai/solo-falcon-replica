@@ -49,22 +49,33 @@ const NAV: { page: Page; label: string; icon: string }[] = [
 // The page title is the nav label — one key, spelled once.
 const TITLES: Record<Page, string> = nav;
 
-// --- URL routing: /<page> with optional #!<tab> ---
+// --- URL routing: /<page> with optional #!<tab> and optional ?f=<record id> ---
 
 interface Route {
   page: Page;
   tab: string | null;
+  /**
+   * TASK 8 — the record an attention item pointed at. The hash form is `#!/<tab>?f=<id>`: the tab
+   * already says which slice of the register holds the record (it is keyed off the record's own
+   * status), and `f` lands the table on that one row and highlights it. Without it a dashboard link
+   * could only say "go to the rejected invoices" and leave the user to find the one that was named.
+   */
+  focus: string | null;
 }
 
 // Canonical tab keys per page (must match the tab state inside each page).
 // Exact URL forms required:
 //   /revenues#!/registered  /revenues#!/pending  /revenues#!/rejected
 //   /expenses#!/registered  /expenses#!/rejected
+//   /declarations#!/inregistrata  /declarations#!/in-asteptare  /declarations#!/transmisa
 //   /documents#!/company    /settings#!/company
 // Pages may also generate their own extra tabs (e.g. /documents#!/toate).
 const VALID_TABS: Partial<Record<Page, string[]>> = {
   revenues: ['registered', 'pending', 'rejected'],
   expenses: ['registered', 'rejected'],
+  // The declarations register keys its tabs off the declaration's own status; the attention target for
+  // a declaration with no recorded submission needs to land on the tab that holds it.
+  declarations: ['inregistrata', 'in-asteptare', 'transmisa', 'respinsa'],
   documents: ['company', 'statements', 'reports'],
   // Mirrors the live SOLO settings tabs (docs/reference/settings.md);
   // the real app's "Abonament" (subscription) tab is not replicated.
@@ -76,13 +87,15 @@ export function parseRoute(): Route {
   const seg = window.location.pathname.split('/').filter(Boolean).pop() ?? '';
   const page: Page = (PAGES as string[]).includes(seg) ? (seg as Page) : 'dashboard';
   const raw = window.location.hash.replace(/^#!\/?/, '');
+  const [tabPart, queryPart] = raw.split('?');
   const valid = VALID_TABS[page];
-  const tab = valid && raw && valid.includes(raw) ? raw : null;
-  return { page, tab };
+  const tab = valid && tabPart && valid.includes(tabPart) ? tabPart : null;
+  const focus = queryPart ? new URLSearchParams(queryPart).get('f') : null;
+  return { page, tab, focus };
 }
 
-function routeToUrl(page: Page, tab: string | null): string {
-  return `/${page}${tab ? `#!/${tab}` : ''}`;
+function routeToUrl(page: Page, tab: string | null, focus: string | null = null): string {
+  return `/${page}${tab ? `#!/${tab}` : ''}${focus ? `?f=${encodeURIComponent(focus)}` : ''}`;
 }
 
 const initials = (name: string) =>
@@ -147,7 +160,7 @@ function Shell() {
     if (window.location.pathname + window.location.hash !== url) {
       window.history.pushState({ page, tab }, '', url);
     }
-    setRoute({ page, tab });
+    setRoute({ page, tab, focus: null });
   }, []);
 
   // Back/forward navigation, plus direct hash edits in the URL bar.
@@ -178,7 +191,7 @@ function Shell() {
   // without adding a history entry.
   useEffect(() => {
     const r = parseRoute();
-    const expected = routeToUrl(r.page, r.tab);
+    const expected = routeToUrl(r.page, r.tab, r.focus);
     if (window.location.pathname + window.location.hash !== expected) {
       window.history.replaceState(null, '', expected);
     }
@@ -278,16 +291,24 @@ function Shell() {
             <Revenues
               initialTab={route.tab as 'registered' | 'pending' | 'rejected' | undefined}
               onTabChange={t => navigate('revenues', t)}
+              focusRecord={route.focus ?? undefined}
             />
           )}
           {route.page === 'expenses' && (
             <Expenses
               initialTab={route.tab as 'registered' | 'rejected' | undefined}
               onTabChange={t => navigate('expenses', t)}
+              focusRecord={route.focus ?? undefined}
             />
           )}
           {route.page === 'e-factura' && <EFactura />}
-          {route.page === 'declarations' && <Declarations />}
+          {route.page === 'declarations' && (
+            <Declarations
+              initialTab={route.tab as 'inregistrata' | 'in-asteptare' | 'transmisa' | 'respinsa' | undefined}
+              onTabChange={t => navigate('declarations', t)}
+              focusRecord={route.focus ?? undefined}
+            />
+          )}
           {route.page === 'documents' && (
             <Documents
               initialTab={route.tab ?? undefined}

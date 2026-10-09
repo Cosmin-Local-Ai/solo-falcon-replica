@@ -13,7 +13,7 @@ import { useDashboardData } from '../data/dashboardAdapter';
 import { getProjectedFinancialSeries } from '../data/dashboard';
 import { estimateFigureLabel } from '../domain/estimateBasis';
 import { formatBaniAxis, formatBaniRON, formatBaniRONOrDash, isBani, type Bani } from '../domain/money';
-import { chart as chartCopy } from '../ui/copy';
+import { chart as chartCopy, estimateState as estimateStateCopy } from '../ui/copy';
 
 
 type Range = 'monthly' | 'ytd' | 'year';
@@ -236,14 +236,22 @@ export default function FinancialChart() {
           </span>
         </div>
 
-        {tax.status === 'computed' ? (
-          <p className="chart-tax-note">
+        {tax !== null && tax.status === 'computed' ? (
+          <p className="chart-tax-note" data-estimate-state="computed">
             {/* Task 1: `YTD` is only said when the amount really is actuals-to-date. */}
             {estimateFigureLabel(tax.basis)}:{' '}
             <strong className="mono">{formatBaniRON(tax.output.total)}</strong>
           </p>
+        ) : tax === null ? (
+          /* TASK 8: there is no calculation to review. This branch used to print the adapter's
+             `loading` sentinel reason — an internal token inside a sentence a person reads. */
+          <p className="chart-tax-note" data-estimate-state="unavailable">
+            {estimateStateCopy.unavailable}
+          </p>
         ) : (
-          <p className="chart-tax-note">{chartCopy.taxNoteReview} {tax.reason}</p>
+          <p className="chart-tax-note" data-estimate-state="review_required">
+            {chartCopy.taxNoteReview} {tax.reason}
+          </p>
         )}
 
         <div className="visually-hidden">

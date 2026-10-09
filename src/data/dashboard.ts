@@ -18,6 +18,7 @@ import {
 import { computeTaxEstimate, type TaxEstimateResult } from '../domain/tax';
 import {
   computeThresholds,
+  readMinimumWageVintages,
   type FiscalBase,
   type FiscalThreshold,
   type MeasuredBasis,
@@ -29,13 +30,16 @@ import {
   createTaxReserveState,
   type TaxReserveRecommendation,
 } from '../domain/taxReserve';
-import { getInsights as buildInsights, type Insight } from '../domain/insights';
+import { getInsights as buildInsights } from '../domain/insights';
+import { partitionAttention, type AttentionItem, type AttentionSurfaces } from '../domain/attention';
+import { recordAttentionItems } from './attention';
+import { legislation as legislationCopy } from '../ui/copy';
 import { selectTaxDerived } from '../domain/derived';
 import { selectRuleSet } from '../domain/fiscal';
 import type { FiscalRule } from '../domain/fiscal/rules';
 import { selectApplicableRules } from '../domain/fiscal/select';
 import { localDateISO, now } from '../domain/date';
-import type { Bani } from '../domain/money';
+import { formatBaniLei, type Bani } from '../domain/money';
 
 /**
  * TASK 6: the rules in force for this profile's fiscal year on `asOfDate`, or none.
@@ -60,20 +64,48 @@ export interface DashboardSnapshotView extends DashboardSnapshot {
   pfaRevenue: Bani;
 }
 
+/**
+ * TASK 8 — the three epistemic states of the tax estimate.
+ *
+ * `TaxEstimateResult` has two members (`computed` | `review_required`), and the dashboard adapter used
+ * to paper over the absence of an estimate with a `review_required` sentinel whose reason was the
+ * internal token `loading` — which reached the screen through the chart note. A missing calculation and
+ * a refused one are different claims: the first says nothing was produced, the second says the engine
+ * ran and withheld a conclusion. `unavailable` is the third state, and it is derived here from the
+ * estimate actually being absent, never from a sentinel's reason string.
+ */
+export type TaxEstimateState = 'computed' | 'review_required' | 'unavailable';
+
+function estimateStateOf(tax: TaxEstimateResult | TaxEstimateWithBasis | null): TaxEstimateState {
+  if (tax === null) return 'unavailable';
+  return tax.status === 'computed' ? 'computed' : 'review_required';
+}
+
 export interface DashboardData {
   taxYear: number;
   snapshot: DashboardSnapshotView;
   /**
    * The engine's result plus the basis that produced it (`estimateBasis.ts`). A consumer can tell
    * actuals-to-date from run-rate projected without inferring it from a label.
+   *
+   * TASK 8: `null` is now representable. It used to be replaced by a `review_required` sentinel, which
+   * made "nothing has been calculated yet" and "the engine refused to calculate" the same value on the
+   * way to the screen. `estimateState` is the field the surfaces read.
    */
-  tax: TaxEstimateWithBasis;
+  tax: TaxEstimateWithBasis | null;
+  estimateState: TaxEstimateState;
   thresholds: FiscalThreshold[];
   deadlines: Deadline[];
   completeness: CompletenessReport;
-  actions: ActionItem[];
+  /**
+   * TASK 8: the action surface is a projection of the attention model, not a second pipeline. It used
+   * to be `ActionItem[]` computed independently of `insights`, over the same deadlines and completeness
+   * checks, which is how one problem reached the screen twice in two vocabularies.
+   */
+  actions: AttentionItem[];
   reserve: TaxReserveRecommendation;
-  insights: Insight[];
+  /** The observation surface — the other projection of the same list. */
+  insights: AttentionItem[];
   pendingCounts: PendingCounts;
   legislation: LegislationState;
 }
@@ -175,14 +207,14 @@ export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEsti
  * and therefore is a different number. When the engine declined to compute, there is no
  * contribution base to report and the three contribution rows come back `review_required`.
  */
-export function buildThresholdBases(ytd: YtdTotals, tax: TaxEstimateResult): ThresholdBases {
+export function buildThresholdBases(ytd: YtdTotals, tax: TaxEstimateResult | null): ThresholdBases {
   const bases: ThresholdBases = {
     'revenue-incl-vat': ytd.revenue,
     'revenue-excl-vat': ytd.revenueNet,
     'expense-incl-vat': ytd.expenses,
     'expense-excl-vat': ytd.expenseNet,
   };
-  if (tax.status === 'computed') {
+  if (tax !== null && tax.status === 'computed') {
     bases['net-income'] = tax.bases.venitulNetDinActivitate;
   }
   return bases;
@@ -199,8 +231,13 @@ export function buildThresholdBases(ytd: YtdTotals, tax: TaxEstimateResult): Thr
  * Unifying them would make one of the two rows state a quantity the law does not measure.
  */
 export function buildThresholdBasisProvenance(
-  tax: TaxEstimateWithBasis,
+  tax: TaxEstimateWithBasis | null,
 ): Partial<Record<FiscalBase, MeasuredBasis>> {
+  if (tax === null) {
+    // Nothing was computed, so nothing can be attributed. An empty provenance map makes the rows say
+    // they are unmeasured; labelling them `annual-projected` would name a basis that does not exist.
+    return {};
+  }
   const turnover: MeasuredBasis = 'ytd-turnover';
   let annual: MeasuredBasis = 'unattributed';
   if (tax.basis.kind === 'annual-projected') annual = 'annual-projected';
@@ -217,10 +254,10 @@ export function buildThresholdBasisProvenance(
 export function getThresholdStatuses(
   data: AppData,
   asOfDate: string,
-  tax: TaxEstimateResult | TaxEstimateWithBasis,
+  tax: TaxEstimateResult | TaxEstimateWithBasis | null,
 ): FiscalThreshold[] {
   const ytd = selectYtd(data, asOfDate);
-  const estimate = withEstimateBasis(tax);
+  const estimate = tax === null ? null : withEstimateBasis(tax);
   // TASK 6: selected, not imported. `ruleRelease` on a threshold row is the releaseId of the release that
   // produced the row — it used to be `PFA_2026_RELEASE.ruleIds[0]`, i.e. the first RULE id stamped on a
   // field named `ruleRelease`, which is how a hard-coded constant quietly becomes a wrong label.
@@ -278,7 +315,7 @@ export function getUpcomingDeadlines(data: AppData, asOfDate: string): Deadline[
 export function getTaxReserve(
   data: AppData,
   asOfDate: string,
-  tax: TaxEstimateResult,
+  tax: TaxEstimateResult | null,
 ): TaxReserveRecommendation {
   const state = createTaxReserveState(data.reservedAmount);
   return computeTaxReserve(tax, state, {
@@ -287,7 +324,11 @@ export function getTaxReserve(
   });
 }
 
-export function getInsights(data: AppData, snapshot: DashboardSnapshot, tax?: TaxEstimateResult): Insight[] {
+export function getInsights(
+  data: AppData,
+  snapshot: DashboardSnapshot,
+  tax?: TaxEstimateResult,
+): AttentionItem[] {
   return buildInsights({
     snapshot,
     expenses: data.expenses,
@@ -298,50 +339,128 @@ export function getInsights(data: AppData, snapshot: DashboardSnapshot, tax?: Ta
   });
 }
 
-export interface ActionItem {
-  id: string;
-  label: string;
-  source: 'deadline' | 'completeness' | 'tax';
+/**
+ * TASK 8 — the reconciliation of the two attention pipelines, in one place.
+ *
+ * `getInsights` (domain) and `getActionItems` (data layer) used to be two independent computations over
+ * the same deadlines and completeness checks. They could not know about each other, so the same problem
+ * reached the screen twice: `completeness` as a collapsed card *and* `completeness-<key>` as an action,
+ * `deadline-<id>` as an alert *and* as an action, `tax` as a card *and* `tax-review` as an action.
+ *
+ * There is now one list. The domain families and the record family are produced once, `dedupeAttention`
+ * collapses any id two producers both claimed (the more severe copy wins), and `partitionAttention`
+ * routes every item to exactly one surface from its `state`. An item cannot be a card and an action at
+ * the same time, because the routing is a function of one field and there is no call site that can
+ * override it.
+ */
+export function getAttentionItems(
+  data: AppData,
+  snapshot: DashboardSnapshot,
+  tax?: TaxEstimateResult,
+): AttentionSurfaces {
+  return partitionAttention([...getInsights(data, snapshot, tax), ...recordAttentionItems(data)]);
 }
 
-export function getActionItems(data: AppData, instant: Date = now()): ActionItem[] {
+/**
+ * The action surface, as a projection of the attention model. Kept under this name because it is the
+ * entry point the tests and any external caller reach for; it no longer computes anything of its own.
+ */
+export function getActionItems(
+  data: AppData,
+  instant: Date = now(),
+  tax: TaxEstimateResult | null = null,
+): AttentionItem[] {
   const asOfDate = isoToday(instant);
-  const items: ActionItem[] = [];
-
-  for (const d of getUpcomingDeadlines(data, asOfDate)) {
-    items.push({ id: `deadline-${d.deadlineId}`, label: d.appliesTo, source: 'deadline' });
-  }
-
-  for (const c of getDataCompleteness(data).checks.filter((c) => !c.satisfied)) {
-    items.push({ id: `completeness-${c.key}`, label: c.key, source: 'completeness' });
-  }
-
-  if (selectYtd(data, asOfDate).revenue > 0) {
-    items.push({ id: 'tax-review', label: 'Revizuire estimări fiscale', source: 'tax' });
-  }
-
-  return items;
+  const snapshot = buildSnapshot(data, asOfDate, tax);
+  return getAttentionItems(data, snapshot, tax ?? undefined).actions;
 }
 
 export interface LegislationItem {
   id: string;
   source: string;
-  publishedDate: string;
+  /** Optional: the rule package records when a change is in force, not when it was published. */
+  publishedDate?: string;
   effectiveDate: string;
-  status: 'CURRENT' | 'UPCOMING';
+  /** `PAST` is a window that has already closed — a superseded vintage, not a live change. */
+  status: 'CURRENT' | 'UPCOMING' | 'PAST';
   affectedArea: string;
   summary: string;
+  /**
+   * TASK 8 — the half that makes a published change worth reading: whether it lands on THIS user in
+   * THIS fiscal year. A change that is in force and changes nothing for the taxpayer is a different
+   * sentence from one that does, and the old card had only the first.
+   */
+  impact: {
+    affects: 'yes' | 'no' | 'unknown';
+    note: string;
+  };
 }
 
 export interface LegislationState {
   updatedAt: string | null;
   items: LegislationItem[];
+  /**
+   * TASK 8 — whether anything verified these items at all. `unavailable` means there is no monitor: no
+   * ingestion, no source checked. The section must say that, because „no verified change” and „nothing
+   * is being watched” are different statements and only the first one reassures the user.
+   */
+  monitor: 'active' | 'unavailable';
 }
 
-export function getLegislationState(data: AppData): LegislationState {
-  // AppData has no legislation data — placeholder boundary only, no ingestion.
-  void data;
-  return { updatedAt: null, items: [] };
+/**
+ * CF art. 135¹ alin. (3) — the anchor for every annual SM multiple in the fiscal year. Verified verbatim
+ * in `docs/ai/research/25_pension_cass_exception_2026.md` (legislatie.just.ro 171282, as amended by
+ * OUG 128/2024 art. I pct. 19) and recorded in `docs/ai/phases/02_fiscal_baseline.md`; the rule package
+ * carries the same anchor on its CAS and CASS rules (`sourceArticle`).
+ */
+const SM_ANCHOR_CITATION = 'art. 135¹ alin. (3)';
+
+/**
+ * What the app can report with no monitor: the minimum-wage vintages its own rule package carries, and
+ * whether each one re-anchors the fiscal year.
+ *
+ * It does not. art. 135¹ alin. (3) takes „valoarea … în vigoare la data de 1 ianuarie a anului de
+ * realizare a venitului”, „indiferent dacă în cursul aceluiași an se utilizează mai multe valori”. So
+ * HG 146/2026 — 4.325 lei from 1 iulie 2026 — is in force, and the FY2026 thresholds still measure
+ * against the 1 January value. Saying only „the minimum wage rose” would leave the user to guess the
+ * part that matters; saying only „it does not affect you” would hide a real published change.
+ */
+function rulePackageLegislation(data: AppData, asOfDate: string): LegislationItem[] {
+  const rules = selectionRules(data, asOfDate);
+  const taxYear = data.profile.fiscalYear;
+  return readMinimumWageVintages(rules, taxYear).map((v) => {
+    const isAnchor = v.from <= `${taxYear}-01-01`;
+    const status: LegislationItem['status'] =
+      v.from > asOfDate ? 'UPCOMING' : v.to !== null && v.to < asOfDate ? 'PAST' : 'CURRENT';
+    return {
+      id: `sm-vintage-${v.from}`,
+      source: v.act,
+      effectiveDate: v.from,
+      status,
+      affectedArea: legislationCopy.minimumWageArea,
+      summary: legislationCopy.minimumWageSummary(formatBaniLei(v.valueBani), v.from, v.act),
+      impact: isAnchor
+        ? {
+            affects: 'yes',
+            note: legislationCopy.minimumWageAnchor(taxYear, SM_ANCHOR_CITATION, v.from),
+          }
+        : {
+            affects: 'no',
+            note: legislationCopy.minimumWageNoImpact(taxYear, SM_ANCHOR_CITATION),
+          },
+    };
+  });
+}
+
+export function getLegislationState(data: AppData, asOfDate: string): LegislationState {
+  // AppData has no legislation data — there is no ingestion and no monitor, and that is what the
+  // section has to say. What is reported here is narrower and honest: the changes the rule package
+  // under this calculation already carries, each with whether it re-anchors this fiscal year.
+  return {
+    updatedAt: null,
+    monitor: 'unavailable',
+    items: rulePackageLegislation(data, asOfDate),
+  };
 }
 
 /**
@@ -358,7 +477,7 @@ function snapshotThresholdType(t: FiscalThreshold): 'income' | 'vat' | 'tier-flo
 function buildSnapshot(
   data: AppData,
   asOfDate: string,
-  tax: TaxEstimateResult,
+  tax: TaxEstimateResult | null,
 ): DashboardSnapshotView {
   const taxYear = data.profile.fiscalYear;
   const completeness = assessCompleteness(data);
@@ -443,25 +562,28 @@ function buildSnapshot(
 
 export function buildDashboardData(
   data: AppData,
-  tax: TaxEstimateResult | TaxEstimateWithBasis,
+  tax: TaxEstimateResult | TaxEstimateWithBasis | null,
   instant: Date = now(),
 ): DashboardData {
   // Normalise once, here, so every consumer of `DashboardData.tax` can read a basis. A result that
-  // never had one is labelled `unknown` rather than assumed projected or assumed actual.
-  const estimate = withEstimateBasis(tax);
+  // never had one is labelled `unknown` rather than assumed projected or assumed actual. A `null`
+  // stays `null`: it is the absence of a calculation, and `estimateState` says so.
+  const estimate = tax === null ? null : withEstimateBasis(tax);
   const asOfDate = isoToday(instant);
   const snapshot = buildSnapshot(data, asOfDate, estimate);
+  const attention = getAttentionItems(data, snapshot, estimate ?? undefined);
   return {
     taxYear: data.profile.fiscalYear,
     snapshot,
     tax: estimate,
+    estimateState: estimateStateOf(estimate),
     thresholds: getThresholdStatuses(data, asOfDate, estimate),
     deadlines: getUpcomingDeadlines(data, asOfDate),
     completeness: getDataCompleteness(data),
-    actions: getActionItems(data, instant),
+    actions: attention.actions,
     reserve: getTaxReserve(data, asOfDate, estimate),
-    insights: getInsights(data, snapshot, estimate),
+    insights: attention.observations,
     pendingCounts: getPendingCounts(data),
-    legislation: getLegislationState(data),
+    legislation: getLegislationState(data, asOfDate),
   };
 }

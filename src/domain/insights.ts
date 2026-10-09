@@ -1,29 +1,39 @@
 import type { DashboardSnapshot, ExcludedFiscalDate, Threshold } from './aggregation';
-import type { ThresholdKind, ThresholdSeverity } from './thresholds';
+import type { ThresholdKind } from './thresholds';
 import type { TaxEstimateResult } from './tax';
 import type { Expense } from '../data/types';
 import { formatRoCalendarDate } from './date';
-import { formatBaniRON, type Bani } from './money';
+import { formatBaniRON } from './money';
+import {
+  deadlineSeverity,
+  sortAttention,
+  type AttentionItem,
+  type AttentionSeverity,
+  type AttentionState,
+  type AttentionTarget,
+} from './attention';
 
 // ── Contract ──────────────────────────────────────────────
-// `Insight` and `InsightInput` match the consumers:
-//   - src/data/dashboard.ts  → getInsights(data, snapshot, tax) → buildInsights({ snapshot, expenses, tax })
-//   - src/components/Insights.tsx → renders insight.title / description / action
-//     with SEVERITY_LABELS = { info: 'Info', warning: 'Atenție', danger: 'Urgent' }
+// TASK 8 replaced `Insight` with `AttentionItem` (`domain/attention.ts`). The old type had one field
+// for three questions — `severity: 'info' | 'warning' | 'danger'` carried the legal weight, the
+// urgency and the kind of thing at once — and this file was where the collapse happened:
+// `insightSeverity()` mapped the domain's four-level `ThresholdSeverity` down to three words, so a
+// `low` row and a `none` row that survived a filter became indistinguishable from each other and a
+// legally load-bearing row could not be told apart from an administrative one.
+//
+// Now: severity is READ from the family that owns the decision (`thresholds.ts` `severityFor` for a
+// threshold row, `deadlineSeverity` for a term, the record table in `attention.ts` for a document)
+// and is never re-derived here. `state` says what the item is, `source` says where it came from, and
+// `target` says where the person acts. `partitionAttention` then routes each item to exactly one
+// surface, which is what stops the same problem appearing as both a card and an action.
 
-export interface Insight {
-  id: string;
-  severity: 'info' | 'warning' | 'danger';
-  title: string; // Romanian
-  description: string; // Romanian
-  action: string; // Romanian
-}
+export type { AttentionItem };
 
 export interface InsightInput {
   snapshot: DashboardSnapshot;
   /** Kept for contract compatibility with dashboard.ts; not used by current insights. */
   expenses?: readonly Expense[];
-  /** Optional tax estimate; `undefined` → no tax insight. */
+  /** Optional tax estimate; `undefined` → no tax item. */
   tax?: TaxEstimateResult;
   /**
    * B-21: records the aggregate could not place in time (`domain/aggregation.ts`
@@ -46,7 +56,7 @@ export interface InsightInput {
 // src/domain/deadlines.ts). `new_pfa` keeps its key but no longer reads "Declarație estimativă
 // PFA": that label named an obligation abrogated on 01-01-2025, and no rule emits `new_pfa` today.
 
-/** Fiscal date field → Romanian, for the B-21 insight. Raw property names are never rendered. */
+/** Fiscal date field → Romanian, for the B-21 item. Raw property names are never rendered. */
 const FISCAL_DATE_FIELD_LABEL: Record<ExcludedFiscalDate['field'], string> = {
   date: 'data',
   collected: 'data încasării',
@@ -80,6 +90,24 @@ const COMPLETENESS_LABELS: Record<string, string> = {
   taxEstimate: 'Estimare impozit',
 };
 
+/**
+ * TASK 8 — an unsatisfied completeness check is now an item with somewhere to go, not a line of text.
+ * The route is data (this app's own router), not language; the words on the link come from the
+ * language layer at the render site. `taxEstimate` has no route: the snapshot that satisfies it is
+ * written by the engine, and pointing the user at a page that cannot produce it would be a dead link.
+ */
+const COMPLETENESS_TARGETS: Record<string, AttentionTarget | null> = {
+  profile: { href: '/settings#!/fiscal' },
+  income: { href: '/revenues' },
+  expenses: { href: '/expenses' },
+  clients: { href: '/clients' },
+  documents: { href: '/documents' },
+  companyDocuments: { href: '/documents#!/company' },
+  declarations: { href: '/declarations' },
+  statements: { href: '/documents#!/statements' },
+  taxEstimate: null,
+};
+
 function deadlineLabel(label: string): string {
   return DEADLINE_LABELS[label] ?? 'Termen fiscal';
 }
@@ -92,22 +120,11 @@ function completenessLabel(key: string): string {
   return COMPLETENESS_LABELS[key] ?? 'date';
 }
 
-// ── Severity ordering ─────────────────────────────────────
-function severityRank(sev: Insight['severity']): number {
-  switch (sev) {
-    case 'danger':
-      return 0;
-    case 'warning':
-      return 1;
-    case 'info':
-      return 2;
-  }
-}
-
 // ── Threshold alerts ──────────────────────────────────────
 interface ThresholdAlert {
   id: string;
-  severity: Insight['severity'];
+  severity: AttentionSeverity;
+  state: AttentionState;
   title: string;
   description: string;
   action: string;
@@ -117,14 +134,15 @@ interface ThresholdAlert {
 
 /**
  * TASK 4 — the severity is DECIDED in the domain (`thresholds.ts` `severityFor`, which never reads
- * the legal kind) and only translated here. This file used to invent it from `breached` + a private
- * `ratio >= 0.8` band, which was a second, uncited copy of the same application policy and made the
- * two surfaces disagree about how urgent a row looked.
+ * the legal kind).
+ *
+ * TASK 8 removed the translation step. `insightSeverity` used to fold `high → danger`,
+ * `medium → warning`, `low → info`, which threw away the difference between `low` and `none` and made
+ * the alert scale a third vocabulary next to the row's own. The row's severity is used verbatim.
  */
-function insightSeverity(severity: ThresholdSeverity): Insight['severity'] {
-  if (severity === 'high') return 'danger';
-  if (severity === 'medium') return 'warning';
-  return 'info';
+function thresholdState(t: Threshold): AttentionState {
+  if (t.current === null) return 'level_review_required';
+  return t.engaged ? 'level_engaged' : 'level_approaching';
 }
 
 /**
@@ -165,7 +183,9 @@ function makeThresholdAlert(t: Threshold): ThresholdAlert {
   const unmeasured = t.current === null;
   return {
     id: `threshold-${t.id}`,
-    severity: insightSeverity(t.severity),
+    // Read, not translated: the row already carries the four-level severity `severityFor` decided.
+    severity: t.severity,
+    state: thresholdState(t),
     title: unmeasured ? `Prag de verificat: ${label}` : thresholdTitle(t.kind, t.engaged, label),
     // The description is the row's own factual, cited consequence. This is the second place that
     // used to re-write the same CF article by hand; there is now exactly one.
@@ -189,7 +209,7 @@ function canonicalCassCas(alerts: ThresholdAlert[]): ThresholdAlert | null {
       canonical = a;
       continue;
     }
-    const sevDiff = severityRank(a.severity) - severityRank(canonical.severity);
+    const sevDiff = rankOf(a.severity) - rankOf(canonical.severity);
     if (sevDiff < 0 || (sevDiff === 0 && a.ratio > canonical.ratio)) {
       canonical = a;
     }
@@ -197,14 +217,31 @@ function canonicalCassCas(alerts: ThresholdAlert[]): ThresholdAlert | null {
   return canonical;
 }
 
-function toInsight(a: ThresholdAlert): Insight {
-  return { id: a.id, severity: a.severity, title: a.title, description: a.description, action: a.action };
+function rankOf(severity: AttentionSeverity): number {
+  if (severity === 'high') return 0;
+  if (severity === 'medium') return 1;
+  if (severity === 'low') return 2;
+  return 3;
+}
+
+function toAttentionItem(a: ThresholdAlert): AttentionItem {
+  return {
+    id: a.id,
+    severity: a.severity,
+    state: a.state,
+    source: 'threshold',
+    title: a.title,
+    description: a.description,
+    action: a.action,
+    // The row itself is the surface: *Praguri* renders it with its measured basis and its citation.
+    target: { href: '/dashboard#!/praguri' },
+  };
 }
 
 // ── Main ──────────────────────────────────────────────────
-export function getInsights(input: InsightInput): Insight[] {
+export function getInsights(input: InsightInput): AttentionItem[] {
   const { snapshot, tax } = input;
-  const insights: Insight[] = [];
+  const items: AttentionItem[] = [];
 
   // 1. Threshold alerts — the domain already decided which rows deserve attention at all
   //    (`severity: 'none'` covers an inapplicable row and a row far from its level), so this layer
@@ -217,93 +254,116 @@ export function getInsights(input: InsightInput): Insight[] {
   const cassCas = thresholdAlerts.filter((a) => a.affectedTax === 'cass' || a.affectedTax === 'cas');
   const others = thresholdAlerts.filter((a) => a.affectedTax !== 'cass' && a.affectedTax !== 'cas');
   const canonical = canonicalCassCas(cassCas);
-  if (canonical !== null) insights.push(toInsight(canonical));
-  for (const a of others) insights.push(toInsight(a));
+  if (canonical !== null) items.push(toAttentionItem(canonical));
+  for (const a of others) items.push(toAttentionItem(a));
 
-  // 2. Deadline alerts — overdue (daysUntil < 0) and due today (daysUntil === 0)
-  //    → danger; 1 <= daysUntil <= 30 → warning; > 30 → no insight.
-  //    Invalid deadlines (empty date, non-finite daysUntil) are skipped.
+  // 2. Deadline items — every dated term the engine resolved.
+  //
+  //    This family used to stop at 30 days, because it only ever fed an alert. It now feeds the
+  //    action list too, so a term 200 days away still appears — at `low`, which is what the domain
+  //    says it is. A legal duty that is far away is not the same as no duty, and `deadlineSeverity`
+  //    is the only place that decides the difference.
+  //    Invalid deadlines (empty date, non-finite daysUntil) are skipped: with no date there is no
+  //    term to state, and the engine already says so in *Termene limită*.
   for (const d of snapshot.deadlines) {
     if (typeof d.daysUntil !== 'number' || !Number.isFinite(d.daysUntil)) continue;
     if (typeof d.date !== 'string' || d.date.length === 0) continue;
     const label = deadlineLabel(d.label);
     const date = formatRoCalendarDate(d.date);
+    const severity = deadlineSeverity(d.daysUntil);
+    if (severity === 'none') continue;
     if (d.daysUntil <= 0) {
-      insights.push({
+      items.push({
         id: `deadline-${d.id}`,
-        severity: 'danger',
+        severity,
+        state: 'deadline_overdue',
+        source: 'deadline',
         title: `Termen depășit: ${label}`,
         description:
           d.daysUntil < 0
             ? `Termenul ${label} a expirat pe ${date}.`
             : `Termenul ${label} este astăzi (${date}).`,
         action: `Depune ${label} cât de curând posibil.`,
+        target: { href: '/declarations' },
       });
-    } else if (d.daysUntil <= 30) {
-      insights.push({
+    } else {
+      items.push({
         id: `deadline-${d.id}`,
-        severity: 'warning',
-        title: `Termen apropiat: ${label}`,
+        severity,
+        state: 'deadline_open',
+        source: 'deadline',
+        title: `Termen limită: ${label}`,
         description: `Termenul ${label} este pe ${date}.`,
         action: `Pregătește ${label}.`,
+        target: { href: '/declarations' },
       });
     }
   }
 
-  // 3. Reserve gap (warning) — only when there is a real gap.
-  //    No insight when no liability data is recorded (projectedLiabilityBani <= 0)
-  //    and no insight when the reserve already meets the target (gapBani <= 0).
+  // 3. Reserve gap — only when there is a real gap.
+  //    No item when no liability data is recorded (projectedLiabilityBani <= 0)
+  //    and no item when the reserve already meets the target (gapBani <= 0).
   const { projectedLiabilityBani, gapBani } = snapshot.taxReserve;
   if (projectedLiabilityBani > 0 && gapBani > 0) {
     const gap = gapBani;
-    insights.push({
+    items.push({
       id: 'reserve',
-      severity: 'warning',
+      severity: 'medium',
+      state: 'reserve_shortfall',
+      source: 'reserve',
       title: 'Rezervă fiscală sub țintă',
       description: `Diferența față de ținta de rezervă: ${formatBaniRON(gap)}.`,
       action: 'Adaugă fonduri la rezerva fiscală.',
+      // The card that holds the control, not a page: the reserve is recorded on the dashboard.
+      target: { href: '/dashboard#!/rezerva' },
     });
   }
 
-  // 4. Completeness (warning) — map raw keys to Romanian labels.
+  // 4. Completeness — one item per unsatisfied check, each with the route that can satisfy it.
+  //
+  //    This used to be one collapsed line in Observații ("Lipsă: X, Y") *and* one action per key from
+  //    `getActionItems` — the same problem twice, in two vocabularies, with neither pointing anywhere.
+  //    It is now one item per key, routed to the action surface by `surfaceFor`, and the collapsed
+  //    card is gone.
   const missing = snapshot.missing ?? [];
-  if (missing.length > 0) {
-    const labels = missing.map(completenessLabel).join(', ');
-    insights.push({
-      id: 'completeness',
-      severity: 'warning',
-      title: 'Date incomplete',
-      description: `Lipsă: ${labels}.`,
-      action: 'Completează datele lipsă în profil.',
+  for (const key of missing) {
+    items.push({
+      id: `completeness-${key}`,
+      severity: 'medium',
+      state: 'data_missing',
+      source: 'completeness',
+      title: `Date lipsă: ${completenessLabel(key)}`,
+      description: `Această verificare de completitudine nu este îndeplinită: ${completenessLabel(key)}.`,
+      action: 'Completează datele lipsă.',
+      target: COMPLETENESS_TARGETS[key] ?? null,
     });
   }
 
-  // 5. Tax estimate (info) — at most one, no raw reasons.
-  if (tax !== undefined) {
-    if (tax.status === 'review_required') {
-      insights.push({
-        id: 'tax',
-        severity: 'info',
-        title: 'Estimarea impozitului necesită verificare',
-        description: 'Datele nu permit o estimare completă a impozitului.',
-        action: 'Verifică datele fiscale.',
-      });
-    } else if (tax.status === 'computed') {
-      insights.push({
-        id: 'tax',
-        severity: 'info',
-        title: 'Estimare impozit',
-        description: `Estimarea totală a impozitului: ${formatBaniRON(tax.output.total)}.`,
-        action: 'Verifică detaliile estimării.',
-      });
-    }
+  // 5. Tax estimate — only when the engine withheld a conclusion.
+  //
+  //    A `computed` estimate used to raise an `info` item that repeated the hero figure in a card.
+  //    That was a duplicate of a number already on the screen, not an item that needs attention, so
+  //    it is gone; the estimate section states `computed` / `review-required` / `unavailable` itself.
+  //    A withheld conclusion still surfaces, and still stays withheld: this item says the estimate
+  //    needs checking, it does not resolve it or restate its reason as a number.
+  if (tax !== undefined && tax.status === 'review_required') {
+    items.push({
+      id: 'tax',
+      severity: 'high',
+      state: 'estimate_review_required',
+      source: 'tax',
+      title: 'Estimarea impozitului necesită verificare',
+      description: 'Datele nu permit o estimare completă a impozitului.',
+      action: 'Verifică datele fiscale.',
+      target: { href: '/dashboard#!/estimare' },
+    });
   }
 
   // 6. B-21 — records whose stored date is not a usable calendar date.
   //    `inPeriod` excludes them from every total, so without this row the dashboard would look
   //    complete while quietly missing rows. One row for the whole class rather than one per
   //    record: the operator's job is one fix (correct the date), and a per-record row would let
-  //    a bad import bury every other insight. The record itself is never rewritten.
+  //    a bad import bury every other item. The record itself is never rewritten.
   const dateIssues = input.fiscalDateIssues ?? [];
   if (dateIssues.length > 0) {
     const shown = dateIssues.slice(0, 3);
@@ -311,16 +371,21 @@ export function getInsights(input: InsightInput): Insight[] {
       .map(i => `${i.kind === 'revenue' ? 'Venit' : 'Cheltuială'} ${i.id} · ${FISCAL_DATE_FIELD_LABEL[i.field]}`)
       .join('; ');
     const more = dateIssues.length > shown.length ? ` și încă ${dateIssues.length - shown.length}` : '';
-    insights.push({
+    items.push({
       id: 'fiscal-dates',
-      severity: 'danger',
+      severity: 'high',
+      state: 'record_date_unusable',
+      source: 'integrity',
       title: `${dateIssues.length} înregistr${dateIssues.length === 1 ? 'are are' : 'ări au'} o dată de verificat`,
       description: `Data nu este o dată calendaristică ISO validă, deci înregistrarea nu intră în niciun total pe perioadă: ${where}${more}.`,
       action: 'De verificat: corectează data în registru; înregistrarea nu a fost modificată automat.',
+      target: { href: '/revenues' },
     });
   }
 
-  // Most urgent first — stable sort keeps natural order within a severity.
-  insights.sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
-  return insights;
+  // Most urgent first — the same ranking `partitionAttention` applies to the merged list, so a caller
+  // that reads the families directly and a caller that reads the surfaces see one order, not two.
+  // The sort is stable, so within a severity the families keep the order above (thresholds, deadlines,
+  // reserve, completeness, tax, integrity).
+  return sortAttention(items);
 }

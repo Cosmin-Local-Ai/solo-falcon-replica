@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { formatBaniRON, leiInputValue, parseLeiInput } from '../domain/money';
 import { useStore } from '../data/store';
 import { fmtDate, declarationNet, statusBadge } from '../data/types';
@@ -102,12 +102,32 @@ function DeclForm({ initial, onSave, onClose }: {
   );
 }
 
-export default function Declarations() {
+interface DeclarationsProps {
+  initialTab?: (typeof TABS)[number]['key'];
+  onTabChange?: (tab: (typeof TABS)[number]['key']) => void;
+  /** TASK 8 — the record an attention item pointed at; see `Revenues.tsx focusRecord`. */
+  focusRecord?: string;
+}
+
+export default function Declarations({ initialTab, onTabChange, focusRecord }: DeclarationsProps) {
   const { declarations, addDeclaration, updateDeclaration, sendDeclaration, toast } = useStore();
-  const [tab, setTab] = useState<(typeof TABS)[number]['key']>('inregistrata');
+  const [tab, setTab] = useState<(typeof TABS)[number]['key']>(
+    initialTab && TABS.some(t => t.key === initialTab) ? initialTab : 'inregistrata',
+  );
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<Declaration | 'new' | null>(null);
+
+  // Sync tab when the URL changes (back/forward navigation), as the other registers do. The tab keys
+  // are the declaration's own status codes, which is what lets an attention target land on the tab
+  // that holds the declaration it names.
+  useEffect(() => {
+    if (initialTab && TABS.some(t => t.key === initialTab) && initialTab !== tab) {
+      setTab(initialTab);
+      setPage(1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTab]);
 
   const rows = useMemo(() =>
     declarations
@@ -119,6 +139,12 @@ export default function Declarations() {
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const counts = (k: string) => declarations.filter(d => d.status === k).length;
+
+  // TASK 8: land the focused record on screen, whatever page of the register it sits on.
+  const focusIndex = focusRecord ? rows.findIndex(d => d.id === focusRecord) : -1;
+  useEffect(() => {
+    if (focusIndex >= 0) setPage(Math.floor(focusIndex / PAGE_SIZE) + 1);
+  }, [focusIndex]);
 
   return (
     <div>
@@ -142,7 +168,7 @@ export default function Declarations() {
         <div style={{ padding: '0 18px' }}>
           <div className="tabs">
             {TABS.map(t => (
-              <button key={t.key} className={`tab ${tab === t.key ? 'active' : ''}`} onClick={() => { setTab(t.key); setPage(1); }}>
+              <button key={t.key} className={`tab ${tab === t.key ? 'active' : ''}`} onClick={() => { setTab(t.key); setPage(1); onTabChange?.(t.key); }}>
                 {t.label}<span className="count">{counts(t.key)}</span>
               </button>
             ))}
@@ -168,7 +194,12 @@ export default function Declarations() {
               </thead>
               <tbody>
                 {pageRows.map(d => (
-                  <tr key={d.id} className="clickable" onClick={() => setEditing(d)}>
+                  <tr
+                    key={d.id}
+                    data-record-id={d.id}
+                    className={`clickable${d.id === focusRecord ? ' row-focus' : ''}`}
+                    onClick={() => setEditing(d)}
+                  >
                     <td style={{ fontWeight: 500, color: 'var(--text)' }}>{d.an}-{String(d.luna).padStart(2, '0')}</td>
                     <td>{d.an}</td>
                     <td>{LUNILE[d.luna - 1]}</td>

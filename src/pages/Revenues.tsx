@@ -140,9 +140,15 @@ function RevenueForm({ initial, onSave, onClose }: {
 interface RevenuesProps {
   initialTab?: (typeof TABS)[number]['key'];
   onTabChange?: (tab: (typeof TABS)[number]['key']) => void;
+  /**
+   * TASK 8 — the record an attention item pointed at (`/revenues#!/rejected?f=r3`). The page jumps to
+   * the page of rows that holds it and marks the row, so the link lands on the document the dashboard
+   * named rather than on a list the user has to search.
+   */
+  focusRecord?: string;
 }
 
-export default function Revenues({ initialTab, onTabChange }: RevenuesProps) {
+export default function Revenues({ initialTab, onTabChange, focusRecord }: RevenuesProps) {
   const { revenues, addRevenue, updateRevenue, deleteRevenue, toast } = useStore();
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>(
     initialTab && TABS.some(t => t.key === initialTab) ? initialTab : 'registered'
@@ -173,6 +179,12 @@ export default function Revenues({ initialTab, onTabChange }: RevenuesProps) {
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const counts = (k: (typeof TABS)[number]['key']) =>
     revenues.filter(r => r.status === statusFor(k)).length;
+
+  // TASK 8: land the focused record on screen, whatever page of the register it sits on.
+  const focusIndex = focusRecord ? rows.findIndex(r => r.id === focusRecord) : -1;
+  useEffect(() => {
+    if (focusIndex >= 0) setPage(Math.floor(focusIndex / PAGE_SIZE) + 1);
+  }, [focusIndex]);
 
   return (
     <div>
@@ -220,7 +232,12 @@ export default function Revenues({ initialTab, onTabChange }: RevenuesProps) {
               </thead>
               <tbody>
                 {pageRows.map(r => (
-                  <tr key={r.id} className="clickable" onClick={() => setEditing(r)}>
+                  <tr
+                    key={r.id}
+                    data-record-id={r.id}
+                    className={`clickable${r.id === focusRecord ? ' row-focus' : ''}`}
+                    onClick={() => setEditing(r)}
+                  >
                     <td style={{ fontWeight: 500, color: 'var(--text)' }}>{r.nr}</td>
                     <td>{r.tip === 'factura' ? revenuesCopy.documentTypeCell.factura : revenuesCopy.documentTypeCell.nota}</td>
                     <td>{r.client}</td>

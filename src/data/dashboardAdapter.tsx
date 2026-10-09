@@ -5,19 +5,18 @@ import {
   type PendingCounts,
 } from './dashboard';
 import { useLatestTaxEstimate } from './derived';
-import type { TaxEstimateResult } from '../domain/tax';
 import { localDateISO } from '../domain/date';
 
 export type { DashboardData, PendingCounts };
 
-const LOADING_TAX: TaxEstimateResult = {
-  status: 'review_required',
-  reason: 'loading',
-  lines: [],
-};
-
+/**
+ * TASK 8: no sentinel. This used to substitute a `review_required` result whose `reason` was the
+ * internal token `loading`, which made „nothing has been calculated yet” indistinguishable from „the
+ * engine refused and said why” — and printed the word `loading` on the chart note. `null` is passed
+ * through, and `DashboardData.estimateState` renders it as the third state it actually is.
+ */
 export function useDashboardData(): DashboardData {
   const data = useStore();
   const { estimate } = useLatestTaxEstimate(localDateISO());
-  return buildDashboardData(data, estimate ?? LOADING_TAX);
+  return buildDashboardData(data, estimate);
 }

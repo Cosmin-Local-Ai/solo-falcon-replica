@@ -362,22 +362,100 @@ describe('threshold bases (Phase 8 — amount semantics, on seeded data)', () =>
 });
 
 describe('getActionItems (sync)', () => {
-  it('returns an array of well-formed action items', () => {
+  it('returns the action projection of the attention model', () => {
+    // Re-pinned from the old `{id, label, source}` shape. `ActionItem` is gone: the action list is now
+    // `AttentionItem[]`, produced by the same pipeline that produces the observations, so the two
+    // cannot disagree and one problem cannot appear on both surfaces.
     const items = getActionItems(makeData({ revenues: [revenue()] }), AS_OF_INSTANT);
     expect(Array.isArray(items)).toBe(true);
     for (const item of items) {
       expect(typeof item.id).toBe('string');
-      expect(typeof item.label).toBe('string');
-      expect(['deadline', 'completeness', 'tax']).toContain(item.source);
+      expect(typeof item.title).toBe('string');
+      expect(typeof item.description).toBe('string');
+      expect(['none', 'low', 'medium', 'high']).toContain(item.severity);
+      expect(item.severity).not.toBe('none');
+      expect(['revenue', 'expense', 'declaration', 'threshold', 'deadline', 'completeness', 'tax', 'reserve', 'integrity']).toContain(item.source);
+      // Every action is something to do, which is what routes it here.
+      expect(['rejected', 'awaiting_acceptance', 'not_submitted', 'data_missing', 'deadline_open', 'deadline_overdue']).toContain(item.state);
     }
+  });
+
+  it('surfaces the four unresolved seed records as actions, each with a target that reaches the record', () => {
+    const items = getActionItems(seedData, AS_OF_INSTANT);
+    const byId = new Map(items.map(i => [i.id, i]));
+
+    const r2 = byId.get('record-revenue-r2')!;
+    expect(r2.state).toBe('awaiting_acceptance');
+    expect(r2.description).toContain('În așteptare');
+    expect(r2.target?.href).toBe('/revenues#!/pending?f=r2');
+
+    const r3 = byId.get('record-revenue-r3')!;
+    expect(r3.state).toBe('rejected');
+    expect(r3.description).toContain('CUI nevalid');
+    expect(r3.target?.href).toBe('/revenues#!/rejected?f=r3');
+
+    const e3 = byId.get('record-expense-e3')!;
+    expect(e3.description).toContain('Document neconform');
+    expect(e3.target?.href).toBe('/expenses#!/rejected?f=e3');
+
+    const d2 = byId.get('record-declaration-d2')!;
+    expect(d2.state).toBe('not_submitted');
+    expect(d2.description).toContain('08.07.2026');
+    expect(d2.description).not.toContain('nu a fost depusă');
+    expect(d2.target?.href).toBe('/declarations#!/in-asteptare?f=d2');
+  });
+
+  it('no issue appears on both surfaces, and the two together cover the whole list', async () => {
+    // The reconciliation, asserted end to end rather than incidentally. `insights.ts` and
+    // `getActionItems` used to be two pipelines over the same deadlines and completeness checks, and
+    // the same problem reached the screen twice in two vocabularies.
+    const tax = await getTaxEstimate(seedData, AS_OF);
+    const dashboard = buildDashboardData(seedData, tax, AS_OF_INSTANT);
+    const obsIds = dashboard.insights.map(i => i.id);
+    const actIds = dashboard.actions.map(i => i.id);
+
+    expect(obsIds.filter(id => actIds.includes(id))).toEqual([]);
+    // The three duplications the two pipelines used to produce are gone.
+    expect(actIds).toContain('completeness-taxEstimate');
+    expect(obsIds).not.toContain('completeness');
+    expect(obsIds).not.toContain('tax-review');
+    expect(obsIds).not.toContain('deadline-PFA_DEADLINE_2026');
+    expect(actIds).toContain('deadline-PFA_DEADLINE_2026');
+    // A computed estimate is not an attention item: the figure is on the hero, in three states.
+    expect(obsIds).not.toContain('tax');
   });
 });
 
 describe('getLegislationState (sync)', () => {
-  it('returns a placeholder state with no items', () => {
-    const state = getLegislationState(makeData());
+  it('states that monitoring is unavailable, and reports only what the rule package carries', () => {
+    // Re-pinned. The old state was `{updatedAt: null, items: []}` behind the sentence „Nicio modificare
+    // viitoare verificată.” — a reassurance built on a placeholder boundary with no ingestion behind it.
+    const state = getLegislationState(makeData(), '2026-10-31');
     expect(state.updatedAt).toBeNull();
-    expect(state.items).toEqual([]);
+    expect(state.monitor).toBe('unavailable');
+  });
+
+  it('surfaces the HG 146/2026 minimum-wage change with whether it re-anchors this fiscal year', () => {
+    const state = getLegislationState(seedData, '2026-10-31');
+    const sm = state.items.find(i => i.source === 'HG 146/2026');
+    expect(sm).toBeDefined();
+    expect(sm!.effectiveDate).toBe('2026-07-01');
+    expect(sm!.status).toBe('CURRENT');
+    expect(sm!.summary).toContain('4.325,00 lei');
+    // The half that matters: it does not re-anchor FY2026, and the provision that fixes the anchor is
+    // named. Read from the rule package — no lei amount is invented here.
+    expect(sm!.impact.affects).toBe('no');
+    expect(sm!.impact.note).toContain('art. 135¹ alin. (3)');
+    expect(sm!.impact.note).toContain('2026');
+  });
+
+  it('names the 1 January vintage as the anchor the thresholds are measured on', () => {
+    const state = getLegislationState(seedData, '2026-10-31');
+    const anchor = state.items.find(i => i.source === 'HG 1506/2024');
+    expect(anchor).toBeDefined();
+    expect(anchor!.impact.affects).toBe('yes');
+    expect(anchor!.summary).toContain('4.050,00 lei');
+    expect(anchor!.impact.note).toContain('art. 135¹ alin. (3)');
   });
 });
 
@@ -445,7 +523,7 @@ describe('snapshot.thresholds[].breached (B-20, re-typed by TASK 4)', () => {
     const floorAlerts = dashboard.insights.filter((i) => /^threshold-(CAS|CASS)_MIN_BASE$/.test(i.id));
     // CASS and CAS collapse into at most ONE canonical alert (canonicalCassCas), so exactly one.
     expect(floorAlerts).toHaveLength(1);
-    expect(floorAlerts[0].severity).toBe('warning');
+    expect(floorAlerts[0].severity).toBe('medium');
     expect(floorAlerts[0].description).toMatch(/art\. 14[48]|art\. 174/);
     const allText = dashboard.insights.map((i) => `${i.title} ${i.description} ${i.action}`).join(' ');
     expect(allText).not.toContain('dezcalificare');
