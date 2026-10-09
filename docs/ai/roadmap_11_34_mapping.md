@@ -44,14 +44,31 @@ Gaps, verified:
 ### Phase 22 — financial graph: **partial**
 `FinancialChart.tsx` carries `kind: 'actual' | 'projected'` and a `stateLabel` for each, so the distinction exists in data and in text. **No `strokeDasharray` or dash pattern found** — the roadmap requires a non-colour-only treatment (solid vs dashed or equivalent). Colour-only would fail its own acceptance. Verify visually before deciding.
 
-### Phase 11 — coherent 2026 seed: **in flight**
+### Phase 11 — coherent 2026 seed: **in flight, and one defect is bigger than the roadmap states**
+See **D1** below — it is the acceptance criterion this phase exists for.
 TASK 9 is doing exactly this now: PFA file carrying `denumire: 'Popescu Consulting SRL'` / `formaJuridica: 'SRL'` / `J40/1234/2020`, `pfaStartYear: 2020`, and declarations `d1` (March) / `d2` (June) unsupported by any seed transaction (every seed revenue is September 2026). **Do not re-open this in Phase 11 without reading `phases/23_provenance_hygiene.md` first.** One plan claim did **not** reproduce and must not be "fixed": the alleged own-CUI collision with a customer CUI.
 
-### Phase 21 / 23 / 24 / 26 / 27 / 28 — UI phases: **not audited here**
-TASK 7 and TASK 8 changed pieces of these surfaces (hero state naming, severity styling, collapsing sections, focus tokens `#!/<tab>?f=<id>`), but none of these phases was run as a phase. Treat as **unsatisfied until inspected**; do not assume the domain fix already delivered the presentation.
+### Phase 21 — tax estimate hero: **mostly satisfied, two gaps**
+`Dashboard.tsx:125-145` renders an `estimate-state` badge with `data-estimate-state`, the value as `—` (`copy.ui.noValue`) when `taxTotal === null` rather than `0`, and a **different hint per state** (`computed` / `reviewRequired` / `unavailable`) from the shared copy layer, plus the Phase 20 disclosure. That is the roadmap's core requirement met.
+Gaps: the hero does **not** separate estimated annual tax from actual YTD and projected full-year values in the hierarchy, and the run-rate assumption lives only inside the disclosure (`estimateBasisExplanation`), not concisely on the hero.
 
-### Phase 29 — persistence / export / import / document blobs: **unsatisfied**
-`grep -rn "Exportă|exportData|importData" src/` → **no hits**. There is no export or import at all. Migrations and Zod validation do exist and are good (v9 chain, `persistedAppDataSchema` strips undeclared keys). Document blobs: not yet inspected.
+### Phase 23 — summary + reserve + threshold UI: **partial**
+Reserve: `null` vs `0` render differently and are asserted (`TaxReserve.test.tsx`) — satisfied. Thresholds: the semantic consequence sentences are **domain-produced with citations** (`consequence` / `applicabilityReason` / `reviewReason` are deliberately *not* in the copy layer — `ui/copy/thresholds.ts:19`), so the "mechanical current/threshold/distance/breached" style is already gone at the domain level. Gap: whether every *applicable-only* row reaches the card, and whether irrelevant thresholds are hidden, was not verified in this pass.
+
+### Phase 24 — deadline + completeness + action UI: **largely unsatisfied**
+`grep` for `Date pentru estimare`, `Ești la zi`, `Vezi toate`, `Ce merită să rezolvi acum` across `src/ui/copy/` → **no hits**: none of the roadmap's user-centred section names exist. There is **no top-three cap** on the attention surfaces (`slice(0, 3)` appears once, at `insights.ts:369`, for fiscal-date issues only). TASK 8 gave these surfaces correct *semantics* — collapsing empties, dedupe, resolved items leaving — but not the roadmap's presentation contract.
+
+### Phase 26 — first-run experience: **fails its own central criterion — see §5 D1**
+
+### Phase 27 — responsive: **partial, in flight**
+TASK 9 is fixing the 390 px chart overflow and unifying the two card systems. 1440 / 1024 / 768 were not tested in this pass. Do not claim a viewport was tested that was not.
+
+### Phase 28 — accessibility + language: **partially satisfied**
+Severity is **not colour-only**: the row renders the severity *word* from `copy.severity`, and `components.css:157-169` keys `border-left-color` off `data-severity` as an addition, with a comment stating every rule keys off `data-severity` set from `AttentionItem.severity`. `Disclosure` is native `<details>`, keyboard-operable, no hover reveal. Not yet verified: landmarks/heading structure, focus management in dialogs, chart text alternatives.
+
+### Phase 29 — persistence / export / import / document blobs: **unsatisfied, and the blob concern is real**
+`grep -rn "Exportă|exportData|importData" src/` → **no hits**: there is no export or import at all. Migrations and Zod validation exist and are good (v9 chain, `persistedAppDataSchema` strips undeclared keys, corrupt payloads are **quarantined** rather than zeroed — `store.tsx:145-154`).
+Document blobs: **confirmed in-record.** `seed.ts:86-96` stores `content: 'data:text/plain;base64,…'` with `marime` values of 48.210 / 51.340 / 39.870 bytes, so binaries travel inside `AppData` and therefore through `localStorage`. Phase 29 C applies.
 
 ### Phase 30–34 — walkthrough, golden fixtures, full suite, browser QA, final audit: **unsatisfied by definition.**
 
@@ -71,6 +88,24 @@ TASK 7 and TASK 8 changed pieces of these surfaces (hero state naming, severity 
 
 ---
 
+## 4a. Defect found while mapping — record it before any phase touches it
+
+**D1 — a clean first run silently becomes the fictional workspace.** `src/data/store.tsx:166-167`:
+
+```ts
+if (!raw) {
+  return { data: seedData, dataOrigin: 'seed', migration: null, quarantine: null };
+}
+```
+
+A user with **no stored data at all** is handed `seedData` — the PFA file carrying an **SRL identity** (`Popescu Consulting SRL`, `formaJuridica: 'SRL'`, `J40/1234/2020`), `pfaStartYear: 2020`, four revenues, three expenses, three declarations and base64 document blobs — as their own records.
+
+The app **knows** the difference: `DataOrigin` is `'seed' | 'persisted' | 'quarantined'`. But `App.tsx:275` renders a banner **only** for `'quarantined'`, and `grep` for `demo` / `fictional` / `exemplu` across `src/ui/copy/` returns **nothing**. So the distinction exists in the type system and never reaches the person using it.
+
+This is Phase 11's acceptance ("a clean first-run user does not mistake sample data for their own") and Phase 26's premise ("a new user can establish the minimum PFA/fiscal profile"), and it is **currently failed**. TASK 9's seed hygiene fixes the *internal* incoherence (SRL identity, unsupported declarations) but is **not** scoped to fix this — do not assume it is.
+
+---
+
 ## 4. Standing invariants that survive every phase
 - Never weaken an assertion, delete a meaningful test, or widen a timeout to get a green.
 - No money figure moves without a hand derivation recorded old → new. Current: deductible 120,00 / 144,00 lei, VNA 9.096,00, impozit 819,00, total 3.249,00, reserve 1.083,00, hero 51.510 lei.
@@ -78,3 +113,4 @@ TASK 7 and TASK 8 changed pieces of these surfaces (hero state naming, severity 
 - Do not backfill digests, rule versions or seed facts to silence a warning.
 - FY2026 only; no 2025 history, no implied future-year support.
 - One Worker at a time.
+- **D1 stays open until a phase explicitly closes it.** A first-run user must not receive `seedData` without it being labelled, or at all.
