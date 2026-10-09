@@ -120,6 +120,39 @@ export const expenses = {
     'un plafon legal care nu poate fi măsurat din datele înregistrate, deci nu intră în cheltuielile deductibile (CF art. 68 alin. (5)). Nu este o eroare de completare — este un fapt pe care aplicația nu îl deține.',
   capBlockedRest: (n: number): string =>
     `Celelalte ${n} sunt excluse pentru temeiuri identice sau analoage; fiecare poartă motivul ei.`,
+  /**
+   * TASK 10b — a ceiling the law states in euro, converted to lei. The banner has to say four things at
+   * once: which reading was applied, at which rate, for which year, and that the other reading gives a
+   * different number and the law does not settle which applies. A converted ceiling that does not name
+   * its rate is the same defect B-32 was.
+   */
+  euroCapTitle: 'Plafonul în euro, convertit',
+  euroCapAppliedReading:
+    'plafonul exprimat în euro a fost convertit la media anuală BNR a anului plății, temeiul pct. 7 alin. (6) '
+    + 'din Normele HG 1/2016; art. 9 alin. (3) lit. b) și alin. (4) CF dau un alt plafon, la cursul de la data '
+    + 'plății, și legea nu stabilește care dintre cele două reguli se aplică — ambele sunt afișate.',
+  euroCapCitation: (article: string): string => ` · ${article}`,
+  euroCapRateLead: '· curs mediu anual',
+  euroCapValidFor: (year: number): string => `pentru anul ${year}`,
+  euroCapAlternativeLead: '· cealaltă citire, cursul BNR de la data plății:',
+  euroCapAlternativeMissing: 'această citire nu poate fi măsurată din datele înregistrate:',
+  euroCapProvisionalTail:
+    'cursul mediu pentru acest an nu este încă publicat de BNR, deci plafonul este provizoriu și se recalculează '
+    + 'singur când media definitivă intră în registru.',
+  /**
+   * TASK 10b — ledger records that entered the lei base only because a recorded BNR rate converted them.
+   * The conversion is a legal act (art. 9 alin. (3) lit. b) + alin. (4)), so the rate that did it is shown
+   * beside the record, not hidden behind a disclosure.
+   */
+  fxConvertedLead: (n: number): string =>
+    n === 1
+      ? 'înregistrare în valută a intrat în calcul la cursul BNR de la data plății'
+      : 'înregistrări în valută au intrat în calcul la cursul BNR de la data plății',
+  fxConvertedTail:
+    ' (CF art. 9 alin. (3) lit. b) și alin. (4)); cursul, seria și sursa sunt afișate lângă fiecare.',
+  fxConvertedRow: (currency: string, onDate: string, rate: string): string =>
+    `${currency} · ${onDate} · curs ${rate}`,
+  fxConvertedCarried: '· curs preluat din ultima zi bancară',
 } as const;
 
 /**

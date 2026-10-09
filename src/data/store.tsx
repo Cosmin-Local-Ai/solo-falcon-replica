@@ -9,6 +9,8 @@ import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import { todayISO } from './types';
 import { epochMs, isoCalendarDateProblemText, toInstantISO } from '../domain/date';
 import { maxBani, type Bani } from '../domain/money';
+import { rateKey } from '../domain/fx/provider';
+import { validateRateRecord, type FxRateRecord } from '../domain/fx/rates';
 import { seedData } from './seed';
 import { parseAppDataResult, validateRecordDates, type PersistedAppData, type RecordKind } from './schema';
 import {
@@ -103,6 +105,17 @@ interface StoreValue extends AppData {
    * explicit zero. A negative amount is clamped at 0 — a withdrawal below zero is not a fact.
    */
   setReservedAmount: (amount: Bani | null) => void;
+  /**
+   * TASK 10b — record or replace an FX rate, keyed by `rateKey` (currency, kind, date-or-year). This is
+   * the provisional → final door: a final annual average replaces the provisional record that stands for
+   * the same year, and every ceiling or ledger amount struck from it re-reads the store on the next
+   * calculation. No network path is involved — a rate arrives here the same way a hand-typed one does,
+   * through the store boundary the `FxRateProvider` reads.
+   *
+   * An unusable candidate is refused with its field-level problems and reported; it is never dropped
+   * silently, because a rate that vanishes is indistinguishable from a rate that was never entered.
+   */
+  recordFxRate: (candidate: unknown) => { ok: true; record: FxRateRecord } | { ok: false; problems: string[] };
   toast: (kind: ToastKind, text: string) => void;
   dismissToast: (id: string) => void;
 }
@@ -353,6 +366,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ...d,
       reservedAmount: amount === null ? null : maxBani(amount, 0 as Bani),
     })),
+
+    // TASK 10b (B-33). The provisional → final lifecycle needs a door, and the door is the store: the
+    // rate layer refuses to invent a rate, so a rate only exists because it was recorded. `rateKey` is
+    // the same key `RateStore.replace` and `loadDailyRates` use, so the store, the cache and the
+    // persisted payload cannot hold two records for one (currency, kind, date-or-year).
+    recordFxRate: candidate => {
+      const checked = validateRateRecord(candidate);
+      if (!checked.ok) {
+        const problems = checked.problems.map(p => `${p.field}: ${p.message}`);
+        toast('error', `Cursul de schimb nu a fost salvat — ${problems.join('; ')}. Cursul este o cifră legală: ` +
+          'fără sursă, fără serie și fără data la care se ancorează, nu poate fi folosit la nicio conversie.');
+        return { ok: false, problems };
+      }
+      const record = checked.record;
+      const key = rateKey(record);
+      setData(d => {
+        const existing = d.fxRates ?? [];
+        const next = existing.some(r => rateKey(r) === key)
+          ? existing.map(r => (rateKey(r) === key ? record : r))
+          : [...existing, record];
+        return { ...d, fxRates: next };
+      });
+      return { ok: true, record };
+    },
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

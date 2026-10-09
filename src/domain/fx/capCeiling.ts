@@ -30,7 +30,7 @@
  */
 import { majorToMinor, money, type Bani, type Money } from '../money';
 import { BASIS_CITATIONS, convertToRon, type ConversionBasis, type ConversionResult } from './convert';
-import { isIsoDate } from './carryForward';
+import { isISOCalendarDate } from '../date';
 import type { FxRateProvider, RateCurrency } from './provider';
 import type { FxRateRecord, RateKind } from './rates';
 
@@ -182,7 +182,7 @@ export function strikeCapCeiling(input: {
     };
   }
   for (const d of dates) {
-    if (!isIsoDate(d)) {
+    if (!isISOCalendarDate(d)) {
       return {
         ok: false,
         reason: 'unusable_payment_date',

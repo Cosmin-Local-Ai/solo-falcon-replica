@@ -242,6 +242,13 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
     return selectEstimateOperands(store, asOf, activeRulesFor(store.profile.fiscalYear, asOf)).capAdjustments;
   }, [store]);
   const alin6Struck = capStruck.filter(a => a.base !== undefined && a.ceilingAlt !== undefined);
+  // TASK 10b — a ceiling the law states in euro. It exists as a lei number only through a conversion, so
+  // the banner names the rate, the year it is anchored to and whether that rate is provisional, and shows
+  // the competing art. 9 ceiling beside the applied one. The conflict itself is the rule's own text, not a
+  // sentence written here.
+  const euroStruck = capStruck.filter(a => a.euro !== undefined);
+  // TASK 10b — ledger records that entered the lei base only because a recorded rate converted them.
+  const converted = classification.conversions;
   // The engine picks the money measure by `vatExempt` (`tax.ts:143-144`); the page shows the one that
   // actually moved the deductible total, and says which one it is.
   const measure = store.profile.vatExempt ? 'inclVat' : 'exclVat';
@@ -310,6 +317,67 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
           <Disclosure label={copy.disclosure.sources}>
             <p className="hint">{copy.sources.capReadingChoice}</p>
           </Disclosure>
+        </div>
+      )}
+
+      {euroStruck.length > 0 && (
+        <div className="banner banner-warn" role="status">
+          <strong>{expensesCopy.euroCapTitle}</strong>{' '}
+          — {euroStruck.length === 1 ? expensesCopy.capHasOne : expensesCopy.capHasMany(euroStruck.length)}{' '}
+          {expensesCopy.euroCapAppliedReading}
+          <InterpretationNote note={copy.notes.fxConversionConflict} />
+          {euroStruck.map(a => {
+            const euro = a.euro!;
+            return (
+              <div className="text-sm" key={a.ruleId} style={{ marginTop: 6 }}>
+                <div>
+                  <strong>{expenseCategoryLabels[a.category]}</strong>
+                  {expensesCopy.euroCapCitation(a.sourceArticle)}
+                  {' '}{formatMoney(euro.cap)}
+                </div>
+                <div>
+                  {expensesCopy.capAppliedLead(measureLabel)}{' '}
+                  <strong>{formatBaniRON(a.ceiling[measure])}</strong>
+                  {' '}{expensesCopy.euroCapRateLead}{' '}
+                  <strong>{euro.applied.rate}</strong>{' '}
+                  {expensesCopy.euroCapValidFor(euro.paymentYear)}
+                  {' '}· {euro.provisional ? copy.fx.provisionalBadge : copy.fx.finalBadge}
+                </div>
+                <div>
+                  {expensesCopy.euroCapAlternativeLead}{' '}
+                  {euro.alternative.ok ? (
+                    <strong>{formatBaniRON(euro.alternative.ceiling)}</strong>
+                  ) : (
+                    <span className="muted">{expensesCopy.euroCapAlternativeMissing} {euro.alternative.detail}</span>
+                  )}
+                </div>
+                {euro.provisional && <div className="muted">{expensesCopy.euroCapProvisionalTail}</div>}
+                {euro.applied.carriedFrom !== undefined && (
+                  <div className="muted">{copy.fx.carriedFrom(euro.applied.carriedFrom)}</div>
+                )}
+              </div>
+            );
+          })}
+          <Disclosure label={copy.disclosure.sources}>
+            {euroStruck.map(a => (
+              <p className="hint" key={a.ruleId}>{a.conflict ?? ''}</p>
+            ))}
+          </Disclosure>
+        </div>
+      )}
+
+      {converted.length > 0 && (
+        <div className="banner banner-warn" role="status">
+          <strong>{converted.length}</strong>{' '}
+          {expensesCopy.fxConvertedLead(converted.length)}{' '}
+          {expensesCopy.fxConvertedTail}
+          {converted.map(c => (
+            <div className="text-sm" key={`${c.recordKind}-${c.recordId}`} style={{ marginTop: 6 }}>
+              {expensesCopy.fxConvertedRow(c.currency, c.onDate, c.rate)}
+              {' '}· {formatBaniRON(c.netLei)}
+              {c.carriedFrom !== undefined && <> {' '}{expensesCopy.fxConvertedCarried}</>}
+            </div>
+          ))}
         </div>
       )}
 

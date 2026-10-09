@@ -33,7 +33,7 @@ import type { AppData, Expense, Revenue } from '../../data/types';
 import { isRon, type Bani, type CurrencyCode, type Money, type RonMoney } from '../money';
 import { revenueFiscalDate, expenseFiscalDate } from '../aggregation';
 import { BASIS_CITATIONS, convertToRon } from './convert';
-import { isIsoDate } from './carryForward';
+import { isISOCalendarDate } from '../date';
 import type { FxRateProvider, RateCurrency } from './provider';
 import type { FxRateRecord } from './rates';
 
@@ -170,15 +170,15 @@ export function normaliseLedgerToRon(data: AppData, provider: FxRateProvider): L
 
   const mapOne = <T extends Revenue | Expense>(record: T, kind: 'revenue' | 'expense', onDate: string): T => {
     if (isRon(record.valoareFaraTva) && isRon(record.tva)) return record;
-    if (!isIsoDate(onDate)) {
+    if (!isISOCalendarDate(onDate)) {
       unconverted.push({
         recordKind: kind,
         recordId: record.id,
         currency: isRon(record.valoareFaraTva) ? record.tva.currency : record.valoareFaraTva.currency,
         onDate,
         detail:
-          `înregistrarea este în valută, iar data care ancorarea conversiei o cere lipsește: „${onDate}" nu este `
-          + 'o dată calendaristică ISO (AAAA-LL-ZZ), deci art. 9 alin. (3) lit. b) nu poate fi aplicată.',
+          `înregistrarea este în valută, iar data care ancorează conversia lipsește: „${onDate}" nu este o dată `
+          + 'calendaristică reală (AAAA-LL-ZZ), deci art. 9 alin. (3) lit. b) nu poate fi aplicată.',
       });
       return record;
     }
