@@ -113,3 +113,29 @@ Resolve the caps that the sources fully determine, and keep honest the ones they
 
 ## HANDOFF
 `NEXT HANDOFF:` must state the exact deductible quantity now entering the operands, which `cap_base` values are still unresolved, and what TASK 3 must not disturb (`getTaxReserve` at `dashboard.ts:199`/`:205` and `buildSnapshot` at `:298` consume `tax.output.total`; the reserve must consume the estimate, never recompute it).
+
+---
+
+## ORCHESTRATOR DECISIONS — taken from research 22, binding on this task
+
+Research 22 settled the *rule* for every cap. For some caps the app still lacks the *datum*. That distinction decides the task.
+
+| Cap | Rule settled? | App holds the datum? | Do this |
+|---|---|---|---|
+| Protocol 2 %, burse private 5 % (alin. (5) a–b + alin. (6)) | **Yes** | Yes (gross + expenses) | **Compute.** Single two-pass, no iteration. |
+| Contribuții profesionale 5 % of gross (lit. q) | **Yes** | Yes | **Compute**, applying the cap (see conflict 3). |
+| Cheltuieli sociale 5 % of payroll (lit. c) | Yes | **No** — the app has no payroll concept | **`undetermined`**, naming the missing fact. Do **not** assert the ceiling is 0: "no data" is not "no employees". |
+| Euro caps 400 / 100 / 4.000 EUR (g, g¹, g², h, p, r, s) | Yes — BNR **annual average for the payment year**, HG 1/2016 pct. 7 alin. (6) | **No** — the app stores no FX rate | **Stay excluded**, with `missingFact` naming the exact datum *and* the rule. **Never hard-code a rate.** |
+| One car per person (lit. j) | **No** — no primary source says which car | n/a | **Stay excluded**, `missingFact` = the law does not select the car. **Never pick one.** |
+| 50 % vehicle haircut (alin. (7) k) | Yes | Yes | Already applied per record by 2b. Leave it. |
+
+**Three unresolved conflicts, and how the app must behave in each.** In every case the conservative reading is the one that *understates* the deduction — the user is never led to underpay:
+
+1. **Which conversion rule governs the euro caps.** HG 1/2016 pct. 7 alin. (6) says BNR **annual average for the payment year**; CF art. 9 alin. (3) lit. b) + alin. (4) say BNR **rate on the payment date**, excepted only by rules „prevăzute expres în prezentul cod" — and the norms are not „prezentul cod". No primary text reconciles them. **Surface the conflict; do not resolve it silently.**
+2. **Does „pentru fiecare persoană" multiply by insured/covered persons?** Unresolved. Use **one cap per taxpayer** (the smaller allowance) and record it as an interpretation.
+3. **alin. (4) lit. i) lists contribuții profesionale as generally deductible (uncapped) while alin. (5) lit. q) caps it at 5 %.** Unresolved. **Apply the cap** and record the conflict on the rule.
+4. **Is „cheltuielile deductibile" in alin. (6) measured before or after the other alin. (5) caps?** Unresolved; no norm fixes an order (negative finding: zero occurrences of „protocol", „ordinea", „în ordine" in the chapter). Use the **post-cap** reading — the word „deductibile" plus the heading „deductibile limitat" support it, and it yields the smaller base and the smaller protocol allowance. Record both readings and the delta.
+
+**FY2026 date gates the rules must already carry** (research 22 §7): lit. g¹)/g²) capture only contributions **paid from 2026-03-01**; lit. s) only amounts **paid and settled from 2026-03-01**; for pensii facultative in 2026 the 400 EUR test **also counts payments made 2026-01-01 – 2026-02-28**. If a rule in `deductibility2026.ts` does not already encode this, fix the rule, not the caller.
+
+**Do not hard-code an entry-into-force date for Legea 227/2015 or for HG 1/2016** — research 22 verified publication dates (MO 688/10.09.2015; MO 22/13.01.2016) but explicitly could not establish entry into force from the texts read.
