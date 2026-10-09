@@ -7,6 +7,7 @@
  * copy-paste of the sentence. One key now, shared.
  */
 import type { DeclStatus, ExpenseStatus, RevenueStatus } from '../../data/types';
+import type { ExpenseCategory } from '../../domain/fiscal/deductibility';
 
 export const revenues = {
   title: 'Venituri',
@@ -90,16 +91,68 @@ export const expenses = {
   unclassifiedTail: 'în acest an fiscal și nu intră în cheltuielile deductibile (CF art. 68 alin. (4) și (7)).',
   /** The cap banner. */
   capTitle: 'Plafonul calculat',
+  capHasOne: 'o cheltuială are',
+  capHasMany: (n: number): string => `${n} cheltuieli au`,
+  /** Names the reading that was applied, so the applied figure is never read as the only possible one. */
+  capAppliedReading: 'plafonul măsurat pe baza art. 68 alin. (6) sub interpretarea «înregistrată» (pre-plafon).',
   capAppliedLead: (measure: string): string => `Plafon aplicat (${measure}):`,
-  capAlternativeLead: '· cealaltă lectură, post-plafon:',
-  capCitation: (article: string, percent: number): string =>
-    `· ${article} · plafon ${percent}% din baza art. 68 alin. (6)`,
+  capAlternativeLead: '· cealaltă interpretare, post-plafon:',
+  capCitation: (article: string, percent: number | undefined): string =>
+    ` · ${article} · plafon ${percent}% din baza art. 68 alin. (6)`,
   measureWithVat: 'cu TVA inclus',
   measureWithoutVat: 'fără TVA',
   /** A legal ceiling the app cannot measure — a missing fact, not a completion error. */
+  capBlockedOne: 'O cheltuială are',
+  capBlockedMany: (n: number): string => `${n} cheltuieli au`,
+  capBlockedTail:
+    'un plafon legal care nu poate fi măsurat din datele înregistrate, deci nu intră în cheltuielile deductibile (CF art. 68 alin. (5)). Nu este o eroare de completare — este un fapt pe care aplicația nu îl deține.',
   capBlockedRest: (n: number): string =>
     `Celelalte ${n} sunt excluse pentru temeiuri identice sau analoage; fiecare poartă motivul ei.`,
 } as const;
+
+/**
+ * The deductibility categories in Romanian. The select and the cap banner used to print the internal
+ * keys (`protocol`, `mandatory_professional_contribution`, `personal_or_family_use`) as if they were
+ * words a person would use. Typed `Record<ExpenseCategory, string>`, so a new category in the rule set
+ * is a compile error here rather than a raw key on screen.
+ */
+export const expenseCategoryLabels: Record<ExpenseCategory, string> = {
+  personal_or_family_use: 'Cheltuială personală sau de uz familial',
+  non_taxable_income_expense: 'Cheltuială cu venituri scutite de impozit',
+  own_income_tax: 'Impozitul propriu pe venit',
+  personal_insurance_premium: 'Primă de asigurare personală',
+  donation: 'Donație',
+  fine_or_penalty: 'Amendă sau penalitate',
+  loan_principal_repayment: 'Rambursare de principal de împrumut',
+  depreciable_asset_purchase: 'Achiziție de mijloc fix',
+  inventory_shortage_uncovered: 'Lipsă de stoc neacoperită',
+  tax_borne_for_beneficiary: 'Impozit plătit pentru altul',
+  depreciation_personal_patrimony: 'Amortizare din patrimoniul personal',
+  sponsorship_or_mecenat: 'Sponsorizare sau mecenat',
+  corruption_related: 'Cheltuială legată de fapte de corupție',
+  owner_social_contributions: 'Contribuții sociale ale titularului',
+  employer_social_contributions: 'Contribuții sociale ale angajatorului',
+  rent_business_space: 'Chirie pentru spațiul de lucru',
+  bank_interest: 'Dobânzi bancare',
+  postal_and_telecom: 'Cheltuieli poștale și telecomunicații',
+  energy_and_water: 'Energie și apă',
+  business_space_upkeep: 'Întreținerea spațiului de lucru',
+  depreciation_business_asset: 'Amortizarea mijloacelor fixe din activitate',
+  vehicle_related: 'Cheltuieli cu autoturismul',
+  protocol: 'Cheltuieli de protocol',
+  social_expenses: 'Cheltuieli sociale',
+  private_scholarship: 'Bursă privată',
+  private_pension_contribution: 'Contribuție la pensie privată',
+  occupational_pension_contribution: 'Contribuție la pensie ocupațională',
+  pepp_contribution: 'Contribuție la un produs de pensie personală paneuropeană',
+  voluntary_health_insurance: 'Asigurare de sănătate voluntară',
+  sports_subscription: 'Abonament sportiv',
+  professional_body_dues: 'Cotizație la colegiul profesional',
+  mandatory_professional_contribution: 'Contribuții profesionale obligatorii',
+  etf_purchase: 'Achiziție de unități ETF',
+  home_office_shared_cost: 'Cheltuială comună pentru biroul de acasă',
+  comodat_immovable_share: 'Cota pentru imobil dat în comodat',
+};
 
 export const clients = {
   title: 'Clienți',

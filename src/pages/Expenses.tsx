@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatBaniRON, leiInputValue, parseLeiInput } from '../domain/money';
 import { useStore } from '../data/store';
-import { fmtDate, sumTotals, total, EXP_STATUS_LABEL, statusBadge } from '../data/types';
+import { fmtDate, sumTotals, total, statusBadge } from '../data/types';
 import type { Expense } from '../data/types';
 import { EXPENSE_CATEGORIES } from '../domain/fiscal/deductibility';
 import { selectDeductibleExpenses, selectEstimateOperands } from '../domain/estimateBasis';
@@ -9,6 +9,9 @@ import { selectRuleSet } from '../domain/fiscal';
 import type { FiscalRule } from '../domain/fiscal/rules';
 import { localDateISO, now } from '../domain/date';
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
+import { Disclosure } from '../components/ui/Disclosure';
+import { InterpretationNote } from '../components/ui/InterpretationNote';
+import { copy, empty, expenseCategoryLabels, expenses as expensesCopy, fields, recordStatus, validation } from '../ui/copy';
 
 /**
  * TASK 6: the rules in force for the profile's fiscal year, selected rather than imported.
@@ -24,8 +27,8 @@ function activeRulesFor(fiscalYear: number, asOfDate: string): FiscalRule[] {
 
 // Canonical route hash keys (English) mapped to the Romanian data statuses.
 const TABS = [
-  { key: 'registered', label: 'Înregistrate', status: 'inregistrata' },
-  { key: 'rejected', label: 'Respinse', status: 'respinsa' },
+  { key: 'registered', label: recordStatus.tabs.inregistrata, status: 'inregistrata' },
+  { key: 'rejected', label: recordStatus.tabs.respinsa, status: 'respinsa' },
 ] as const;
 
 const statusFor = (tab: (typeof TABS)[number]['key']) =>
@@ -62,14 +65,14 @@ function ExpenseForm({ initial, onSave, onClose }: {
 
   const submit = () => {
     const e: Record<string, string> = {};
-    if (!f.nr.trim()) e.nr = 'Numărul documentului este obligatoriu';
-    if (!f.date) e.date = 'Data este obligatorie';
-    if (!f.furnizor.trim()) e.furnizor = 'Furnizorul este obligatoriu';
+    if (!f.nr.trim()) e.nr = validation.documentNumberRequired;
+    if (!f.date) e.date = validation.dateRequired;
+    if (!f.furnizor.trim()) e.furnizor = validation.providerRequired;
     // Phase 10: form in lei, storage in bani; `parseLeiInput` refuses sub-ban precision rather than rounding.
     const v = parseLeiInput(f.valoare);
     const t = parseLeiInput(f.tva);
-    if (v === null || v < 0) e.valoare = 'Introduceți o valoare validă';
-    if (t === null || t < 0) e.tva = 'Introduceți un TVA valid';
+    if (v === null || v < 0) e.valoare = validation.amountInvalid;
+    if (t === null || t < 0) e.tva = validation.vatInvalid;
     setErrors(e);
     if (Object.keys(e).length) return;
     if (v === null || t === null) return; // unreachable; narrows without a cast
@@ -83,69 +86,69 @@ function ExpenseForm({ initial, onSave, onClose }: {
 
   return (
     <Modal
-      title={initial ? `Editează ${initial.nr}` : 'Adaugă cheltuială'}
+      title={initial ? expensesCopy.editTitle(initial.nr) : expensesCopy.addTitle}
       onClose={onClose}
       footer={<>
-        <button className="btn btn-ghost" onClick={onClose}>Anulează</button>
-        <button className="btn btn-primary" onClick={submit}>{initial ? 'Salvează' : 'Adaugă'}</button>
+        <button className="btn btn-ghost" onClick={onClose}>{copy.ui.cancel}</button>
+        <button className="btn btn-primary" onClick={submit}>{initial ? copy.ui.save : copy.ui.add}</button>
       </>}
     >
       <div className="form-grid">
         <div className="field">
-          <label>Tip document <span className="req">*</span></label>
+          <label>{fields.documentType} <span className="req">*</span></label>
           <select value={f.tip} onChange={e => set('tip', e.target.value)}>
-            <option value="factura">Factură</option>
-            <option value="bon-fiscal">Bon fiscal</option>
+            <option value="factura">{expensesCopy.documentTypes.factura}</option>
+            <option value="bon-fiscal">{expensesCopy.documentTypes.bon}</option>
           </select>
         </div>
         <div className="field">
-          <label>Număr document <span className="req">*</span></label>
-          <input className={errors.nr ? 'invalid' : ''} value={f.nr} onChange={e => set('nr', e.target.value)} placeholder="FCT-09-112043" />
+          <label>{fields.documentNumber} <span className="req">*</span></label>
+          <input className={errors.nr ? 'invalid' : ''} value={f.nr} onChange={e => set('nr', e.target.value)} placeholder={expensesCopy.documentNumberPlaceholder} />
           {errors.nr && <span className="error">{errors.nr}</span>}
         </div>
         <div className="field">
-          <label>Data <span className="req">*</span></label>
+          <label>{fields.date} <span className="req">*</span></label>
           <input type="date" className={errors.date ? 'invalid' : ''} value={f.date} onChange={e => set('date', e.target.value)} />
           {errors.date && <span className="error">{errors.date}</span>}
         </div>
         <div className="field">
-          <label>Furnizor <span className="req">*</span></label>
-          <input className={errors.furnizor ? 'invalid' : ''} value={f.furnizor} onChange={e => set('furnizor', e.target.value)} placeholder="SC … SA" />
+          <label>{expensesCopy.columns.provider} <span className="req">*</span></label>
+          <input className={errors.furnizor ? 'invalid' : ''} value={f.furnizor} onChange={e => set('furnizor', e.target.value)} placeholder={expensesCopy.providerPlaceholder} />
           {errors.furnizor && <span className="error">{errors.furnizor}</span>}
         </div>
         <div className="field">
-          <label>CUI</label>
-          <input value={f.cui} onChange={e => set('cui', e.target.value)} placeholder="RO…" />
+          <label>{fields.cui}</label>
+          <input value={f.cui} onChange={e => set('cui', e.target.value)} placeholder={fields.cuiPlaceholder} />
         </div>
         <div className="field">
-          <label>Valoare fără TVA (RON) <span className="req">*</span></label>
-          <input className={errors.valoare ? 'invalid' : ''} value={f.valoare} onChange={e => set('valoare', e.target.value)} placeholder="0,00" />
+          <label>{fields.amountWithoutVat} <span className="req">*</span></label>
+          <input className={errors.valoare ? 'invalid' : ''} value={f.valoare} onChange={e => set('valoare', e.target.value)} placeholder={fields.amountPlaceholder} />
           {errors.valoare && <span className="error">{errors.valoare}</span>}
         </div>
         <div className="field">
-          <label>TVA (RON) <span className="req">*</span></label>
-          <input className={errors.tva ? 'invalid' : ''} value={f.tva} onChange={e => set('tva', e.target.value)} placeholder="0,00" />
+          <label>{fields.vatAmount} <span className="req">*</span></label>
+          <input className={errors.tva ? 'invalid' : ''} value={f.tva} onChange={e => set('tva', e.target.value)} placeholder={fields.amountPlaceholder} />
           {errors.tva && <span className="error">{errors.tva}</span>}
         </div>
         <div className="field">
-          <label>Status</label>
+          <label>{fields.status}</label>
           <select value={f.status} onChange={e => set('status', e.target.value)}>
-            <option value="inregistrata">Înregistrată</option>
-            <option value="respinsa">Respinsă</option>
+            <option value="inregistrata">{recordStatus.labels.inregistrata}</option>
+            <option value="respinsa">{recordStatus.labels.respinsa}</option>
           </select>
         </div>
         <div className="field">
-          <label>Categorie deductibilitate (CF art. 68)</label>
+          <label>{expensesCopy.deductibilityLabel}</label>
           <select value={f.category} onChange={e => set('category', e.target.value)}>
-            <option value="">— fără categorie —</option>
-            {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            <option value="">{expensesCopy.deductibilityNone}</option>
+            {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{expenseCategoryLabels[c]}</option>)}
           </select>
-          <span className="text-sm muted">Fără categorie, cheltuiala este neclasificată și exclusă din calculul impozitului.</span>
+          <span className="text-sm muted">{expensesCopy.deductibilityNoneHint}</span>
         </div>
         {f.status !== 'inregistrata' && (
           <div className="field full">
-            <label>Detaliu status</label>
-            <input value={f.statusDetail} onChange={e => set('statusDetail', e.target.value)} placeholder="motivul respingerii…" />
+            <label>{fields.statusDetail}</label>
+            <input value={f.statusDetail} onChange={e => set('statusDetail', e.target.value)} placeholder={fields.statusDetailPlaceholder} />
           </div>
         )}
       </div>
@@ -221,37 +224,39 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
   // The engine picks the money measure by `vatExempt` (`tax.ts:143-144`); the page shows the one that
   // actually moved the deductible total, and says which one it is.
   const measure = store.profile.vatExempt ? 'inclVat' : 'exclVat';
-  const measureLabel = store.profile.vatExempt ? 'cu TVA inclus' : 'fără TVA';
+  const measureLabel = store.profile.vatExempt
+    ? expensesCopy.measureWithVat
+    : expensesCopy.measureWithoutVat;
 
   return (
     <div>
       <div className="page-header">
         <div>
-          <h1>Cheltuieli</h1>
-          <div className="sub">Facturi și bonuri fiscale primite de la furnizori.</div>
+          <h1>{expensesCopy.title}</h1>
+          <div className="sub">{expensesCopy.subtitle}</div>
         </div>
         <div className="actions">
           <input
-            placeholder="Caută după nr. sau furnizor…"
+            placeholder={expensesCopy.searchPlaceholder}
             style={{ border: '1px solid var(--border-strong)', borderRadius: 6, padding: '7px 10px', fontSize: 13, width: 220 }}
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
           />
-          <button className="btn btn-primary" onClick={() => setEditing('new')}>+ Adaugă cheltuială</button>
+          <button className="btn btn-primary" onClick={() => setEditing('new')}>+ {expensesCopy.add}</button>
         </div>
       </div>
 
       {unclassifiedIds.length > 0 && (
         <div className="banner banner-warn" role="status">
           <strong>{unclassifiedIds.length}</strong>
-          {' '}{unclassifiedIds.length === 1 ? 'cheltuială este neclasificată' : 'cheltuieli sunt neclasificate'} în acest an fiscal și nu intră în cheltuielile deductibile (CF art. 68 alin. (4) și (7)).
+          {' '}{expensesCopy.unclassifiedLead(unclassifiedIds.length)} {expensesCopy.unclassifiedTail}
           {firstUnclassified && (
             <button
               className="btn btn-sm"
               style={{ marginLeft: 10 }}
               onClick={() => setEditing(firstUnclassified)}
             >
-              Clasifică
+              {expensesCopy.classify}
             </button>
           )}
         </div>
@@ -259,40 +264,44 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
 
       {alin6Struck.length > 0 && (
         <div className="banner banner-warn" role="status">
-          <strong>Plafonul calculat</strong>
-          {' '}— {alin6Struck.length === 1 ? 'o cheltuială are' : `${alin6Struck.length} cheltuieli au`} plafonul
-          {' '}măsurat pe baza art. 68 alin. (6) în lectura «înregistrată» (pre-plafon): baza scade
-          {' '}cheltuielile deductibile așa cum au fost înregistrate, nu așa cum rămân după celelalte
-          {' '}plafoane alin. (5). Legea nu stabilește care lectură se aplică — nicio normă nu prescrie o
-          {' '}ordine — deci ambele cifre sunt afișate. Cea aplicată este mai puțin generoasă și nu poate
-          {' '}produce subimpozitare.
+          <strong>{expensesCopy.capTitle}</strong>{' '}
+          — {alin6Struck.length === 1 ? expensesCopy.capHasOne : expensesCopy.capHasMany(alin6Struck.length)}{' '}
+          {expensesCopy.capAppliedReading}
+          {/* TASK 7: the unresolved reading is stated once, by the reusable Notă de interpretare, and the
+              full explanation of both readings sits behind „Surse și note de interpretare". Both figures
+              stay on screen — hiding the reading that was not applied would present an unresolved reading
+              as settled law. */}
+          <InterpretationNote note={copy.notes.capReading} />
           {alin6Struck.map(a => (
             <div className="text-sm" key={a.ruleId} style={{ marginTop: 6 }}>
               <div>
-                <strong>{a.category}</strong>
-                {` · ${a.sourceArticle} · plafon ${a.cap.percent}% din baza art. 68 alin. (6)`}
+                <strong>{expenseCategoryLabels[a.category]}</strong>
+                {expensesCopy.capCitation(a.sourceArticle, a.cap.percent)}
               </div>
               <div>
-                {`Plafon aplicat (${measureLabel}): `}
+                {expensesCopy.capAppliedLead(measureLabel)}{' '}
                 <strong>{formatBaniRON(a.ceiling[measure])}</strong>
-                {` · cealaltă lectură, post-plafon: `}
+                {' '}{expensesCopy.capAlternativeLead}{' '}
                 <strong>{formatBaniRON(a.ceilingAlt![measure])}</strong>
               </div>
             </div>
           ))}
+          <Disclosure label={copy.disclosure.sources}>
+            <p className="hint">{copy.sources.capReadingChoice}</p>
+          </Disclosure>
         </div>
       )}
 
       {capBlocked.length > 0 && (
         <div className="banner banner-warn" role="status">
           <strong>{capBlocked.length}</strong>
-          {' '}{capBlocked.length === 1 ? 'cheltuială are' : 'cheltuieli au'} un plafon legal care nu poate fi
-          {' '}măsurat din datele înregistrate, deci nu intră în cheltuielile deductibile (CF art. 68 alin. (5)).
-          {' '}Nu este o eroare de completare — este un fapt pe care aplicația nu îl deține.
+          {' '}{capBlocked.length === 1 ? expensesCopy.capBlockedOne : expensesCopy.capBlockedMany(capBlocked.length)}{' '}
+          {expensesCopy.capBlockedTail}
+          <InterpretationNote note={copy.notes.capUnmeasurable} />
           <div className="text-sm muted" style={{ marginTop: 6 }}>{capBlocked[0].detail}</div>
           {capBlocked.length > 1 && (
             <div className="text-sm muted">
-              {`Celelalte ${capBlocked.length - 1} sunt excluse pentru temeiuri identice sau analoage; fiecare poartă motivul ei.`}
+              {expensesCopy.capBlockedRest(capBlocked.length - 1)}
             </div>
           )}
         </div>
@@ -310,25 +319,25 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
         </div>
         {pageRows.length === 0 ? (
           <Empty
-            title="Nicio cheltuială în această categorie"
-            text={search ? 'Niciun rezultat pentru căutare.' : 'Adăugați prima cheltuială pentru a o vedea aici.'}
-            action={<button className="btn btn-primary" onClick={() => setEditing('new')}>+ Adaugă cheltuială</button>}
+            title={expensesCopy.emptyTitle}
+            text={search ? empty.noSearchResults : expensesCopy.emptyBody}
+            action={<button className="btn btn-primary" onClick={() => setEditing('new')}>+ {expensesCopy.add}</button>}
           />
         ) : (
           <>
             <table className="table">
               <thead>
                 <tr>
-                  <th>Document</th><th>Tip</th><th>Furnizor</th><th>CUI</th><th>Data</th>
-                  <th className="amount">Fără TVA</th><th className="amount">TVA</th><th className="amount">Total</th>
-                  <th>Status</th><th />
+                  <th>{expensesCopy.columns.document}</th><th>{expensesCopy.columns.type}</th><th>{expensesCopy.columns.provider}</th><th>{expensesCopy.columns.cui}</th><th>{expensesCopy.columns.date}</th>
+                  <th className="amount">{expensesCopy.columns.withoutVat}</th><th className="amount">{expensesCopy.columns.vat}</th><th className="amount">{expensesCopy.columns.total}</th>
+                  <th>{expensesCopy.columns.status}</th><th />
                 </tr>
               </thead>
               <tbody>
                 {pageRows.map(e => (
                   <tr key={e.id} className="clickable" onClick={() => setEditing(e)}>
                     <td style={{ fontWeight: 500, color: 'var(--text)' }}>{e.nr}</td>
-                    <td>{e.tip === 'factura' ? 'Factură' : 'Bon fiscal'}</td>
+                    <td>{e.tip === 'factura' ? expensesCopy.documentTypeCell.factura : expensesCopy.documentTypeCell.bon}</td>
                     <td>{e.furnizor}</td>
                     <td className="muted">{e.cui}</td>
                     <td>{fmtDate(e.date)}</td>
@@ -336,12 +345,12 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
                     <td className="amount">{formatBaniRON(e.tva)}</td>
                     <td className="amount">{formatBaniRON(total(e))}</td>
                     <td>
-                      <Badge kind={statusBadge(e.status)}>{EXP_STATUS_LABEL[e.status]}</Badge>
+                      <Badge kind={statusBadge(e.status)}>{recordStatus.expenseLabels[e.status]}</Badge>
                       {e.statusDetail && <div className="text-sm muted" style={{ marginTop: 3 }}>{e.statusDetail}</div>}
                     </td>
                     <td>
                       <div className="row-actions">
-                        <button className="btn btn-sm btn-ghost" onClick={ev => { ev.stopPropagation(); deleteExpense(e.id); toast('success', `${e.nr} a fost ștearsă`); }}>Șterge</button>
+                        <button className="btn btn-sm btn-ghost" onClick={ev => { ev.stopPropagation(); deleteExpense(e.id); toast('success', expensesCopy.deleted(e.nr)); }}>{copy.ui.remove}</button>
                       </div>
                     </td>
                   </tr>
@@ -349,7 +358,7 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'right' }} className="muted">Total: {rows.length} documente</td>
+                  <td colSpan={7} style={{ textAlign: 'right' }} className="muted">{expensesCopy.totalDocuments(rows.length)}</td>
                   <td className="amount" style={{ fontWeight: 600 }}>{formatBaniRON(sum)}</td>
                   <td colSpan={2} />
                 </tr>
@@ -365,8 +374,8 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
           initial={editing === 'new' ? undefined : editing}
           onClose={() => setEditing(null)}
           onSave={e => {
-            if (editing === 'new') { addExpense(e); toast('success', `Cheltuiala ${e.nr} a fost adăugată`); }
-            else { updateExpense({ ...e, id: editing.id }); toast('success', `Cheltuiala ${e.nr} a fost actualizată`); }
+            if (editing === 'new') { addExpense(e); toast('success', expensesCopy.added(e.nr)); }
+            else { updateExpense({ ...e, id: editing.id }); toast('success', expensesCopy.updated(e.nr)); }
             setEditing(null);
           }}
         />

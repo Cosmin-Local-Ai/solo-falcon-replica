@@ -178,7 +178,7 @@ const PER_PERSON_MULTIPLIER_CONFLICT =
   'INTERPRETARE (research 22 §2): „pentru fiecare persoană" nu este lămurit dacă înseamnă un plafon '
   + 'pentru contribuabil sau câte unul pentru fiecare persoană asigurată/acoperită; art. 68 alin. (7) '
   + 'lit. a) trage în sens contrar pentru uzul familial. Aplicația aplică UN SINGUR plafon pe '
-  + 'contribuabil — lectura care dă deducerea cea mai mică — și o declară interpretare, nu regulă.';
+  + 'contribuabil — interpretarea care dă deducerea cea mai mică — și o declară interpretare, nu regulă.';
 
 /**
  * research 22 §6. alin. (6) says „cheltuielile deductibile" and never says whether that is the amount
@@ -194,8 +194,8 @@ const ALIN6_BASE_ORDER_CONFLICT =
   + 'rămase după plafoanele alin. (5). Negative finding: zero occurențe ale „protocol", „ordinea" și '
   + '„în ordine" în tot capitolul normelor pentru Titlul IV Cap. II — nicio normă nu prescrie o ordine. '
   + 'Aplicația citește pre-plafon (deduce cheltuielile înregistrate, nu sumele rămase după plafon) — ' 
-  + 'lectura cea mai puțin generoasă, care nu poate produce subimpozitare — și afișează și plafonul ' 
-  + 'celeilalte lecturi, post-plafon, pentru că legea nu stabilește care dintre ele se aplică.';
+  + 'interpretarea cea mai puțin generoasă, care nu poate produce subimpozitare — și afișează și plafonul '
+  + 'celeilalte interpretări, post-plafon, pentru că legea nu stabilește care dintre ele se aplică.';
 
 /**
  * research 22 §3. alin. (4) lit. i) lists contribuții profesionale obligatorii among the generally
@@ -208,7 +208,7 @@ const PROFESSIONAL_CONTRIBUTION_CONFLICT =
   + 'obligatorii plătite" printre condițiile de deductibilitate generală, fără plafon, iar alin. (5) '
   + 'lit. q) plafonează exact aceeași categorie la 5 % din venitul brut. Nicio normă HG 1/2016 nu '
   + 'rezolvă suprapunerea — lista ilustrativă a normelor (pct. 7 alin. (5)) nu menționează deloc '
-  + 'categoria. Aplicația aplică plafonul, adică lectura care deduce mai puțin.';
+  + 'categoria. Aplicația aplică plafonul, adică interpretarea care deduce mai puțin.';
 
 /**
  * research 22 §5. alin. (5) lit. j) limits running/maintenance/repair costs to „cel mult un singur

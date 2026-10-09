@@ -52,7 +52,9 @@ function toBani(s: string): number {
 }
 
 const APPLIED = /Plafon aplicat \(([^)]*)\): ([\d.]+,\d{2}) RON/;
-const ALTERNATIVE = /cealaltă lectură, post-plafon: ([\d.]+,\d{2}) RON/;
+// TASK 7 grammar pass: „lectură" is a book-reading word; the law is read as an „interpretare".
+// Re-pinned from /cealaltă lectură, post-plafon: …/.
+const ALTERNATIVE = /cealaltă interpretare, post-plafon: ([\d.]+,\d{2}) RON/;
 
 describe('Expenses — the struck alin. (6) ceiling discloses BOTH readings', () => {
   beforeEach(() => localStorage.clear());
@@ -78,8 +80,11 @@ describe('Expenses — the struck alin. (6) ceiling discloses BOTH readings', ()
 
     // The article, and the explicit statement that the law does not settle the reading.
     expect(text).toContain('art. 68 alin. (6)');
-    expect(text).toContain('Legea nu stabilește care lectură se aplică');
+    // Re-pinned from 'Legea nu stabilește care lectură se aplică' (TASK 7 grammar pass).
+    expect(text).toContain('Legea nu stabilește care interpretare se aplică');
     expect(text).toContain('nicio normă nu prescrie o ordine');
+    // The uncertainty is carried by the one reusable „Notă de interpretare", not by an improvised line.
+    expect(text).toContain('Notă de interpretare');
     // Which reading is operative, in words, not only in the arithmetic.
     expect(text).toContain('pre-plafon');
     expect(text).toContain('post-plafon');

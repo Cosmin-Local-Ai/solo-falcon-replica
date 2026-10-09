@@ -38,3 +38,4 @@ export const copy = {
   ...settingsCopy,
   ...recordsCopy,
 } as const;
+/** Barrel: `src/ui/copy` is the only import a component or page needs for words. */

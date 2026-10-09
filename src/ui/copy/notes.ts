@@ -17,7 +17,10 @@ export const notes = {
     'Legea condiționează pragul de o faptă pe care aplicația nu o înregistrează, așa că nu decide dacă pragul se aplică și marchează linia ca fiind de verificat.',
   /** art. 68 alin. (6) — which base the annual caps are measured on (TASK 2d). */
   capReading:
-    'Legea nu spune pe care bază se măsoară plafoanele — înainte sau după celelalte plafoane — și nicio normă nu prescrie o ordine, așa că aplicația aplică lectura mai puțin generoasă și afișează și cealaltă cifră.',
+    'Legea nu stabilește care interpretare se aplică — nicio normă nu prescrie o ordine — așa că aplicația aplică interpretarea mai puțin generoasă și afișează și cealaltă cifră.',
+  /** A legal ceiling the app cannot measure: the datum is missing, not the rule. */
+  capUnmeasurable:
+    'Plafonul depinde de o informație pe care aplicația nu o înregistrează, așa că cheltuiala rămâne în afara cheltuielilor deductibile cu motivul afișat, nu cu un plafon de 0 lei.',
   /** The 10 % warning distance (TASK 4). */
   warningBand:
     'Legea nu stabilește nicio distanță de avertizare față de un prag, așa că banda de 10 % este o politică de afișare a aplicației și nu primește nicio citare legală.',
@@ -95,5 +98,5 @@ export const sources = {
   eFacturaContact:
     'Nu este obligatoriu să incluzi datele tale de contact în e-Factura.',
   capReadingChoice:
-    'Plafonul este măsurat pe baza art. 68 alin. (6) în lectura „înregistrată" (pre-plafon): baza scade cheltuielile deductibile așa cum au fost înregistrate, nu așa cum rămân după celelalte plafoane alin. (5). Legea nu stabilește care lectură se aplică — nicio normă nu prescrie o ordine — deci ambele cifre sunt afișate. Cea aplicată este mai puțin generoasă și nu poate produce subimpozitare.',
+    'Plafonul este măsurat pe baza art. 68 alin. (6) sub interpretarea «înregistrată» (pre-plafon): baza scade cheltuielile deductibile așa cum au fost înregistrate, nu așa cum rămân după celelalte plafoane alin. (5). Legea nu stabilește care interpretare se aplică — nicio normă nu prescrie o ordine — deci ambele cifre sunt afișate. Cea aplicată este mai puțin generoasă și nu poate produce subimpozitare.',
 } as const;
