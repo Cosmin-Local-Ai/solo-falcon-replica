@@ -1,11 +1,12 @@
 /**
- * Tests for the dashboard insights engine (`getInsights`) — Step 30 emission contract:
+ * Tests for the dashboard insights engine (`getInsights`) — emission contract:
  *
  * | Source       | Condition                                   | Severity |
  * |--------------|---------------------------------------------|----------|
- * | Threshold    | breached                                      | danger   |
- * | Threshold    | !breached && ratio >= 0.8                    | warning  |
- * | Threshold    | ratio < 0.8                                  | —        |
+ * | Threshold    | domain severity 'high'                      | danger   |
+ * | Threshold    | domain severity 'medium'                    | warning  |
+ * | Threshold    | domain severity 'low'                       | info     |
+ * | Threshold    | domain severity 'none' (inapplicable, far)  | —        |
  * | Threshold    | CASS + CAS both alerting                     | one canonical alert |
  * | Deadline     | daysUntil < 0 / === 0                        | danger   |
  * | Deadline     | 1..30                                        | warning  |
@@ -13,6 +14,12 @@
  * | Reserve      | projectedLiabilityBani > 0 && gapBani > 0   | warning  |
  * | Completeness | missing.length > 0                           | warning  |
  * | Tax          | review_required / computed                   | info     |
+ *
+ * TASK 4 changed the threshold rows: the severity is decided in the domain (`thresholds.ts`
+ * `severityFor`, which never reads the legal kind) and this layer only translates the vocabulary and
+ * filters out `none`. The old `breached → danger` / `ratio >= 0.8 → warning` rows were a SECOND copy
+ * of the same application policy, written here without a citation, and they made a contribution FLOOR
+ * look like a fiscal limit that had been exceeded.
  *
  * Invariants: raw keys never leak into user-facing strings, all strings are
  * Romanian, output is sorted danger → warning → info, engine is deterministic.
@@ -38,6 +45,13 @@ function threshold(overrides: Partial<Threshold> = {}): Threshold {
     limit: lei(1_000_000),
     ratio: 0.5,
     breached: false,
+    // TASK 4: the semantic fields the domain now passes through. `severity` is what decides whether
+    // an alert exists at all; `kind` decides how it is worded; `consequence` is the cited sentence
+    // the alert shows, so the CF citation lives in exactly one file.
+    kind: 'over_limit',
+    engaged: false,
+    severity: 'medium',
+    consequence: 'Baza de calcul pentru CASS este venitul net anual, în limita plafonului de 72 SM (art. 170 alin. (1) din Codul fiscal).',
     ...overrides,
   };
 }
@@ -101,10 +115,11 @@ function texts(insights: Insight[]): string {
 }
 
 // Phase 6 §7 item 5 — the 24 SM CAS ladder step (CF art. 148 alin. (2) lit. b).
-// A tier floor is NOT a limit: crossing it raises the MINIMUM CAS base, so the existing
-// "a depășit limita fiscală" wording would state the opposite of the law.
-describe('tier-floor threshold alerts', () => {
-  it('words a crossed tier as a ladder step, never as a limit breach', () => {
+// A tier floor is NOT a limit: crossing it raises the MINIMUM CAS base, so the old
+// "a depășit limita fiscală" wording stated the opposite of the law. TASK 4 removed the
+// `breached → danger` path entirely: a `tier_transition` row cannot be breached in either direction.
+describe('tier_transition threshold alerts (CF art. 148 alin. (2))', () => {
+  it('words a crossed tier as a changed calculation base, never as a limit breach', () => {
     const insights = getInsights(
       input({
         snapshot: snapshot({
@@ -113,8 +128,13 @@ describe('tier-floor threshold alerts', () => {
               id: 'CAS_TIER2_FLOOR',
               affectedTax: 'cas',
               type: 'tier-floor',
+              kind: 'tier_transition',
+              engaged: true,
               ratio: 1.23,
-              breached: true,
+              // The domain's own decision: a crossed ladder rung is worth showing, not alarming on.
+              severity: 'medium',
+              consequence:
+                'Baza minimă de calcul pentru CAS crește de la 12 SM la 24 SM (art. 148 alin. (2) lit. b) din Codul fiscal). Nu este un plafon.',
             }),
           ],
         }),
@@ -126,17 +146,25 @@ describe('tier-floor threshold alerts', () => {
     // a `danger`.
     expect(insights[0].severity).toBe('warning');
     expect(insights[0].id).toBe('threshold-CAS_TIER2_FLOOR');
-    expect(insights[0].title).toContain('Treaptă de calcul depășită');
+    expect(insights[0].title).toContain('Nivel de calcul modificat');
     expect(insights[0].description).toContain('art. 148 alin. (2) lit. b)');
     expect(texts(insights)).not.toContain('limita fiscală');
+    expect(texts(insights)).not.toContain('Prag depășit');
   });
 
-  it('warns as the tier approaches, before it is crossed', () => {
+  it('shows the row the domain marked medium, whatever its ratio', () => {
     const insights = getInsights(
       input({
         snapshot: snapshot({
           thresholds: [
-            threshold({ id: 'CAS_TIER2_FLOOR', affectedTax: 'cas', type: 'tier-floor', ratio: 0.9 }),
+            threshold({
+              id: 'CAS_TIER2_FLOOR',
+              affectedTax: 'cas',
+              type: 'tier-floor',
+              kind: 'tier_transition',
+              ratio: 0.9,
+              severity: 'medium',
+            }),
           ],
         }),
       }),
@@ -144,15 +172,22 @@ describe('tier-floor threshold alerts', () => {
 
     expect(insights).toHaveLength(1);
     expect(insights[0].severity).toBe('warning');
-    expect(insights[0].description).toContain('90%');
+    expect(insights[0].title).toContain('Aproape de prag');
   });
 
-  it('says nothing while the tier is far away', () => {
+  it('says nothing while the domain says the row needs no attention', () => {
     const insights = getInsights(
       input({
         snapshot: snapshot({
           thresholds: [
-            threshold({ id: 'CAS_TIER2_FLOOR', affectedTax: 'cas', type: 'tier-floor', ratio: 0.07 }),
+            threshold({
+              id: 'CAS_TIER2_FLOOR',
+              affectedTax: 'cas',
+              type: 'tier-floor',
+              kind: 'tier_transition',
+              ratio: 0.07,
+              severity: 'none',
+            }),
           ],
         }),
       }),
@@ -160,16 +195,56 @@ describe('tier-floor threshold alerts', () => {
 
     expect(insights).toEqual([]);
   });
+
+  it('a below-floor CAS row is never worded as a breach, in either direction', () => {
+    // TASK 4 acceptance, at the alert layer: income below the CAS floor means no contribution is owed
+    // (CF art. 148 alin. (1) and (4)); it is not a breach, a regime change or a reportable event.
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          thresholds: [
+            threshold({
+              id: 'CAS_MIN_BASE',
+              affectedTax: 'cas',
+              kind: 'tier_transition',
+              engaged: true,
+              ratio: 0.19,
+              severity: 'medium',
+              consequence:
+                'Venitul net anual este sub pragul de 12 salarii minime brute; nu se datorează contribuția de asigurări sociale pentru acest an (art. 148 alin. (1) și (4) din Codul fiscal).',
+            }),
+          ],
+        }),
+      }),
+    );
+
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('warning');
+    expect(insights[0].description).toContain('art. 148 alin. (1) și (4)');
+    expect(texts(insights)).not.toContain('Prag depășit');
+    expect(texts(insights)).not.toContain('limita fiscală');
+    expect(texts(insights).toLowerCase()).not.toContain('dezcalificare');
+    expect(texts(insights).toLowerCase()).not.toContain('schimbare de regim');
+  });
 });
 
 // Thresholds
 
 describe('thresholds', () => {
-  it('emits exactly one danger when a threshold is breached', () => {
+  it('emits exactly one danger when the domain marks a row high', () => {
     const insights = getInsights(
       input({
         snapshot: snapshot({
-          thresholds: [threshold({ id: 'cass', affectedTax: 'cass', ratio: 1.1, breached: true })],
+          thresholds: [
+            threshold({
+              id: 'cass',
+              affectedTax: 'cass',
+              ratio: 1.1,
+              breached: true,
+              engaged: true,
+              severity: 'high',
+            }),
+          ],
         }),
       }),
     );
@@ -177,14 +252,19 @@ describe('thresholds', () => {
     expect(insights).toHaveLength(1);
     expect(insights[0].severity).toBe('danger');
     expect(insights[0].id).toBe('threshold-cass');
-    expect(insights[0].title).toContain('Prag depășit');
+    // `over_limit` is the one kind whose crossing may be called a depășire: CF art. 170 alin. (1)
+    // really does cap the base there.
+    expect(insights[0].title).toContain('Plafon depășit');
+    expect(insights[0].description).toContain('art. 170 alin. (1)');
   });
 
-  it('emits a warning when not breached but ratio >= 0.8', () => {
+  it('emits a warning for a row the domain marked medium', () => {
     const insights = getInsights(
       input({
         snapshot: snapshot({
-          thresholds: [threshold({ id: 'cass', affectedTax: 'cass', ratio: 0.85 })],
+          thresholds: [
+            threshold({ id: 'cass', affectedTax: 'cass', ratio: 0.85, severity: 'medium' }),
+          ],
         }),
       }),
     );
@@ -195,24 +275,16 @@ describe('thresholds', () => {
     expect(insights[0].title).toContain('Aproape de prag');
   });
 
-  it('emits a warning at exactly ratio 0.8 (boundary)', () => {
+  it('does not re-derive its own proximity band: the ratio alone never creates an alert', () => {
+    // Replaces the two assertions that pinned `ratio >= 0.8` here. That band was a second, uncited
+    // copy of the app's 10 % presentation policy; it now lives once in `thresholds.ts`, and this layer
+    // must stay silent for a row the domain marked `none` however close its ratio is to 1.
     const insights = getInsights(
       input({
         snapshot: snapshot({
-          thresholds: [threshold({ id: 'cass', affectedTax: 'cass', ratio: 0.8 })],
-        }),
-      }),
-    );
-
-    expect(insights).toHaveLength(1);
-    expect(insights[0].severity).toBe('warning');
-  });
-
-  it('emits nothing when ratio < 0.8', () => {
-    const insights = getInsights(
-      input({
-        snapshot: snapshot({
-          thresholds: [threshold({ id: 'cass', affectedTax: 'cass', ratio: 0.79 })],
+          thresholds: [
+            threshold({ id: 'cass', affectedTax: 'cass', ratio: 0.99, severity: 'none' }),
+          ],
         }),
       }),
     );
@@ -220,11 +292,71 @@ describe('thresholds', () => {
     expect(insights).toEqual([]);
   });
 
-  it('emits danger at exactly ratio 1.0 when breached (boundary)', () => {
+  it('emits an info insight for a low-severity row, so severity and legal kind stay separate', () => {
     const insights = getInsights(
       input({
         snapshot: snapshot({
-          thresholds: [threshold({ id: 'cass', affectedTax: 'cass', ratio: 1.0, breached: true })],
+          thresholds: [
+            threshold({ id: 'cass', affectedTax: 'cass', ratio: 0.2, severity: 'low' }),
+          ],
+        }),
+      }),
+    );
+
+    expect(insights).toHaveLength(1);
+    expect(insights[0].severity).toBe('info');
+  });
+
+  it('emits nothing when the domain marks the row none', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          thresholds: [threshold({ id: 'cass', affectedTax: 'cass', ratio: 0.79, severity: 'none' })],
+        }),
+      }),
+    );
+
+    expect(insights).toEqual([]);
+  });
+
+  it('an inapplicable row is silent even when its level is engaged and its ratio is over 1', () => {
+    // The severity `none` the domain gives an inapplicable row is what keeps it out of Observații —
+    // the flag alone cannot make it alert.
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          thresholds: [
+            threshold({
+              id: 'vat',
+              affectedTax: 'vat',
+              kind: 'registration',
+              ratio: 1.4,
+              breached: true,
+              engaged: true,
+              severity: 'none',
+            }),
+          ],
+        }),
+      }),
+    );
+
+    expect(insights).toEqual([]);
+  });
+
+  it('emits danger at exactly ratio 1.0 when the domain marks the row high (boundary)', () => {
+    const insights = getInsights(
+      input({
+        snapshot: snapshot({
+          thresholds: [
+            threshold({
+              id: 'cass',
+              affectedTax: 'cass',
+              ratio: 1.0,
+              breached: true,
+              engaged: true,
+              severity: 'high',
+            }),
+          ],
         }),
       }),
     );
@@ -239,8 +371,8 @@ describe('thresholds', () => {
       input({
         snapshot: snapshot({
           thresholds: [
-            threshold({ id: 'cass', affectedTax: 'cass', ratio: 1.05, breached: true }),
-            threshold({ id: 'cas', affectedTax: 'cas', ratio: 0.9 }),
+            threshold({ id: 'cass', affectedTax: 'cass', ratio: 1.05, breached: true, engaged: true, severity: 'high' }),
+            threshold({ id: 'cas', affectedTax: 'cas', ratio: 0.9, severity: 'medium' }),
           ],
         }),
       }),
@@ -590,8 +722,8 @@ describe('invariants', () => {
         snapshot: snapshot({
           missing: ['profile'],
           thresholds: [
-            threshold({ id: 'cass', affectedTax: 'cass', ratio: 1.1, breached: true }),
-            threshold({ id: 'vat', affectedTax: 'vat', ratio: 0.85 }),
+            threshold({ id: 'cass', affectedTax: 'cass', ratio: 1.1, breached: true, engaged: true, severity: 'high' }),
+            threshold({ id: 'vat', affectedTax: 'vat', ratio: 0.85, severity: 'medium' }),
           ],
           deadlines: [
             deadline({ id: 'pfa', label: 'pfa', daysUntil: -1, date: '2026-05-14' }),

@@ -5,13 +5,13 @@ import { Card, CardHeader, CardTitle, CardDescription } from '../ui/card';
 /**
  * ThresholdSection (Step 22, verified Step 31) — presentational only.
  *
- * Formats and presents `FiscalThreshold` items: no threshold calculation,
- * no data fetching, no persistence. The only derived value is the progress
- * bar width from currentValue/thresholdValue (allowed presentation math,
- * kept as a visual convenience). The threshold's meaning comes from the
- * domain fields — `type` + `affectedTax` (label), `status`,
- * `breachMeaning`, `affectedDomain`, and `source` — never from the
- * percentage.
+ * Formats and presents `FiscalThreshold` items: no threshold calculation, no data fetching, no
+ * persistence. The only derived value is the progress bar width from currentValue/thresholdValue
+ * (allowed presentation math, kept as a visual convenience). Everything with a legal meaning comes
+ * from the domain fields — `type` + `affectedTax` (label), `status`, `kind`, `applicability`,
+ * `severity`, `measuredBasis`, `consequence`, `computedFrom`, `affectedDomain` and `source` — never
+ * from the percentage and never from a sentence written in this file. TASK 7 owns the language layer;
+ * the copy here is only what was needed to stop asserting a consequence the law does not create.
  */
 
 /** Status → badge class (green / amber / red / neutral). */
@@ -30,6 +30,20 @@ const STATUS_LABEL: Record<FiscalThreshold['status'], string> = {
   warning: 'Atenție',
   breached: 'Depășit',
   'review_required': 'De verificat',
+};
+
+/**
+ * Which quantity the row measured (TASK 4). The contribution rows and the VAT row are measured on
+ * DIFFERENT bases on purpose — CF art. 148 / 170 / 174 measure an annual value, CF art. 310 alin. (1)
+ * measures the turnover realised so far this year — so each row says which one it measured instead of
+ * letting the reader assume they are the same quantity.
+ */
+const MEASURED_BASIS_LABEL: Record<FiscalThreshold['measuredBasis'], string> = {
+  'annual-projected': 'venit net anual estimat pentru întreg anul',
+  'annual-actual': 'venit net anual înregistrat până acum (fără proiecție disponibilă)',
+  'ytd-turnover': 'cifra de afaceri înregistrată de la începutul anului',
+  unattributed: 'bază măsurată, dar fără origine declarată',
+  unmeasured: 'bază nemăsurată',
 };
 
 /** Romanian labels for raw affected-domain keys (never render raw keys). */
@@ -83,7 +97,16 @@ export default function ThresholdSection({ thresholds }: ThresholdSectionProps) 
         <p className="hint">Niciun prag</p>
       ) : (
         thresholds.map((t) => (
-          <div key={t.thresholdId}>
+          <div
+            key={t.thresholdId}
+            // TASK 4: the row carries its legal kind, its applicability and its severity in the DOM.
+            // Severity is a separate dimension from the kind, and TASK 8 owns how it is styled —
+            // hooking it here keeps the data visible to tests and to the styling pass without
+            // inventing a visual language in this task.
+            data-kind={t.kind}
+            data-applicability={t.applicability}
+            data-severity={t.severity}
+          >
             <div className="item-row">
               <div>
                 <strong className="item-title">{labelFor(t)}</strong>
@@ -102,11 +125,35 @@ export default function ThresholdSection({ thresholds }: ThresholdSectionProps) 
                 Distanță: <strong>{t.currentValue === null ? '—' : formatBaniLei(t.distance)}</strong>
               </span>
             </div>
+            <p className="hint">Bază măsurată: {MEASURED_BASIS_LABEL[t.measuredBasis]}</p>
+            {t.computedFrom ? (
+              <p className="hint">
+                Sumă calculată de aplicație: {t.computedFrom.multiplier} × salariul minim de{' '}
+                <strong>{formatBaniLei(t.computedFrom.smValueBani)}</strong> ({t.computedFrom.smAct}).{' '}
+                {t.computedFrom.note}
+              </p>
+            ) : null}
             {t.reviewReason ? (
               <p className="hint">{t.reviewReason}</p>
+            ) : t.applicability === 'not_applicable' ? (
+              // An inapplicable row states why it does not apply and stops there. It shows no
+              // consequence and no breach: the exception in the law removed the question.
+              <p className="hint">Nu se aplică: {t.applicabilityReason}</p>
+            ) : t.applicability === 'unknown' ? (
+              <p className="hint">Aplicabilitate nesigură: {t.applicabilityReason}</p>
             ) : (
-              <p className="hint">La depășire: {t.breachMeaning}</p>
+              // No "La depășire:" prefix: the row is not about a depășire. This is the factual
+              // consequence of where the measured value sits, with the article it rests on.
+              <p className="hint">{t.consequence}</p>
             )}
+            {t.status === 'warning' && t.currentValue !== null ? (
+              // The 10 % band is this app's presentation policy, and the label says so: it is not a
+              // statutory distance and it must never acquire a citation.
+              <p className="hint">
+                Bandă de avertizare la 10 % din prag — politică de afișare a aplicației, nu o prevedere
+                legală.
+              </p>
+            ) : null}
             <div className="bar-track">
               <div
                 className={`bar-fill ${t.status}`}

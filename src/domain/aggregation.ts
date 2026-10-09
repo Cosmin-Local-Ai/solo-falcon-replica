@@ -1,6 +1,7 @@
 import type { AppData, Expense, Revenue } from '../data/types';
 import { isISOCalendarDate, isoCalendarDateProblem, isoCalendarDateProblemText } from './date';
 import { addBani, lei, subBani, sumBani, type Bani } from './money';
+import type { ThresholdKind, ThresholdSeverity } from './thresholds';
 
 /**
  * Deterministic financial aggregation selectors (Step 13, Part A).
@@ -66,13 +67,34 @@ export interface Threshold {
   ratio: number;
   breached: boolean;
   /**
-   * Which threshold family this belongs to, when known. `tier-floor` is carried through because
-   * its alert wording differs from a limit breach: crossing it steps the minimum CAS base up a
-   * tier (CF art. 148 alin. (2) lit. b)), it does not exceed a cap.
+   * Which threshold family this belongs to, when known. Kept for the existing snapshot readers;
+   * the alert wording no longer depends on it — `kind` carries the legal meaning instead.
    */
   type?: 'income' | 'vat' | 'tier-floor';
   /** Tax this threshold affects (e.g. 'cass', 'vat'). */
   affectedTax?: string;
+  /**
+   * TASK 4 — the legal kind, passed through from `FiscalThreshold.kind`. This is what an alert is
+   * worded from, so the CF citation lives in one place (`thresholds.ts`) instead of being
+   * re-invented per file by `insights.ts`.
+   */
+  kind: ThresholdKind;
+  /**
+   * TASK 4 — is the measured value on the side of the level where the row's consequence applies?
+   * Carried because `breached` no longer answers it: a `tier_transition` row can be engaged without
+   * being a breach, and an alert must be able to tell "the level applies" from "a limit was exceeded".
+   */
+  engaged: boolean;
+  /**
+   * TASK 4 — the user-attention level decided in the domain (`severityFor`, which never reads the
+   * legal kind). `insights.ts` filters and ranks on this instead of re-deriving its own `ratio >= 0.8`
+   * band, which was a second, uncited copy of the same application policy.
+   */
+  severity: ThresholdSeverity;
+  /** TASK 4 — the factual, cited consequence of where the measured value sits. */
+  consequence: string;
+  /** TASK 4 — why no verdict could be given, for an unmeasured row. */
+  reviewReason?: string;
 }
 
 export interface DashboardSnapshot {

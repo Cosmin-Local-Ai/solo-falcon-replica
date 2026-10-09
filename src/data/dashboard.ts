@@ -18,7 +18,9 @@ import {
 import { computeTaxEstimate, type TaxEstimateResult } from '../domain/tax';
 import {
   computeThresholds,
+  type FiscalBase,
   type FiscalThreshold,
+  type MeasuredBasis,
   type ThresholdBases,
 } from '../domain/thresholds';
 import { computeDeadlines, filterUpcoming, type Deadline } from '../domain/deadlines';
@@ -158,17 +160,49 @@ export function buildThresholdBases(ytd: YtdTotals, tax: TaxEstimateResult): Thr
   return bases;
 }
 
+/**
+ * TASK 4 — record HOW each supplied amount was produced, so each threshold row can state which
+ * basis it measured instead of the reader having to guess.
+ *
+ * The asymmetry is deliberate and must stay: CF art. 148 / art. 170 / art. 174 measure an ANNUAL
+ * value, so the four contribution rows are measured against the engine's annual figure — the
+ * projection when the projection model ran, the actuals when it could not (TASK 1). CF art. 310
+ * alin. (1) measures the turnover realised in the year so far, so `VAT_REGISTRATION` stays YTD.
+ * Unifying them would make one of the two rows state a quantity the law does not measure.
+ */
+export function buildThresholdBasisProvenance(
+  tax: TaxEstimateWithBasis,
+): Partial<Record<FiscalBase, MeasuredBasis>> {
+  const turnover: MeasuredBasis = 'ytd-turnover';
+  let annual: MeasuredBasis = 'unattributed';
+  if (tax.basis.kind === 'annual-projected') annual = 'annual-projected';
+  else if (tax.basis.kind === 'actuals-only') annual = 'annual-actual';
+  return {
+    'revenue-incl-vat': turnover,
+    'revenue-excl-vat': turnover,
+    'expense-incl-vat': turnover,
+    'expense-excl-vat': turnover,
+    'net-income': annual,
+  };
+}
+
 export function getThresholdStatuses(
   data: AppData,
   asOfDate: string,
-  tax: TaxEstimateResult,
+  tax: TaxEstimateResult | TaxEstimateWithBasis,
 ): FiscalThreshold[] {
   const ytd = selectYtd(data, asOfDate);
+  const estimate = withEstimateBasis(tax);
   return computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, {
     taxYear: data.profile.fiscalYear,
     asOfDate,
-    bases: buildThresholdBases(ytd, tax),
+    bases: buildThresholdBases(ytd, estimate),
     ruleRelease: PFA_2026_RELEASE.ruleIds[0],
+    // TASK 4: applicability is derived from the profile, never assumed. Passing no profile would
+    // make every row `applicability: 'unknown'`, and `dashboard.test.ts` pins that the production
+    // path never does that.
+    profile: data.profile,
+    measuredBasis: buildThresholdBasisProvenance(estimate),
   });
 }
 
@@ -346,6 +380,14 @@ function buildSnapshot(
       breached: t.status === 'breached',
       type: snapshotThresholdType(t),
       affectedTax: t.affectedTax,
+      // TASK 4: the semantic fields travel through the flattening instead of being re-invented
+      // downstream. `insights.ts` used to derive its own severity from `breached` + `ratio >= 0.8`
+      // and to re-write the CF citation in a second file; both decisions now have exactly one home.
+      kind: t.kind,
+      engaged: t.engaged,
+      severity: t.severity,
+      consequence: t.consequence,
+      reviewReason: t.reviewReason,
     })),
     // No unit conversion here. `reserve` is already in bani and the snapshot contract is in bani; the
     // `* 100` that used to sit on these lines was a lei→cents bridge that, with the domain now storing

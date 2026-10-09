@@ -385,9 +385,15 @@ describe('getLegislationState (sync)', () => {
 // `buildSnapshot` used to re-derive the flag as `distance > 0`. `distance` is
 // `currentValue - thresholdValue`, so for a `min-base` (floor) row a breach is `distance < 0`:
 // the old expression inverted exactly the floor rows and contradicted `thresholds.ts` `statusFor`,
-// which already branches on the threshold type. `insights.ts` filters on this flag, so two real
+// which already branches on the threshold type. `insights.ts` filtered on this flag, so two real
 // breaches (CAS_MIN_BASE, CASS_MIN_BASE) never reached Observații while Praguri showed `Depășit`.
-describe('snapshot.thresholds[].breached (B-20)', () => {
+//
+// TASK 4 re-opened this fix from the other side: the flag was right about the ARITHMETIC and wrong
+// about the LAW. Being below a contribution floor is not a breach — CF art. 148 alin. (1) makes the
+// 12-SM figure the condition for the CAS obligation to exist, and below it the consequence is
+// `nu datorează contribuția`, with an optional election under art. 148 alin. (4). So `breached` is now
+// reserved for kinds the law actually caps or triggers, and the floor rows carry `kind` + `severity`.
+describe('snapshot.thresholds[].breached (B-20, re-typed by TASK 4)', () => {
   const AS_OF_SEED = '2026-12-31';
   // `buildDashboardData` derives asOfDate from `instant` in LOCAL time, so pass an unambiguous
   // local date rather than an ISO string that a timezone could shift.
@@ -400,32 +406,119 @@ describe('snapshot.thresholds[].breached (B-20)', () => {
       const snapRow = dashboard.snapshot.thresholds.find((s) => s.id === row.thresholdId);
       expect(snapRow, `no snapshot row for ${row.thresholdId}`).toBeDefined();
       expect(snapRow!.breached).toBe(row.status === 'breached');
+      // The semantic fields travel through the flattening, so `insights.ts` never has to guess them.
+      expect(snapRow!.kind).toBe(row.kind);
+      expect(snapRow!.engaged).toBe(row.engaged);
+      expect(snapRow!.severity).toBe(row.severity);
+      expect(snapRow!.consequence).toBe(row.consequence);
     }
   });
 
-  it('marks a floor (min-base) row breached when the measured value is BELOW the floor', async () => {
+  it('never marks a contribution-floor row breached when the value is BELOW the floor', async () => {
     const tax = await getTaxEstimate(seedData, AS_OF_SEED);
     const dashboard = buildDashboardData(seedData, tax, INSTANT);
     const floors = dashboard.thresholds.filter((t) => t.type === 'min-base');
     expect(floors.map((t) => t.thresholdId).sort()).toEqual(['CASS_MIN_BASE', 'CAS_MIN_BASE']);
     for (const floor of floors) {
-      // The seed's net income (7,494.50) is far below both statutory floors.
+      // The seed's net income (7.580,00 lei) is far below both statutory floors.
       expect(floor.distance).toBeLessThan(0);
-      expect(floor.status).toBe('breached');
+      // TASK 4 replaces the assertion that pinned `status: 'breached'` here. The level is in play —
+      // that is what the row reports — but the law attaches no adverse consequence to being under it.
+      expect(floor.kind, floor.thresholdId).toBe('tier_transition');
+      expect(floor.engaged, floor.thresholdId).toBe(true);
+      expect(floor.status, floor.thresholdId).toBe('warning');
+      expect(floor.status, floor.thresholdId).not.toBe('breached');
+      expect(floor.severity, floor.thresholdId).not.toBe('high');
       const snapRow = dashboard.snapshot.thresholds.find((s) => s.id === floor.thresholdId)!;
-      // This is the assertion that fails under the old `distance > 0` derivation.
-      expect(snapRow.breached).toBe(true);
+      // The B-20 derivation still holds — it is driven off the domain status — it just can no longer
+      // come out true for a floor row.
+      expect(snapRow.breached).toBe(false);
     }
   });
 
-  it('surfaces the floor breach in Observații (the flag is what insights.ts filters on)', async () => {
+  it('surfaces the below-floor fact in Observații without calling it a breach', async () => {
     const tax = await getTaxEstimate(seedData, AS_OF_SEED);
     const dashboard = buildDashboardData(seedData, tax, INSTANT);
-    const breaches = dashboard.insights.filter((i) => i.title.startsWith('Prag depășit:'));
+    // Replaces the assertion that pinned a `Prag depășit:` danger for the floor rows: that wording
+    // claimed a fiscal limit had been exceeded, which research 24 found no support for.
+    expect(dashboard.insights.filter((i) => i.title.startsWith('Prag depășit:'))).toHaveLength(0);
+    const floorAlerts = dashboard.insights.filter((i) => /^threshold-(CAS|CASS)_MIN_BASE$/.test(i.id));
     // CASS and CAS collapse into at most ONE canonical alert (canonicalCassCas), so exactly one.
-    expect(breaches).toHaveLength(1);
-    expect(breaches[0].severity).toBe('danger');
-    expect(breaches[0].id).toMatch(/^threshold-(CAS|CASS)_MIN_BASE$/);
+    expect(floorAlerts).toHaveLength(1);
+    expect(floorAlerts[0].severity).toBe('warning');
+    expect(floorAlerts[0].description).toMatch(/art\. 14[48]|art\. 174/);
+    const allText = dashboard.insights.map((i) => `${i.title} ${i.description} ${i.action}`).join(' ');
+    expect(allText).not.toContain('dezcalificare');
+    expect(allText).not.toContain('schimbare de regim');
+  });
+
+  it('the production caller derives applicability from the profile — no row comes back unknown', async () => {
+    // `ThresholdQuery.profile` is optional so the domain can be called with hand-built queries, where
+    // `unknown` is the honest answer. The app must never be in that position.
+    const tax = await getTaxEstimate(seedData, AS_OF_SEED);
+    const rows = getThresholdStatuses(seedData, AS_OF_SEED, tax);
+    for (const row of rows) {
+      expect(row.applicability, row.thresholdId).not.toBe('unknown');
+      expect(row.measuredBasis, row.thresholdId).not.toBe('unattributed');
+    }
+  });
+
+  it('the VAT plafon row is inapplicable for a profile that already applies VAT', async () => {
+    // The seed profile is not in the TVA scutire (`vatExempt: false`), so the art. 310 alin. (1)
+    // registration test has already been decided. The row stays visible and measured, but it cannot
+    // alert.
+    const tax = await getTaxEstimate(seedData, AS_OF_SEED);
+    const dashboard = buildDashboardData(seedData, tax, INSTANT);
+    const vat = dashboard.thresholds.find((t) => t.thresholdId === 'VAT_REGISTRATION')!;
+    expect(vat.applicability).toBe('not_applicable');
+    expect(vat.applicabilityReason ?? '').toContain('art. 310 alin. (1)');
+    expect(vat.severity).toBe('none');
+    expect(vat.currentValue).toBe(lei(7700));
+    expect(dashboard.insights.filter((i) => i.id === 'threshold-VAT_REGISTRATION')).toHaveLength(0);
+  });
+
+  it('each row states the basis it measured: annual for contributions, YTD for the VAT plafon', async () => {
+    // TASK 4 labels the asymmetry TASK 1 left in place instead of unifying it. Mid-year the engine runs
+    // on the projection, so the contribution rows measure an annual projected figure while the VAT row
+    // measures turnover realised so far — two different numbers, and the rows say which is which.
+    const asOf = '2026-10-31';
+    const instant = new Date(2026, 9, 31, 12);
+    const tax = await getTaxEstimate(seedData, asOf);
+    const rows = getThresholdStatuses(seedData, asOf, tax);
+    const contribution = rows.filter((t) => t.fiscalBase === 'net-income');
+    expect(contribution.map((t) => t.thresholdId).sort()).toEqual([
+      'CASS_MAX_BASE',
+      'CASS_MIN_BASE',
+      'CAS_MIN_BASE',
+      'CAS_TIER2_FLOOR',
+    ]);
+    for (const row of contribution) {
+      expect(row.measuredBasis, row.thresholdId).toBe('annual-projected');
+    }
+    const vat = rows.find((t) => t.thresholdId === 'VAT_REGISTRATION')!;
+    expect(vat.measuredBasis).toBe('ytd-turnover');
+    // The two bases really are different quantities on the seed at this date: 9.096,00 lei annual
+    // projected VNA against 7.700,00 lei YTD turnover.
+    expect(contribution[0].currentValue).toBe(lei(9096));
+    expect(vat.currentValue).toBe(lei(7700));
+    expect(instant.getMonth()).toBe(9);
+  });
+
+  it('a pensioner profile removes the CAS rows from applicability, with the art. 150 alin. (1) reason', async () => {
+    // The seed records are kept: with no records the VNA would be zero and art. 174 alin. (2) would
+    // switch CASS off for a different reason, hiding the asymmetry this test is about.
+    const data: AppData = { ...seedData, profile: { ...seedData.profile, pensionStatus: 'da' } };
+    const tax = await getTaxEstimate(data, AS_OF_SEED);
+    const rows = getThresholdStatuses(data, AS_OF_SEED, tax);
+    for (const id of ['CAS_MIN_BASE', 'CAS_TIER2_FLOOR']) {
+      const row = rows.find((t) => t.thresholdId === id)!;
+      expect(row.applicability, id).toBe('not_applicable');
+      expect(row.applicabilityReason ?? '', id).toContain('art. 150 alin. (1)');
+      expect(row.severity, id).toBe('none');
+    }
+    // CASS is NOT mirrored: CF art. 174 alin. (7) lit. c) removes only the art. 174 alin. (6) top-up.
+    expect(rows.find((t) => t.thresholdId === 'CASS_MAX_BASE')!.applicability).toBe('applicable');
+    expect(rows.find((t) => t.thresholdId === 'CASS_MIN_BASE')!.applicability).toBe('not_applicable');
   });
 });
 
@@ -456,7 +549,7 @@ describe('CAS_TIER2_FLOOR — the 24 SM ladder step is surfaced (Phase 6 §7 ite
     expect(snapRow.breached).toBe(false);
   });
 
-  it('crossing 24 SM flags the row AND doubles the CAS the engine computes, from one figure', async () => {
+  it('crossing 24 SM changes the calculation base AND doubles the CAS the engine computes, from one figure', async () => {
     const data = makeData({ revenues: [revenue({ valoareFaraTva: lei(120000), tva: lei(0) })] });
     const tax = await getTaxEstimate(data, AS_OF_SEED);
     expect(tax.status).toBe('computed');
@@ -465,7 +558,14 @@ describe('CAS_TIER2_FLOOR — the 24 SM ladder step is surfaced (Phase 6 §7 ite
       (t) => t.thresholdId === 'CAS_TIER2_FLOOR',
     )!;
     expect(row.currentValue).toBe(lei(120000));
-    expect(row.status).toBe('breached');
+    // TASK 4 replaces `status: 'breached'` here. Crossing a ladder rung is not exceeding a limit:
+    // art. 148 alin. (2) lit. b) raises the MINIMUM base. The row is flagged as engaged and worth
+    // showing, and the doubled amount below is the fact that makes it worth showing.
+    expect(row.engaged).toBe(true);
+    expect(row.kind).toBe('tier_transition');
+    expect(row.status).toBe('warning');
+    expect(row.status).not.toBe('breached');
+    expect(row.consequence).toContain('art. 148 alin. (2) lit. b)');
 
     // The same input, read through the calculator, lands on the tier-2 floor (25% × 97.200).
     const casLine = tax.lines.find((l) => l.label === 'CAS (25%)')!;
@@ -473,8 +573,10 @@ describe('CAS_TIER2_FLOOR — the 24 SM ladder step is surfaced (Phase 6 §7 ite
 
     const dashboard = buildDashboardData(data, tax, INSTANT);
     const snapRow = dashboard.snapshot.thresholds.find((s) => s.id === 'CAS_TIER2_FLOOR')!;
-    expect(snapRow.breached).toBe(true);
+    expect(snapRow.breached).toBe(false);
+    expect(snapRow.engaged).toBe(true);
     expect(snapRow.type).toBe('tier-floor');
+    expect(snapRow.kind).toBe('tier_transition');
   });
 });
 

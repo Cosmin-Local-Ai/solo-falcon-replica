@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { calculatorRegistry } from './fiscal/calculators';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal/package2026';
+import { createDefaultProfile } from './profile';
 import {
-  breachMeaningFor,
+  applicabilityFor,
   computeThresholds,
+  engagedSide,
+  severityFor,
   statusFor,
   statusForRatioRule,
   withRatioRuleStatus,
@@ -11,8 +14,10 @@ import {
   type FiscalThreshold,
   type RatioRule,
   type RatioRuleStatus,
+  type ThresholdKind,
   type ThresholdQuery,
 } from './thresholds';
+import type { PfaProfile } from './models';
 import { lei, type Bani } from './money'
 
 /**
@@ -28,11 +33,26 @@ const allBases = (value: Bani) => ({
   'net-income': value,
 });
 
+/**
+ * TASK 4 — a profile for which EVERY shipped threshold applies: not a pensioner (CF art. 150 alin. (1)
+ * would remove the CAS rows), CASS obligatory (B-19 makes any other flag `unknown`), no salary relief
+ * (art. 174 alin. (7) lit. a)), and inside the VAT scutire so the art. 310 alin. (1) plafon still
+ * decides something. The arithmetic tests below are about distance, so they need the rows applicable.
+ */
+const APPLICABLE_PROFILE: PfaProfile = createDefaultProfile({
+  fiscalYear: 2026,
+  pensionStatus: 'nu',
+  salaryStatus: 'nu',
+  socialInsuranceStatus: 'obligatoriu',
+  vatExempt: true,
+});
+
 const QUERY: ThresholdQuery = {
   taxYear: 2026,
   asOfDate: '2026-03-15',
   bases: allBases(lei(100000)),
   ruleRelease: 'PFA_2026_RELEASE',
+  profile: APPLICABLE_PROFILE,
 };
 
 const byId = (thresholds: FiscalThreshold[], id: string) =>
@@ -102,13 +122,25 @@ describe('computeThresholds', () => {
     expect(second).toEqual(first);
   });
 
-  it('below threshold → negative distance', () => {
+  it('below threshold → negative distance, and never a breach for a contribution floor', () => {
     const q: ThresholdQuery = { taxYear: 2026, asOfDate: '2026-06-15', bases: allBases(lei(10000)), ruleRelease: '2026-01-01' };
     const r = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, q);
     // 10000 < 48600 (CAS_MIN_BASE) → distance = 10000 - 48600 = -38600
     const casMin = r.find(t => t.thresholdId === 'CAS_MIN_BASE')!;
     expect(casMin.distance).toBe(lei(-38600));
-    expect(casMin.status).toBe('breached');
+    // TASK 4 acceptance: no row can render a breach for income below a contribution floor. CF
+    // art. 148 alin. (1) makes 12 SM the condition for the CAS obligation to exist at all, and
+    // research 24 found no provision attaching any adverse consequence to a below-12-SM income. The
+    // old expectation here was `breached`, which asserted exactly the consequence the law does not create.
+    expect(casMin.kind).toBe('tier_transition');
+    // The level IS in play — that is what the row exists to say — but "in play" is not "breached":
+    // the worst a tier_transition row may claim is `warning`, and its severity is never `high`.
+    expect(casMin.engaged).toBe(true);
+    expect(casMin.status).toBe('warning');
+    expect(casMin.status).not.toBe('breached');
+    expect(casMin.severity).toBe('medium');
+    expect(casMin.severity).not.toBe('high');
+    expect(casMin.consequence).toContain('nu se datorează contribuția de asigurări sociale');
   });
 
   it('exactly at threshold → zero distance', () => {
@@ -265,32 +297,51 @@ describe('computeThresholds', () => {
       .toBe('revenue-excl-vat');
   });
 
-  it('every threshold has a non-empty breachMeaning', () => {
+  it('every threshold carries a factual consequence that cites the provision it rests on', () => {
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, QUERY);
     for (const t of result) {
-      expect(typeof t.breachMeaning).toBe('string');
-      expect(t.breachMeaning.length).toBeGreaterThan(0);
+      expect(typeof t.consequence).toBe('string');
+      expect(t.consequence.length).toBeGreaterThan(0);
+      // A consequence without a citation is an assertion, not a legal statement.
+      expect(t.consequence).toMatch(/art\. \d+/);
     }
   });
 
-  it('min-base breachMeaning mentions disqualification', () => {
-    const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, QUERY);
-    const casMin = byId(result, 'CAS_MIN_BASE');
-    expect(casMin.breachMeaning).toContain('dezcalificare');
+  it('no consequence asserts a decălificare, a regime change or a penalty, in either direction', () => {
+    // TASK 4: `breachMeaningFor` said 'Sub baza minimă — dezcalificare din regim' and 'Peste plafonul
+    // maxim al bazei — schimbare de regim'. Both are deleted, not reworded: research 24 searched the
+    // consolidated Cod fiscal and found zero occurrences of „decălificare" and no provision making a
+    // below-floor income a breach, a regime change, a rectification duty, a penalty or a reportable
+    // event. A reworded sentence would still assert a consequence the law does not create, so the
+    // assertion is now the OPPOSITE of the one that lived here.
+    const forbidden = ['dezcalificare', 'decălificare', 'schimbare de regim', 'penalizare', 'amendă', 'rectificare obligatorie'];
+    for (const bases of [allBases(lei(10000)), allBases(lei(400000)), allBases(lei(900000))]) {
+      for (const t of computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...QUERY, bases })) {
+        for (const phrase of forbidden) {
+          expect(t.consequence, `${t.thresholdId}: ${t.consequence}`).not.toContain(phrase);
+          expect(t.applicabilityReason ?? '').not.toContain(phrase);
+        }
+      }
+    }
   });
 
-  it('max-base breachMeaning mentions regime change', () => {
-    // Re-pointed from CAS_MAX_BASE to CASS_MAX_BASE in Phase 3: only CASS has a statutory
-    // ceiling (CF art. 170 alin. (1)); CF art. 148 alin. (2) has no cap for CAS.
-    const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, QUERY);
-    const cassMax = byId(result, 'CASS_MAX_BASE');
-    expect(cassMax.breachMeaning).toContain('schimbare de regim');
+  it('the CASS cap consequence states the cap on the base, not a regime change', () => {
+    // Re-pointed from CAS_MAX_BASE in Phase 3: only CASS has a statutory ceiling (CF art. 170 alin. (1)).
+    const cassMax = byId(
+      computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...QUERY, bases: allBases(lei(300000)) }),
+      'CASS_MAX_BASE',
+    );
+    expect(cassMax.kind).toBe('over_limit');
+    expect(cassMax.engaged).toBe(true);
+    expect(cassMax.consequence).toContain('art. 170 alin. (1)');
+    expect(cassMax.consequence).toContain('plafon');
   });
 
-  it('registration breachMeaning mentions registration obligation', () => {
+  it('registration consequence mentions the registration obligation, with its article', () => {
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, QUERY);
     const vat = byId(result, 'VAT_REGISTRATION');
-    expect(vat.breachMeaning).toContain('obligația de înregistrare');
+    expect(vat.consequence).toContain('obligația de înregistrare');
+    expect(vat.consequence).toContain('art. 310 alin. (1)');
   });
 
   // The old behaviour here was `toHaveLength(0)`: a base mismatch silently DELETED the
@@ -372,13 +423,19 @@ describe('tier-floor — the 24 SM CAS ladder step', () => {
     expect(row.source).toContain('art. 148');
   });
 
-  it('is crossed at the tier, inclusive — the same predicate calcCas uses', () => {
-    // art. 148 alin. (2) lit. b) applies once realised income is "cel puțin egal cu" 24 SM.
-    expect(statusFor('tier-floor', lei(0), lei(100))).toBe('breached');
-    expect(statusFor('tier-floor', lei(1000), lei(100))).toBe('breached');
-    expect(statusFor('tier-floor', lei(-1), lei(0))).toBe('ok');
-    expect(statusFor('tier-floor', lei(-50), lei(100))).toBe('warning');
-    expect(statusFor('tier-floor', lei(-101), lei(100))).toBe('ok');
+  it('is crossed at the tier, inclusive — the same predicate calcCas uses, and never a breach', () => {
+    // art. 148 alin. (2) lit. b) applies once realised income is "cel puțin egal cu" 24 SM, so the
+    // boundary is INCLUSIVE. But crossing a ladder rung is not exceeding a limit: with kind
+    // `tier_transition` the most `statusFor` may say is `warning`. The old expectations here were
+    // `breached`, which is the false claim TASK 4 removes.
+    expect(statusFor('tier-floor', lei(0), lei(100), 'tier_transition')).toBe('warning');
+    expect(statusFor('tier-floor', lei(1000), lei(100), 'tier_transition')).toBe('warning');
+    expect(statusFor('tier-floor', lei(-1), lei(0), 'tier_transition')).toBe('ok');
+    expect(statusFor('tier-floor', lei(-50), lei(100), 'tier_transition')).toBe('warning');
+    expect(statusFor('tier-floor', lei(-101), lei(100), 'tier_transition')).toBe('ok');
+    // The same arithmetic under a kind that CAN be exceeded is a breach — proof that the gate is the
+    // kind, not the arithmetic shape.
+    expect(statusFor('tier-floor', lei(0), lei(100), 'over_limit')).toBe('breached');
   });
 
   it('crossing the tier and the doubled CAS floor move together on the same input', () => {
@@ -389,7 +446,9 @@ describe('tier-floor — the 24 SM CAS ladder step', () => {
       // 97.199 is one leu below the tier, i.e. inside the app-chosen 10% warning band — the tier-1
       // floor still applies, but the step is close enough that `ok` would understate it.
       { netIncome: lei(97199), cas: lei(12150), status: 'warning' },
-      { netIncome: lei(97200), cas: lei(24300), status: 'breached' },
+      // TASK 4: crossing the tier is `warning`, not `breached`. The CAS amount doubles — that is the
+      // fact worth showing — but nothing went wrong and no limit was exceeded.
+      { netIncome: lei(97200), cas: lei(24300), status: 'warning' },
     ] as const) {
       const row = byId(
         computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...QUERY, bases: allBases(netIncome) }),
@@ -402,14 +461,28 @@ describe('tier-floor — the 24 SM CAS ladder step', () => {
     }
   });
 
-  it('its breach meaning never claims a ceiling or a regime change', () => {
-    const meaning = breachMeaningFor('tier-floor');
-    expect(meaning).toContain('baza minimă');
-    expect(meaning).not.toContain('schimbare de regim');
-    expect(meaning).not.toContain('dezcalificare');
-    // The only numbers are the statutory tier names (12 SM / 24 SM). No lei amount lives in this
-    // string — 12.150 and 24.300 come from the `tier1_cas` / `tier2_cas` rule parameters.
-    expect(meaning).not.toMatch(/\d{3}/);
+  it('its consequence states the minimum base, never a ceiling or a regime change', () => {
+    // Replaces the assertion that pinned `breachMeaningFor('tier-floor')`. The row must say what
+    // art. 148 alin. (2) provides — a higher MINIMUM base — and must not imply a cap (research 24,
+    // "What the app must not state" item 7) or a regime change (item 1).
+    const row = byId(
+      computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...QUERY, bases: allBases(lei(120000)) }),
+      'CAS_TIER2_FLOOR',
+    );
+    expect(row.engaged).toBe(true);
+    expect(row.consequence).toContain('baza minimă de calcul pentru CAS crește');
+    expect(row.consequence).toContain('art. 148 alin. (2) lit. b)');
+    expect(row.consequence).not.toContain('schimbare de regim');
+    expect(row.consequence).not.toContain('dezcalificare');
+    // No lei amount lives in this string — 12.150 and 24.300 come from the `tier1_cas` / `tier2_cas`
+    // rule parameters, and the 24 SM level itself is rendered from `thresholdValue` and labelled as
+    // computed. Only the statutory multipliers (12 SM / 24 SM) and the article number appear here.
+    expect(row.consequence).not.toMatch(/\d[\d.]*\s*lei/);
+    expect(row.consequence).not.toContain('12.150');
+    expect(row.consequence).not.toContain('24.300');
+    // And the lei threshold itself is labelled as computed, with the SM value and its act cited.
+    expect(row.computedFrom?.multiplier).toBe(24);
+    expect(row.computedFrom?.smAct).toBe('HG 1506/2024');
   });
 
   it('no max_cas parameter returns anywhere in the package (Phase 3 guard)', () => {
@@ -423,67 +496,304 @@ describe('tier-floor — the 24 SM CAS ladder step', () => {
   });
 });
 
-describe('income threshold type (Step 29)', () => {
+describe('statusFor — the kind decides, not the arithmetic (Step 29 / TASK 4)', () => {
   it('statusFor: income breached when distance > 0', () => {
-    expect(statusFor('income', lei(1), lei(100))).toBe('breached');
-    expect(statusFor('income', lei(1000), lei(100))).toBe('breached');
+    expect(statusFor('income', lei(1), lei(100), 'over_limit')).toBe('breached');
+    expect(statusFor('income', lei(1000), lei(100), 'over_limit')).toBe('breached');
   });
 
   it('statusFor: income warning when approaching the threshold (distance near 0)', () => {
-    expect(statusFor('income', lei(0), lei(100))).toBe('warning');
-    expect(statusFor('income', lei(-50), lei(100))).toBe('warning');
+    expect(statusFor('income', lei(0), lei(100), 'over_limit')).toBe('warning');
+    expect(statusFor('income', lei(-50), lei(100), 'over_limit')).toBe('warning');
   });
 
   it('statusFor: income ok when distance < -warningDistance', () => {
-    expect(statusFor('income', lei(-101), lei(100))).toBe('ok');
-    expect(statusFor('income', lei(-500), lei(100))).toBe('ok');
+    expect(statusFor('income', lei(-101), lei(100), 'over_limit')).toBe('ok');
+    expect(statusFor('income', lei(-500), lei(100), 'over_limit')).toBe('ok');
   });
 
-  it('statusFor: min-base breached when below minimum, ok when above', () => {
-    expect(statusFor('min-base', lei(-100), lei(50))).toBe('breached');
-    expect(statusFor('min-base', lei(100), lei(50))).toBe('ok');
+  it('statusFor: a floor is never breached under a tier_transition kind, in either direction', () => {
+    // This is the acceptance criterion in unit form: the arithmetic says "below the minimum", the law
+    // says "nu datorează contribuția". Only the kind can tell those apart, so it is a parameter.
+    expect(statusFor('min-base', lei(-100), lei(50), 'tier_transition')).toBe('warning');
+    expect(statusFor('min-base', lei(100), lei(50), 'tier_transition')).toBe('ok');
+    expect(statusFor('min-base', lei(-100), lei(50), 'informational')).toBe('warning');
+    // The same arithmetic under a kind the law does cap is a breach — the gate is the kind.
+    expect(statusFor('min-base', lei(-100), lei(50), 'over_limit')).toBe('breached');
   });
 
   it('statusFor: max-base breached when above maximum, ok when below', () => {
-    expect(statusFor('max-base', lei(100), lei(50))).toBe('breached');
-    expect(statusFor('max-base', lei(-100), lei(50))).toBe('ok');
+    expect(statusFor('max-base', lei(100), lei(50), 'over_limit')).toBe('breached');
+    expect(statusFor('max-base', lei(-100), lei(50), 'over_limit')).toBe('ok');
   });
 
   it('statusFor: registration breached at/above threshold, ok below', () => {
-    expect(statusFor('registration', lei(100), lei(50))).toBe('breached');
-    expect(statusFor('registration', lei(0), lei(50))).toBe('breached'); // exactly at threshold
-    expect(statusFor('registration', lei(-100), lei(50))).toBe('ok');
+    expect(statusFor('registration', lei(100), lei(50), 'registration')).toBe('breached');
+    expect(statusFor('registration', lei(0), lei(50), 'registration')).toBe('breached'); // exactly at threshold
+    expect(statusFor('registration', lei(-100), lei(50), 'registration')).toBe('ok');
   });
 
   it('statusFor: min-base warning band outer boundary (exactly +warningDistance → warning, beyond → ok)', () => {
-    expect(statusFor('min-base', lei(50), lei(50))).toBe('warning'); // exactly at +warningDistance
-    expect(statusFor('min-base', lei(49), lei(50))).toBe('warning'); // inside the band
-    expect(statusFor('min-base', lei(0), lei(50))).toBe('warning'); // exactly at threshold
-    expect(statusFor('min-base', lei(51), lei(50))).toBe('ok'); // just outside the band
+    expect(statusFor('min-base', lei(50), lei(50), 'tier_transition')).toBe('warning'); // exactly at +warningDistance
+    expect(statusFor('min-base', lei(49), lei(50), 'tier_transition')).toBe('warning'); // inside the band
+    expect(statusFor('min-base', lei(0), lei(50), 'tier_transition')).toBe('warning'); // exactly at threshold
+    expect(statusFor('min-base', lei(51), lei(50), 'tier_transition')).toBe('ok'); // just outside the band
   });
 
   it('statusFor: max-base warning band outer boundary (exactly -warningDistance → warning, beyond → ok)', () => {
-    expect(statusFor('max-base', lei(-50), lei(50))).toBe('warning'); // exactly at -warningDistance
-    expect(statusFor('max-base', lei(-49), lei(50))).toBe('warning'); // inside the band
-    expect(statusFor('max-base', lei(0), lei(50))).toBe('warning'); // exactly at threshold
-    expect(statusFor('max-base', lei(-51), lei(50))).toBe('ok'); // just outside the band
+    expect(statusFor('max-base', lei(-50), lei(50), 'over_limit')).toBe('warning'); // exactly at -warningDistance
+    expect(statusFor('max-base', lei(-49), lei(50), 'over_limit')).toBe('warning'); // inside the band
+    expect(statusFor('max-base', lei(0), lei(50), 'over_limit')).toBe('warning'); // exactly at threshold
+    expect(statusFor('max-base', lei(-51), lei(50), 'over_limit')).toBe('ok'); // just outside the band
   });
 
   it('statusFor: registration warning band (negative distance within the band → warning, beyond → ok)', () => {
-    expect(statusFor('registration', lei(-50), lei(50))).toBe('warning'); // exactly at -warningDistance
-    expect(statusFor('registration', lei(-49), lei(50))).toBe('warning'); // inside the band
-    expect(statusFor('registration', lei(-51), lei(50))).toBe('ok'); // just outside the band
+    expect(statusFor('registration', lei(-50), lei(50), 'registration')).toBe('warning'); // exactly at -warningDistance
+    expect(statusFor('registration', lei(-49), lei(50), 'registration')).toBe('warning'); // inside the band
+    expect(statusFor('registration', lei(-51), lei(50), 'registration')).toBe('ok'); // just outside the band
   });
 
-  it('breachMeaningFor: income returns the tax obligation message', () => {
-    expect(breachMeaningFor('income')).toBe(
-      'Peste pragul de venit — se declanșează obligația fiscală suplimentară',
-    );
+  it('engagedSide names the side of the level where the consequence applies', () => {
+    // A floor is engaged BELOW it; a cap or a duty level is engaged AT/ABOVE it. Replaces the
+    // `breachMeaningFor('income')` assertion that pinned a string no spec ever rendered.
+    expect(engagedSide('min-base', lei(-1))).toBe(true);
+    expect(engagedSide('min-base', lei(0))).toBe(false);
+    expect(engagedSide('max-base', lei(1))).toBe(true);
+    expect(engagedSide('max-base', lei(0))).toBe(false);
+    expect(engagedSide('income', lei(1))).toBe(true);
+    expect(engagedSide('income', lei(0))).toBe(false); // reaching a cap exactly is not exceeding it
+    expect(engagedSide('registration', lei(0))).toBe(true);
+    expect(engagedSide('tier-floor', lei(0))).toBe(true);
+  });
+
+  it('the kind union is exactly the four TASK 4 members, and every spec declares one', () => {
+    const kinds: ThresholdKind[] = ['registration', 'tier_transition', 'over_limit', 'informational'];
+    expect(kinds).toEqual(['registration', 'tier_transition', 'over_limit', 'informational']);
+    for (const spec of THRESHOLD_SPECS) {
+      expect(kinds, spec.thresholdId).toContain(spec.kind);
+    }
+    // The shipped mapping: the three contribution levels are ladder rungs, the CASS ceiling is a cap,
+    // the VAT plafon is a registration duty.
+    expect(THRESHOLD_SPECS.map((s) => `${s.thresholdId}:${s.kind}`).sort()).toEqual([
+      'CASS_MAX_BASE:over_limit',
+      'CASS_MIN_BASE:tier_transition',
+      'CAS_MIN_BASE:tier_transition',
+      'CAS_TIER2_FLOOR:tier_transition',
+      'VAT_REGISTRATION:registration',
+    ]);
   });
 
   it('income has no fiscal rule spec (conceptual completeness only)', () => {
     const result = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, QUERY);
     expect(result.every((t) => t.type !== 'income')).toBe(true);
+  });
+});
+
+describe('TASK 4 — severity, applicability and the measured basis', () => {
+  const specOf = (id: string) => THRESHOLD_SPECS.find((s) => s.thresholdId === id)!;
+  const rowsFor = (profile: PfaProfile | undefined, netIncome: Bani, extra: Partial<ThresholdQuery> = {}) =>
+    computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, {
+      ...QUERY,
+      bases: allBases(netIncome),
+      profile,
+      ...extra,
+    });
+
+  it('severity never reads the legal kind: identical facts give one severity, and no kind can even be passed', () => {
+    // The independence is structural: `severityFor`'s parameter has no `kind` field, so a caller
+    // CANNOT make a row urgent by pointing at its legal family. The line below would not compile with
+    // a `kind` added, which is the guarantee the acceptance criterion asks for.
+    const facts = { applicability: 'applicable' as const, status: 'warning' as const, distance: lei(-100), warningDistance: lei(500) };
+    const kinds: ThresholdKind[] = ['registration', 'tier_transition', 'over_limit', 'informational'];
+    const severities = kinds.map(() => severityFor(facts));
+    expect(new Set(severities).size).toBe(1);
+    expect(severities[0]).toBe('medium');
+    expect(Object.keys(facts).sort()).toEqual(['applicability', 'distance', 'status', 'warningDistance']);
+
+    // And the same kind at different distances gives DIFFERENT severities: urgency tracks the
+    // measurement, not the legal label.
+    expect(severityFor({ applicability: 'applicable', status: 'ok', distance: lei(-10), warningDistance: lei(500) })).toBe('low');
+    expect(severityFor({ applicability: 'applicable', status: 'ok', distance: lei(-99999), warningDistance: lei(500) })).toBe('none');
+    expect(severityFor({ applicability: 'applicable', status: 'breached', distance: lei(1), warningDistance: lei(500) })).toBe('high');
+  });
+
+  it('a legally non-breached row can still carry severity, and a breached one can be demoted', () => {
+    // `review_required` is not a breach of anything, yet the user has work to do: severity medium.
+    expect(severityFor({ applicability: 'applicable', status: 'review_required', distance: lei(0), warningDistance: lei(500) })).toBe('medium');
+    // A crossing whose applicability the profile never established is reported, not shouted about.
+    expect(severityFor({ applicability: 'unknown', status: 'breached', distance: lei(1), warningDistance: lei(500) })).toBe('medium');
+    expect(severityFor({ applicability: 'applicable', status: 'breached', distance: lei(1), warningDistance: lei(500) })).toBe('high');
+  });
+
+  it('an inapplicable row carries severity none whatever its status says', () => {
+    for (const status of ['ok', 'warning', 'breached', 'review_required'] as const) {
+      expect(
+        severityFor({ applicability: 'not_applicable', status, distance: lei(10), warningDistance: lei(500) }),
+        `status ${status}`,
+      ).toBe('none');
+    }
+  });
+
+  it('a pensioner profile makes both CAS rows not applicable, with the art. 150 alin. (1) reason', () => {
+    const rows = rowsFor({ ...APPLICABLE_PROFILE, pensionStatus: 'da' }, lei(100000));
+    for (const id of ['CAS_MIN_BASE', 'CAS_TIER2_FLOOR']) {
+      const row = byId(rows, id);
+      expect(row.applicability, id).toBe('not_applicable');
+      expect(row.applicabilityReason ?? '', id).toContain('art. 150 alin. (1)');
+      expect(row.severity, id).toBe('none');
+      // The row is still measured and still shown — it just cannot render as a breach.
+      expect(row.currentValue, id).toBe(lei(100000));
+    }
+  });
+
+  it('a zero net income makes both CASS rows not applicable (art. 174 alin. (2))', () => {
+    const rows = rowsFor(APPLICABLE_PROFILE, lei(0));
+    for (const id of ['CASS_MIN_BASE', 'CASS_MAX_BASE']) {
+      const row = byId(rows, id);
+      expect(row.applicability, id).toBe('not_applicable');
+      expect(row.applicabilityReason ?? '', id).toContain('art. 174 alin. (2)');
+      expect(row.severity, id).toBe('none');
+      expect(row.status, id).not.toBe('breached');
+    }
+  });
+
+  it('a pensioner removes the CASS 6 SM top-up row but keeps the CASS cap row applicable', () => {
+    // CF art. 174 alin. (7) lit. c) removes ONLY the art. 174 alin. (6) difference; 10 % × net is still
+    // owed, so the 72-SM cap row still applies. Never mirror the CAS pensioner exemption into CASS.
+    const rows = rowsFor({ ...APPLICABLE_PROFILE, pensionStatus: 'da' }, lei(10000));
+    expect(byId(rows, 'CASS_MIN_BASE').applicability).toBe('not_applicable');
+    expect(byId(rows, 'CASS_MIN_BASE').applicabilityReason ?? '').toContain('art. 174 alin. (7) lit. c)');
+    expect(byId(rows, 'CASS_MAX_BASE').applicability).toBe('applicable');
+  });
+
+  it('the art. 174 alin. (7) lit. a) salary relief: decided with the amount, unknown without it', () => {
+    const cassMin = (profile: PfaProfile) => byId(rowsFor(profile, lei(10000)), 'CASS_MIN_BASE');
+    // Salary at least 6 SM (the row's own threshold, 24.300 lei) → the top-up row does not apply.
+    const relieved = cassMin({ ...APPLICABLE_PROFILE, salaryStatus: 'da', salaryIncomeLei: lei(30000) });
+    expect(relieved.applicability).toBe('not_applicable');
+    expect(relieved.applicabilityReason ?? '').toContain('art. 174 alin. (7) lit. a)');
+    // Salary declared but the amount missing → the app has no input for the comparison and says so.
+    expect(cassMin({ ...APPLICABLE_PROFILE, salaryStatus: 'da' }).applicability).toBe('unknown');
+    // Salary below 6 SM → the condition is not met and the top-up stands.
+    expect(cassMin({ ...APPLICABLE_PROFILE, salaryStatus: 'da', salaryIncomeLei: lei(20000) }).applicability).toBe('applicable');
+  });
+
+  it('an unverified CASS status flag leaves the CASS rows unknown, never assumed applicable (B-19)', () => {
+    for (const flag of ['exempt', 'neplata'] as const) {
+      const rows = rowsFor({ ...APPLICABLE_PROFILE, socialInsuranceStatus: flag }, lei(100000));
+      for (const id of ['CASS_MIN_BASE', 'CASS_MAX_BASE']) {
+        expect(byId(rows, id).applicability, `${id} / ${flag}`).toBe('unknown');
+        expect(byId(rows, id).applicabilityReason ?? '', `${id} / ${flag}`).toContain('art. 154 alin. (1)');
+      }
+    }
+  });
+
+  it('VAT_REGISTRATION applies only while the profile is inside the VAT scutire (art. 310 alin. (1))', () => {
+    const registered = byId(rowsFor({ ...APPLICABLE_PROFILE, vatExempt: false }, lei(100000)), 'VAT_REGISTRATION');
+    expect(registered.applicability).toBe('not_applicable');
+    expect(registered.applicabilityReason ?? '').toContain('art. 310 alin. (1)');
+    expect(registered.severity).toBe('none');
+    // The row is still measured — the plafon and the YTD turnover stay visible.
+    expect(registered.currentValue).toBe(lei(100000));
+
+    const exempt = byId(rowsFor(APPLICABLE_PROFILE, lei(100000)), 'VAT_REGISTRATION');
+    expect(exempt.applicability).toBe('applicable');
+  });
+
+  it('an inapplicable row cannot render as a breach even when its level is engaged', () => {
+    // The VAT profile is already registered (row not applicable) while the turnover is far above the
+    // plafon: the status may say the level was passed, the severity must still be none.
+    const row = byId(rowsFor({ ...APPLICABLE_PROFILE, vatExempt: false }, lei(900000)), 'VAT_REGISTRATION');
+    expect(row.engaged).toBe(true);
+    expect(row.applicability).toBe('not_applicable');
+    expect(row.severity).toBe('none');
+  });
+
+  it('no profile supplied → every row is unknown, never assumed applicable', () => {
+    const rows = rowsFor(undefined, lei(100000));
+    for (const t of rows) {
+      expect(t.applicability, t.thresholdId).toBe('unknown');
+      expect(t.applicabilityReason ?? '', t.thresholdId).toBeTruthy();
+      // Unknown is never allowed to escalate to the top of the severity scale.
+      expect(t.severity, t.thresholdId).not.toBe('high');
+    }
+  });
+
+  it('applicabilityFor is total over the shipped specs: every spec names a test that answers', () => {
+    for (const spec of THRESHOLD_SPECS) {
+      const decision = applicabilityFor(spec, APPLICABLE_PROFILE, lei(100000), lei(24300));
+      expect(['applicable', 'not_applicable', 'unknown'], spec.thresholdId).toContain(decision.applicability);
+      if (decision.applicability !== 'applicable') expect(decision.reason, spec.thresholdId).toBeTruthy();
+    }
+  });
+
+  it('each row states which basis it measured: annual for contributions, YTD for the VAT plafon', () => {
+    const rows = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, {
+      ...QUERY,
+      measuredBasis: { 'net-income': 'annual-projected', 'revenue-excl-vat': 'ytd-turnover' },
+    });
+    for (const id of ['CAS_MIN_BASE', 'CAS_TIER2_FLOOR', 'CASS_MIN_BASE', 'CASS_MAX_BASE']) {
+      expect(byId(rows, id).measuredBasis, id).toBe('annual-projected');
+    }
+    expect(byId(rows, 'VAT_REGISTRATION').measuredBasis).toBe('ytd-turnover');
+  });
+
+  it('an unmeasured row says it was unmeasured, and claims no legal consequence', () => {
+    const rows = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, { ...QUERY, bases: {} });
+    for (const t of rows) {
+      expect(t.measuredBasis, t.thresholdId).toBe('unmeasured');
+      expect(t.engaged, t.thresholdId).toBe(false);
+      expect(t.consequence, t.thresholdId).toContain('nu poate fi stabilit');
+      expect(t.severity, t.thresholdId).toBe('medium');
+    }
+  });
+
+  it('every SM-multiple threshold carries its computed-amount label, and the label verifies', () => {
+    const rows = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, QUERY);
+    for (const spec of THRESHOLD_SPECS) {
+      const row = byId(rows, spec.thresholdId);
+      if (spec.statutorySmMultiplier === undefined) {
+        // CF art. 310 alin. (1) states 395.000 lei itself: labelling it as computed would be false.
+        expect(row.computedFrom, spec.thresholdId).toBeUndefined();
+        continue;
+      }
+      // The lei amount is labelled as computed, with the SM value and the act that set it.
+      expect(row.computedFrom, spec.thresholdId).toBeDefined();
+      expect(row.computedFrom?.multiplier, spec.thresholdId).toBe(spec.statutorySmMultiplier);
+      expect(row.computedFrom?.smValueBani, spec.thresholdId).toBe(lei(4050));
+      expect(row.computedFrom?.smAct, spec.thresholdId).toBe('HG 1506/2024');
+      // Drift guard: the label is only attached when the arithmetic checks out, so a parameter that
+      // stops being a multiple of the package SM would fail here instead of silently losing the label.
+      expect(row.computedFrom!.multiplier * row.computedFrom!.smValueBani, spec.thresholdId).toBe(row.thresholdValue);
+      // And the law is stated as a multiplier, never as a lei amount (research 24, must-not-state 6).
+      expect(row.computedFrom?.note, spec.thresholdId).toContain('nu în lei');
+      expect(row.computedFrom?.note, spec.thresholdId).toContain('HG 146/2026');
+    }
+  });
+
+  it('the 10 % warning distance stays application policy and never acquires a citation', () => {
+    const rows = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, QUERY);
+    for (const t of rows) {
+      // The band is derived from the threshold by the app's own rule, not read from any rule parameter.
+      expect(t.warningDistance, t.thresholdId).toBe(Math.floor(t.thresholdValue / 10) as Bani);
+      // No sentence the user reads presents the band as a legal distance, and the row carries no
+      // source/citation attached to it — only `thresholdValue` has a `source`.
+      expect(t.consequence, t.thresholdId).not.toMatch(/band[ăa] de avertizare/i);
+      expect(t.applicabilityReason ?? '', t.thresholdId).not.toMatch(/band[ăa] de avertizare/i);
+      const citedFields = Object.keys(t).filter((k) => /source|citation|article/i.test(k));
+      expect(citedFields, t.thresholdId).toEqual(['source']);
+      expect(Object.keys(t), t.thresholdId).not.toContain('warningSource');
+    }
+  });
+
+  it('every spec names an applicability test, so no row silently defaults to applicable', () => {
+    for (const spec of THRESHOLD_SPECS) {
+      expect(['cas-art-150-1', 'cass-art-174-6', 'cass-art-170-1', 'vat-art-310'], spec.thresholdId).toContain(
+        spec.applicabilityTest,
+      );
+    }
+    expect(specOf('CASS_MIN_BASE').applicabilityTest).toBe('cass-art-174-6');
+    expect(specOf('CASS_MAX_BASE').applicabilityTest).toBe('cass-art-170-1');
   });
 });
 

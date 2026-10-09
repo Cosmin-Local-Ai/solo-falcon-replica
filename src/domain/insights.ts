@@ -1,4 +1,5 @@
 import type { DashboardSnapshot, ExcludedFiscalDate, Threshold } from './aggregation';
+import type { ThresholdKind, ThresholdSeverity } from './thresholds';
 import type { TaxEstimateResult } from './tax';
 import type { Expense } from '../data/types';
 import { formatRoCalendarDate } from './date';
@@ -106,7 +107,7 @@ function severityRank(sev: Insight['severity']): number {
 // ── Threshold alerts ──────────────────────────────────────
 interface ThresholdAlert {
   id: string;
-  severity: 'danger' | 'warning';
+  severity: Insight['severity'];
   title: string;
   description: string;
   action: string;
@@ -114,46 +115,65 @@ interface ThresholdAlert {
   ratio: number;
 }
 
+/**
+ * TASK 4 — the severity is DECIDED in the domain (`thresholds.ts` `severityFor`, which never reads
+ * the legal kind) and only translated here. This file used to invent it from `breached` + a private
+ * `ratio >= 0.8` band, which was a second, uncited copy of the same application policy and made the
+ * two surfaces disagree about how urgent a row looked.
+ */
+function insightSeverity(severity: ThresholdSeverity): Insight['severity'] {
+  if (severity === 'high') return 'danger';
+  if (severity === 'medium') return 'warning';
+  return 'info';
+}
+
+/**
+ * TASK 4 — the title says what kind of level was reached, because "limita fiscală depășită" was false
+ * for the contribution floors: CF art. 148 alin. (1) makes 12 SM the condition for the CAS obligation
+ * to exist, and below it the consequence is `nu datorează contribuția` (research 24, "What the app
+ * must not state" items 1-2 and 7). No CF citation is written here — the row carries its own.
+ */
+function thresholdTitle(kind: ThresholdKind, engaged: boolean, label: string): string {
+  if (!engaged) return `Aproape de prag: ${label}`;
+  switch (kind) {
+    case 'registration':
+      return `Prag de înregistrare depășit: ${label}`;
+    case 'over_limit':
+      return `Plafon depășit: ${label}`;
+    case 'tier_transition':
+      return `Nivel de calcul modificat: ${label}`;
+    case 'informational':
+      return `Prag de referință: ${label}`;
+  }
+}
+
+function thresholdAction(kind: ThresholdKind): string {
+  switch (kind) {
+    case 'registration':
+      return 'Verifică cifra de afaceri și termenul de înregistrare în scopuri de TVA.';
+    case 'over_limit':
+      return 'Verifică baza de calcul: contribuția se calculează la plafon.';
+    case 'tier_transition':
+      return 'Verifică venitul net anual: baza de calcul se modifică.';
+    case 'informational':
+      return 'Vezi detaliile pragului.';
+  }
+}
+
 function makeThresholdAlert(t: Threshold): ThresholdAlert {
   const label = thresholdLabel(t.label);
-  const pct = Math.round(t.ratio * 100);
-  if (t.type === 'tier-floor') {
-    // A tier floor is NOT a limit. CF art. 148 alin. (2) lit. b) raises the MINIMUM CAS base to 24 SM
-    // once realised net income reaches that level, so "valoarea curentă a depășit limita fiscală"
-    // would state the opposite of the law. Severity is `warning`, not `danger`: nothing went wrong —
-    // the contribution is simply computed on a higher floor. No amounts are written here; they come
-    // from the CAS rule's `tier2_base` / `tier2_cas` parameters.
-    return {
-      id: `threshold-${t.id}`,
-      severity: 'warning',
-      title: `Treaptă de calcul depășită: ${label}`,
-      description:
-        t.breached === true
-          ? 'Baza minimă de calcul pentru CAS crește la nivelul de 24 SM (CF art. 148 alin. (2) lit. b)).'
-          : `Venitul net este la ${pct}% din pragul de 24 SM care dublează baza minimă de calcul pentru CAS.`,
-      action: 'Verifică venitul net: CAS se calculează la noua bază minimă.',
-      affectedTax: t.affectedTax ?? '',
-      ratio: t.ratio,
-    };
-  }
-  if (t.breached === true) {
-    return {
-      id: `threshold-${t.id}`,
-      severity: 'danger',
-      title: `Prag depășit: ${label}`,
-      description: `Valoarea curentă a depășit limita fiscală (${pct}%).`,
-      action: `Verifică ${label} și corectează datele.`,
-      affectedTax: t.affectedTax ?? '',
-      ratio: t.ratio,
-    };
-  }
+  const unmeasured = t.current === null;
   return {
     id: `threshold-${t.id}`,
-    severity: 'warning',
-    title: `Aproape de prag: ${label}`,
-    description: `Valoarea curentă este la ${pct}% din limita fiscală.`,
-    action: `Monitorizează ${label} pentru a evita depășirea.`,
+    severity: insightSeverity(t.severity),
+    title: unmeasured ? `Prag de verificat: ${label}` : thresholdTitle(t.kind, t.engaged, label),
+    // The description is the row's own factual, cited consequence. This is the second place that
+    // used to re-write the same CF article by hand; there is now exactly one.
+    description: unmeasured ? (t.reviewReason ?? t.consequence) : t.consequence,
+    action: unmeasured ? 'Completează baza de calcul lipsă.' : thresholdAction(t.kind),
     affectedTax: t.affectedTax ?? '',
+    // Kept for the CAS/CASS tie-break only. It is no longer a warning threshold: the proximity band
+    // is the domain's 10 % presentation policy, stated once in `thresholds.ts`.
     ratio: t.ratio,
   };
 }
@@ -186,10 +206,12 @@ export function getInsights(input: InsightInput): Insight[] {
   const { snapshot, tax } = input;
   const insights: Insight[] = [];
 
-  // 1. Threshold alerts — collect ALL (breached → danger, ratio >= 0.8 → warning),
-  //    then collapse CASS/CAS into at most one canonical alert.
+  // 1. Threshold alerts — the domain already decided which rows deserve attention at all
+  //    (`severity: 'none'` covers an inapplicable row and a row far from its level), so this layer
+  //    filters on that decision instead of re-deriving a band of its own. CASS/CAS still collapse to
+  //    at most one canonical alert.
   const thresholdAlerts = snapshot.thresholds
-    .filter((t) => t.breached === true || (!t.breached && t.ratio >= 0.8))
+    .filter((t) => t.severity !== 'none')
     .map(makeThresholdAlert);
 
   const cassCas = thresholdAlerts.filter((a) => a.affectedTax === 'cass' || a.affectedTax === 'cas');

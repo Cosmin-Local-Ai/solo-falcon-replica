@@ -209,7 +209,7 @@ test.describe('Dashboard — section content (seed data)', () => {
     const thresholds = sectionWith(page, 'Praguri');
     await expect(thresholds.locator('.item-row')).toHaveCount(5);
 
-    // CAS: below the tier-1 floor of 12 SM → breached. There is no 'Prag maxim CAS' row:
+    // CAS: below the tier-1 floor of 12 SM. There is no 'Prag maxim CAS' row:
     // CF art. 148 alin. (2) sets FLOORS ("nu poate fi mai mic decât"), never a ceiling, so a
     // CAS maximum-base row asserted a cap that does not exist (docs/ai/phases/03_cas.md).
     // (exact: true — 'Prag minim CAS' is a substring of 'Prag minim CASS').
@@ -222,7 +222,7 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(thresholds.getByText('Treaptă de calcul CAS', { exact: true })).toBeVisible();
     await expect(thresholds.getByText('Prag: 97.200,00 lei')).toBeVisible();
 
-    // CASS: below the minimum base (breached), within the maximum base.
+    // CASS: below the minimum base, within the maximum base.
     await expect(thresholds.getByText('Prag minim CASS', { exact: true })).toBeVisible();
     await expect(thresholds.getByText('Prag maxim CASS', { exact: true })).toBeVisible();
     await expect(thresholds.getByText('Prag: 24.300,00 lei')).toBeVisible();
@@ -246,10 +246,46 @@ test.describe('Dashboard — section content (seed data)', () => {
     // still correct — and still shown — as the "Venituri PFA (an)" cockpit card.)
     await expect(thresholds.getByText(/Curent: 9\.317,00 lei/)).toHaveCount(0);
 
-    // Status badges: 2 breached (min CAS, min CASS), 3 within limits (max CASS, the 24 SM step,
-    // which the seed is far below).
-    await expect(thresholds.getByText('Depășit', { exact: true })).toHaveCount(2);
+    // Status badges — TASK 4 re-pinned. Before: 2 × 'Depășit' (the two contribution FLOORS) and
+    // 3 × 'În limite'. Nothing in the Cod fiscal attaches an adverse consequence to a net income
+    // below 12 SM (docs/ai/research/24_cas_floor_consequence_2026.md), so a floor row can no longer
+    // render as a breach: now 0 × 'Depășit', 2 × 'Atenție' (the two floors, whose level IS in play)
+    // and 3 × 'În limite' (the 24 SM step, the 72 SM cap and the VAT plafon, all far from their level).
+    await expect(thresholds.getByText('Depășit', { exact: true })).toHaveCount(0);
+    await expect(thresholds.getByText('Atenție', { exact: true })).toHaveCount(2);
     await expect(thresholds.getByText('În limite', { exact: true })).toHaveCount(3);
+
+    // TASK 4: the below-floor CAS row states the consequence the law does provide, with its citation,
+    // instead of the deleted 'Sub baza minimă — dezcalificare din regim'.
+    await expect(
+      thresholds.getByText(/nu se datorează contribuția de asigurări sociale pentru acest an/),
+    ).toBeVisible();
+    await expect(thresholds.getByText(/art\. 148 alin\. \(1\) și \(4\) din Codul fiscal/)).toBeVisible();
+    // The two deleted sentences, and the words they were built from, must not come back.
+    await expect(thresholds.getByText(/dezcalificare/)).toHaveCount(0);
+    await expect(thresholds.getByText(/schimbare de regim/)).toHaveCount(0);
+    // The 'La depășire:' prefix presumed a breach; the consequence is now its own sentence.
+    await expect(thresholds.getByText(/La depășire:/)).toHaveCount(0);
+
+    // TASK 4: a lei amount the law states as an SM multiple is labelled as computed, citing the SM
+    // value and the act that set it. CF art. 148 never writes 48.600 lei.
+    await expect(
+      thresholds.getByText('Sumă calculată de aplicație: 12 × salariul minim de'),
+    ).toBeVisible();
+    // Four SM-multiple rows (12 SM, 24 SM, 6 SM, 72 SM) each carry the same anchor: 4.050 lei,
+    // HG 1506/2024. The 395.000-lei VAT row does not — that figure is the statute's own.
+    await expect(thresholds.getByText('4.050,00 lei')).toHaveCount(4);
+    await expect(thresholds.getByText(/HG 1506\/2024/)).toHaveCount(4);
+    await expect(thresholds.getByText(/HG 146\/2026/)).toHaveCount(4);
+
+    // TASK 4: each row says which quantity it measured — the annual projected VNA for the four
+    // contribution rows, year-to-date turnover for the VAT plafon. The asymmetry is deliberate.
+    await expect(thresholds.getByText(/Bază măsurată: venit net anual estimat pentru întreg anul/)).toHaveCount(4);
+    await expect(thresholds.getByText(/Bază măsurată: cifra de afaceri înregistrată de la începutul anului/)).toHaveCount(1);
+
+    // TASK 4: the seed profile already applies VAT (`vatExempt: false`), so the art. 310 alin. (1)
+    // registration test has been decided — the row renders as not applicable, not as a breach.
+    await expect(thresholds.getByText(/Nu se aplică:/)).toHaveCount(1);
   });
 
   // Phase 9b: exactly ONE upcoming deadline. The four quarterly/estimated event types were deleted
@@ -372,15 +408,24 @@ test.describe('Dashboard — section content (seed data)', () => {
     // estimate is computed.
     await expect(insights.getByText('Rezervă fiscală sub țintă')).toBeVisible();
 
-    // Phase 9 / B-20: the two contribution FLOORS (CAS_MIN_BASE, CASS_MIN_BASE) are breached —
-    // the seed's net income is far below both — and `breached` is now driven off the domain status,
-    // so they reach Observații as ONE canonical CASS/CAS alert (canonicalCassCas collapses them).
-    await expect(insights.getByText('Prag depășit:')).toHaveCount(1);
+    // TASK 4 re-pinned: the two contribution FLOORS (CAS_MIN_BASE, CASS_MIN_BASE) no longer reach
+    // Observații as `Prag depășit:` / `Urgent`. Being below a contribution floor is not a breach —
+    // CF art. 148 alin. (1) makes 12 SM the condition for the obligation to exist, and below it the
+    // consequence is `nu datorează contribuția` (docs/ai/research/24_cas_floor_consequence_2026.md).
+    // They still surface, as ONE canonical CASS/CAS alert (canonicalCassCas collapses them) worded as
+    // a changed calculation base, and the description is the row's own cited consequence.
+    await expect(insights.getByText('Prag depășit:')).toHaveCount(0);
+    await expect(insights.getByText('Nivel de calcul modificat:')).toHaveCount(1);
+    await expect(insights.getByText(/art\. 174 alin\. \(6\) coroborat cu art\. 170 alin\. \(1\)/)).toBeVisible();
+    await expect(insights.getByText(/limita fiscală/)).toHaveCount(0);
+    await expect(insights.getByText(/dezcalificare|schimbare de regim/)).toHaveCount(0);
 
-    // Severity badges: 1 Urgent (the collapsed CASS/CAS floor breach), 2 Atenție (completeness +
-    // reserve), 1 Info (tax). Phase 9b removed the 8 deadline alerts that used to dominate this list.
-    await expect(insights.getByText('Urgent', { exact: true })).toHaveCount(1);
-    await expect(insights.getByText('Atenție', { exact: true })).toHaveCount(2);
+    // Severity badges — TASK 4 re-pinned. Before: 1 Urgent + 2 Atenție + 1 Info. The floor rows are
+    // no longer `danger`, so: 0 Urgent, 3 Atenție (the collapsed CASS/CAS level change + completeness
+    // + reserve), 1 Info (tax). Severity is decided in `thresholds.ts` `severityFor`, which never
+    // reads the legal kind — it is not a relabelling of the status badge.
+    await expect(insights.getByText('Urgent', { exact: true })).toHaveCount(0);
+    await expect(insights.getByText('Atenție', { exact: true })).toHaveCount(3);
     await expect(insights.getByText('Info', { exact: true })).toHaveCount(1);
   });
 });

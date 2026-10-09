@@ -1,6 +1,7 @@
 import type { FiscalRule } from './fiscal/rules';
 import { selectApplicableRules } from './fiscal/select';
-import { lei, subBani, type Bani } from './money';
+import type { PfaProfile } from './models';
+import { formatBaniLei, lei, subBani, type Bani } from './money';
 
 /**
  * `tier-floor` is not a ceiling and not a disqualification — it is a **step in a ladder**.
@@ -49,6 +50,84 @@ export type FiscalBase =
  */
 export type ThresholdStatus = 'ok' | 'warning' | 'breached' | 'review_required';
 
+/**
+ * TASK 4 — what a crossing of this level MEANS in law. This is a different question from
+ * `ThresholdType`, which is the arithmetic shape of the comparison (`min-base` reads "below the
+ * number", `max-base` reads "above the number"). The arithmetic shape must never decide the legal
+ * consequence: that is what produced `breachMeaningFor`, whose two floor strings asserted a
+ * `dezcalificare din regim` and a `schimbare de regim` that no provision of the Cod fiscal creates
+ * (`docs/ai/research/24_cas_floor_consequence_2026.md`, "What the app must not state" items 1-4 —
+ * the word „decălificare" occurs zero times in the Cod fiscal).
+ *
+ * - `registration` — crossing the level triggers a registration duty (CF art. 310 alin. (1)).
+ *   This is the only shipped kind where `status: 'breached'` is a defensible word: the duty exists.
+ * - `tier_transition` — the level is a rung of a ladder: on one side of it one base applies, on the
+ *   other another (CF art. 148 alin. (1)-(2), art. 174 alin. (6)). **A `tier_transition` row can
+ *   never be `breached`**, in either direction. Below the CAS 12-SM level the consequence is
+ *   `nu datorează contribuția de asigurări sociale`, with an optional election under art. 148 alin. (4).
+ * - `over_limit` — the level is a statutory cap on the base (CF art. 170 alin. (1), 72 SM). Crossing
+ *   it caps the base; it is not an offence.
+ * - `informational` — the row states a fact with no duty attached. Never breached.
+ */
+export type ThresholdKind = 'registration' | 'tier_transition' | 'over_limit' | 'informational';
+
+/**
+ * TASK 4 — how much attention the row deserves from the user.
+ *
+ * This is deliberately a SEPARATE dimension from `ThresholdKind` and from `ThresholdStatus`:
+ * `severityFor` does not take the kind at all, so a row cannot become urgent merely because of
+ * which legal family it belongs to, and a legally load-bearing row is not automatically urgent.
+ * Severity is a function of applicability, status and distance only.
+ */
+export type ThresholdSeverity = 'none' | 'low' | 'medium' | 'high';
+
+/**
+ * TASK 4 — does this threshold apply to THIS taxpayer at all? Applicability is computed from the
+ * profile / fiscal context (`applicabilityFor`), never assumed. A row that does not apply renders as
+ * not applicable and carries severity `none`; it cannot render as a breach.
+ *
+ * `unknown` is a real third state, not a synonym for `applicable`: it means the fact the rule needs
+ * is not in the profile (no profile supplied, no salary amount for CF art. 174 alin. (7) lit. a),
+ * a CASS status flag whose legal basis was never verified — B-19). The app must not decide an
+ * exception it does not have the input for.
+ */
+export type Applicability = 'applicable' | 'not_applicable' | 'unknown';
+
+/**
+ * TASK 4 — which quantity the row actually measured. TASK 1 left a deliberate asymmetry: the four
+ * contribution rows are measured against an ANNUAL figure (projected, or actuals when the projection
+ * model could not run) while `VAT_REGISTRATION` is measured against YEAR-TO-DATE turnover. That split
+ * is correct — CF art. 148 / art. 170 measure an annual value, art. 310 alin. (1) measures the
+ * turnover realised in the year so far — so it is labelled here instead of being quietly unified.
+ */
+export type MeasuredBasis =
+  | 'annual-projected'
+  | 'annual-actual'
+  | 'ytd-turnover'
+  | 'unattributed'
+  | 'unmeasured';
+
+/**
+ * TASK 4 — a lei amount that the law does NOT state in lei.
+ *
+ * CF art. 148 / art. 170 / art. 174 state multipliers of „salariul minim", never a lei figure, and
+ * research 24 ("What the app must not state" item 6) forbids presenting a single lei amount as the
+ * statutory FY2026 threshold: ANAF's 48.600 / 97.200 lei use the SM in force at 1 ianuarie 2026
+ * (4.050 lei, HG 1.506/2024) while HG 146/2026 raised SM to 4.325 lei from 1 iulie 2026, and art. 148
+ * carries no reference-date clause. So the lei figure is rendered as COMPUTED, with the SM value and
+ * its act cited, and the unverified vintage stated.
+ */
+export interface ComputedLeiAmount {
+  /** The multiplier the law states (6 / 12 / 24 / 72 salarii minime brute). */
+  multiplier: number;
+  /** The salariul minim value the app multiplied, in bani. */
+  smValueBani: Bani;
+  /** The act that set that SM value, e.g. 'HG 1506/2024'. */
+  smAct: string;
+  /** Factual note: the law states a multiplier, and which SM vintage governs is unverified. */
+  note: string;
+}
+
 /** Every amount a caller can supply, keyed by the base it represents. Absent = unknown. */
 export interface ThresholdBases {
   // Phase 10: integer bani. A threshold comparison is a comparison of amounts, so the unit has to be the
@@ -81,15 +160,34 @@ export interface FiscalThreshold {
   status: ThresholdStatus;
   /** The fiscal base this threshold was evaluated against. */
   fiscalBase: FiscalBase;
-  /**
-   * Human-readable explanation of what a breach means for this threshold type.
-   * - `min-base`: below the minimum base → disqualification from the regime.
-   * - `max-base`: above the maximum base → regime change.
-   * - `registration`: at/above the threshold → registration obligation triggered.
-   * - `income`: above the income threshold → additional tax obligation triggered.
-   * - `tier-floor`: at/above the tier → the minimum contribution base steps up a tier.
+  /** TASK 4 — the legal kind of this row: what a crossing means. Decides whether `status`
+   * may ever be `breached` (`statusFor`) and how an alert is worded. Never derived from `type`.
    */
-  breachMeaning: string;
+  kind: ThresholdKind;
+  /**
+   * TASK 4 — is the measured value on the side of the level where the row's special consequence
+   * applies (`engagedSide`)? `false` on an unmeasured row: there is no side to speak of.
+   */
+  engaged: boolean;
+  /**
+   * TASK 4 — how much user attention the row deserves. Computed by `severityFor`, which does not
+   * read `kind`: legal kind and user severity are independent dimensions.
+   */
+  severity: ThresholdSeverity;
+  /** TASK 4 — whether this threshold applies to this profile at all (`applicabilityFor`). */
+  applicability: Applicability;
+  /** Present whenever `applicability !== 'applicable'`: why, with the provision it rests on. */
+  applicabilityReason?: string;
+  /** TASK 4 — which quantity was measured: annual projected/actual VNA, or YTD turnover. */
+  measuredBasis: MeasuredBasis;
+  /**
+   * TASK 4 — the factual, cited consequence of where the measured value sits. Replaces
+   * `breachMeaning`, which asserted a regime change no provision creates. It states what the law
+   * provides, not what the app fears.
+   */
+  consequence: string;
+  /** Present when the threshold is an SM multiple: the lei amount is computed, not statutory. */
+  computedFrom?: ComputedLeiAmount;
   /** Present only when `status === 'review_required'`: why no verdict could be given. */
   reviewReason?: string;
 }
@@ -104,6 +202,19 @@ export interface ThresholdQuery {
    */
   bases: ThresholdBases;
   ruleRelease: string; // releaseId
+  /**
+   * TASK 4 — the profile the applicability decision is derived from. Optional in the TYPE because
+   * the domain function is also called with hand-built queries; omitting it yields
+   * `applicability: 'unknown'`, never `'applicable'`. The production caller (`data/dashboard.ts
+   * getThresholdStatuses`) always supplies it, and `dashboard.test.ts` pins that no production row
+   * comes back `unknown`.
+   */
+  profile?: PfaProfile;
+  /**
+   * TASK 4 — how each supplied amount was produced (annual projected vs actuals vs YTD). Absent for
+   * a supplied base renders as `unattributed`; a base that was never supplied renders as `unmeasured`.
+   */
+  measuredBasis?: Partial<Record<FiscalBase, MeasuredBasis>>;
 }
 
 export interface ThresholdSpec {
@@ -124,6 +235,38 @@ export interface ThresholdSpec {
    * `thresholds.test.ts` so a row can never travel without the article that names its base.
    */
   baseSourceArticle: string;
+  /** TASK 4 — what a crossing of this level means in law. See `ThresholdKind`. */
+  kind: ThresholdKind;
+  /**
+   * TASK 4 — which applicability rule `applicabilityFor` runs for this row. A spec must name one:
+   * an unlisted test is a bug, not a default to `applicable`.
+   */
+  applicabilityTest: 'cas-art-150-1' | 'cass-art-174-6' | 'cass-art-170-1' | 'vat-art-310';
+  /**
+   * TASK 4 — the multiplier of „salariul minim" the LAW states for this level, when the law states
+   * one as a multiplier. Present ⇒ the lei amount is rendered as computed (`ComputedLeiAmount`);
+   * absent ⇒ the lei figure is the statute's own number (CF art. 310 alin. (1): 395.000 lei).
+   */
+  statutorySmMultiplier?: number;
+  /** TASK 4 — what the law provides while the measured value is at or above the level. */
+  consequenceAtOrAbove: string;
+  /** TASK 4 — what the law provides while the measured value is below the level. */
+  consequenceBelow: string;
+}
+
+/**
+ * TASK 4 — the side of the level on which the row's special consequence applies. Pure arithmetic:
+ * a floor is engaged BELOW it, a cap or a duty level is engaged AT/ABOVE it. `statusFor` uses it to
+ * decide whether the level is in play; the KIND then decides whether that may be called a breach.
+ */
+export function engagedSide(type: ThresholdType, distance: Bani): boolean {
+  // A `min-base` level is engaged when the measured value fell under it; a duty level or a ladder rung
+  // is engaged at or above it (CF art. 148 alin. (2) lit. b) applies once income is "cel puțin egal cu"
+  // 24 SM, and art. 310 alin. (1) at the plafon itself). `max-base` and `income` keep their strict `>`:
+  // reaching a cap exactly is not exceeding it.
+  if (type === 'min-base') return distance < 0;
+  if (type === 'max-base' || type === 'income') return distance > 0;
+  return distance >= 0;
 }
 
 /**
@@ -145,6 +288,18 @@ export const THRESHOLD_SPECS: readonly ThresholdSpec[] = [
     // measures the 12 SM / 24 SM floors against "venitul net anual realizat".
     requiredFiscalBase: 'net-income',
     baseSourceArticle: 'Cod fiscal art. 148 alin. (1)-(2) lit. a) (baza: venitul net anual realizat)',
+    // TASK 4: 12 SM is the ENTRY threshold for the CAS obligation and the tier-1 MINIMUM base. Below
+    // it the law's only consequence is `nu datorează contribuția de asigurări sociale`, with an
+    // optional election (art. 148 alin. (4)). It is not a breach, not a rectification, not a penalty
+    // and not a regime change — research 24 searched the whole Cod fiscal and found zero occurrences
+    // of „decălificare" and no provision attaching any consequence to a below-12-SM income.
+    kind: 'tier_transition',
+    applicabilityTest: 'cas-art-150-1',
+    statutorySmMultiplier: 12,
+    consequenceBelow:
+      'Venitul net anual din activități independente este sub pragul de 12 salarii minime brute pe țară; în consecință, nu se datorează contribuția de asigurări sociale pentru acest an (art. 148 alin. (1) și (4) din Codul fiscal). Opțiunea pentru plata CAS este disponibilă, la un venit ales de cel puțin 12 salarii minime brute.',
+    consequenceAtOrAbove:
+      'Venitul net anual din activități independente este cel puțin egal cu 12 salarii minime brute pe țară; se datorează contribuția de asigurări sociale, la o bază de calcul nu mai mică de 12 salarii minime brute (art. 148 alin. (1) și (2) lit. a) din Codul fiscal).',
   },
   // CAS_MAX_BASE was removed in Phase 3 and is NOT restored. CF art. 148 alin. (2) sets FLOORS —
   // "venitul ales de contribuabil, care nu poate fi mai mic decât" 12 SM / 24 SM — and contains no
@@ -166,6 +321,15 @@ export const THRESHOLD_SPECS: readonly ThresholdSpec[] = [
     requiredFiscalBase: 'net-income',
     baseSourceArticle:
       'Cod fiscal art. 148 alin. (2) lit. b) (baza: venitul net anual realizat cel puțin egal cu 24 SM)',
+    // A rung of the same ladder, so the same kind: crossing it raises the MINIMUM base, it does not
+    // exceed a limit. `statusFor` refuses to call it `breached` for exactly this reason.
+    kind: 'tier_transition',
+    applicabilityTest: 'cas-art-150-1',
+    statutorySmMultiplier: 24,
+    consequenceBelow:
+      'Venitul net anual este sub 24 de salarii minime brute; baza minimă de calcul pentru CAS rămâne 12 salarii minime brute (art. 148 alin. (2) lit. a) din Codul fiscal). Acest prag nu este un plafon.',
+    consequenceAtOrAbove:
+      'Venitul net anual este cel puțin egal cu 24 de salarii minime brute; baza minimă de calcul pentru CAS crește de la 12 SM la 24 SM (art. 148 alin. (2) lit. b) din Codul fiscal). Nu este un plafon.',
   },
   {
     thresholdId: 'CASS_MIN_BASE',
@@ -178,6 +342,17 @@ export const THRESHOLD_SPECS: readonly ThresholdSpec[] = [
     // art. 174 alin. (2) switches CASS off when VNA is zero — both measure the CASS base.
     requiredFiscalBase: 'net-income',
     baseSourceArticle: 'Cod fiscal art. 174 alin. (6) coroborat cu art. 170 alin. (1) (baza: venitul net anual)',
+    // CF art. 174 alin. (6): below a 6-SM base the taxpayer datorează „o diferență de contribuție” up
+    // to that base. That is an AMOUNT OWED, not a violation — so this is a tier transition too, and
+    // `statusFor` will not call it breached. CF art. 174 alin. (2) switches the whole contribution off
+    // for a zero/loss year, and alin. (7) lit. a)/c) remove only this top-up: see `applicabilityFor`.
+    kind: 'tier_transition',
+    applicabilityTest: 'cass-art-174-6',
+    statutorySmMultiplier: 6,
+    consequenceBelow:
+      'Venitul net anual este sub baza de calcul de 6 salarii minime brute; se datorează diferența de contribuție până la nivelul corespunzător bazei de 6 salarii minime brute (art. 174 alin. (6) coroborat cu art. 170 alin. (1) din Codul fiscal).',
+    consequenceAtOrAbove:
+      'Venitul net anual este cel puțin egal cu baza de calcul de 6 salarii minime brute; baza de calcul pentru CASS este venitul net anual, în limita plafonului de 72 de salarii minime brute (art. 170 alin. (1) din Codul fiscal).',
   },
   {
     thresholdId: 'CASS_MAX_BASE',
@@ -189,6 +364,16 @@ export const THRESHOLD_SPECS: readonly ThresholdSpec[] = [
     // CF art. 170 alin. (1): the 72 SM ceiling caps the *base de calcul*, i.e. VNA — not turnover.
     requiredFiscalBase: 'net-income',
     baseSourceArticle: 'Cod fiscal art. 170 alin. (1) (plafon de 72 SM din venitul net anual)',
+    // The only genuine cap on this path: art. 170 alin. (1) says „nu poate fi mai mare decât” 72 SM.
+    // Crossing it caps the base — `over_limit`, the one contribution kind whose crossing may be
+    // reported as `breached`, because the statutory limit really is exceeded (still not an offence).
+    kind: 'over_limit',
+    applicabilityTest: 'cass-art-170-1',
+    statutorySmMultiplier: 72,
+    consequenceBelow:
+      'Venitul net anual este sub baza de calcul de 72 de salarii minime brute; plafonul din art. 170 alin. (1) din Codul fiscal nu limitează baza de calcul pentru CASS.',
+    consequenceAtOrAbove:
+      'Venitul net anual depășește baza de calcul de 72 de salarii minime brute; baza de calcul pentru CASS nu poate fi mai mare decât acest nivel, iar contribuția se calculează la plafon (art. 170 alin. (1) din Codul fiscal).',
   },
   {
     thresholdId: 'VAT_REGISTRATION',
@@ -204,65 +389,264 @@ export const THRESHOLD_SPECS: readonly ThresholdSpec[] = [
     // TVA-inclusiv — not because alin. (2) is a global definition.
     requiredFiscalBase: 'revenue-excl-vat',
     baseSourceArticle: 'Cod fiscal art. 310 alin. (1) (cifră de afaceri, exclusiv taxa)',
+    // A registration duty really does attach to this level, so this is the one row where `breached`
+    // is a defensible word. The lei figure is the statute's own (art. 310 alin. (1): 395.000 lei), so
+    // it carries NO `statutorySmMultiplier` and must never be labelled as computed.
+    kind: 'registration',
+    applicabilityTest: 'vat-art-310',
+    consequenceBelow:
+      'Cifra de afaceri de la începutul anului este sub plafonul de 395.000 lei; obligația de înregistrare în scopuri de TVA nu intervine (art. 310 alin. (1) din Codul fiscal).',
+    consequenceAtOrAbove:
+      'Cifra de afaceri de la începutul anului este cel puțin egală cu plafonul de 395.000 lei; intervine obligația de înregistrare în scopuri de TVA (art. 310 alin. (1) din Codul fiscal).',
   },
 ];
 
+/**
+ * TASK 4 — the legal/calculation status of a row.
+ *
+ * The signature gained `kind`, and that addition IS the change: whether an engaged level may be
+ * called `breached` is a legal question, and the answer is carried by the KIND, never by the
+ * arithmetic shape. `tier_transition` and `informational` rows are never `breached`, in either
+ * direction: CF art. 148 alin. (1) makes the 12-SM figure the condition for the CAS obligation to
+ * exist at all, and below it art. 148 alin. (4) plus art. 151 alin. (3) provide only
+ * `nu datorează contribuția` with an optional election. Research 24 searched the consolidated Cod
+ * fiscal and found no provision making a below-floor income a breach, a rectification duty, a
+ * penalty or a reportable event — which is why `breachMeaningFor` and its two floor strings are
+ * deleted rather than reworded.
+ */
 export function statusFor(
   type: ThresholdType,
   distance: Bani,
   warningDistance: Bani,
+  kind: ThresholdKind,
 ): Exclude<ThresholdStatus, 'review_required'> {
-  if (type === 'registration') {
-    // current >= threshold means VAT registration is required
-    if (distance >= 0) return 'breached';
-    if (distance >= -warningDistance) return 'warning';
-    return 'ok';
+  if (engagedSide(type, distance)) {
+    if (kind === 'tier_transition' || kind === 'informational') return 'warning';
+    return 'breached';
   }
-  if (type === 'tier-floor') {
-    // A tier floor is *crossed*, not exceeded harmfully: art. 148 alin. (2) lit. b) applies once
-    // realised income is "cel puțin egal cu" 24 SM, so the boundary is INCLUSIVE — exactly the
-    // predicate `calcCas` uses (`realized >= tier2Base`). Below it, the tier-1 floor applies.
-    if (distance >= 0) return 'breached';
-    if (distance >= -warningDistance) return 'warning';
-    return 'ok';
-  }
-  // min-base: breached when current is below the minimum
-  // max-base: breached when current is above the maximum
-  // income: breached when current is above the income threshold
-  const breached = type === 'min-base' ? distance < 0 : distance > 0;
-  if (breached) return 'breached';
+  // Not engaged. The only thing left to say is that the measured value sits close to the level, and
+  // that band is the app's own presentation policy (`warningDistance`, 10 % of the threshold) — it
+  // is not a statutory distance and must never acquire a citation.
   if (Math.abs(distance) <= warningDistance) return 'warning';
   return 'ok';
 }
 
 /**
- * Human-readable explanation of what a breach means for a threshold type.
+ * TASK 4 — how much attention the row deserves.
  *
- * - `min-base`: below the minimum base → disqualification from the regime.
- * - `max-base`: above the maximum base → regime change.
- * - `registration`: at/above the threshold → registration obligation triggered.
- * - `income`: above the income threshold → additional tax obligation triggered.
- * - `tier-floor`: at/above the tier → the minimum CAS base steps up to the next tier.
+ * Note what this function does NOT take: no `kind`, no `type`, no affected tax. Severity is a
+ * separate dimension from the legal kind, so a row cannot become urgent just because of the legal
+ * family it belongs to, and a legally load-bearing row is not automatically urgent. It is a function
+ * of applicability, status and distance only — which is also what makes the independence testable.
  */
-export function breachMeaningFor(type: ThresholdType | 'ratio'): string {
-  switch (type) {
-    case 'min-base':
-      return 'Sub baza minimă — dezcalificare din regim';
-    case 'max-base':
-      return 'Peste plafonul maxim al bazei — schimbare de regim';
-    case 'registration':
-      return 'La sau peste prag — se declanșează obligația de înregistrare';
-    case 'income':
-      return 'Peste pragul de venit — se declanșează obligația fiscală suplimentară';
-    case 'tier-floor':
-      // Deliberately NOT "schimbare de regim" and NOT "plafon": art. 148 alin. (2) lit. b) raises a
-      // FLOOR. The amounts themselves (12.150 / 24.300 lei) are never written here — they come from
-      // the `tier1_cas` / `tier2_cas` parameters of the CAS rule.
-      return 'Peste pragul de 24 SM — baza minimă de calcul pentru CAS crește de la 12 SM la 24 SM (nu este plafon)';
-    case 'ratio':
-      return 'Raport sub minimumul cerut — risc de reclasificare';
+export function severityFor(facts: {
+  applicability: Applicability;
+  status: ThresholdStatus;
+  distance: Bani;
+  warningDistance: Bani;
+}): ThresholdSeverity {
+  // A threshold that does not apply to this taxpayer deserves no attention at all, whatever its
+  // status says: an inapplicable row must never surface as a breach or an alert.
+  if (facts.applicability === 'not_applicable') return 'none';
+  // Citable but unmeasured: the user's job is to supply the missing base.
+  if (facts.status === 'review_required') return 'medium';
+  // If the profile does not even establish that the row applies, a crossing is not yet the user's
+  // problem to fix — report it, but do not shout.
+  if (facts.status === 'breached') return facts.applicability === 'unknown' ? 'medium' : 'high';
+  if (facts.status === 'warning') return 'medium';
+  // 'ok': the only urgency left is proximity. Two warning bands of the app's own 10 % policy is the
+  // reading used here; it is a distance question, and `kind` is never consulted.
+  if (facts.applicability === 'unknown') return 'low';
+  return Math.abs(facts.distance) <= 2 * facts.warningDistance ? 'low' : 'none';
+}
+
+export interface ApplicabilityDecision {
+  applicability: Applicability;
+  /** Present whenever `applicability !== 'applicable'`: why, with the provision it rests on. */
+  reason?: string;
+}
+
+/**
+ * TASK 4 — decide whether a threshold applies to THIS profile, from the profile / fiscal context.
+ *
+ * Nothing here is assumed. Where the profile lacks the fact a rule needs, the answer is `unknown`
+ * with a reason — the same honesty the engine already practices (`calcCass` refuses to guess the
+ * CF art. 174 alin. (7) lit. a) comparison without the salary amount, and B-19 keeps the CASS status
+ * flag unverified). An inapplicable row is rendered as inapplicable and carries severity `none`, so
+ * it cannot render as a breach at all.
+ */
+export function applicabilityFor(
+  spec: ThresholdSpec,
+  profile: PfaProfile | undefined,
+  measured: Bani | undefined,
+  thresholdValue: Bani,
+): ApplicabilityDecision {
+  if (!profile) {
+    return {
+      applicability: 'unknown',
+      reason:
+        'Profilul nu a fost furnizat, deci excepțiile care guvernează acest prag nu au putut fi evaluate. Aplicația nu presupune că pragul se aplică.',
+    };
+  }
+
+  switch (spec.applicabilityTest) {
+    case 'cas-art-150-1': {
+      // CF art. 150 alin. (1): pensioners and people insured in their own social insurance systems
+      // owe NO CAS on art. 137 alin. (1) lit. b)/b^1) income. `salaryStatus` is deliberately NOT
+      // consulted: art. 150 alin. (2) exempts salary earners only for lit. b^1), never for lit. b).
+      if (profile.pensionStatus === 'da') {
+        return {
+          applicability: 'not_applicable',
+          reason:
+            'Persoană pensionară sau asigurată în sisteme proprii de asigurări sociale: nu datorează contribuția de asigurări sociale pentru veniturile din activități independente (art. 150 alin. (1) din Codul fiscal). Excepția nu depinde de cuantumul venitului.',
+        };
+      }
+      return { applicability: 'applicable' };
+    }
+
+    case 'cass-art-174-6':
+    case 'cass-art-170-1': {
+      // B-19: the stored CASS status flag names the art. 154 alin. (1) categories, a closed list none
+      // of which covers a PFA on independent-activity income. The engine marks that zero `reviewRequired`
+      // rather than presenting it as an established exemption, and the threshold layer must not be more
+      // confident than the engine.
+      if (profile.socialInsuranceStatus !== 'obligatoriu') {
+        return {
+          applicability: 'unknown',
+          reason:
+            'Starea CASS din profil nu are temei legal verificat pentru un PFA cu activitate independentă (art. 154 alin. (1) din Codul fiscal este o listă închisă); aplicația nu poate stabili dacă contribuția se datorează.',
+        };
+      }
+      if (measured === undefined) {
+        return {
+          applicability: 'unknown',
+          reason: 'Baza de calcul nu a fost măsurată, deci aplicabilitatea contribuției nu a putut fi stabilită.',
+        };
+      }
+      // CF art. 174 alin. (2): a zero net income or a fiscal loss owes NO CASS at all, so neither the
+      // 6-SM top-up nor the 72-SM cap is in play. The same person may opt in under art. 180 alin. (1).
+      if (measured <= 0) {
+        return {
+          applicability: 'not_applicable',
+          reason:
+            'Venit net anual egal cu zero sau pierdere fiscală: nu se datorează contribuția de asigurări sociale de sănătate (art. 174 alin. (2) din Codul fiscal). Aceeași persoană poate opta pentru plată potrivit art. 180 alin. (1).',
+        };
+      }
+      if (spec.applicabilityTest === 'cass-art-170-1') {
+        // The cap rides on the art. 170 alin. (1) contribution itself, which a pensioner still owes:
+        // art. 174 alin. (7) lit. c) removes ONLY the art. 174 alin. (6) top-up. Never mirror the CAS
+        // pensioner exemption into CASS.
+        return { applicability: 'applicable' };
+      }
+      // Below here the row is the art. 174 alin. (6) TOP-UP, and only the top-up, so the two reliefs
+      // in art. 174 alin. (7) make THIS row inapplicable while the CASS contribution keeps applying.
+      if (profile.pensionStatus === 'da') {
+        return {
+          applicability: 'not_applicable',
+          reason:
+            'Venituri din pensii (art. 99) realizate în anul fiscal: diferența de contribuție până la baza de 6 salarii minime brute nu se datorează (art. 174 alin. (7) lit. c) din Codul fiscal). Contribuția de 10 % pe venitul net rămâne datorată — art. 174 alin. (7) lit. c) elimină doar diferența.',
+        };
+      }
+      if (profile.salaryStatus === 'da' && profile.salaryIncomeLei === undefined) {
+        return {
+          applicability: 'unknown',
+          reason:
+            'Profilul declară venituri din salarii dar nu conține cuantumul lor, iar art. 174 alin. (7) lit. a) din Codul fiscal compară acel cuantum cu 6 salarii minime brute. Aplicația nu decide o excepție pentru care nu are inputul.',
+        };
+      }
+      if (
+        profile.salaryStatus === 'da' &&
+        profile.salaryIncomeLei !== undefined &&
+        profile.salaryIncomeLei >= thresholdValue
+      ) {
+        return {
+          applicability: 'not_applicable',
+          reason:
+            'Venituri din salarii și asimilate realizate în anul fiscal cel puțin egale cu 6 salarii minime brute: diferența de contribuție până la baza de 6 salarii minime brute nu se datorează (art. 174 alin. (7) lit. a) din Codul fiscal). Contribuția de 10 % pe venitul net rămâne datorată.',
+        };
+      }
+      return { applicability: 'applicable' };
+    }
+
+    case 'vat-art-310': {
+      // The plafon only decides anything while the taxpayer is NOT already in the VAT system. A
+      // profile that applies VAT (`vatExempt: false`) has already passed the registration test, so the
+      // row would otherwise report a duty that has already been discharged.
+      if (!profile.vatExempt) {
+        return {
+          applicability: 'not_applicable',
+          reason:
+            'Profilul aplică TVA (nu se află în scutirea de TVA): obligația de înregistrare în scopuri de TVA prevăzută de art. 310 alin. (1) din Codul fiscal a intervenit deja, deci acest plafon nu mai decide nicio obligație.',
+        };
+      }
+      return { applicability: 'applicable' };
+    }
   }
 }
+
+/** A `salariul minim` vintage carried by the rule package. */
+interface SmVintage {
+  valueBani: Bani;
+  act: string;
+  from: string;
+}
+
+/**
+ * The SM value the package anchors the annual multiples to — the `reference` parameter of the
+ * wage-reference rule (4.050 lei, HG 1506/2024 for 2026). Read from the package, never hardcoded
+ * here, so the label cannot drift from the figures the thresholds are built from.
+ */
+function smReference(rules: FiscalRule[], taxYear: number): { valueBani: Bani; act: string } | null {
+  const rule = rules.find(
+    (r) => r.taxYear === taxYear && r.taxRegime === 'wage-reference' && r.parameters.some((p) => p.id === 'reference'),
+  );
+  const param = rule?.parameters.find((p) => p.id === 'reference');
+  if (!rule || typeof param?.value !== 'number') return null;
+  return { valueBani: param.value as Bani, act: rule.sourceAct };
+}
+
+/** Every SM vintage the package carries for the fiscal year — the H1/H2 pair, with its acts. */
+function smVintages(rules: FiscalRule[], taxYear: number): SmVintage[] {
+  return rules
+    .filter((r) => r.taxYear === taxYear && r.taxRegime === 'wage-reference')
+    .filter((r) => r.parameters.some((p) => p.id === 'monthly'))
+    .map((r) => {
+      const param = r.parameters.find((p) => p.id === 'monthly')!;
+      return { valueBani: param.value as Bani, act: r.sourceAct, from: r.effectiveFrom };
+    })
+    .sort((a, b) => a.from.localeCompare(b.from));
+}
+
+/**
+ * Build the "this lei amount is computed, not statutory" label for an SM-multiple threshold.
+ *
+ * It is attached only when the arithmetic actually verifies against the package's own SM value: a
+ * label that does not check out would be a fabricated provenance, which is worse than no label. The
+ * `thresholds.test.ts` guard makes a drift fail a test instead of silently dropping the label.
+ */
+function computedLeiFor(
+  spec: ThresholdSpec,
+  thresholdValue: Bani,
+  smRef: { valueBani: Bani; act: string } | null,
+  vintages: SmVintage[],
+  taxYear: number,
+): ComputedLeiAmount | undefined {
+  if (spec.statutorySmMultiplier === undefined || smRef === null) return undefined;
+  if (smRef.valueBani * spec.statutorySmMultiplier !== thresholdValue) return undefined;
+  const list = vintages.map((v) => `${formatBaniLei(v.valueBani)} de la ${v.from} (${v.act})`).join('; ');
+  return {
+    multiplier: spec.statutorySmMultiplier,
+    smValueBani: smRef.valueBani,
+    smAct: smRef.act,
+    note:
+      `Codul fiscal exprimă acest prag în multipli de salariu minim brut pe țară, nu în lei; suma în lei este calculată de aplicație. ` +
+      `Nivelul de referință care guvernează pragurile pentru ${taxYear} nu este verificat — salariul minim purtat de pachetul de reguli: ${list}.`,
+  };
+}
+
+/** Stated on an unmeasured row instead of a legal consequence: nothing may be claimed about a side the app never measured. */
+const UNMEASURED_CONSEQUENCE =
+  'Efectul acestui prag nu poate fi stabilit: baza de calcul prevăzută de lege nu a fost măsurată.';
 
 export function computeThresholds(
   rules: FiscalRule[],
@@ -272,6 +656,12 @@ export function computeThresholds(
     taxYear: query.taxYear,
     asOfDate: query.asOfDate,
   });
+
+  // TASK 4: the SM anchor is read from the package (not from `applicable`, which is filtered by
+  // asOfDate and would hide the 1 iulie vintage in a March query) so the computed-amount label can
+  // state every vintage the fiscal year carries.
+  const smRef = smReference(rules, query.taxYear);
+  const vintages = smVintages(rules, query.taxYear);
 
   const results: FiscalThreshold[] = [];
   for (const spec of THRESHOLD_SPECS) {
@@ -291,11 +681,14 @@ export function computeThresholds(
     // threshold is a whole leu, so dividing its bani by 10 is exact; the floor only guards a future
     // parameter that is not, and it can never widen the band past 10%.
     const warningDistance = Math.floor(thresholdValue / 10) as Bani;
+    const computedFrom = computedLeiFor(spec, thresholdValue, smRef, vintages, query.taxYear);
 
     const currentValue = query.bases[spec.requiredFiscalBase];
+    const applicability = applicabilityFor(spec, query.profile, currentValue, thresholdValue);
     if (currentValue === undefined) {
       // A base mismatch used to `continue`, silently deleting a threshold card. It is now a
       // loud row: the threshold is citable, but it cannot be measured, so no verdict is faked.
+      const status: ThresholdStatus = 'review_required';
       results.push({
         thresholdId: spec.thresholdId,
         type: spec.type,
@@ -308,16 +701,31 @@ export function computeThresholds(
         warningDistance,
         ruleRelease: query.ruleRelease,
         source: `${rule.sourceAct} ${rule.sourceArticle}`,
-        status: 'review_required',
+        status,
         fiscalBase: spec.requiredFiscalBase,
-        breachMeaning: breachMeaningFor(spec.type),
+        kind: spec.kind,
+        // `engaged` is meaningless without a measurement: distance is a placeholder 0, and a
+        // `registration` row would read `engagedSide(0) === true` out of nothing. Force it false.
+        engaged: false,
+        severity: severityFor({
+          applicability: applicability.applicability,
+          status,
+          distance: lei(0),
+          warningDistance,
+        }),
+        applicability: applicability.applicability,
+        applicabilityReason: applicability.reason,
+        measuredBasis: 'unmeasured',
+        consequence: UNMEASURED_CONSEQUENCE,
+        computedFrom,
         reviewReason: `Baza „${spec.requiredFiscalBase}” nu a fost furnizată; pragul nu poate fi evaluat.`,
       });
       continue;
     }
 
     const distance = subBani(currentValue, thresholdValue);
-
+    const engaged = engagedSide(spec.type, distance);
+    const status = statusFor(spec.type, distance, warningDistance, spec.kind);
     results.push({
       thresholdId: spec.thresholdId,
       type: spec.type,
@@ -330,9 +738,24 @@ export function computeThresholds(
       warningDistance,
       ruleRelease: query.ruleRelease,
       source: `${rule.sourceAct} ${rule.sourceArticle}`,
-      status: statusFor(spec.type, distance, warningDistance),
+      status,
       fiscalBase: spec.requiredFiscalBase,
-      breachMeaning: breachMeaningFor(spec.type),
+      kind: spec.kind,
+      engaged,
+      severity: severityFor({
+        applicability: applicability.applicability,
+        status,
+        distance,
+        warningDistance,
+      }),
+      applicability: applicability.applicability,
+      applicabilityReason: applicability.reason,
+      measuredBasis: query.measuredBasis?.[spec.requiredFiscalBase] ?? 'unattributed',
+      // Chosen by which SIDE of the level the measured value sits on, not by `engagedSide`: for a
+      // `min-base` row the two are opposite, and the law's consequence follows the side, not the
+      // arithmetic label. Below 12 SM the CAS obligation never arises; at/above it it does.
+      consequence: distance < 0 ? spec.consequenceBelow : spec.consequenceAtOrAbove,
+      computedFrom,
     });
   }
   return results;
