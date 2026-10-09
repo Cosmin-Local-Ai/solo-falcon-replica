@@ -1,0 +1,257 @@
+# Phase plan — Phases 11–34, restructured after the independent audit
+
+**This file is the authoritative forward plan.** It supersedes the phase list in `docs/ai/pre_phase11_execution_plan.md` (that round is finished) and merges the user's *SOLO Orchestrator Prompt Set — Updated Phases 11–34* with the findings of the independent audit of 2026-10-10.
+
+## 0. How to use this file after a compaction
+
+1. Read §1 for the baseline you must not regress.
+2. Read §2 for what is **already good and must not be rewritten**.
+3. Read §3 before repeating any audit claim — it says which claims were **verified in-repo** and which were not.
+4. Read §5 for the order, §6 for what each phase actually has to do.
+5. Read §9 before writing a brief — several phases are **blocked on a user decision**, and guessing them is how the last round produced rework.
+6. Defect ids **B-36 … B-47** are defined in §4 and each phase names the ones it closes. `docs/ai/STATE.md` holds B-1 … B-35.
+7. User decisions are logged in `docs/ai/USER_DECISIONS.md`; phase status in `docs/ai/phases/NN_*.md`; phase-vs-landed status of the user's original 11–34 list in `docs/ai/roadmap_11_34_mapping.md`.
+
+---
+
+## 1. Baseline — do not regress it
+
+At `02c6ecf` (pushed to `origin/master`): `tsc` 0 · **77 files / 1332 unit tests** · `build` 0 · **e2e 37** · copy-guard allow-list **empty** · data version **10** (`record-currency`).
+
+Money figures pinned green: deductible **120,00 / 144,00 lei**, VNA **9.096,00**, impozit **819,00**, clock total **3.249,00**, reserve **1.083,00**, year-end **3.112,00**, hero **51.510 lei**. Euro cap ceiling **531,00 lei provisional → 540,00 lei final**.
+
+No snapshot digest may move: `inputSnapshot` is `{ profile, revenues: Bani, expenses: Bani }` — aggregate lei totals, not record arrays.
+
+---
+
+## 2. Preserve unchanged — do not rewrite these in any phase
+
+| Area | Why it survives |
+|---|---|
+| Fiscal rule registry + content digest (`ruleSetDigest.ts`, `registry.ts`) | Lifecycle ladder enforced, reused `releaseId` refused, ACTIVE sets deep-frozen, R1/R2 fixture reproduces **7.600,00** while a new calculation gives **7.960,00** |
+| `Bani` integer minor units + `Money<C>` | Consistent arithmetic; mixing currencies is a `tsc` error |
+| `unknown` / `REVIEW_REQUIRED` / unavailable states | Honest uncertainty; never replace with a value |
+| Expense-deductibility ruleset (48 rules on CF art. 68) | Extend with facts; do not replace |
+| Shared attention model (`AttentionItem`, one producer, `partitionAttention`) | Do not rebuild a second alert engine |
+| Copy layer `src/ui/copy/` + guard with empty allow-list | New sentences go there, never inline |
+| `RuleProvenance` / `Disclosure` / `InterpretationNote` | Never repair a drifted digest by re-hashing |
+| FX explicit-basis + interpretation policy | Keep both readings; complete the entry path instead |
+
+---
+
+## 3. Audit claim ledger — what I checked, and what I did not
+
+The audit is external and its verification limits are stated in it (it could not run the suite). I re-checked its load-bearing claims against the tree.
+
+**Verified in-repo (file:line is mine, not the auditor's):**
+
+| Claim | Evidence |
+|---|---|
+| Projection denominator is **fiscal-year elapsed**, not PFA active period | `src/domain/projection.ts:91` `elapsedMonths(fiscalYear, asOfDate)`; doc comment `:14-15`. No PFA start input. **Confirmed** |
+| `paid` / `collected` exist in the model but **no entry form writes them** | `src/data/types.ts:27` `collected?`, `:62` `paid?`; grep for `paid` in `pages/Expenses.tsx` and `collected` in `pages/Revenues.tsx` → **no hits** |
+| FX rates have **no UI ingress at all** | grep `recordFxRate` / `loadDailyRates` / `manualAnnualAverage` across `src/pages` + `src/components` → **no callers**. 10b built the store door with no handle |
+| Financial aggregation **skips** non-lei records while the tax pipeline normalises them | `src/domain/aggregation.ts:127-139` — lei total or `null`, callers skip `null` |
+| No per-expense vehicle/documentation facts on the persisted record | grep `vehicleUse` / `usage` / `documentatie` in `src/data/types.ts` → **no hits** |
+| Activity family is **not** an input to the estimate path | grep `ActivityFamily` / `activityFamily` in `estimateBasis.ts`, `data/derived.ts`, `data/dashboard.ts` → **no hits**, while the refusal exists: `fiscal/deductibility2026.ts:621` `treatment: 'no_expense_engine'`, handled at `fiscal/deductibility.ts:350` |
+| Seed is a **2020** PFA with a 2025 D212, against the Phase 11 spec of a 2026-start PFA | `src/data/seed.ts:7` `pfaStartYear: 2020`, with the coherence reasoning at `:31-34` |
+| e2e has date-dependent assertions valid only before 25 May 2027 | `e2e/dashboard.spec.ts:318` `25.05.2027`, `:340` `15.01.2027`, `:472` |
+
+**Not independently verified — treat as reported, re-verify inside the phase that acts on it:** the exact place where operand evidence is dropped (`data/dashboard.ts` destructuring); the other-income ratios sitting at 1; the fixed-asset threshold not being encoded; the SM-vintage claim's reach into the *calculation* as opposed to the display.
+
+---
+
+## 4. New defect ids
+
+| Id | Defect | Closed by |
+|---|---|---|
+| **B-36** | FX rate records cannot enter the app through any interface — `recordFxRate` has no caller, Settings is read-only. A user with an EUR/USD record cannot resolve the missing-rate exclusion | **10c** |
+| **B-37** | The financial summary/graph and the tax estimate use different currency handling: aggregation skips non-lei records, the estimate normalises them. One user, two revenue totals | **10c** |
+| **B-38** | Payment and collection dates are modelled (`paid?`, `collected?`) but not enterable; a document in December paid in January can be attributed to the wrong fiscal year | **12C** |
+| **B-39** | Per-expense facts the classifier needs (vehicle exclusive/partly/not for the activity, supporting documentation present) are not persisted; unknown vehicle use defaults to non-exclusive, applying 50 % without a recorded fact | **12D** |
+| **B-40** | The `no_expense_engine` refusal exists in the classifier but the profile's activity family is never passed to the estimate, so the normal path may apply the ordinary actual-expense method to an activity with a different statutory method | **12E** |
+| **B-41** | Other-income flags are collected but the amounts those calculations depend on are not modelled; the estimate can look complete while a material input is absent | **12F** |
+| **B-42** | Fixed assets and depreciation: the classifier can refuse the whole purchase price, but there is no asset model and the OUG 8/2026 threshold is not encoded, so the expense neither depreciates nor visibly stays unresolved | **12G** |
+| **B-43** | The estimate result loses the evidence that produced it — classifications, exclusion reasons, cap adjustments, FX conversions — so the calculation-detail view and the persisted snapshot cannot explain the expense total | **15**, **20** |
+| **B-44** | Projection divides by fiscal-year elapsed months and multiplies by 12, ignoring the PFA's actual active period; a PFA starting in October is projected as if it had been trading since 1 January | **12** |
+| **B-45** | The FY2026 minimum-wage vintage is recorded UNVERIFIED and is labelled on thresholds, but the same uncertainty applies wherever SM-derived values feed the **calculation**; the assumption is not identifiable later from the calculation record | **17**, **15** |
+| **B-46** | UTC-based date defaults in page forms, and e2e assertions that only pass while today is before 25 May 2027 | **12C** (defaults), **32** (inject a controlled date) |
+| **B-47** | The seed tells two product stories: a 2020-start PFA with a 2025 filing history, against a product specified as starting in 2026 with no prior-year history | **11** (needs the §9 decision) |
+
+Already open from before: **B-34** (`Declaration` is monthly `{an, luna}` and cannot hold an annual D212) → **18A**; **B-35** (D300 periodicity undetermined; `vatExempt` boolean insufficient) → **18B**; **D1** (a clean first run is handed `seedData` and never told, `store.tsx:166-167`) → **11**, verified in **26**.
+
+---
+
+## 5. Order
+
+Phases in **bold** are new, inserted by the audit. The rest keep the user's numbering.
+
+| # | Phase | Status | Closes |
+|---|---|---|---|
+| **10c** | **FX end to end: rate ingress and one normalised-ledger boundary** | not started | B-36, B-37 |
+| 11 | Coherent 2026 seed state + first-run separation | partially done by TASK 9 | B-47, D1 |
+| 12 | Run-rate projection over the **active period** | partial | B-44 |
+| 12A | Expense deductibility model | **DONE** (TASK 2a–2d) — gap-check only | — |
+| 12B | Pension fact for CASS | **DONE** (TASK 5) — gap-check only | — |
+| **12C** | **Payment / collection dates enterable, and date defaults** | not started | B-38, B-46 |
+| **12D** | **Per-expense facts the classifier needs** | not started | B-39 |
+| **12E** | **Activity family wired to the estimate, or explicit refusal** | not started | B-40 |
+| **12F** | **Other income: model the amounts or refuse** | not started | B-41 |
+| **12G** | **Fixed assets and depreciation boundary** | not started | B-42 |
+| 13 | Annual tax estimate pipeline | largely done — gate it | — |
+| 14 | Automatic recalculation | done — extend the triggers | — |
+| 15 | Snapshots + rule-release versioning | partial | B-43, B-45 |
+| 16 | Tax reserve persistence | **DONE** (TASK 3) | — |
+| 17 | Threshold semantics | **DONE** (TASK 4) | B-45 |
+| **18A** | **Annual declaration model** | not started | B-34 |
+| **18B** | **VAT periodicity facts** | not started | B-35 |
+| 18 | Deadline semantics | **DONE** (Phase 9b) — re-check after 18A/18B | — |
+| 19 | Unified issue/severity/action | **DONE** (TASK 8) — vocabulary decision | — |
+| 20 | Calculation detail + disclosure policy | partial | B-43 |
+| 21 | Tax estimate hero | mostly done | — |
+| 22 | Financial graph | partial (no non-colour actual/projected cue) | — |
+| 23 | Summary + reserve + threshold UI | partial | — |
+| 24 | Deadline + completeness + action UI | largely unsatisfied | depends on 18A |
+| 25 | Legislation slot | **DONE** (TASK 8) | — |
+| 26 | 2026 first-run experience | not started | D1 verified end to end |
+| 27 | Responsive dashboard | partial (TASK 9 fixed 390 px chart) | — |
+| 28 | Accessibility + remaining Romanian polish | partial | the nine parked wording calls |
+| 29 | Persistence / export / import / document blobs | not started — **release gate** | — |
+| 30 | Real production walkthrough + demonstrated fixes | not started | — |
+| 31 | Golden fiscal fixtures | not started | — |
+| 32 | Full automated suite | not started | B-46 |
+| 33 | Real-browser E2E + responsive QA | not started | — |
+| 34 | Final dry run + release audit | not started | — |
+
+**10c runs before 11.** It is the unfinished half of the currency work, and Phases 11, 12, 13, 22, 23 and 26 all touch money that 10c makes consistent.
+
+---
+
+## 6. Phase detail
+
+### 10c — FX end to end *(new)*
+- **Rate ingress through the UI.** A manual rate-entry workflow using the existing validated `recordFxRate` upsert keyed by `rateKey`: currency, rate, `rateKind`, date or year, source URL, provisional/final. Settings' FX block stops being read-only.
+- **One normalised-ledger boundary.** Summary, graph and estimate consume the same converted records, or the UI states precisely why they differ. A record must not vanish from the financial picture because its currency is foreign (B-37).
+- Prove: an EUR record with a rate reconciles across summary, graph and estimate; the same record without a rate cannot make the result look complete.
+- Do not add a network path; manual/store ingress only, as 10b left it.
+
+### 11 — Coherent 2026 seed + first-run separation
+- Resolve **B-47**: the seed is a 2020 PFA with a 2025 D212; the product is specified as a 2026-start PFA with no prior-year history. **Blocked on §9 decision 5.** TASK 9's removal of the false quarterly filings was correct and stays.
+- **D1**: `store.tsx:166-167` hands a first-run user `seedData` with `dataOrigin: 'seed'`, and only `'quarantined'` renders a banner. Either start empty or label the demo — **blocked on §9 decision 4**.
+- Keep demo data separate from a clean workspace; expected totals in fixtures are labelled as expected results, not mutable UI state.
+
+### 12 — Projection over the active period
+- Replace the fiscal-year denominator with the **PFA's actual active period**: start date, elapsed active time, remaining period. A PFA starting in October must not be divided by nine calendar months (B-44).
+- Handle: newly started PFA, zero elapsed active time, future start date, no transactions, losses, partial-year activity, leap years — no division by zero, no false precision.
+- Fixtures for a 2026 start with a partial first month; the first partial month is not a full month unless a documented rule says so.
+- Keep `method` and assumptions in the domain result; YTD actuals stay distinct from projected values.
+
+### 12C — Payment / collection dates *(new)*
+- Expose an explicit payment date on the expense form persisting to `paid`, and a collection date on the revenue form persisting to `collected`, each keeping the document date separately.
+- Fix the UTC-based page date defaults using the shared local-date utilities (B-46).
+- Browser tests: expense documented December paid January; revenue invoiced December collected January — each lands in the intended fiscal year, after reload.
+
+### 12D — Per-expense facts *(new)*
+- Add the smallest set of facts the classifier already asks for — vehicle use exclusive / partly / not at all, which statutory vehicle exception applies, whether supporting documentation is present — through form, schema and migration.
+- **Unknown must return a review state, not a default.** Today unknown vehicle use is treated as non-exclusive and applies 50 % with no recorded fact; that is manufacturing a fact (B-39).
+- Apply vehicle rules to the individual expense, never a profile-wide assumption.
+
+### 12E — Activity family *(new)*
+- Either establish the applicable activity family from a verified mapping before calculating, or **explicitly decline** when the profile's activity could require a different statutory method. The `no_expense_engine` refusal already exists in the rules; it is simply never reachable from the profile (B-40).
+- Never apply the ordinary actual-expense method to an activity with another statutory calculation.
+
+### 12F — Other income *(new)*
+- Model the amounts the affected calculations depend on, or refuse the affected calculation when the profile makes them material (B-41). A flag that another income source exists does not supply the ratios.
+- The app must not accept a profile implying a more complex situation, ignore the missing quantities, and return a confident estimate.
+
+### 12G — Fixed assets and depreciation *(new)*
+- Encode the verified 2026 asset threshold (OUG 8/2026) and the asset facts, or make the expense **visibly unresolved**. Refusing the whole purchase price is not the same as modelling depreciation (B-42).
+
+### 13 — Annual pipeline
+- Largely satisfied. **Gate:** do not declare it complete while required profile facts, FX rates or material expense classifications can be omitted without an incomplete/review state. Depends on 10c, 12C–12G.
+
+### 14 — Automatic recalculation
+- Extend the invalidation triggers to payment/collection dates, expense classifications, vehicle facts, profile facts and **FX rate changes**. No manual recalculate button, no second engine; historical snapshots never mutate.
+
+### 15 — Snapshots and release versioning
+- Persist the **evidence**, not just the aggregates and the digest: amounts passed to the engine, actual-vs-projected basis and method, deductible total with category-level components, exclusions and unresolved facts, cap calculations with the chosen interpretation and the alternative, FX rates with provenance, and the rule release + digest (B-43).
+- A stored estimate must be interpretable without re-running the current projection or consulting the current FX store.
+- Record the SM-vintage assumption in the calculation record (B-45).
+- **§9 decision 2** governs whether rule `version` numbers move off 1.
+
+### 17 — Thresholds
+- Semantics are done and must be preserved. Confirm the wage-vintage assumption is surfaced wherever it affects a **calculated** result, not only on a displayed threshold (B-45).
+
+### 18A — Annual declaration model *(new)*
+- Replace the monthly `{an, luna}` shape with an annual record carrying `taxYear` and a filing date; rethink the `length > 0` completeness predicate with it (B-34). Needs a persistence bump and migration.
+
+### 18B — VAT periodicity *(new)*
+- Collect the facts that select the branch — VAT registration date, prior-year taxable supplies — or decline to assert a period. `vatExempt: boolean` is not enough (B-35). Do not assume monthly.
+
+### 20 — Calculation detail
+- The breakdown must show or link everything §15 persists. Today the hero disclosure renders the engine's lines, and `copy.disclosure.sources` is wired on Settings, Expenses and thresholds but **not on the estimate**.
+
+### 22 — Graph
+- Add a non-colour actual/projected cue (dashed or equivalent). Today the distinction is in data and label text only.
+
+### 24 — Dashboard actions
+- None of the roadmap's section names exist yet (`Date pentru estimare`, `Ești la zi`, `Vezi toate`, `Ce merită să rezolvi acum`) and there is no top-three cap. Depends on 18A so declaration completeness stops reading as a monthly checklist.
+
+### 26 — First-run
+- Verify the real form-to-calculation path, including distinct payment/collection dates and unsupported scenarios. This is where **D1** is proven closed, not assumed.
+
+### 29 — Persistence / export / import / blobs — **release gate**
+- No export or import exists at all. Document blobs are base64 inside records travelling through `localStorage` (`seed.ts:86-96`, 39–51 kB each). Corrupt data must not become zeros or fake demo data; import must validate before replacing and be non-destructive on failure.
+
+### 30–34 — Walkthrough, fixtures, suite, browser QA, final audit
+- 32 must inject a controlled date so the suite stops depending on the calendar (B-46).
+- 34 refuses a production-ready label while any CRITICAL or HIGH remains.
+
+---
+
+## 7. Standing requirements — every phase
+
+1. One Worker at a time; **Scouts sequential** (standing user decision).
+2. Classify each acceptance criterion as already satisfied / partial / unsatisfied **before** implementing. A type, component or comment is not proof of end-to-end behaviour.
+3. Never weaken an assertion, delete a meaningful test, or widen a timeout.
+4. No money figure moves without a hand derivation recorded old → new.
+5. `unknown` / `REVIEW_REQUIRED` / unavailable stay withheld; nothing resolves them to make a warning disappear.
+6. No backfilled digests, rule versions, rates or seed facts.
+7. FY2026 only; no 2025 user-facing history, no implied future-year support.
+8. Copy goes in `src/ui/copy/`; `src/domain` never imports from it.
+9. Phase docs in `docs/ai/phases/NN_*.md`; **never** write to `docs/ai/steps/` (frozen archive — §9 decision 3).
+10. Report only validations actually run.
+
+---
+
+## 8. Regression scenarios to prove before the first release
+
+1. **Payment/collection dates** across fiscal years, verified after reload.
+2. **New PFA projection** starting in 2026, partial first month, active-period run rate.
+3. **Foreign currency**: EUR record, rate entered **through the UI**, summary + graph + estimate reconcile; repeat without a rate and prove the result cannot look complete.
+4. **Activity-specific rules**: a profile needing another method selects it or is explicitly refused.
+5. **Expense-dependent facts**: vehicle exclusive / non-exclusive / unknown, including missing-fact behaviour.
+6. **Additional income**: quantitative inputs present, or no falsely complete estimate.
+7. **Annual declaration**: an annual D212 resolves the right completeness/action state, not a monthly checklist.
+8. **VAT periodicity**: the app obtains the facts before asserting a D300 period.
+9. **Reproducibility**: save an estimate, change a release or a rate, the old record stays interpretable.
+10. **Tax detail**: the breakdown reconciles to the deductible subset, exclusions, cap adjustments and FX conversions.
+
+---
+
+## 9. Open decisions — blocked phases
+
+| # | Decision | Blocks |
+|---|---|---|
+| 1 | **Severity vocabulary**: keep `none \| low \| medium \| high` (what ships) or map back to `info \| warning \| danger` as Phase 19 asks. Both cannot exist. | 19, 24 |
+| 2 | **Rule `version` numbers**: bump revisions off 1, or keep TASK 6's refusal to mint unreconstructable history? | 15 |
+| 3 | **Phase docs location**: `docs/ai/phases/` (current) or the roadmap's `docs/ai/steps/NN_*.md`, which would overwrite unrelated frozen files. | all |
+| 4 | **First run**: start empty, or start with a clearly-labelled demo the user chooses? | 11, 26 |
+| 5 | **Seed scenario**: 2020-start PFA with a 2025 filing, or a 2026-start PFA with no prior history? | 11 |
+| 6 | **Supported scope for the first cohort**: which profiles are genuinely supported, and how is an unsupported one excluded rather than mis-served? | 12E, 12F, 13, 34 |
+| 7 | **The nine parked Romanian wording calls** in `phases/21_language_layer.md` §13. | 28 |
+
+---
+
+## 10. Release gates
+
+Not release-ready until: **10c** (one money path), **12C** (fiscally correct dates enterable), **12E/12F** (unsupported cases refused, not mis-calculated), **18A** (declaration model honest), **29** (export/import and blob storage), **26 + 30 + 33** (the flow proven in a real browser), and **34** with no CRITICAL/HIGH open.
