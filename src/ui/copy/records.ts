@@ -38,6 +38,7 @@ export const revenues = {
     client: 'Client',
     cui: 'CUI',
     date: 'Data',
+    currency: 'Moneda',
     withoutVat: 'Fără TVA',
     vat: 'TVA',
     total: 'Total',
@@ -79,11 +80,21 @@ export const expenses = {
     provider: 'Furnizor',
     cui: 'CUI',
     date: 'Data',
+    currency: 'Moneda',
     withoutVat: 'Fără TVA',
     vat: 'TVA',
     total: 'Total',
     status: 'Status',
   },
+  /**
+   * TASK 10a (B-32) — the foreign-currency banner. A record written in EUR or USD is real data the app can
+   * store, and it is NOT in the lei totals, because bringing it in needs a BNR rate and a legal basis the
+   * assembler does not attach yet. The banner says so rather than letting the total quietly omit it.
+   */
+  foreignCurrencyLead: (n: number): string =>
+    n === 1 ? 'O cheltuială este' : `${n} cheltuieli sunt`,
+  foreignCurrencyTail:
+    'într-o monedă pe care aplicația nu o poate aduce încă în lei, deci nu intră în cheltuielile deductibile.',
   /** The unclassified-expense banner: how many, and what happens to them. */
   unclassifiedLead: (n: number): string =>
     n === 1
@@ -351,6 +362,15 @@ export const documents = {
     balance: 'Sold',
     rows: 'Rânduri',
     csvHeader: 'Data;Descriere;Venit (RON);Cheltuiala (RON)',
+    /**
+     * TASK 10a (B-32). The RJIP is a leu register — its own header says `(RON)`. A record written in euro
+     * has no leu amount until a BNR rate is attached to it, so it is left out and said out loud, never
+     * exported at its cents figure relabelled as lei.
+     */
+    foreignCurrencyExcluded: (n: number): string =>
+      n === 1
+        ? 'O înregistrare este într-o monedă străină și nu intră în RJIP, care se ține în lei.'
+        : `${n} înregistrări sunt în monede străine și nu intră în RJIP, care se ține în lei.`,
     invoiceKind: {
       factura: 'Factură',
       nota: 'Notă de factură',

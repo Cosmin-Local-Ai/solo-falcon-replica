@@ -27,7 +27,7 @@
  * both a card and an action.
  */
 import type { ThresholdSeverity } from './thresholds';
-import type { Bani } from './money';
+import { money, type Bani, type Money } from './money';
 import type { SnapshotRuleProvenance } from './snapshots/ruleProvenance';
 
 /**
@@ -247,8 +247,15 @@ export interface UnresolvedRecord {
   eFacturaStatus: string | null;
   registeredOn: string | null;
   submittedOn: string | null;
-  /** The record's own net amount. Carried for the register, never summed here. */
-  amountNet: Bani;
+  /**
+   * The record's own net amount, **in the currency the record is written in**. Carried for the register,
+   * never summed here.
+   *
+   * TASK 10a: a rejected EUR invoice has to show its EUR amount, not a lei number it never had. A
+   * declaration is always lei — the Declarația Unică is filed in lei — so its row carries `RON` explicitly
+   * rather than an unqualified number.
+   */
+  amountNet: Money;
 }
 
 interface RecordSource {
@@ -259,7 +266,7 @@ interface RecordSource {
     status: string;
     statusDetail?: string;
     eFacturaStatus?: string;
-    valoareFaraTva: Bani;
+    valoareFaraTva: Money;
   }[];
   expenses: readonly {
     id: string;
@@ -267,7 +274,7 @@ interface RecordSource {
     date: string;
     status: string;
     statusDetail?: string;
-    valoareFaraTva: Bani;
+    valoareFaraTva: Money;
   }[];
   declarations: readonly {
     id: string;
@@ -378,7 +385,7 @@ export function unresolvedRecords(data: RecordSource): UnresolvedRecord[] {
       eFacturaStatus: null,
       registeredOn: d.dataInregistrare,
       submittedOn: d.dataTrimitere ?? null,
-      amountNet: d.venituri,
+      amountNet: money(d.venituri, 'RON'),
     });
   }
 

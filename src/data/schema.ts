@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { isoCalendarDateProblem } from '../domain/date';
 import { parsePfaProfile } from '../domain/schema';
 import type { PfaProfile } from '../domain/models';
-import type { Bani } from '../domain/money';
+import type { Bani, Money } from '../domain/money';
+import { CURRENCY_CODES } from '../domain/money';
 import type { MoneyPrecisionNotice } from './migration';
 import type { RuleRelease } from '../domain/fiscal/rules';
 import { EXPENSE_CATEGORIES } from '../domain/fiscal/deductibility';
@@ -52,6 +53,43 @@ const nonNegative = z.number().min(0);
  */
 const bani = (schema: z.ZodNumber = nonNegative) => schema.transform((n) => n as Bani);
 
+/**
+ * TASK 10a (B-32): a record's money field is a `Money` — an integer minor-unit count **and** the
+ * currency it is counted in.
+ *
+ * The gate accepts the pre-v10 shape (a bare number) as well, and it deliberately does **not** convert
+ * it. Two reasons, both load-bearing:
+ *
+ * 1. `safeParse` runs **before** the migration chain. If the gate wrapped `674.504` into
+ *    `{ amount: 674.504, currency: 'RON' }`, the v4→v5 `money-bani` step would receive an object where
+ *    it expects lei, report it as `non-finite`, and the precision notice the user sees would name
+ *    `[object Object]` instead of the value that was actually stored.
+ * 2. A gate that converts is a gate that decides. The shape change belongs to the named chain step
+ *    (`record-currency`), which is where a migration decision is recorded and reviewable.
+ *
+ * So the `transform` is a **type-level cast and nothing else** — the same device `bani()` uses — and it
+ * exists because the `Expect<Equal<…>>` assertions at the bottom of this file force the zod output and
+ * the domain type to be the same type. Integer-ness and currency-ness are enforced after migration, in
+ * the domain (`requireRon`/`sumMoney` throw), and asserted by test.
+ */
+const moneyObjectSchema = z.object({
+  // `nonNegative`, exactly like the bare-number branch it sits beside in the union. A negative amount is
+  // corrupt money whichever shape it arrives in, and `parseAppData` must quarantine it rather than load it
+  // — the same rule `bani()` enforces on the pre-v10 number.
+  amount: bani(nonNegative),
+  currency: z.enum(CURRENCY_CODES),
+});
+const moneyField = (schema: z.ZodNumber = nonNegative) =>
+  z.union([schema, moneyObjectSchema]).transform((v) => {
+    // SAFETY: identity at runtime — this cast converts nothing. The union's two branches are exactly the
+    // two shapes the field can hold: a pre-v10 bare number (lei or bani, depending on how far the chain has
+    // run) and a post-v10 `{ amount, currency }`. `Money` is the type of the payload the chain ends at, and
+    // `record-currency` is the only step allowed to move a value between the two. The invariant TypeScript
+    // cannot check is that no consumer reads `.currency` off a payload that has not been through the chain:
+    // the load path always runs it, and `requireRon` throws rather than misread a bare number as lei.
+    return v as unknown as Money;
+  });
+
 export const revenueSchema = z.object({
   id: nonEmptyString,
   tip: z.enum(['factura', 'notafactura']),
@@ -62,8 +100,8 @@ export const revenueSchema = z.object({
   collected: z.string().optional(),
   client: z.string(),
   cui: z.string(),
-  valoareFaraTva: bani(),
-  tva: bani(),
+  valoareFaraTva: moneyField(),
+  tva: moneyField(),
   status: z.enum(['inregistrata', 'in-asteptare', 'respinsa']),
   statusDetail: z.string().optional(),
   eFacturaStatus: z.enum(['Acceptată', 'În așteptare', 'Respinsă']).optional(),
@@ -79,8 +117,8 @@ export const expenseSchema = z.object({
   paid: z.string().optional(),
   furnizor: z.string(),
   cui: z.string(),
-  valoareFaraTva: bani(),
-  tva: bani(),
+  valoareFaraTva: moneyField(),
+  tva: moneyField(),
   status: z.enum(['inregistrata', 'respinsa']),
   statusDetail: z.string().optional(),
   // TASK 2b: the deductibility category (CF art. 68). Declared here as well as on `Expense` because

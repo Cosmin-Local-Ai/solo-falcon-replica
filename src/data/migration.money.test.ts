@@ -16,6 +16,19 @@ import { lei } from '../domain/money';
 /** A v4 payload: the seed dataset with money forced back to the OLD lei scale. */
 function v4(overrides: Record<string, unknown> = {}): PersistedAppData {
   const base = JSON.parse(JSON.stringify({ ...seedData, version: 4 })) as Record<string, unknown>;
+  // TASK 10a: the seed now stores money as `{ amount, currency }`, but a v4 payload predates that shape —
+  // the `money-bani` step is what CREATES integer bani and `record-currency` (v10) is what creates the
+  // object. Handing the step an object would make it report `[object Object]` as an unconvertible value,
+  // which is a fixture bug, not a finding. The unwrapped number is the same number the pre-10a fixture
+  // held, so every expectation in this file still pins exactly what it pinned before.
+  for (const collection of ['revenues', 'expenses'] as const) {
+    for (const row of (base[collection] as Record<string, unknown>[] | undefined) ?? []) {
+      for (const field of ['valoareFaraTva', 'tva']) {
+        const value = row[field];
+        if (value && typeof value === 'object') row[field] = (value as { amount: number }).amount;
+      }
+    }
+  }
   return { ...base, ...overrides } as unknown as PersistedAppData;
 }
 

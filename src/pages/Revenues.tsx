@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { formatBaniRON, leiInputValue, parseLeiInput } from '../domain/money';
+import { ENTRY_CURRENCIES, formatMoney, moneyInputValue, parseMoneyInput, type CurrencyCode } from '../domain/money';
 import { useStore } from '../data/store';
 import { fmtDate, total, statusBadge } from '../data/types';
 import type { Revenue } from '../data/types';
@@ -30,10 +30,13 @@ function RevenueForm({ initial, onSave, onClose }: {
     date: initial?.date ?? new Date().toISOString().slice(0, 10),
     client: initial?.client ?? '',
     cui: initial?.cui ?? '',
-    // `leiInputValue`, not `String(...)`: the stored amount is integer bani, and an input is a screen.
+    // `moneyInputValue`, not `String(...)`: the stored amount is integer minor units, and an input is a screen.
     // `String(450000)` would show a user 450 000 for 4 500 lei.
-    valoare: initial ? leiInputValue(initial.valoareFaraTva) : '',
-    tva: initial ? leiInputValue(initial.tva) : '',
+    valoare: initial ? moneyInputValue(initial.valoareFaraTva) : '',
+    tva: initial ? moneyInputValue(initial.tva) : '',
+    // TASK 10a: the currency is part of the amount, so it is a field the user can see and set. It defaults
+    // to RON because that is what every existing record was written in.
+    currency: (initial?.valoareFaraTva.currency ?? 'RON') as CurrencyCode,
     status: initial?.status ?? 'inregistrata',
     statusDetail: initial?.statusDetail ?? '',
   });
@@ -46,13 +49,15 @@ function RevenueForm({ initial, onSave, onClose }: {
     if (!f.nr.trim()) e.nr = validation.documentNumberRequired;
     if (!f.date) e.date = validation.dateRequired;
     if (!f.client.trim()) e.client = validation.clientRequired;
-    // Phase 10: the form speaks lei, storage speaks bani. `parseLeiInput` is the one boundary, and it
-    // REFUSES sub-ban precision (`85.555`) instead of rounding it — rounding on the way into a ledger is the
-    // silent money change this phase forbids. The existing messages are unchanged.
-    const v = parseLeiInput(f.valoare);
-    const t = parseLeiInput(f.tva);
-    if (v === null || v < 0) e.valoare = validation.amountInvalid;
-    if (t === null || t < 0) e.tva = validation.vatInvalid;
+    // Phase 10: the form speaks major units, storage speaks minor units. `parseMoneyInput` is the one
+    // boundary, and it REFUSES sub-minor-unit precision (`85.555`) instead of rounding it — rounding on the
+    // way into a ledger is the silent money change this codebase forbids. The existing messages are
+    // unchanged. TASK 10a: the parse is done in the currency the form is set to, so the stored amount and
+    // the currency can never disagree.
+    const v = parseMoneyInput(f.valoare, f.currency);
+    const t = parseMoneyInput(f.tva, f.currency);
+    if (v === null || v.amount < 0) e.valoare = validation.amountInvalid;
+    if (t === null || t.amount < 0) e.tva = validation.vatInvalid;
     setErrors(e);
     if (Object.keys(e).length) return;
     // Unreachable — the two checks above already recorded an error for a null. It exists so the compiler
@@ -107,6 +112,12 @@ function RevenueForm({ initial, onSave, onClose }: {
         <div className="field">
           <label>{fields.cui}</label>
           <input value={f.cui} onChange={e => set('cui', e.target.value)} placeholder={fields.cuiPlaceholder} />
+        </div>
+        <div className="field">
+          <label>{fields.currency} <span className="req">*</span></label>
+          <select value={f.currency} onChange={e => set('currency', e.target.value)}>
+            {ENTRY_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
         </div>
         <div className="field">
           <label>{fields.amountWithoutVat} <span className="req">*</span></label>
@@ -225,7 +236,7 @@ export default function Revenues({ initialTab, onTabChange, focusRecord }: Reven
             <table className="table">
               <thead>
                 <tr>
-                  <th>{revenuesCopy.columns.document}</th><th>{revenuesCopy.columns.type}</th><th>{revenuesCopy.columns.client}</th><th>{revenuesCopy.columns.cui}</th><th>{revenuesCopy.columns.date}</th>
+                  <th>{revenuesCopy.columns.document}</th><th>{revenuesCopy.columns.type}</th><th>{revenuesCopy.columns.client}</th><th>{revenuesCopy.columns.cui}</th><th>{revenuesCopy.columns.date}</th><th>{revenuesCopy.columns.currency}</th>
                   <th className="amount">{revenuesCopy.columns.withoutVat}</th><th className="amount">{revenuesCopy.columns.vat}</th><th className="amount">{revenuesCopy.columns.total}</th>
                   <th>{revenuesCopy.columns.status}</th><th />
                 </tr>
@@ -243,9 +254,10 @@ export default function Revenues({ initialTab, onTabChange, focusRecord }: Reven
                     <td>{r.client}</td>
                     <td className="muted">{r.cui}</td>
                     <td>{fmtDate(r.date)}</td>
-                    <td className="amount">{formatBaniRON(r.valoareFaraTva)}</td>
-                    <td className="amount">{formatBaniRON(r.tva)}</td>
-                    <td className="amount">{formatBaniRON(total(r))}</td>
+                    <td>{r.valoareFaraTva.currency}</td>
+                    <td className="amount">{formatMoney(r.valoareFaraTva)}</td>
+                    <td className="amount">{formatMoney(r.tva)}</td>
+                    <td className="amount">{formatMoney(total(r))}</td>
                     <td>
                       <Badge kind={statusBadge(r.status)}>{recordStatus.revenueLabels[r.status]}</Badge>
                       {r.statusDetail && <div className="text-sm muted" style={{ marginTop: 3 }}>{r.statusDetail}</div>}

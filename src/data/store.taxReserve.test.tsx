@@ -16,7 +16,7 @@ import { StoreProvider, useStore, STORAGE_KEY } from './store';
 import { CURRENT_DATA_VERSION, DATA_VERSION_EXPENSE_CATEGORY } from './migration';
 import { seedData } from './seed';
 import type { AppData, Revenue } from './types';
-import { lei, type Bani } from '../domain/money';
+import { lei, ron, type Bani } from '../domain/money';
 
 let storeRef: ReturnType<typeof useStore> | null = null;
 function Probe() {
@@ -31,8 +31,8 @@ const validRevenue: Revenue = {
   date: '2026-03-15',
   client: 'Presta Consulting SRL',
   cui: 'RO12345678',
-  valoareFaraTva: lei(1000),
-  tva: lei(190),
+  valoareFaraTva: ron(1000),
+  tva: ron(190),
   status: 'inregistrata',
 };
 
@@ -148,7 +148,7 @@ describe('a payload with no reserve field loads as null, not 0', () => {
 
     load();
     expect(storeRef!.dataOrigin).toBe('persisted');
-    expect(storeRef!.migration!.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest']);
+    expect(storeRef!.migration!.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency']);
     expect(storeRef!.reservedAmount).toBeNull();
     // And the next write stamps the current version — the upgrade is one-way and additive.
     expect(persisted().version).toBe(CURRENT_DATA_VERSION);

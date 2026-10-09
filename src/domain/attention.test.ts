@@ -21,7 +21,7 @@ import {
   unresolvedRecords,
   type AttentionItem,
 } from './attention';
-import { lei } from './money';
+import { lei, ron } from './money';
 import { seedData } from '../data/seed';
 import type { Declaration } from '../data/types';
 
@@ -297,15 +297,15 @@ describe('the record family: what the seed actually holds', () => {
     // asserted from memory.
     const registeredNet = seedData.revenues
       .filter(r => r.status === 'inregistrata')
-      .reduce((sum, r) => sum + r.valoareFaraTva, 0);
+      .reduce((sum, r) => sum + r.valoareFaraTva.amount, 0);
     const registeredExpenses = seedData.expenses
       .filter(e => e.status === 'inregistrata')
-      .reduce((sum, e) => sum + e.valoareFaraTva, 0);
+      .reduce((sum, e) => sum + e.valoareFaraTva.amount, 0);
 
     expect(registeredNet).toBe(450000 + 320000); // r1 + r4 in bani — r2 is `in-asteptare`, r3 `respinsa`
     expect(registeredExpenses).toBe(12000 + 8550); // e1 + e2, in bani — e3's 34.000 bani stays out
     // And the attention items themselves carry no sum: they name the record, they do not add it up.
-    for (const r of records) expect(r.amountNet).toBeGreaterThanOrEqual(0);
+    for (const r of records) expect(r.amountNet.amount).toBeGreaterThanOrEqual(0);
   });
 });
 
@@ -339,6 +339,6 @@ describe('the record facts carry what a target needs', () => {
       expenses: [],
       declarations: [],
     });
-    expect(r3.amountNet).toBe(lei(800));
+    expect(r3.amountNet).toEqual(ron(800));
   });
 });

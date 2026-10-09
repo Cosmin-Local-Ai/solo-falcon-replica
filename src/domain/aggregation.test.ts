@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AppData, Expense, Revenue, SettingsState } from '../data/types';
 import type { PfaIdentity, PfaProfile } from './models';
 import { inPeriod, selectMonthly, selectYtd, revenueFiscalDate, expenseFiscalDate, auditFiscalDates } from './aggregation';
-import { addBani, lei, subBani, type Bani } from './money';
+import { addBani, lei, money, ron, subBani, type Bani } from './money';
 
 function identity(): PfaIdentity {
   return {
@@ -74,8 +74,10 @@ function revenue(date: string, valoareFaraTva: Bani, tva: Bani, status: Revenue[
     date,
     client: 'Client Test',
     cui: '12345678',
-    valoareFaraTva,
-    tva,
+    // TASK 10a: the helper still takes plain bani, so every existing call site and every
+    // pinned figure keeps its exact wording; the record wraps it as RON here.
+    valoareFaraTva: money(valoareFaraTva, 'RON'),
+    tva: money(tva, 'RON'),
     status,
   };
 }
@@ -88,8 +90,8 @@ function expense(date: string, valoareFaraTva: Bani, tva: Bani, status: Expense[
     date,
     furnizor: 'Furnizor Test',
     cui: '87654321',
-    valoareFaraTva,
-    tva,
+    valoareFaraTva: money(valoareFaraTva, 'RON'),
+    tva: money(tva, 'RON'),
     status,
   };
 }

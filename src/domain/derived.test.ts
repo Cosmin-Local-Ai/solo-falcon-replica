@@ -5,7 +5,7 @@ import { selectFinancialDerived, selectTaxDerived } from './derived';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal/package2026';
 import { selectApplicableRules } from './fiscal/select';
 import type { FiscalRule } from './fiscal/rules';
-import { addBani, lei, subBani } from './money';
+import { addBani, lei, ron, subBani } from './money';
 
 const AS_OF = '2026-10-01';
 
@@ -78,8 +78,8 @@ function revenue(overrides: Partial<Revenue> = {}): Revenue {
     date: '2026-03-15',
     client: 'Client Test',
     cui: '12345678',
-    valoareFaraTva: lei(1000),
-    tva: lei(190),
+    valoareFaraTva: ron(1000),
+    tva: ron(190),
     status: 'inregistrata',
     ...overrides,
   };
@@ -93,8 +93,8 @@ function expense(overrides: Partial<Expense> = {}): Expense {
     date: '2026-04-10',
     furnizor: 'Furnizor Test',
     cui: 'RO12345678',
-    valoareFaraTva: lei(500),
-    tva: lei(95),
+    valoareFaraTva: ron(500),
+    tva: ron(95),
     status: 'inregistrata',
     ...overrides,
   };
@@ -122,7 +122,7 @@ describe('selectFinancialDerived (Step 14)', () => {
   it('case 1: income added → derived revenue/net change', () => {
     const before = selectFinancialDerived(makeData({ revenues: [revenue()] }), AS_OF);
     const after = selectFinancialDerived(
-      makeData({ revenues: [revenue(), revenue({ id: 'rev-2', nr: 'FCT-002', date: '2026-05-20', valoareFaraTva: lei(800), tva: lei(152) })] }),
+      makeData({ revenues: [revenue(), revenue({ id: 'rev-2', nr: 'FCT-002', date: '2026-05-20', valoareFaraTva: ron(800), tva: ron(152) })] }),
       AS_OF,
     );
     // addBani/subBani: `Bani + number` widens to an unbranded number, and the delta has to be
@@ -135,7 +135,7 @@ describe('selectFinancialDerived (Step 14)', () => {
   it('case 2: expense added → derived expenses/net change', () => {
     const before = selectFinancialDerived(makeData({ expenses: [expense()] }), AS_OF);
     const after = selectFinancialDerived(
-      makeData({ expenses: [expense(), expense({ id: 'exp-2', nr: 'FCT-PRO-002', date: '2026-06-11', valoareFaraTva: lei(300), tva: lei(57) })] }),
+      makeData({ expenses: [expense(), expense({ id: 'exp-2', nr: 'FCT-PRO-002', date: '2026-06-11', valoareFaraTva: ron(300), tva: ron(57) })] }),
       AS_OF,
     );
     expect(after.ytd.expenses).toBe(addBani(before.ytd.expenses, lei(357)));
@@ -144,7 +144,7 @@ describe('selectFinancialDerived (Step 14)', () => {
   });
 
   it('case 3: expense deleted → derived expenses/net change', () => {
-    const data = makeData({ expenses: [expense(), expense({ id: 'exp-2', valoareFaraTva: lei(200), tva: lei(38) })] });
+    const data = makeData({ expenses: [expense(), expense({ id: 'exp-2', valoareFaraTva: ron(200), tva: ron(38) })] });
     const before = selectFinancialDerived(data, AS_OF);
     const after = selectFinancialDerived({ ...data, expenses: [data.expenses[0]] }, AS_OF);
     expect(after.ytd.expenses).toBe(subBani(before.ytd.expenses, lei(238)));
@@ -168,7 +168,7 @@ describe('selectFinancialDerived (Step 14)', () => {
     expect(before.lines.expenses[0].document).toEqual({ tip: 'factura', nr: 'FCT-PRO-001' });
     // Amounts are untouched — only the document link state changed.
     expect(after.ytd).toEqual(before.ytd);
-    expect(after.lines.expenses[0].total).toBe(before.lines.expenses[0].total);
+    expect(after.lines.expenses[0].total).toEqual(before.lines.expenses[0].total);
   });
 
   it('unrelated change (client added) → derived financial view unchanged', () => {
@@ -224,13 +224,13 @@ describe('selectFinancialDerived (Step 14)', () => {
 
   it('preserves full revenue-line provenance (all fields)', () => {
     const data = makeData({
-      revenues: [revenue({ id: 'rev-p', tip: 'notafactura', nr: 'NI-42', date: '2026-05-20', valoareFaraTva: lei(800), tva: lei(152) })],
+      revenues: [revenue({ id: 'rev-p', tip: 'notafactura', nr: 'NI-42', date: '2026-05-20', valoareFaraTva: ron(800), tva: ron(152) })],
     });
     const view = selectFinancialDerived(data, AS_OF);
     expect(view.lines.revenues[0]).toEqual({
       id: 'rev-p',
       date: '2026-05-20',
-      total: lei(952),
+      total: ron(952),
       status: 'inregistrata',
       counted: true,
       document: { tip: 'notafactura', nr: 'NI-42' },
@@ -259,8 +259,8 @@ describe('selectFinancialDerived (Step 14)', () => {
 
   it('computes negative net when expenses exceed revenue', () => {
     const data = makeData({
-      revenues: [revenue({ valoareFaraTva: lei(100), tva: lei(19) })],
-      expenses: [expense({ valoareFaraTva: lei(500), tva: lei(95) })],
+      revenues: [revenue({ valoareFaraTva: ron(100), tva: ron(19) })],
+      expenses: [expense({ valoareFaraTva: ron(500), tva: ron(95) })],
     });
     const view = selectFinancialDerived(data, AS_OF);
     expect(view.ytd.revenue).toBe(lei(119));

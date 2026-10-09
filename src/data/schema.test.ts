@@ -3,7 +3,7 @@ import { parseAppData } from './schema';
 import { seedData } from './seed';
 import type { AppData, Revenue } from './types';
 import type { RuleRelease } from '../domain/fiscal/rules';
-import { lei } from '../domain/money';
+import { lei, ron } from '../domain/money';
 
 /** A minimal-but-valid persisted dataset, used as the test baseline. */
 function baseline(): AppData {
@@ -18,8 +18,8 @@ function baseline(): AppData {
         date: '2026-03-15',
         client: 'Presta Consulting SRL',
         cui: 'RO12345678',
-        valoareFaraTva: lei(1000),
-        tva: lei(190),
+        valoareFaraTva: ron(1000),
+        tva: ron(190),
         status: 'inregistrata',
       },
     ],
@@ -322,9 +322,9 @@ describe('parseAppData — corrupt payloads return null', () => {
   });
 
   it('returns null for invalid revenue numbers', () => {
-    expect(parseAppData(write({ revenues: [{ ...validRevenue, valoareFaraTva: lei(-5) }] }))).toBeNull();
+    expect(parseAppData(write({ revenues: [{ ...validRevenue, valoareFaraTva: ron(-5) }] }))).toBeNull();
     expect(parseAppData(write({ revenues: [{ ...validRevenue, tva: '190' }] }))).toBeNull();
-    expect(parseAppData(write({ revenues: [{ ...validRevenue, tva: lei(-1) }] }))).toBeNull();
+    expect(parseAppData(write({ revenues: [{ ...validRevenue, tva: ron(-1) }] }))).toBeNull();
   });
 
   it('returns null for a revenue with an empty id', () => {
@@ -336,7 +336,7 @@ describe('parseAppData — corrupt payloads return null', () => {
   });
 
   it('returns null for invalid expense entries', () => {
-    expect(parseAppData(write({ expenses: [{ ...seedData.expenses[0], valoareFaraTva: lei(-5) }] }))).toBeNull();
+    expect(parseAppData(write({ expenses: [{ ...seedData.expenses[0], valoareFaraTva: ron(-5) }] }))).toBeNull();
     expect(parseAppData(write({ expenses: [{ ...seedData.expenses[0], status: 'plata' }] }))).toBeNull();
     expect(parseAppData(write({ expenses: [{ ...seedData.expenses[0], tip: 'chec' }] }))).toBeNull();
     expect(parseAppData(write({ expenses: [{ ...seedData.expenses[0], id: '' }] }))).toBeNull();

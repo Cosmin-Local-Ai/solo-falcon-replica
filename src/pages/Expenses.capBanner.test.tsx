@@ -13,7 +13,7 @@ import { StoreProvider } from '../data/store';
 import { CURRENT_DATA_VERSION } from '../data/migration';
 import { seedData } from '../data/seed';
 import type { Expense } from '../data/types';
-import { lei } from '../domain/money';
+import { lei, ron } from '../domain/money';
 
 const STORAGE_KEY = 'pfa-app-data-v2';
 
@@ -32,8 +32,8 @@ function expense(over: Partial<Expense>): Expense {
     date: '2026-05-10',
     furnizor: 'Furnizor Test',
     cui: 'RO99999999',
-    valoareFaraTva: lei(2000),
-    tva: lei(400),
+    valoareFaraTva: ron(2000),
+    tva: ron(400),
     status: 'inregistrata',
     ...over,
   };
@@ -62,7 +62,7 @@ describe('Expenses — an unmeasurable statutory cap is named, not dropped', () 
   });
 
   it('cheltuieli sociale is named as an absent datum, never as a zero ceiling', () => {
-    seedWith([expense({ id: 'cap-social', category: 'social_expenses', valoareFaraTva: lei(500), tva: lei(100) })]);
+    seedWith([expense({ id: 'cap-social', category: 'social_expenses', valoareFaraTva: ron(500), tva: ron(100) })]);
     render(
       <StoreProvider>
         <Expenses />
@@ -74,7 +74,7 @@ describe('Expenses — an unmeasurable statutory cap is named, not dropped', () 
   });
 
   it('a protocol expense is NOT reported as unmeasurable: its ceiling is computed, so no banner lies about it', () => {
-    seedWith([expense({ id: 'cap-protocol', category: 'protocol', valoareFaraTva: lei(300), tva: lei(57) })]);
+    seedWith([expense({ id: 'cap-protocol', category: 'protocol', valoareFaraTva: ron(300), tva: ron(57) })]);
     render(
       <StoreProvider>
         <Expenses />

@@ -18,7 +18,7 @@ import {
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal';
 import { seedData } from '../data/seed';
 import type { AppData, Expense } from '../data/types';
-import { lei } from './money';
+import { lei, ron } from './money';
 
 const AS_OF_YEAR_END = '2026-12-31';
 
@@ -30,8 +30,8 @@ function expense(over: Partial<Expense> = {}): Expense {
     date: '2026-06-10',
     furnizor: 'Furnizor Test',
     cui: 'RO00000000',
-    valoareFaraTva: lei(1000),
-    tva: lei(190),
+    valoareFaraTva: ron(1000),
+    tva: ron(190),
     status: 'inregistrata',
     ...over,
   };
@@ -85,9 +85,9 @@ describe('selectDeductibleExpenses — the law decides, the record only states',
 
   it('the deductible total is explainable per category, each line carrying the rule that justified it', () => {
     const set = assemble([
-      expense({ id: 'a', category: 'postal_and_telecom', valoareFaraTva: lei(1000), tva: lei(190) }),
-      expense({ id: 'b', category: 'rent_business_space', valoareFaraTva: lei(500), tva: lei(95) }),
-      expense({ id: 'c', category: 'postal_and_telecom', valoareFaraTva: lei(200), tva: lei(38) }),
+      expense({ id: 'a', category: 'postal_and_telecom', valoareFaraTva: ron(1000), tva: ron(190) }),
+      expense({ id: 'b', category: 'rent_business_space', valoareFaraTva: ron(500), tva: ron(95) }),
+      expense({ id: 'c', category: 'postal_and_telecom', valoareFaraTva: ron(200), tva: ron(38) }),
     ]);
     expect(set.counts.entered).toBe(3);
     expect(set.lines).toHaveLength(2); // sorted by category: postal_and_telecom, rent_business_space
@@ -110,8 +110,8 @@ describe('selectDeductibleExpenses — the law decides, the record only states',
     // like `mixed`, never like `exclusive`.
     const set = assemble([expense({ category: 'vehicle_related' })]);
     expect(set.records).toHaveLength(1);
-    expect(set.records[0].valoareFaraTva).toBe(lei(500)); // 1.000,00 x 50 %
-    expect(set.records[0].tva).toBe(lei(95)); // 190,00 x 50 %
+    expect(set.records[0].valoareFaraTva).toEqual(ron(500)); // 1.000,00 x 50 %
+    expect(set.records[0].tva).toEqual(ron(95)); // 190,00 x 50 %
     const line = set.lines[0];
     expect(line.treatment).toBe('capped');
     expect(line.cap).toMatchObject({ percent: 50, base: 'expense_itself' });
@@ -120,14 +120,14 @@ describe('selectDeductibleExpenses — the law decides, the record only states',
 
   it('a cap is a ceiling: the fractional ban is floored, never rounded up', () => {
     // 10,01 lei = 1.001 bani; 50 % is 500,5 bani. Rounding up would deduct more than the law allows.
-    const set = assemble([expense({ category: 'vehicle_related', valoareFaraTva: lei(10.01), tva: lei(0) })]);
-    expect(set.records[0].valoareFaraTva).toBe(lei(5)); // 500 bani, not 501
+    const set = assemble([expense({ category: 'vehicle_related', valoareFaraTva: ron(10.01), tva: ron(0) })]);
+    expect(set.records[0].valoareFaraTva).toEqual(ron(5)); // 500 bani, not 501
   });
 
   it('capping does not rewrite the stored record — the capped entry is a copy', () => {
     const e = expense({ id: 'orig', category: 'vehicle_related' });
     const set = assemble([e]);
-    expect(e.valoareFaraTva).toBe(lei(1000));
+    expect(e.valoareFaraTva).toEqual(ron(1000));
     expect(set.records[0]).not.toBe(e);
     expect(set.records[0].id).toBe('orig');
   });
@@ -229,8 +229,8 @@ describe('selectEstimateOperands — one assembler, feeding both selectors the s
     // 2026-06-30 -> 6 elapsed months -> x 2.
     const operands = selectEstimateOperands(
       dataWith([
-        expense({ id: 'deduct', category: 'postal_and_telecom', valoareFaraTva: lei(1000), tva: lei(190) }),
-        expense({ id: 'not', category: 'donation', valoareFaraTva: lei(5000), tva: lei(950) }),
+        expense({ id: 'deduct', category: 'postal_and_telecom', valoareFaraTva: ron(1000), tva: ron(190) }),
+        expense({ id: 'not', category: 'donation', valoareFaraTva: ron(5000), tva: ron(950) }),
       ]),
       '2026-06-30',
       PFA_2026_SYSTEM_REAL_PACKAGE,
@@ -247,7 +247,7 @@ describe('selectEstimateOperands — one assembler, feeding both selectors the s
 
   it('an uncategorised payload — the migrated-data case — contributes nothing to the base', () => {
     const operands = selectEstimateOperands(
-      dataWith([expense({ valoareFaraTva: lei(5000), tva: lei(950) })]),
+      dataWith([expense({ valoareFaraTva: ron(5000), tva: ron(950) })]),
       AS_OF_YEAR_END,
       PFA_2026_SYSTEM_REAL_PACKAGE,
     );

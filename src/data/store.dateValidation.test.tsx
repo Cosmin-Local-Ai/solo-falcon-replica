@@ -3,7 +3,7 @@ import { act, render } from '@testing-library/react';
 import { StoreProvider, useStore } from './store';
 import { seedData } from './seed';
 import type { Expense, Revenue, Toast } from './types';
-import { lei } from '../domain/money';
+import { lei, ron } from '../domain/money';
 
 // B-21 — the write path must refuse an unusable calendar date, loudly, and name the record,
 // the field and the value. Before this, such a record was accepted and then vanished from
@@ -54,8 +54,8 @@ function newRevenue(date: string): Omit<Revenue, 'id'> {
     date,
     client: 'Presta Consulting SRL',
     cui: 'RO12345678',
-    valoareFaraTva: lei(1000),
-    tva: lei(210),
+    valoareFaraTva: ron(1000),
+    tva: ron(210),
     status: 'inregistrata',
   };
 }
@@ -174,8 +174,8 @@ describe('expense date validation (B-21)', () => {
     date: '2026-06-01',
     furnizor: 'CloudHost SRL',
     cui: 'RO87654321',
-    valoareFaraTva: lei(100),
-    tva: lei(21),
+    valoareFaraTva: ron(100),
+    tva: ron(21),
     status: 'inregistrata' as const,
   };
 

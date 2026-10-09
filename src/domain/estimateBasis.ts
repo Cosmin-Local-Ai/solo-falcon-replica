@@ -34,7 +34,7 @@ import {
   type RefusedExpense,
 } from './fiscal/deductibility';
 import type { FiscalRule } from './fiscal/rules';
-import { addBani, applyRateDecimal, lei, subBani, type Bani } from './money';
+import { addBani, applyRateDecimal, isRon, lei, money, requireRon, subBani, type Bani } from './money';
 import { selectProjectionV1, type ProjectionV1 } from './projection';
 import type { TaxEstimateResult } from './tax';
 import Decimal from 'decimal.js-light';
@@ -190,8 +190,15 @@ export function amountsForEstimate(basis: AttributedEstimateBasis): EstimateAmou
 //    (`annual_eur_per_person`, `annual_salary_expense`) stay excluded and counted, with the missing
 //    datum named on the record.
 
-/** Why an expense did not reach the deductible total. */
-export type ExcludedReason = 'undetermined' | 'non_deductible' | 'cap_unresolved';
+/**
+ * Why an expense did not reach the deductible total.
+ *
+ * `foreign_currency` is TASK 10a (B-32): the record is written in a currency the app can store but cannot
+ * yet bring into a lei base, because doing so needs a BNR rate and a legal basis, and the assembler has
+ * neither wired in yet (TASK 10b). It is NOT `cap_unresolved` — the deductibility of the expense is not
+ * what is unresolved, the *unit* is — and it is not silently summed.
+ */
+export type ExcludedReason = 'undetermined' | 'non_deductible' | 'cap_unresolved' | 'foreign_currency';
 
 /** One category's contribution to the deductible total, with the rule that justified it. */
 export interface DeductibleExpenseLine {
@@ -279,6 +286,8 @@ export interface DeductibleExpenseCounts {
   capUnresolved: number;
   /** TASK 2c: records held for an annual ceiling the assembler CAN strike. Not an exclusion. */
   annualCapped: number;
+  /** TASK 10a (B-32): records written in a currency the lei base cannot yet absorb. */
+  foreignCurrency: number;
 }
 
 /** The expense subset that may enter the engine, plus the audit trail of everything kept out. */
@@ -374,9 +383,21 @@ function unresolvedCapDetail(cap: DeductibilityCap | undefined, rule: FiscalRule
 function applyExpenseCap(e: Expense, percent: number): Expense {
   return {
     ...e,
-    valoareFaraTva: capBaniCeiling(e.valoareFaraTva, percent),
-    tva: capBaniCeiling(e.tva, percent),
+    valoareFaraTva: money(capBaniCeiling(e.valoareFaraTva.amount, percent), e.valoareFaraTva.currency),
+    tva: money(capBaniCeiling(e.tva.amount, percent), e.tva.currency),
   };
+}
+
+/**
+ * The two lei measures of an expense the caller has already established is written in lei.
+ *
+ * `requireRon` throws rather than read a foreign amount as lei. Reaching the throw is a defect in this
+ * loop — the loop excludes a non-RON record before it gets here — not a data condition, and that is the
+ * point: the only way a foreign amount enters a lei total is if this guard is removed.
+ */
+function leiMeasures(e: Expense): { net: Bani; inclVat: Bani } {
+  const net = requireRon(e.valoareFaraTva, `expense ${e.id}.valoareFaraTva`);
+  return { net, inclVat: addBani(net, requireRon(e.tva, `expense ${e.id}.tva`)) };
 }
 
 /**
@@ -404,7 +425,7 @@ export function selectDeductibleExpenses(
     lines: [],
     annualCapped: [],
     excluded: [],
-    counts: { entered: 0, undetermined: 0, nonDeductible: 0, capUnresolved: 0, annualCapped: 0 },
+    counts: { entered: 0, undetermined: 0, nonDeductible: 0, capUnresolved: 0, annualCapped: 0, foreignCurrency: 0 },
     refusal: null,
   };
 
@@ -423,11 +444,34 @@ export function selectDeductibleExpenses(
     nonDeductible: 0,
     capUnresolved: 0,
     annualCapped: 0,
+    foreignCurrency: 0,
   };
 
   for (const e of data.expenses) {
     const fiscalDate = expenseFiscalDate(e);
     if (e.status !== 'inregistrata' || !inPeriod(fiscalDate, asOfDate, fiscalYear)) continue;
+
+    // TASK 10a (B-32). The deductible base is a lei quantity — every ceiling struck here is a lei ceiling
+    // and every figure the engine consumes is lei. A record written in another currency has no lei amount
+    // until a BNR rate, a date or year to key it to and a legal basis are attached to it, and this build
+    // attaches none. So it is excluded and counted, with the missing datum named — never added to a lei
+    // total as though its cents were bani, which is precisely the defect this step removes.
+    if (!isRon(e.valoareFaraTva) || !isRon(e.tva)) {
+      counts.foreignCurrency += 1;
+      excluded.push({
+        id: e.id,
+        category: e.category ?? null,
+        reason: 'foreign_currency',
+        ruleId: null,
+        sourceArticle: 'CF art. 9 alin. (3) lit. b) și alin. (4)',
+        detail:
+          `inregistrarea este în ${e.valoareFaraTva.currency}, iar baza deductibilă este în lei. ` +
+          'Lipsește cursul BNR de aplicat: art. 9 alin. (3) lit. b) și alin. (4) indică cursul comunicat de BNR ' +
+          'valabil la data la care s-a plătit suma, dar aplicația nu are încă un curs atașat acestei înregistrări. ' +
+          'Un curs scris de la sine ar fi o cifră inventată, așa că înregistrarea iese din total și este raportată.',
+      });
+      continue;
+    }
 
     const c = classifyExpenseDeductibility(
       { category: e.category, context },
@@ -529,8 +573,9 @@ export function selectDeductibleExpenses(
           ...(c.conflict ? { conflict: c.conflict } : {}),
         };
         line.count += 1;
-        line.inclVat = addBani(line.inclVat, addBani(e.valoareFaraTva, e.tva));
-        line.exclVat = addBani(line.exclVat, e.valoareFaraTva);
+        const measures = leiMeasures(e);
+        line.inclVat = addBani(line.inclVat, measures.inclVat);
+        line.exclVat = addBani(line.exclVat, measures.net);
         line.records.push(e);
         cappedByCategory.set(category, line);
         continue;
@@ -549,8 +594,9 @@ export function selectDeductibleExpenses(
         exclVat: lei(0),
       };
       line.count += 1;
-      line.inclVat = addBani(line.inclVat, addBani(capped.valoareFaraTva, capped.tva));
-      line.exclVat = addBani(line.exclVat, capped.valoareFaraTva);
+      const cappedMeasures = leiMeasures(capped);
+      line.inclVat = addBani(line.inclVat, cappedMeasures.inclVat);
+      line.exclVat = addBani(line.exclVat, cappedMeasures.net);
       byCategory.set(category, line);
       continue;
     }
@@ -567,8 +613,9 @@ export function selectDeductibleExpenses(
       exclVat: lei(0),
     };
     line.count += 1;
-    line.inclVat = addBani(line.inclVat, addBani(e.valoareFaraTva, e.tva));
-    line.exclVat = addBani(line.exclVat, e.valoareFaraTva);
+    const plainMeasures = leiMeasures(e);
+    line.inclVat = addBani(line.inclVat, plainMeasures.inclVat);
+    line.exclVat = addBani(line.exclVat, plainMeasures.net);
     byCategory.set(category, line);
   }
 

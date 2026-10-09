@@ -3,7 +3,7 @@ import type { ExpenseCategory } from '../domain/fiscal/deductibility';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import type { MoneyPrecisionNotice } from './migration';
 import { localDateISO, now } from '../domain/date';
-import { maxBani, subBani, type Bani, sumBani } from '../domain/money';
+import { maxBani, subBani, sumMoney, type Bani, type CurrencyCode, type Money } from '../domain/money';
 
 // ── Venituri ──────────────────────────────────────────────
 export type RevenueStatus = 'inregistrata' | 'in-asteptare' | 'respinsa';
@@ -26,9 +26,16 @@ export interface Revenue {
   collected?: string;
   client: string;
   cui: string;
-  /** Integer **bani** (Phase 10). A persisted lei value became bani through the `money-bani` migration step. */
-  valoareFaraTva: Bani;
-  tva: Bani;
+  /**
+   * Integer **bani** (Phase 10). A persisted lei value became bani through the `money-bani` migration step.
+   *
+   * TASK 10a (B-32): the amount now carries its **currency**. `Money` is `{ amount: Bani, currency }`, so a
+   * EUR invoice is no longer arithmetically indistinguishable from a lei invoice. The stored figure itself
+   * did not move — the `record-currency` step wrapped every existing number as `{ amount: <same number>,
+   * currency: 'RON' }`, which is value-preserving by construction. See `docs/ai/phases/24_currency_fx_store.md`.
+   */
+  valoareFaraTva: Money;
+  tva: Money;
   status: RevenueStatus;
   statusDetail?: string;
   eFacturaStatus?: EFacturaStatus;
@@ -54,9 +61,9 @@ export interface Expense {
   paid?: string;
   furnizor: string;
   cui: string;
-  /** Integer **bani** (Phase 10). */
-  valoareFaraTva: Bani;
-  tva: Bani;
+  /** Integer **bani** (Phase 10). TASK 10a: carries its currency — see `Revenue.valoareFaraTva`. */
+  valoareFaraTva: Money;
+  tva: Money;
   status: ExpenseStatus;
   statusDetail?: string;
   /**
@@ -74,6 +81,31 @@ export interface Expense {
    */
   category?: ExpenseCategory;
 }
+
+// ── Pre-v10 record shapes (migration tests only) ────────────────────────────
+/**
+ * A `Revenue` / `Expense` in the shape a **pre-v10** payload stored it: money as a bare number, with no
+ * currency anywhere on the field.
+ *
+ * These exist for the migration tests, and only for them. A fixture that feeds `localStorage` a payload at
+ * `version < 10` is showing what the chain must convert, so it must be typed as the OLD shape — typing it
+ * `Revenue` would force the fixture into the post-v10 object form and the chain would have nothing left to
+ * migrate, which is exactly the "fixtures are payloads, not values" trap `docs/ai/phases/10_money_precision.md`
+ * §3.3(4) records. The `Bani` here is the pre-v10 reality: a number the load gate casts and the chain
+ * converts. Never use these types in production code.
+ */
+export type LegacyRevenue = Omit<Revenue, 'valoareFaraTva' | 'tva'> & { valoareFaraTva: Bani; tva: Bani };
+export type LegacyExpense = Omit<Expense, 'valoareFaraTva' | 'tva'> & { valoareFaraTva: Bani; tva: Bani };
+
+/**
+ * A whole dataset in the pre-v10 shape. The migration tests build one of these, hand it to `localStorage`
+ * at a `version` below 10, and assert what the chain produces — so the fixture must be typed as the shape
+ * that arrives, not the shape that leaves.
+ */
+export type LegacyAppData = Omit<AppData, 'revenues' | 'expenses'> & {
+  revenues: LegacyRevenue[];
+  expenses: LegacyExpense[];
+};
 
 // ── Clienți ───────────────────────────────────────────────
 export interface Client {
@@ -240,17 +272,37 @@ export const fmtDate = (iso: string) => {
 /**
  * Phase 10: money is an integer number of bani, so a record total is an exact integer sum —
  * `sumBani` throws rather than let a float accumulate here (`aggregation.ts` was the float origin).
+ *
+ * TASK 10a: the two addends are now `Money`, so the sum is guarded by `sumMoney` — a record whose
+ * `valoareFaraTva` is EUR and whose `tva` is RON is a corrupt record, and it throws instead of
+ * producing a total in an unnamed unit.
  */
-export const total = (r: Revenue | Expense) => sumBani([r.valoareFaraTva, r.tva]);
+export const total = (r: Revenue | Expense) => sumMoney([r.valoareFaraTva, r.tva], r.valoareFaraTva.currency);
 
 /**
- * Sum of record totals for a list of records.
+ * Sum of record totals for a list of records, **grouped by currency**.
  *
  * This lives here rather than in a `rows.reduce(...)` inside a component: accumulating money in the view
  * layer is how float drift reappears, and `reduce((s, e) => s + total(e), 0)` also drops the `Bani` brand
- * and starts from an unbranded `0`. `sumBani` rejects a non-integer instead of absorbing one.
+ * and starts from an unbranded `0`. `sumMoney` rejects a mixed-currency sum instead of absorbing one.
+ *
+ * TASK 10a: it returns one entry per currency rather than one number, because a register that holds both
+ * a lei invoice and a euro invoice has **two** totals, and adding them would invent a figure in a unit
+ * neither record was written in. The order is by currency code, so the same rows always render the same
+ * subtotals in the same order.
  */
-export const sumTotals = (rows: readonly (Revenue | Expense)[]): Bani => sumBani(rows.map(total));
+export const sumTotalsByCurrency = (rows: readonly (Revenue | Expense)[]): Money[] => {
+  const byCurrency = new Map<CurrencyCode, Money[]>();
+  for (const row of rows) {
+    const bucket = byCurrency.get(row.valoareFaraTva.currency);
+    const amount = total(row);
+    if (bucket) bucket.push(amount);
+    else byCurrency.set(row.valoareFaraTva.currency, [amount]);
+  }
+  return [...byCurrency.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([currency, amounts]) => sumMoney(amounts, currency));
+};
 
 /**
  * Declared net for one month, floored at zero — the figure the declarations table shows.

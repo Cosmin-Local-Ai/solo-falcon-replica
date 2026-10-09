@@ -2,22 +2,24 @@ import { test, expect, describe, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import { StoreProvider } from '../data/store';
 import { seedData } from '../data/seed';
-import type { AppData, Revenue } from '../data/types';
+import type { AppData, LegacyRevenue } from '../data/types';
 import Dashboard from './Dashboard';
-import { lei, type Bani } from '../domain/money';
+import { lei, ron, type Bani } from '../domain/money';
 
 const STORAGE_KEY = 'pfa-app-data-v2';
 
-/** A valid registered revenue (Feb 2026). */
-const validRevenue: Revenue = {
+/** A valid registered revenue (Feb 2026), in the shape the payload stores it. */
+const validRevenue: LegacyRevenue = {
   id: 'r1',
   tip: 'factura',
   nr: 'FCT-2026-001',
   date: '2026-02-10',
   client: 'Client A SRL',
   cui: 'RO12345678',
-  // Deliberately NOT wrapped in lei(): writePayload() writes a versionless payload straight to
-  // localStorage, so the v4->v5 money step scales it. Wrapping here would double the conversion.
+  // Deliberately NOT wrapped in lei() or ron(): writePayload() writes a versionless payload straight to
+  // localStorage, so the v4->v5 money step scales it. Wrapping here would double the conversion. It is
+  // typed `LegacyRevenue`, not `Revenue`, because a pre-v10 payload has no currency on the money field —
+  // that is the shape under test, not the current one.
   valoareFaraTva: 50_000 as Bani,
   tva: 9_500 as Bani,
   status: 'inregistrata',

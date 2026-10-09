@@ -23,7 +23,7 @@ import { selectEstimateOperands, type EstimateOperands } from './estimateBasis';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal';
 import { seedData } from '../data/seed';
 import type { AppData, Expense, Revenue } from '../data/types';
-import { lei } from './money';
+import { lei, ron } from './money';
 
 const YEAR_END = '2026-12-31'; // elapsedMonths = 11 + 31/31 = 12 -> the projection is the identity
 const E2E_CLOCK = '2026-10-31'; // elapsedMonths = 9 + 31/31 = 10 -> every annual figure is YTD x 1,2
@@ -41,8 +41,8 @@ function revenue(over: Partial<Revenue> = {}): Revenue {
     date: '2026-01-03',
     client: 'Presta Consulting SRL',
     cui: 'RO12345678',
-    valoareFaraTva: lei(1000),
-    tva: lei(190),
+    valoareFaraTva: ron(1000),
+    tva: ron(190),
     status: 'inregistrata',
     ...over,
   };
@@ -56,8 +56,8 @@ function expense(over: Partial<Expense> = {}): Expense {
     date: '2026-06-10',
     furnizor: 'Furnizor Test',
     cui: 'RO00000000',
-    valoareFaraTva: lei(1000),
-    tva: lei(190),
+    valoareFaraTva: ron(1000),
+    tva: ron(190),
     status: 'inregistrata',
     ...over,
   };
@@ -98,7 +98,7 @@ describe('TASK 2c — the art. 68 alin. (6) two-pass: protocol 2 % and burse pri
     expect(adj.ceiling).toEqual({ inclVat: lei(186.34), exclVat: lei(154) });
     expect(adj.allowed).toEqual({ inclVat: lei(186.34), exclVat: lei(154) });
     // A claim inside the ceiling is allowed whole — the ceiling is a ceiling, not a haircut.
-    const inside = amounts(run([expense({ category: 'protocol', valoareFaraTva: lei(100), tva: lei(19) })]));
+    const inside = amounts(run([expense({ category: 'protocol', valoareFaraTva: ron(100), tva: ron(19) })]));
     //   claimed 10.000 / 11.900 bani < ceiling 15.400 / 18.634 -> allowed = claimed.
     expect(inside.amounts.expensesNet).toBe(lei(100));
     expect(inside.amounts.expenses).toBe(lei(119));
@@ -118,7 +118,7 @@ describe('TASK 2c — the art. 68 alin. (6) two-pass: protocol 2 % and burse pri
     const o = amounts(
       run([
         expense({ id: 'p', category: 'protocol' }),
-        expense({ id: 'b', category: 'private_scholarship', valoareFaraTva: lei(2000), tva: lei(380) }),
+        expense({ id: 'b', category: 'private_scholarship', valoareFaraTva: ron(2000), tva: ron(380) }),
       ]),
     );
     expect(o.amounts.expensesNet).toBe(lei(539));
@@ -138,8 +138,8 @@ describe('TASK 2c — the art. 68 alin. (6) two-pass: protocol 2 % and burse pri
     // A negative base must not become a negative allowance (which would ADD to the deductible total).
     const o = amounts(
       run([
-        expense({ id: 'rent', category: 'rent_business_space', valoareFaraTva: lei(20000), tva: lei(0) }),
-        expense({ id: 'p', category: 'protocol', valoareFaraTva: lei(1000), tva: lei(0) }),
+        expense({ id: 'rent', category: 'rent_business_space', valoareFaraTva: ron(20000), tva: ron(0) }),
+        expense({ id: 'p', category: 'protocol', valoareFaraTva: ron(1000), tva: ron(0) }),
       ]),
     );
     expect(o.amounts.expensesNet).toBe(lei(20000)); // rent only; protocol contributed 0
@@ -191,7 +191,7 @@ describe('TASK 2d — the alin. (6) base is struck PRE-cap, and the post-cap rea
     const o = amounts(
       run([
         expense({ id: 'p', category: 'protocol' }),
-        expense({ id: 'q', category: 'mandatory_professional_contribution', valoareFaraTva: lei(5000), tva: lei(950) }),
+        expense({ id: 'q', category: 'mandatory_professional_contribution', valoareFaraTva: ron(5000), tva: ron(950) }),
       ]),
     );
     expect(o.amounts.expensesNet).toBe(lei(439));
@@ -229,8 +229,8 @@ describe('TASK 2d — the alin. (6) base is struck PRE-cap, and the post-cap rea
     //   expenses    = 46.585 + 6.734 + 16.835 = 70.154 bani = 701,54 lei
     const o = run([
       expense({ id: 'p', category: 'protocol' }),
-      expense({ id: 'b', category: 'private_scholarship', valoareFaraTva: lei(2000), tva: lei(380) }),
-      expense({ id: 'q', category: 'mandatory_professional_contribution', valoareFaraTva: lei(5000), tva: lei(950) }),
+      expense({ id: 'b', category: 'private_scholarship', valoareFaraTva: ron(2000), tva: ron(380) }),
+      expense({ id: 'q', category: 'mandatory_professional_contribution', valoareFaraTva: ron(5000), tva: ron(950) }),
     ]);
     if (o.kind !== 'run') throw new Error('expected the estimate to run');
     expect(o.capAdjustments).toHaveLength(3);
@@ -288,7 +288,7 @@ describe('TASK 2c — decision 5: the annual ceiling is struck on the ANNUAL fig
     // commute, so a uniform run rate hides the wrong basis in the headline number. `basis.actual` is what
     // exposes it — which is exactly why the basis decision is written down and pinned here.
     const o = amounts(
-      run([expense({ category: 'protocol', valoareFaraTva: lei(300), tva: lei(0) })], E2E_CLOCK),
+      run([expense({ category: 'protocol', valoareFaraTva: ron(300), tva: ron(0) })], E2E_CLOCK),
     );
     expect(o.basis.kind).toBe('annual-projected');
     expect(o.basis.elapsedMonths).toBe(10);
@@ -312,7 +312,7 @@ describe('TASK 2c — decision 5: the annual ceiling is struck on the ANNUAL fig
     //   incl measure has its OWN, larger ceiling: base 1.118.040 -> floor(22.360,8) = 22.360 = 223,60 lei,
     //   and claimed annual incl = 20.400 < 22.360, so the incl measure is allowed whole: 204,00 lei.
     const o = amounts(
-      run([expense({ category: 'protocol', valoareFaraTva: lei(170), tva: lei(0) })], E2E_CLOCK),
+      run([expense({ category: 'protocol', valoareFaraTva: ron(170), tva: ron(0) })], E2E_CLOCK),
     );
     expect(o.amounts.expensesNet).toBe(lei(184.8));
     expect(o.basis.actual.expensesNet).toBe(lei(170)); // NOT lei(154)
@@ -335,7 +335,7 @@ describe('TASK 2c — decision 5: the annual ceiling is struck on the ANNUAL fig
     //   285,60 lei; claimed annual incl 1.200.000 -> allowed 28.560; allowed actual incl = 28.560.
     const o = amounts(
       run(
-        [expense({ category: 'protocol', date: '2026-01-04', valoareFaraTva: lei(1000), tva: lei(0) })],
+        [expense({ category: 'protocol', date: '2026-01-04', valoareFaraTva: ron(1000), tva: ron(0) })],
         '2026-01-05',
         [revenue()],
       ),
@@ -373,8 +373,8 @@ describe('TASK 2c — the caps the app must NOT compute', () => {
     // the honest behaviour, not an enforcement of a limit the law does not let the app apply.
     const o = amounts(
       run([
-        expense({ id: 'masina-1', category: 'vehicle_related', valoareFaraTva: lei(1000), tva: lei(0) }),
-        expense({ id: 'masina-2', category: 'vehicle_related', valoareFaraTva: lei(2000), tva: lei(0) }),
+        expense({ id: 'masina-1', category: 'vehicle_related', valoareFaraTva: ron(1000), tva: ron(0) }),
+        expense({ id: 'masina-2', category: 'vehicle_related', valoareFaraTva: ron(2000), tva: ron(0) }),
       ]),
     );
     //   50 % of 1.000,00 = 500,00 lei; 50 % of 2.000,00 = 1.000,00 lei; total 1.500,00 lei.

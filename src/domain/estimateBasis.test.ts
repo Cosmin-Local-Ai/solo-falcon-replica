@@ -3,7 +3,7 @@ import type { AppData, Expense, Revenue, SettingsState } from '../data/types';
 import type { PfaIdentity, PfaProfile } from './models';
 import { selectYtd } from './aggregation';
 import { selectProjectionV1 } from './projection';
-import { lei, type Bani } from './money';
+import { lei, money, ron, type Bani } from './money';
 import type { TaxEstimateResult } from './tax';
 import {
   actualEstimateAmounts,
@@ -63,12 +63,12 @@ function makeData(overrides: Partial<AppData> = {}): AppData {
 
 function revenue(date: string, net: Bani, tva: Bani): Revenue {
   return { id: 'rev-' + date + '-' + net, tip: 'factura', nr: '1', date, client: 'Client Test', cui: '12345678',
-    valoareFaraTva: net, tva, status: 'inregistrata' };
+    valoareFaraTva: money(net, 'RON'), tva: money(tva, 'RON'), status: 'inregistrata' };
 }
 
 function expense(date: string, net: Bani, tva: Bani): Expense {
   return { id: 'exp-' + date + '-' + net, tip: 'factura', nr: '1', date, furnizor: 'Furnizor Test', cui: '87654321',
-    valoareFaraTva: net, tva, status: 'inregistrata' };
+    valoareFaraTva: money(net, 'RON'), tva: money(tva, 'RON'), status: 'inregistrata' };
 }
 
 /**

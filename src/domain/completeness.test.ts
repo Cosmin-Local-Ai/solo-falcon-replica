@@ -14,7 +14,7 @@ import type { RuleRelease } from './fiscal/rules';
 import type { PfaProfile, PfaRegime } from './models';
 import { assessCompleteness } from './completeness';
 import type { TaxCalculationSnapshot } from './snapshots/types';
-import { lei } from './money';
+import { lei, ron } from './money';
 
 function makeProfile(): PfaProfile {
   return {
@@ -57,8 +57,8 @@ function makeRevenue(overrides: Partial<Revenue> = {}): Revenue {
     date: '2026-06-01',
     client: 'Client A',
     cui: 'RO12345678',
-    valoareFaraTva: lei(1000),
-    tva: lei(190),
+    valoareFaraTva: ron(1000),
+    tva: ron(190),
     status: 'inregistrata',
     ...overrides,
   };
@@ -72,8 +72,8 @@ function makeExpense(overrides: Partial<Expense> = {}): Expense {
     date: '2026-06-02',
     furnizor: 'Furnizor A',
     cui: 'RO87654321',
-    valoareFaraTva: lei(500),
-    tva: lei(95),
+    valoareFaraTva: ron(500),
+    tva: ron(95),
     status: 'inregistrata',
     ...overrides,
   };

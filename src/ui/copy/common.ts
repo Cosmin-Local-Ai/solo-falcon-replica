@@ -67,8 +67,14 @@ export const fields = {
   cui: 'CUI',
   documentNumber: 'Număr document',
   documentType: 'Tip document',
-  amountWithoutVat: 'Valoare fără TVA (RON)',
-  vatAmount: 'TVA (RON)',
+  amountWithoutVat: 'Valoare fără TVA',
+  vatAmount: 'TVA',
+  /**
+   * TASK 10a. These two labels used to say `(RON)`. They cannot any more: a record now carries its own
+   * currency, and a label asserting RON next to a currency selector would contradict the field under it.
+   * The currency is its own visible field, and every amount on screen prints its own currency suffix.
+   */
+  currency: 'Moneda',
   statusDetail: 'Detaliu status',
   statusDetailPlaceholder: 'motivul respingerii…',
   amountPlaceholder: '0,00',

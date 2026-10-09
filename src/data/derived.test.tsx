@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import { StoreProvider, useStore } from './store';
 import { useFinancialDerived, useTaxDerived } from './derived';
-import { lei } from '../domain/money';
+import { lei, ron } from '../domain/money';
 
 const AS_OF = '2026-12-31';
 
@@ -23,8 +23,8 @@ function FinancialProbe() {
             date: '2026-10-15',
             client: 'Client Nou',
             cui: '12345678',
-            valoareFaraTva: lei(1000),
-            tva: lei(190),
+            valoareFaraTva: ron(1000),
+            tva: ron(190),
             status: 'inregistrata',
           })
         }
@@ -39,8 +39,8 @@ function FinancialProbe() {
             date: '2026-10-20',
             furnizor: 'Furnizor Nou',
             cui: 'RO12345678',
-            valoareFaraTva: lei(200),
-            tva: lei(38),
+            valoareFaraTva: ron(200),
+            tva: ron(38),
             status: 'inregistrata',
           })
         }

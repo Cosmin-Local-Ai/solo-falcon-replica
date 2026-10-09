@@ -10,7 +10,7 @@ import type { AppData } from '../data/types';
 import { selectMonthly, selectYtd, inPeriod, revenueFiscalDate, expenseFiscalDate, type MonthlyTotals, type YtdTotals } from './aggregation';
 import { selectProjectionV1, type ProjectionV1 } from './projection';
 import type { FiscalRule } from './fiscal/rules';
-import { sumBani, type Bani } from './money';
+import { sumMoney, type Bani, type Money } from './money';
 import type {
   CassPreviousYearContext,
   ForeignSicknessInsurance,
@@ -31,7 +31,11 @@ import type {
 export interface RecordLine {
   id: string;
   date: string;
-  total: number;
+  /**
+   * The record's gross, **in its own currency** (TASK 10a). A provenance line that printed a EUR record's
+   * cents as though they were lei would reproduce defect B-32 on screen.
+   */
+  total: Money;
   status: string;
   counted: boolean;
   /** Document-link state: expenses/revenues are documents (tip + nr). */
@@ -54,8 +58,8 @@ type HasRecordFields = {
   id: string;
   date: string;
   status: string;
-  valoareFaraTva: Bani;
-  tva: Bani;
+  valoareFaraTva: Money;
+  tva: Money;
   tip: string;
   nr: string;
 };
@@ -74,7 +78,7 @@ function toLines<T extends HasRecordFields>(
     return {
       id: r.id,
       date,
-      total: sumBani([r.valoareFaraTva, r.tva]),
+      total: sumMoney([r.valoareFaraTva, r.tva], r.valoareFaraTva.currency),
       status: r.status,
       counted: r.status === 'inregistrata' && inPeriod(date, asOfDate, fiscalYear),
       document: { tip: r.tip, nr: r.nr },

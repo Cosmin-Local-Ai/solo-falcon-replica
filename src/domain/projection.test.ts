@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AppData, Expense, Revenue, SettingsState } from '../data/types';
 import type { PfaIdentity, PfaProfile } from './models';
 import { selectProjectionV1 } from './projection';
-import { lei, type Bani } from './money'
+import { lei, money, ron, type Bani } from './money'
 
 function identity(): PfaIdentity {
   return {
@@ -74,8 +74,9 @@ function revenue(date: string, valoareFaraTva: Bani, tva: Bani, status: Revenue[
     date,
     client: 'Client Test',
     cui: '12345678',
-    valoareFaraTva,
-    tva,
+    // TASK 10a: plain bani in, RON money on the record — call sites and figures unchanged.
+    valoareFaraTva: money(valoareFaraTva, 'RON'),
+    tva: money(tva, 'RON'),
     status,
   };
 }
@@ -88,8 +89,8 @@ function expense(date: string, valoareFaraTva: Bani, tva: Bani, status: Expense[
     date,
     furnizor: 'Furnizor Test',
     cui: '87654321',
-    valoareFaraTva,
-    tva,
+    valoareFaraTva: money(valoareFaraTva, 'RON'),
+    tva: money(tva, 'RON'),
     status,
   };
 }

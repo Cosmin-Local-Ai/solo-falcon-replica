@@ -20,7 +20,7 @@ import { StoreProvider } from '../data/store';
 import { CURRENT_DATA_VERSION } from '../data/migration';
 import { seedData } from '../data/seed';
 import type { Expense } from '../data/types';
-import { lei } from '../domain/money';
+import { lei, ron } from '../domain/money';
 
 const STORAGE_KEY = 'pfa-app-data-v2';
 
@@ -39,8 +39,8 @@ function expense(over: Partial<Expense>): Expense {
     date: '2026-05-10',
     furnizor: 'Furnizor Test',
     cui: 'RO99999999',
-    valoareFaraTva: lei(2000),
-    tva: lei(400),
+    valoareFaraTva: ron(2000),
+    tva: ron(400),
     status: 'inregistrata',
     ...over,
   };
@@ -63,12 +63,12 @@ describe('Expenses — the struck alin. (6) ceiling discloses BOTH readings', ()
     // protocol + contribuții profesionale: the two categories whose readings of the alin. (6) base
     // disagree, so the two figures on screen must differ.
     seedWith([
-      expense({ id: 'ceil-p', category: 'protocol', valoareFaraTva: lei(1000), tva: lei(190) }),
+      expense({ id: 'ceil-p', category: 'protocol', valoareFaraTva: ron(1000), tva: ron(190) }),
       expense({
         id: 'ceil-q',
         category: 'mandatory_professional_contribution',
-        valoareFaraTva: lei(5000),
-        tva: lei(950),
+        valoareFaraTva: ron(5000),
+        tva: ron(950),
       }),
     ]);
     const { container } = render(
@@ -107,7 +107,7 @@ describe('Expenses — the struck alin. (6) ceiling discloses BOTH readings', ()
     // No other alin. (5) cap is present, so recorded == allowed and both readings give the same
     // ceiling. The alternative must still appear: an absent figure would read as "there is no other
     // reading", which is the claim the sources do not support.
-    seedWith([expense({ id: 'ceil-solo', category: 'protocol', valoareFaraTva: lei(1000), tva: lei(190) })]);
+    seedWith([expense({ id: 'ceil-solo', category: 'protocol', valoareFaraTva: ron(1000), tva: ron(190) })]);
     const { container } = render(
       <StoreProvider>
         <Expenses />

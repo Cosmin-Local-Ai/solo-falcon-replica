@@ -25,7 +25,7 @@ import { selectYtd } from '../domain/aggregation';
 import { computeInputsHashSync } from '../domain/snapshots/hashSync';
 import { backfillSnapshotIdentity } from './migration';
 import { THRESHOLD_SPECS } from '../domain/thresholds';
-import { lei, subBani, type Bani } from '../domain/money';
+import { lei, ron, subBani, type Bani } from '../domain/money';
 
 const AS_OF = '2026-10-01';
 // B-23 standing rule: no test may read the wall clock. `buildDashboardData` and `getActionItems` take an
@@ -102,8 +102,8 @@ function revenue(overrides: Partial<Revenue> = {}): Revenue {
     date: '2026-03-15',
     client: 'Client Test',
     cui: '12345678',
-    valoareFaraTva: lei(1000),
-    tva: lei(190),
+    valoareFaraTva: ron(1000),
+    tva: ron(190),
     status: 'inregistrata',
     ...overrides,
   };
@@ -117,8 +117,8 @@ function expense(overrides: Partial<Expense> = {}): Expense {
     date: '2026-04-10',
     furnizor: 'Furnizor Test',
     cui: 'RO12345678',
-    valoareFaraTva: lei(500),
-    tva: lei(95),
+    valoareFaraTva: ron(500),
+    tva: ron(95),
     status: 'inregistrata',
     ...overrides,
   };
@@ -734,7 +734,7 @@ describe('CAS_TIER2_FLOOR — the 24 SM ladder step is surfaced (Phase 6 §7 ite
   });
 
   it('crossing 24 SM changes the calculation base AND doubles the CAS the engine computes, from one figure', async () => {
-    const data = makeData({ revenues: [revenue({ valoareFaraTva: lei(120000), tva: lei(0) })] });
+    const data = makeData({ revenues: [revenue({ valoareFaraTva: ron(120000), tva: ron(0) })] });
     const tax = await getTaxEstimate(data, AS_OF_SEED);
     expect(tax.status).toBe('computed');
 
@@ -1093,8 +1093,8 @@ describe('TASK 3 — the persisted reserve feeds both read sites', () => {
           date: '2026-06-10',
           furnizor: 'Furnizor Test',
           cui: 'RO00000000',
-          valoareFaraTva: lei(1000),
-          tva: lei(190),
+          valoareFaraTva: ron(1000),
+          tva: ron(190),
           status: 'inregistrata',
           category: 'protocol',
         },

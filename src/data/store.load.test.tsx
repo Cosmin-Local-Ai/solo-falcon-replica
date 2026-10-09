@@ -3,10 +3,10 @@ import { render } from '@testing-library/react';
 import { StoreProvider, useStore, STORAGE_KEY, QUARANTINE_STORAGE_KEY } from './store';
 import { CURRENT_DATA_VERSION } from './migration';
 import { seedData } from './seed';
-import type { AppData, Revenue } from './types';
+import type { AppData, LegacyAppData, LegacyRevenue } from './types';
 import type { RuleRelease } from '../domain/fiscal/rules';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
-import { lei, type Bani } from '../domain/money';
+import { lei, ron, type Bani } from '../domain/money';
 import { computeInputsHash } from '../domain/snapshots/hash';
 
 let storeRef: ReturnType<typeof useStore> | null = null;
@@ -15,7 +15,9 @@ function Probe() {
   return null;
 }
 
-const validRevenue: Revenue = {
+// A pre-v10 payload record: money as a bare number, no currency. Typed `LegacyRevenue` because that is
+// the shape under test — the chain is what turns it into a `Money`.
+const validRevenue: LegacyRevenue = {
   id: 'r1',
   tip: 'factura',
   nr: 'FCT-2026-001',
@@ -41,7 +43,7 @@ const validRelease: RuleRelease = {
 };
 
 function writePayload(overrides: Record<string, unknown> = {}) {
-  const base: AppData = {
+  const base: LegacyAppData = {
     reservedAmount: null,
     profile: seedData.profile,
     revenues: [validRevenue],
@@ -369,7 +371,7 @@ describe('loadInitial — the money-precision report survives (B-26)', () => {
     );
 
     // The money converted once, to the nearest ban, half-down.
-    expect(storeRef!.revenues[0]!.valoareFaraTva).toBe(lei(674.5));
+    expect(storeRef!.revenues[0]!.valoareFaraTva).toEqual(ron(674.5));
     // And the decision it had to make is on the data, not only on the migration result.
     expect(storeRef!.moneyNotices).toHaveLength(1);
     expect(storeRef!.moneyNotices![0]).toMatchObject({
@@ -433,7 +435,7 @@ describe('loadInitial — the money-precision report survives (B-26)', () => {
         <Probe />
       </StoreProvider>,
     );
-    expect(storeRef!.revenues[0]!.valoareFaraTva).toBe(lei(142.5));
+    expect(storeRef!.revenues[0]!.valoareFaraTva).toEqual(ron(142.5));
     expect(storeRef!.moneyNotices).toBeUndefined();
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
     expect('moneyNotices' in saved).toBe(false);

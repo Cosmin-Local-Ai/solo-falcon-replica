@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import { StoreProvider, useStore } from './store';
 import { seedData } from './seed';
-import type { AppData, Client, Declaration, Expense, Revenue } from './types';
+import type { Client, Declaration, LegacyAppData, LegacyExpense, LegacyRevenue } from './types';
 import { lei } from '../domain/money';
 
 /**
@@ -27,7 +27,7 @@ function Probe() {
   return null;
 }
 
-const revenues: Revenue[] = [
+const revenues: LegacyRevenue[] = [
   {
     id: 'r-legacy-1',
     tip: 'factura',
@@ -52,7 +52,7 @@ const revenues: Revenue[] = [
   },
 ];
 
-const expenses: Expense[] = [
+const expenses: LegacyExpense[] = [
   {
     id: 'e-legacy-1',
     tip: 'factura',
@@ -89,7 +89,7 @@ function legacyPayload(): Record<string, unknown> {
   const { pfaStartDate, salaryIncomeLei, ...prePhase6Profile } = seedData.profile;
   void pfaStartDate;
   void salaryIncomeLei;
-  const base: AppData = {
+  const base: LegacyAppData = {
     reservedAmount: null,
     profile: prePhase6Profile,
     revenues,

@@ -1,6 +1,6 @@
 import type { AppData, Expense, Revenue } from '../data/types';
 import { isISOCalendarDate, isoCalendarDateProblem, isoCalendarDateProblemText } from './date';
-import { addBani, lei, subBani, sumBani, type Bani } from './money';
+import { addBani, isRon, lei, subBani, sumBani, type Bani, type CurrencyCode, type Money } from './money';
 import type { ThresholdKind, ThresholdSeverity } from './thresholds';
 
 /**
@@ -123,8 +123,51 @@ export interface DashboardSnapshot {
   };
 }
 
-function recordTotal(r: Pick<Revenue, 'valoareFaraTva' | 'tva'>): Bani {
-  return sumBani([r.valoareFaraTva, r.tva]);
+/**
+ * A record's total **in lei**, or `null` when the record is not written in lei.
+ *
+ * TASK 10a (B-32). Before this, `recordTotal` summed two numbers that were assumed to be lei. A EUR
+ * invoice summed into that total is a lei figure that was never a lei figure — the exact defect. The
+ * `null` is the honest answer: this record has no lei total, because converting it needs a rate, a date
+ * or year to key it to, and a basis, and none of those exist on the record.
+ *
+ * The callers below **skip** a `null` rather than throw. Throwing would take the whole dashboard down over
+ * one foreign-currency record; summing it would lie. Skipping is only acceptable because the skip is
+ * visible — `selectUnconvertedRecords` names every record left out, and the registers render it. A silent
+ * exclusion is what B-21 was about, and it is not what this is.
+ */
+function recordTotal(r: Pick<Revenue, 'valoareFaraTva' | 'tva'>): Bani | null {
+  if (!isRon(r.valoareFaraTva) || !isRon(r.tva)) return null;
+  return sumBani([r.valoareFaraTva.amount, r.tva.amount]);
+}
+
+/** A single amount in lei, or `null` when it is in another currency. */
+function leiAmount(amount: Money): Bani | null {
+  return isRon(amount) ? amount.amount : null;
+}
+
+/**
+ * The records the lei totals above deliberately left out, with the currency they are written in.
+ *
+ * This is the visibility half of `recordTotal`'s `null`. The app can store a foreign-currency amount and
+ * cannot yet convert one into the engine's lei operands — conversion needs a BNR rate and a legal basis
+ * (`domain/fx/convert.ts`), and which basis applies to a given amount is a decision the euro-cap work
+ * (TASK 10b) has not made yet. So the correct output is not a number and not silence; it is this list.
+ */
+export interface UnconvertedRecord {
+  id: string;
+  currency: CurrencyCode;
+}
+
+export function selectUnconvertedRecords(data: AppData): UnconvertedRecord[] {
+  const out: UnconvertedRecord[] = [];
+  for (const r of data.revenues) {
+    if (!isRon(r.valoareFaraTva)) out.push({ id: r.id, currency: r.valoareFaraTva.currency });
+  }
+  for (const e of data.expenses) {
+    if (!isRon(e.valoareFaraTva)) out.push({ id: e.id, currency: e.valoareFaraTva.currency });
+  }
+  return out;
 }
 
 function inFiscalYear(date: string, fiscalYear: number): boolean {
@@ -255,16 +298,20 @@ export function selectYtd(data: AppData, asOfDate: string): YtdTotals {
 
   for (const r of data.revenues) {
     const fiscalDate = revenueFiscalDate(r);
-    if (r.status === 'inregistrata' && inPeriod(fiscalDate, asOfDate, fiscalYear)) {
-      revenue = addBani(revenue, recordTotal(r));
-      revenueNet = addBani(revenueNet, r.valoareFaraTva);
+    const net = leiAmount(r.valoareFaraTva);
+    const total = recordTotal(r);
+    if (r.status === 'inregistrata' && total !== null && net !== null && inPeriod(fiscalDate, asOfDate, fiscalYear)) {
+      revenue = addBani(revenue, total);
+      revenueNet = addBani(revenueNet, net);
     }
   }
   for (const e of data.expenses) {
     const fiscalDate = expenseFiscalDate(e);
-    if (e.status === 'inregistrata' && inPeriod(fiscalDate, asOfDate, fiscalYear)) {
-      expenses = addBani(expenses, recordTotal(e));
-      expenseNet = addBani(expenseNet, e.valoareFaraTva);
+    const net = leiAmount(e.valoareFaraTva);
+    const total = recordTotal(e);
+    if (e.status === 'inregistrata' && total !== null && net !== null && inPeriod(fiscalDate, asOfDate, fiscalYear)) {
+      expenses = addBani(expenses, total);
+      expenseNet = addBani(expenseNet, net);
     }
   }
 
@@ -288,14 +335,16 @@ export function selectMonthly(data: AppData, asOfDate: string): Map<string, Mont
 
   for (const r of data.revenues) {
     const fiscalDate = revenueFiscalDate(r);
-    if (r.status === 'inregistrata' && inPeriod(fiscalDate, asOfDate, fiscalYear)) {
-      add(monthKey(fiscalDate), 'revenue', recordTotal(r));
+    const total = recordTotal(r);
+    if (r.status === 'inregistrata' && total !== null && inPeriod(fiscalDate, asOfDate, fiscalYear)) {
+      add(monthKey(fiscalDate), 'revenue', total);
     }
   }
   for (const e of data.expenses) {
     const fiscalDate = expenseFiscalDate(e);
-    if (e.status === 'inregistrata' && inPeriod(fiscalDate, asOfDate, fiscalYear)) {
-      add(monthKey(fiscalDate), 'expenses', recordTotal(e));
+    const total = recordTotal(e);
+    if (e.status === 'inregistrata' && total !== null && inPeriod(fiscalDate, asOfDate, fiscalYear)) {
+      add(monthKey(fiscalDate), 'expenses', total);
     }
   }
 

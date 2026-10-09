@@ -25,7 +25,7 @@
 import type { CaenCode, PfaIdentity, PfaProfile } from '../domain/models';
 import { computeInputsHashSync } from '../domain/snapshots/hashSync';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
-import { baniFromLei, lei, type Bani } from '../domain/money';
+import { baniFromLei, lei, money, type Bani, type Money } from '../domain/money';
 import type { Declaration, Expense, Revenue } from './types';
 import { localYear, now, toInstantISO } from '../domain/date';
 import type { SettingsState } from './types';
@@ -110,8 +110,56 @@ export const DATA_VERSION_PENSION_FACTS = 8;
  * inputs the user never gave.
  */
 export const DATA_VERSION_RULE_SET_DIGEST = 9;
+
+/**
+ * TASK 10a (B-32): a stored `Revenue`/`Expense` money field becomes a `Money` — the integer minor-unit
+ * count **plus** the currency it is counted in. Before this step a record held a bare number and the leu
+ * was the only unit the type could name, so a EUR invoice was arithmetically indistinguishable from a lei
+ * invoice and was added to lei totals. That was defect B-32, and it was invisible: the app could not
+ * represent a foreign amount at all, so it could not mis-treat one loudly either.
+ *
+ * ## What the step does
+ *
+ * Wraps each `revenues[].valoareFaraTva|tva` and `expenses[].valoareFaraTva|tva` as
+ * `{ amount: <the same number>, currency: 'RON' }`. The number is copied **verbatim** — not rescaled, not
+ * rounded, not passed through `baniFromLei`. `baniFromLei` is a unit conversion (lei → bani) and this step
+ * is a shape change; conflating the two is how a migration silently edits someone's ledger. Every existing
+ * figure is therefore bit-identical, which is what "value-preserving no-op" means here.
+ *
+ * Existing records are stamped RON because that is what they always were: each one came from a form
+ * labelled `(RON)` and was read by an engine that could only add it to lei totals. Stamping RON records
+ * what the data is; it is not a default applied to unknown data.
+ *
+ * ## What the step deliberately does NOT touch
+ *
+ * - **`declarations[].venituri|cheltuieli` and `profile.cashFloorLei|salaryIncomeLei`.** A Declarația Unică
+ *   is filed in lei and a profile cash floor is a leu amount; those stay `Bani`. Widening them would imply
+ *   the app can hold a euro filing, and it cannot.
+ * - **Anything inside a snapshot — and no `inputsHash` moves.** This is the migration decision TASK 10a had
+ *   to make explicitly, and it was made from the canonicalisation rather than from a comment:
+ *   `canonicalize` (`domain/snapshots/serialize.ts`) emits every own enumerable key, keys sorted, and the
+ *   payload it is fed is `CalculationInput = { profile, revenues: Bani, expenses: Bani }`
+ *   (`domain/snapshots/types.ts`) — **aggregate RON totals, not record arrays**. A currency field on a
+ *   `Revenue` is therefore unreachable from the digest bytes: a snapshot never stored the record, it stored
+ *   the number the record was summed into. Stored digests cannot move, so the step writes no
+ *   `preMigrationInputsHash`.
+ *
+ *   The alternative — putting a currency marker inside `inputSnapshot` so the hash *would* move — is the
+ *   forbidden blanket re-hash, and it is already blocked: `snapshots.test.ts:437` pins
+ *   `Object.keys(inputSnapshot).sort() === ['expenses','profile','revenues']`. A historical snapshot stays
+ *   interpretable for the same reason it was interpretable before: its `revenues`/`expenses` are the
+ *   post-conversion lei totals the engine actually consumed, and `ruleSetHash` **beside** the payload (never
+ *   inside it) says which rules did the consuming.
+ *
+ * ## Why the load gate still accepts the old shape
+ *
+ * `safeParse` runs before the chain, so `persistedAppDataSchema` must parse a pre-v10 payload or every
+ * existing install quarantines. It accepts a bare number and converts nothing — see `moneyField` in
+ * `schema.ts`. This step is where the shape actually changes.
+ */
+export const DATA_VERSION_RECORD_CURRENCY = 10;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_RULE_SET_DIGEST;
+export const CURRENT_DATA_VERSION = DATA_VERSION_RECORD_CURRENCY;
 
 export interface MigrationStep {
   readonly from: number;
@@ -472,20 +520,36 @@ export function convertMoneyToBani(input: PersistedAppData): {
     };
   };
 
+  // The two casts below move between a **v4** payload and the types the chain ends at. A v4 record's money
+  // field is a bare float in **lei**; `Revenue.valoareFaraTva` is typed `Money` because the load gate casts
+  // without converting (`moneyField` in schema.ts), and the value only becomes a `{ amount, currency }`
+  // object at the `record-currency` step (v10). Neither cast converts anything at runtime, and both helpers
+  // are only ever called from this step, which runs solely at `from: 4` — before the bani unit (created
+  // here) and before the `Money` shape (created at v10) exist.
+  // SAFETY: reads a pre-migration v4 money field, which is a bare number of lei, not a `Money` object.
+  const legacyLei = (value: Money): number => value as unknown as number;
+  // SAFETY: writes post-conversion **bani** back into a field that only becomes a `Money` object at v10.
+  const asMoneyField = (value: Bani): Money => value as unknown as Money;
+
   const data: PersistedAppData = {
     ...input,
     version: DATA_VERSION_MONEY_BANI,
+    // SAFETY: the four `as unknown as number` casts below read a **v4** payload, whose money fields are bare
+    // float lei. `Revenue.valoareFaraTva` is typed `Money` only because the load gate casts without
+    // converting (`moneyField` in schema.ts), and the `Bani` brand here describes the post-migration world,
+    // not this payload. The invariant TypeScript cannot check: this step only ever runs at `from: 4`, and a
+    // v4 payload predates both the bani unit (this step creates it) and the `Money` shape (v10 creates it).
     revenues: input.revenues.map((r: Revenue) => ({
       ...r,
-      valoareFaraTva: convert(r.valoareFaraTva as number, 'revenues', r.id ?? '<no id>', 'valoareFaraTva'),
-      tva: convert(r.tva as number, 'revenues', r.id ?? '<no id>', 'tva'),
+      valoareFaraTva: asMoneyField(convert(legacyLei(r.valoareFaraTva), 'revenues', r.id ?? '<no id>', 'valoareFaraTva')),
+      tva: asMoneyField(convert(legacyLei(r.tva), 'revenues', r.id ?? '<no id>', 'tva')),
     })),
     ...(input.expenses
       ? {
           expenses: input.expenses.map((e: Expense) => ({
             ...e,
-            valoareFaraTva: convert(e.valoareFaraTva as number, 'expenses', e.id ?? '<no id>', 'valoareFaraTva'),
-            tva: convert(e.tva as number, 'expenses', e.id ?? '<no id>', 'tva'),
+            valoareFaraTva: asMoneyField(convert(legacyLei(e.valoareFaraTva), 'expenses', e.id ?? '<no id>', 'valoareFaraTva')),
+            tva: asMoneyField(convert(legacyLei(e.tva), 'expenses', e.id ?? '<no id>', 'tva')),
           })),
         }
       : {}),
@@ -618,6 +682,43 @@ export function migrateRuleSetDigestV9(data: PersistedAppData): PersistedAppData
   return touched ? { ...stamped, snapshots: next } : stamped;
 }
 
+/**
+ * TASK 10a: the v9→v10 step gives every stored revenue and expense its currency. See the doc comment on
+ * `DATA_VERSION_RECORD_CURRENCY` for the decision and for what this step refuses to touch.
+ *
+ * Idempotent-safe, as the chain contract requires: a field that already carries a currency is left exactly
+ * as it is, so re-running the step cannot double-wrap a value or overwrite a currency the user chose.
+ */
+export function migrateRecordCurrencyV10(data: PersistedAppData): PersistedAppData {
+  const stamped = { ...data, version: DATA_VERSION_RECORD_CURRENCY };
+
+  // A pre-v10 money field is a bare number; a post-v10 one is `{ amount, currency }`. The load gate types
+  // both as `Money` — a cast, not a conversion — so the discriminator has to be structural.
+  const wrap = (value: Money): Money =>
+    typeof value === 'number' ? money(value as Bani, 'RON') : value;
+
+  const needsWrap = (record: Revenue | Expense): boolean =>
+    typeof record.valoareFaraTva !== 'object' || typeof record.tva !== 'object';
+
+  const anyRevenueChanged = data.revenues.some(needsWrap);
+  const anyExpenseChanged = data.expenses?.some(needsWrap) ?? false;
+  if (!anyRevenueChanged && !anyExpenseChanged) return stamped;
+
+  return {
+    ...stamped,
+    revenues: data.revenues.map((r) =>
+      needsWrap(r) ? { ...r, valoareFaraTva: wrap(r.valoareFaraTva), tva: wrap(r.tva) } : r,
+    ),
+    ...(data.expenses
+      ? {
+          expenses: data.expenses.map((e) =>
+            needsWrap(e) ? { ...e, valoareFaraTva: wrap(e.valoareFaraTva), tva: wrap(e.tva) } : e,
+          ),
+        }
+      : {}),
+  };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -690,6 +791,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Fiecare înregistrare de calcul primește acum „ruleSetHash”: amprenta sha-256 a regulilor care au produs cifra, calculată pe o serializare canonicală (chei sortate, reguli sortate după ruleId, parametri după id). Nimic nu a fost inventat: o înregistrare veche primește „null”, adică „regulile care au produs acest calcul nu mai pot fi reconstruite” — setul de reguli s-a schimbat de trei ori (CAS, CASS, impozit pe venit) sub același „releaseId”, iar o amprentă calculată astăzi ar pretinde că ea a produs un număr vechi. Niciun „inputsHash" stocat nu se mișcă și niciun „ruleRelease" înglobat nu este rescris.',
     apply: migrateRuleSetDigestV9,
+  },
+  {
+    from: DATA_VERSION_RULE_SET_DIGEST,
+    to: DATA_VERSION_RECORD_CURRENCY,
+    name: 'record-currency',
+    summary:
+      'Fiecare venit și cheltuială stocată primește moneda în care e scrisă: un număr simplu devine `{ amount, currency: "RON" }`. Nimic nu a fost recalculat — suma rămâne bit cu bit aceeași, se schimbă doar forma. RON pentru că așa au fost mereu aceste înregistrări: au intrat printr-un formular etichetat „(RON)” și un motor care știa să le adune doar în lei. „declarations”, „profile.cashFloorLei” și „profile.salaryIncomeLei” rămân în lei — o Declarația Unică se depune în lei. Niciun „inputsHash" stocat nu se mișcă și nu se scrie niciun „preMigrationInputsHash": amprenta se calculează pe `{ profile, revenues, expenses }`, unde „revenues" și „expenses" sunt totaluri agregate în lei, nu șirul de înregistrări, deci o monedă pusă pe înregistrare nu ajunge niciodată în octetul hash-ului. O înregistrare istorică rămâne la fel de interpretabilă ca înainte.',
+    apply: migrateRecordCurrencyV10,
   },
 ];
 

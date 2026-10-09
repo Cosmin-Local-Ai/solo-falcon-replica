@@ -102,7 +102,15 @@ describe('App shell surfaces the money-precision report (Phase 10, B-26)', () =>
       STORAGE_KEY,
       JSON.stringify({
         profile: seedData.profile,
-        revenues: [{ ...seedData.revenues[0], id: 'r-1', valoareFaraTva: 674.504 }],
+        revenues: [{
+          ...seedData.revenues[0],
+          id: 'r-1',
+          valoareFaraTva: 674.504,
+          // TASK 10a: the seed now stores `{ amount, currency }`, but a raw v4 payload stores a bare
+          // number. Unwrapping keeps the fixture's number exactly what it was; leaving the object in
+          // place would make the money-bani step report `[object Object]` as an unconvertible value.
+          tva: seedData.revenues[0].tva.amount,
+        }],
         settings: seedData.settings,
       }),
     );

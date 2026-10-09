@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { formatBaniRON, leiInputValue, parseLeiInput } from '../domain/money';
+import { ENTRY_CURRENCIES, formatBaniRON, formatMoney, moneyInputValue, parseMoneyInput, type CurrencyCode } from '../domain/money';
 import { useStore } from '../data/store';
-import { fmtDate, sumTotals, total, statusBadge } from '../data/types';
+import { fmtDate, sumTotalsByCurrency, total, statusBadge } from '../data/types';
 import type { Expense } from '../data/types';
 import { EXPENSE_CATEGORIES } from '../domain/fiscal/deductibility';
 import { selectDeductibleExpenses, selectEstimateOperands } from '../domain/estimateBasis';
@@ -47,9 +47,11 @@ function ExpenseForm({ initial, onSave, onClose }: {
     date: initial?.date ?? new Date().toISOString().slice(0, 10),
     furnizor: initial?.furnizor ?? '',
     cui: initial?.cui ?? '',
-    // `leiInputValue`, not `String(...)`: stored money is integer bani; an input is a screen.
-    valoare: initial ? leiInputValue(initial.valoareFaraTva) : '',
-    tva: initial ? leiInputValue(initial.tva) : '',
+    // `moneyInputValue`, not `String(...)`: stored money is integer minor units; an input is a screen.
+    valoare: initial ? moneyInputValue(initial.valoareFaraTva) : '',
+    tva: initial ? moneyInputValue(initial.tva) : '',
+    // TASK 10a: the currency belongs to the amount. Defaults to RON — what every existing record has.
+    currency: (initial?.valoareFaraTva.currency ?? 'RON') as CurrencyCode,
     status: initial?.status ?? 'inregistrata',
     statusDetail: initial?.statusDetail ?? '',
     // TASK 2b: '' means "no category", which is a legal state, not a half-filled field. It is stored as
@@ -68,11 +70,12 @@ function ExpenseForm({ initial, onSave, onClose }: {
     if (!f.nr.trim()) e.nr = validation.documentNumberRequired;
     if (!f.date) e.date = validation.dateRequired;
     if (!f.furnizor.trim()) e.furnizor = validation.providerRequired;
-    // Phase 10: form in lei, storage in bani; `parseLeiInput` refuses sub-ban precision rather than rounding.
-    const v = parseLeiInput(f.valoare);
-    const t = parseLeiInput(f.tva);
-    if (v === null || v < 0) e.valoare = validation.amountInvalid;
-    if (t === null || t < 0) e.tva = validation.vatInvalid;
+    // Phase 10: form in major units, storage in minor units; `parseMoneyInput` refuses sub-minor-unit
+    // precision rather than rounding. TASK 10a: it parses in the currency the form is set to.
+    const v = parseMoneyInput(f.valoare, f.currency);
+    const t = parseMoneyInput(f.tva, f.currency);
+    if (v === null || v.amount < 0) e.valoare = validation.amountInvalid;
+    if (t === null || t.amount < 0) e.tva = validation.vatInvalid;
     setErrors(e);
     if (Object.keys(e).length) return;
     if (v === null || t === null) return; // unreachable; narrows without a cast
@@ -119,6 +122,12 @@ function ExpenseForm({ initial, onSave, onClose }: {
         <div className="field">
           <label>{fields.cui}</label>
           <input value={f.cui} onChange={e => set('cui', e.target.value)} placeholder={fields.cuiPlaceholder} />
+        </div>
+        <div className="field">
+          <label>{fields.currency} <span className="req">*</span></label>
+          <select value={f.currency} onChange={e => set('currency', e.target.value)}>
+            {ENTRY_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
         </div>
         <div className="field">
           <label>{fields.amountWithoutVat} <span className="req">*</span></label>
@@ -193,7 +202,7 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const counts = (k: (typeof TABS)[number]['key']) =>
     expenses.filter(e => e.status === statusFor(k)).length;
-  const sum = sumTotals(rows);
+  const sums = sumTotalsByCurrency(rows);
 
   // TASK 8: land the focused record on screen, whatever page of the register it sits on.
   const focusIndex = focusRecord ? rows.findIndex(e => e.id === focusRecord) : -1;
@@ -218,6 +227,10 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
   // missing is a datum (a BNR rate, a payroll) or a primary text that picks a side. The expense stays out
   // of the deductible total and the reason says which, in the words the rule itself carries.
   const capBlocked = classification.excluded.filter(x => x.reason === 'cap_unresolved');
+  // TASK 10a (B-32): records the assembler kept out because they are not written in lei. Named here so the
+  // register says what left the deductible base — the same selector the estimate runs, so the count on this
+  // screen and the total the engine used cannot disagree.
+  const foreignBlocked = classification.excluded.filter(x => x.reason === 'foreign_currency');
 
   // TASK 2d — a ceiling that WAS struck must be explained, not just applied. These are the numbers the
   // estimate itself produced: the SAME assembler the tax engine runs (`selectEstimateOperands`), so the
@@ -300,6 +313,15 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
         </div>
       )}
 
+      {foreignBlocked.length > 0 && (
+        <div className="banner banner-warn" role="status">
+          <strong>{foreignBlocked.length}</strong>{' '}
+          {expensesCopy.foreignCurrencyLead(foreignBlocked.length)}{' '}
+          {expensesCopy.foreignCurrencyTail}
+          <div className="text-sm muted" style={{ marginTop: 6 }}>{foreignBlocked[0].detail}</div>
+        </div>
+      )}
+
       {capBlocked.length > 0 && (
         <div className="banner banner-warn" role="status">
           <strong>{capBlocked.length}</strong>
@@ -336,7 +358,7 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
             <table className="table">
               <thead>
                 <tr>
-                  <th>{expensesCopy.columns.document}</th><th>{expensesCopy.columns.type}</th><th>{expensesCopy.columns.provider}</th><th>{expensesCopy.columns.cui}</th><th>{expensesCopy.columns.date}</th>
+                  <th>{expensesCopy.columns.document}</th><th>{expensesCopy.columns.type}</th><th>{expensesCopy.columns.provider}</th><th>{expensesCopy.columns.cui}</th><th>{expensesCopy.columns.date}</th><th>{expensesCopy.columns.currency}</th>
                   <th className="amount">{expensesCopy.columns.withoutVat}</th><th className="amount">{expensesCopy.columns.vat}</th><th className="amount">{expensesCopy.columns.total}</th>
                   <th>{expensesCopy.columns.status}</th><th />
                 </tr>
@@ -354,9 +376,10 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
                     <td>{e.furnizor}</td>
                     <td className="muted">{e.cui}</td>
                     <td>{fmtDate(e.date)}</td>
-                    <td className="amount">{formatBaniRON(e.valoareFaraTva)}</td>
-                    <td className="amount">{formatBaniRON(e.tva)}</td>
-                    <td className="amount">{formatBaniRON(total(e))}</td>
+                    <td>{e.valoareFaraTva.currency}</td>
+                    <td className="amount">{formatMoney(e.valoareFaraTva)}</td>
+                    <td className="amount">{formatMoney(e.tva)}</td>
+                    <td className="amount">{formatMoney(total(e))}</td>
                     <td>
                       <Badge kind={statusBadge(e.status)}>{recordStatus.expenseLabels[e.status]}</Badge>
                       {e.statusDetail && <div className="text-sm muted" style={{ marginTop: 3 }}>{e.statusDetail}</div>}
@@ -371,8 +394,12 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'right' }} className="muted">{expensesCopy.totalDocuments(rows.length)}</td>
-                  <td className="amount" style={{ fontWeight: 600 }}>{formatBaniRON(sum)}</td>
+                  <td colSpan={8} style={{ textAlign: 'right' }} className="muted">{expensesCopy.totalDocuments(rows.length)}</td>
+                  {/* One subtotal per currency: a register holding lei and euro has two totals, and adding
+                      them would invent a figure in a unit neither record was written in. */}
+                  <td className="amount" style={{ fontWeight: 600 }}>
+                    {sums.map(s => <div key={s.currency}>{formatMoney(s)}</div>)}
+                  </td>
                   <td colSpan={2} />
                 </tr>
               </tfoot>

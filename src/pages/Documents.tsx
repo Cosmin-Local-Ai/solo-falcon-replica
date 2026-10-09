@@ -6,7 +6,7 @@ import {
   downloadDataUrl, downloadText, total,
 } from '../data/types';
 import type { DocTypeCode, CompanyDocument, TaxStatement } from '../data/types';
-import { type Bani, formatBani, formatBaniRON, sumBani, subBani } from '../domain/money';
+import { type Bani, formatBani, formatBaniRON, isRon, requireRon, sumBani, subBani } from '../domain/money';
 import { Card, Badge, Modal, Empty } from '../components/ui';
 import { copy, documents as documentsCopy, expenses as expensesCopy } from '../ui/copy';
 
@@ -456,26 +456,40 @@ function ReportsTab() {
     const out: { data: string; descriere: string; venit: Bani; cheltuiala: Bani }[] = [];
     for (const r of revenues) {
       if (r.date.slice(0, 4) === String(year)) {
+        // TASK 10a: the RJIP is a leu register — its header says `(RON)`. A record in another currency has
+        // no leu amount here (no BNR rate is attached to it yet), so it is left out and counted, never
+        // exported at its cent count relabelled as lei. The count is rendered below.
+        if (!isRon(r.valoareFaraTva) || !isRon(r.tva)) continue;
         out.push({
           data: r.date,
           descriere: `${r.tip === 'factura' ? documentsCopy.rjip.invoiceKind.factura : documentsCopy.rjip.invoiceKind.nota} ${r.nr} – ${r.client}`,
-          venit: total(r),
+          venit: requireRon(total(r), `revenue ${r.id}`),
           cheltuiala: 0 as Bani,
         });
       }
     }
     for (const e of expenses) {
       if (e.date.slice(0, 4) === String(year)) {
+        if (!isRon(e.valoareFaraTva) || !isRon(e.tva)) continue;
         out.push({
           data: e.date,
           descriere: `${e.tip === 'factura' ? expensesCopy.documentTypeCell.factura : expensesCopy.documentTypeCell.bon} ${e.nr} – ${e.furnizor}`,
           venit: 0 as Bani,
-          cheltuiala: total(e),
+          cheltuiala: requireRon(total(e), `expense ${e.id}`),
         });
       }
     }
     return out.sort((a, b) => a.data.localeCompare(b.data));
   }, [revenues, expenses, year]);
+
+  // How many of this year's records the leu register could not hold, so the omission is visible.
+  const foreignCount = useMemo(
+    () =>
+      [...revenues, ...expenses].filter(
+        (r) => r.date.slice(0, 4) === String(year) && !isRon(r.valoareFaraTva),
+      ).length,
+    [revenues, expenses, year],
+  );
 
   // Money arithmetic belongs in the domain, not in JSX: `rows.reduce((s, r) => s + r.venit, 0)` starts
   // from an unbranded 0 and widens every Bani addend to a plain number on the way through.
@@ -497,6 +511,9 @@ function ReportsTab() {
       <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 13.5 }}>
           {documentsCopy.rjip.description}
+          {foreignCount > 0 && (
+            <div className="text-sm muted">{documentsCopy.rjip.foreignCurrencyExcluded(foreignCount)}</div>
+          )}
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
           <select

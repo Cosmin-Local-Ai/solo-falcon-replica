@@ -1,5 +1,5 @@
 import type { AppData } from './types';
-import { lei } from '../domain/money';
+import { lei, ron } from '../domain/money';
 
 export const seedData: AppData = {
   profile: {
@@ -49,10 +49,10 @@ export const seedData: AppData = {
     updatedAt: '2026-09-28T10:00:00.000Z',
   },
   revenues: [
-    { id: 'r1', tip: 'factura', nr: 'FCT-2026-001', date: '2026-09-02', client: 'Presta Consulting SRL', cui: 'RO12345678', valoareFaraTva: lei(4500), tva: lei(945), status: 'inregistrata', eFacturaStatus: 'Acceptată' },
-    { id: 'r2', tip: 'factura', nr: 'FCT-2026-002', date: '2026-09-10', client: 'Andrei Popescu', cui: '1234567890123', valoareFaraTva: lei(1200), tva: lei(252), status: 'in-asteptare', eFacturaStatus: 'În așteptare' },
-    { id: 'r3', tip: 'notafactura', nr: 'NF-2026-003', date: '2026-09-18', client: 'Marius Ionescu', cui: '9876543210987', valoareFaraTva: lei(800), tva: lei(168), status: 'respinsa', statusDetail: 'CUI nevalid', eFacturaStatus: 'Respinsă' },
-    { id: 'r4', tip: 'factura', nr: 'FCT-2026-004', date: '2026-09-25', client: 'Presta Consulting SRL', cui: 'RO12345678', valoareFaraTva: lei(3200), tva: lei(672), status: 'inregistrata', eFacturaStatus: 'Acceptată' },
+    { id: 'r1', tip: 'factura', nr: 'FCT-2026-001', date: '2026-09-02', client: 'Presta Consulting SRL', cui: 'RO12345678', valoareFaraTva: ron(4500), tva: ron(945), status: 'inregistrata', eFacturaStatus: 'Acceptată' },
+    { id: 'r2', tip: 'factura', nr: 'FCT-2026-002', date: '2026-09-10', client: 'Andrei Popescu', cui: '1234567890123', valoareFaraTva: ron(1200), tva: ron(252), status: 'in-asteptare', eFacturaStatus: 'În așteptare' },
+    { id: 'r3', tip: 'notafactura', nr: 'NF-2026-003', date: '2026-09-18', client: 'Marius Ionescu', cui: '9876543210987', valoareFaraTva: ron(800), tva: ron(168), status: 'respinsa', statusDetail: 'CUI nevalid', eFacturaStatus: 'Respinsă' },
+    { id: 'r4', tip: 'factura', nr: 'FCT-2026-004', date: '2026-09-25', client: 'Presta Consulting SRL', cui: 'RO12345678', valoareFaraTva: ron(3200), tva: ron(672), status: 'inregistrata', eFacturaStatus: 'Acceptată' },
   ],
   expenses: [
     // TASK 2b — seed records are FIXTURES, not user data, so they carry explicit categories; migrated
@@ -69,9 +69,9 @@ export const seedData: AppData = {
     //   before: expenseNet = 120,00 + 85,50 = 205,50 lei (20.550 bani) — every 'inregistrata' record
     //   after:  expenseNet = 120,00 lei (12.000 bani) — only e1 survives classification
     //   and VAT-inclusive: 12.000 + 2.520 = 14.520 bani, down from 24.866 bani.
-    { id: 'e1', tip: 'factura', nr: 'FCT-PRO-118', date: '2026-09-05', furnizor: 'CloudHost SRL', cui: 'RO87654321', valoareFaraTva: lei(120), tva: lei(25.2), status: 'inregistrata', category: 'postal_and_telecom' },
-    { id: 'e2', tip: 'bon-fiscal', nr: 'BF-4471', date: '2026-09-12', furnizor: 'Carrefour', cui: 'RO11223344', valoareFaraTva: lei(85.5), tva: lei(17.96), status: 'inregistrata', category: 'personal_or_family_use' },
-    { id: 'e3', tip: 'factura', nr: 'FCT-PRO-121', date: '2026-09-20', furnizor: 'Office Supplies SA', cui: 'RO55667788', valoareFaraTva: lei(340), tva: lei(71.4), status: 'respinsa', statusDetail: 'Document neconform', category: 'business_space_upkeep' },
+    { id: 'e1', tip: 'factura', nr: 'FCT-PRO-118', date: '2026-09-05', furnizor: 'CloudHost SRL', cui: 'RO87654321', valoareFaraTva: ron(120), tva: ron(25.2), status: 'inregistrata', category: 'postal_and_telecom' },
+    { id: 'e2', tip: 'bon-fiscal', nr: 'BF-4471', date: '2026-09-12', furnizor: 'Carrefour', cui: 'RO11223344', valoareFaraTva: ron(85.5), tva: ron(17.96), status: 'inregistrata', category: 'personal_or_family_use' },
+    { id: 'e3', tip: 'factura', nr: 'FCT-PRO-121', date: '2026-09-20', furnizor: 'Office Supplies SA', cui: 'RO55667788', valoareFaraTva: ron(340), tva: ron(71.4), status: 'respinsa', statusDetail: 'Document neconform', category: 'business_space_upkeep' },
   ],
   clients: [
     { id: 'c1', denumire: 'Presta Consulting SRL', cui: 'RO12345678', email: 'contact@presta.ro', telefon: '0721 111 222', oras: 'București' },

@@ -423,7 +423,12 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // snapshots at all, so the version moves and no money and no digest does.
     // Re-pinned 2026-10-09 (TASK 6): 8 → 9, because the rule-set-digest step widened the stored snapshot
     // shape. Nothing else in this assertion changed.
-    expect(saved.version).toBe(9);
+    // Re-pinned again 2026-10-09 (TASK 10a): 9 → 10, because `record-currency` (9→10) stamps a currency on
+    // every money field of every revenue and expense. Same reason, same discipline — the chain has one more
+    // step, so the bytes written back carry one more version. What this test exists for is untouched: the
+    // notice is still one long, `original` is still the verbatim 674.504 and `converted` is still 67450 bani.
+    // `record-currency` converts nothing, so no money figure in this file moves.
+    expect(saved.version).toBe(10);
     // TASK 5: the legacy profile entered this test with the pre-v8 `pensionStatus` key. The step folds it
     // into `pensionerStatus` and removes the old key — a rename of the status fact, never an inference
     // from it about pension sums received in the year.

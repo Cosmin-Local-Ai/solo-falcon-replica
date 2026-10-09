@@ -25,6 +25,7 @@ import {
   DATA_VERSION_TAX_RESERVE,
   DATA_VERSION_PENSION_FACTS,
   DATA_VERSION_RULE_SET_DIGEST,
+  DATA_VERSION_RECORD_CURRENCY,
   DATA_VERSION_IDENTITY,
   DATA_VERSION_PROFILE,
   MIGRATION_CHAIN,
@@ -36,8 +37,8 @@ import { canonicalize } from '../domain/snapshots/serialize';
 import { computeInputsHashSync } from '../domain/snapshots/hashSync';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import type { PfaProfile } from '../domain/models';
-import type { AppData, Client, Declaration, Expense, Revenue } from './types';
-import { lei, type Bani } from '../domain/money';
+import type { Client, Declaration, LegacyAppData, LegacyExpense, LegacyRevenue } from './types';
+import { lei, ron, type Bani } from '../domain/money';
 
 let storeRef: ReturnType<typeof useStore> | null = null;
 function Probe() {
@@ -57,7 +58,7 @@ function load(): void {
  * A revenue/expenses/clients/declarations set with STABLE ids, so "the data
  * survived" is asserted by identity and not merely by the app rendering.
  */
-const revenues: Revenue[] = [
+const revenues: LegacyRevenue[] = [
   {
     id: 'r-legacy-1',
     tip: 'factura',
@@ -81,7 +82,7 @@ const revenues: Revenue[] = [
     status: 'inregistrata',
   },
 ];
-const expenses: Expense[] = [
+const expenses: LegacyExpense[] = [
   {
     id: 'e-legacy-1',
     tip: 'factura',
@@ -170,7 +171,7 @@ function prePhase7Snapshot(calculationId: string, revenuesValueLei: number): Tax
 }
 
 function prePhase7Payload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  const base: AppData = {
+  const base: LegacyAppData = {
     reservedAmount: null,
     profile: seedData.profile,
     revenues,
@@ -203,8 +204,9 @@ describe('migration chain (pure)', () => {
       [DATA_VERSION_EXPENSE_CATEGORY, DATA_VERSION_TAX_RESERVE],
       [DATA_VERSION_TAX_RESERVE, DATA_VERSION_PENSION_FACTS],
       [DATA_VERSION_PENSION_FACTS, DATA_VERSION_RULE_SET_DIGEST],
+      [DATA_VERSION_RULE_SET_DIGEST, DATA_VERSION_RECORD_CURRENCY],
     ]);
-    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_RULE_SET_DIGEST);
+    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_RECORD_CURRENCY);
   });
 
   // Phase 9 acceptance criterion 4: a payload written by a newer build is refused loudly rather
@@ -223,7 +225,7 @@ describe('migration chain (pure)', () => {
     const outcome = migratePersistedData(payload as never);
     // The chain runs to the current version, so the money-scale step follows; it converts
     // amounts and invents no fields, which is what the assertions below check.
-    expect(outcome.stepsApplied).toEqual(['payment-dates', 'vat-exceedance-date', 'money-bani', 'expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest']);
+    expect(outcome.stepsApplied).toEqual(['payment-dates', 'vat-exceedance-date', 'money-bani', 'expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     for (const r of outcome.data.revenues) {
       expect('collected' in r).toBe(false);
@@ -244,7 +246,7 @@ describe('migration chain (pure)', () => {
     const payload = prePhase7Payload({ version: DATA_VERSION_DATES });
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_DATES);
-    expect(outcome.stepsApplied).toEqual(['vat-exceedance-date', 'money-bani', 'expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest']);
+    expect(outcome.stepsApplied).toEqual(['vat-exceedance-date', 'money-bani', 'expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     expect('vatExceedanceDate' in outcome.data.profile!).toBe(false);
     // And nothing else about the profile moved.
@@ -267,6 +269,7 @@ describe('migration chain (pure)', () => {
       'tax-reserve',
       'pension-facts',
       'rule-set-digest',
+      'record-currency',
     ]);
     expect(outcome.data.version).toBe(CURRENT_DATA_VERSION);
   });
@@ -279,7 +282,7 @@ describe('migration chain (pure)', () => {
     const payload = prePhase7Payload({ version: DATA_VERSION_MONEY_BANI });
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_MONEY_BANI);
-    expect(outcome.stepsApplied).toEqual(['expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest']);
+    expect(outcome.stepsApplied).toEqual(['expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     const migrated = outcome.data.expenses ?? [];
     expect(migrated.map((e) => e.id)).toEqual(['e-legacy-1']);
@@ -296,7 +299,7 @@ describe('migration chain (pure)', () => {
       expenses: [{ ...expenses[0], category: 'rent_business_space' }],
     });
     const outcome = migratePersistedData(payload as never);
-    expect(outcome.stepsApplied).toEqual(['expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest']);
+    expect(outcome.stepsApplied).toEqual(['expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency']);
     expect(outcome.data.expenses?.[0].category).toBe('rent_business_space');
   });
 
@@ -310,7 +313,7 @@ describe('migration chain (pure)', () => {
     delete payload.reservedAmount;
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_EXPENSE_CATEGORY);
-    expect(outcome.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest']);
+    expect(outcome.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     // Absence carried forward verbatim — not `null`, not `0`, not an empty string.
     expect('reservedAmount' in outcome.data).toBe(false);
@@ -327,7 +330,7 @@ describe('migration chain (pure)', () => {
     const withAmount = migratePersistedData(
       prePhase7Payload({ version: DATA_VERSION_EXPENSE_CATEGORY, reservedAmount: lei(25000) }) as never,
     );
-    expect(withAmount.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest']);
+    expect(withAmount.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency']);
     expect(withAmount.data.reservedAmount).toBe(lei(25000));
 
     const explicitZero = migratePersistedData(
@@ -346,7 +349,7 @@ describe('migration chain (pure)', () => {
     payload.profile = { ...prePhase7Profile(), pensionStatus: 'da' };
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_TAX_RESERVE);
-    expect(outcome.stepsApplied).toEqual(['pension-facts', 'rule-set-digest']);
+    expect(outcome.stepsApplied).toEqual(['pension-facts', 'rule-set-digest', 'record-currency']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     // The status fact travels, under the name that says what it is.
     expect(outcome.data.profile!.pensionerStatus).toBe('da');
@@ -500,7 +503,7 @@ describe('stored snapshots survive the migration (F-1, acceptance criterion 3)',
     });
     delete payload.reservedAmount;
     const outcome = migratePersistedData(payload as never);
-    expect(outcome.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest']);
+    expect(outcome.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency']);
     const [after] = outcome.data.snapshots!;
     expect(after.inputSnapshot).toEqual(stored.inputSnapshot);
     expect(after.inputsHash).toBe(stored.inputsHash);
@@ -526,7 +529,7 @@ describe('stored snapshots survive the migration (F-1, acceptance criterion 3)',
       snapshots: [stored],
     });
     const outcome = migratePersistedData(payload as never);
-    expect(outcome.stepsApplied).toEqual(['rule-set-digest']);
+    expect(outcome.stepsApplied).toEqual(['rule-set-digest', 'record-currency']);
     const [after] = outcome.data.snapshots!;
     // The record now says out loud that its rules cannot be reconstructed…
     expect(after.ruleSetHash).toBeNull();
@@ -665,6 +668,7 @@ describe('load path runs the chain (acceptance criteria 2 and 3)', () => {
         'tax-reserve',
         'pension-facts',
         'rule-set-digest',
+        'record-currency',
       ],
     });
     // Not the seed: the seed's ids are different.

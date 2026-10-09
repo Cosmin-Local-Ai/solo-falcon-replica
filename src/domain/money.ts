@@ -47,6 +47,193 @@ import Decimal from 'decimal.js-light';
 /** An integer number of bani. Branded so a plain `number` cannot be passed off as money. */
 export type Bani = number & { readonly __brand: 'bani' };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TASK 10a — money carries its own currency (register B-32).
+//
+// Everything above this line is RON-only money: a `Bani` is an integer number of
+// **bani**, and the leu is the only unit the type can name. That is the defect
+// B-32: `Revenue` and `Expense` held a `Bani`, so a EUR invoice was arithmetically
+// indistinguishable from a lei invoice and was silently added to lei totals.
+//
+// The fix is NOT a `currency` string sitting next to a RON number — that leaves
+// the number unqualified and lets any helper add the two. The fix is a money
+// **value** whose currency is part of its type, so `addMoney(ron, eur)` is a
+// compile error and an FX conversion has to be a named call.
+//
+// What does NOT change: the storage unit stays an integer number of minor units.
+// No float is reintroduced. `Bani` remains the minor-unit type — for RON those
+// are bani, for EUR they are cents, and `MINOR_UNITS_PER_MAJOR` is 100 for both,
+// so every integer helper above keeps working unchanged.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The currencies this app can name and store.
+ *
+ * A **closed** set on purpose. BNR's `nbrfxrates.xml` publishes roughly 20 more
+ * (BNR, „Cursurile pieței valutare în format XML", https://www.bnr.ro/23988-…), and a
+ * rate record can in principle carry any ISO-4217 code, but a currency the app has no
+ * label for and no rounding story for is a currency it must not silently accept. The
+ * fetcher therefore **refuses** a currency outside this set and reports it, rather than
+ * inventing a display name for it.
+ */
+export const CURRENCY_CODES = ['RON', 'EUR', 'USD', 'GBP', 'HUF'] as const;
+export type CurrencyCode = (typeof CURRENCY_CODES)[number];
+
+/** Minor units per major unit. 100 for every currency in `CURRENCY_CODES`. */
+export const MINOR_UNITS_PER_MAJOR: Record<CurrencyCode, 100> = {
+  RON: 100,
+  EUR: 100,
+  USD: 100,
+  GBP: 100,
+  HUF: 100,
+};
+
+/** True when `value` names a currency this app can hold. */
+export function isCurrencyCode(value: unknown): value is CurrencyCode {
+  return typeof value === 'string' && (CURRENCY_CODES as readonly string[]).includes(value);
+}
+
+/**
+ * An amount **with** its currency. `amount` is an integer number of the currency's minor
+ * units — bani for RON, cents for EUR — never a float.
+ *
+ * The type parameter is what makes cross-currency arithmetic a compile error: the
+ * arithmetic helpers below take the second operand as `Money<B extends A>`, so a
+ * `Money<'EUR'>` handed where a `Money<'RON'>` is expected fails the constraint. The
+ * default parameter (`CurrencyCode`) is what lets a record field hold *some* currency
+ * without naming which; the runtime guard in `sumMoney`/`requireRon` covers that case,
+ * which the type cannot.
+ */
+export interface Money<C extends CurrencyCode = CurrencyCode> {
+  amount: Bani;
+  currency: C;
+}
+
+/** Money known at compile time to be lei. What the fiscal engine consumes. */
+export type RonMoney = Money<'RON'>;
+
+/** Raised when an operation needs one currency and got another, or when a sum mixes two. */
+export class MixedCurrencyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MixedCurrencyError';
+  }
+}
+
+/** Build money from an integer minor-unit count. */
+export function money<C extends CurrencyCode>(amount: Bani, currency: C): Money<C> {
+  assertIntegralBani(amount, 'money');
+  return { amount, currency };
+}
+
+/**
+ * RON money from a **lei** amount — the currency-carrying twin of `lei()`.
+ * `ron(2430)` is 2 430 lei. Same exactness rule and the same refusal of a sub-ban
+ * literal, because it is the same scaling.
+ */
+export function ron(amount: number): RonMoney {
+  return money(lei(amount), 'RON');
+}
+
+/** EUR money from a **euro** amount. `eur(400)` is 400,00 EUR = 40 000 cents. */
+export function eur(amount: number): Money<'EUR'> {
+  if (typeof amount !== 'number' || !Number.isFinite(amount)) {
+    throw new RangeError(`eur(${amount}) requires a finite number of euro`);
+  }
+  const scaled = new Decimal(amount).times(MINOR_UNITS_PER_MAJOR.EUR);
+  if (!scaled.isInteger() || !Number.isSafeInteger(scaled.toNumber())) {
+    throw new RangeError(`eur(${amount}) is not a whole number of cents`);
+  }
+  return money(scaled.toNumber() as Bani, 'EUR');
+}
+
+/** Narrow at runtime. Use it before a helper that needs lei at compile time. */
+export function isRon(amount: Money): amount is RonMoney {
+  return amount.currency === 'RON';
+}
+
+/**
+ * The **explicit boundary** from a currency-carrying amount to the engine's `Bani`.
+ *
+ * It does not convert — it *asserts*. A `Money<'EUR'>` reaching here is a bug or an
+ * unconverted record, and it throws rather than being read as lei: that silent read is
+ * exactly defect B-32, and a `Bani` taken from a EUR amount is a fabricated lei figure.
+ * A real conversion is `convertToRon` in `domain/fx/convert.ts`, which names the rate,
+ * the date or year it is keyed to, the source and the basis.
+ */
+export function requireRon(amount: Money, context = ''): Bani {
+  if (amount.currency !== 'RON') {
+    throw new MixedCurrencyError(
+      `${context || 'this amount'} is ${amount.currency}, not RON — it cannot be read as lei. ` +
+        `Convert it with convertToRon(amount, basis, …), which records the rate and its provenance.`,
+    );
+  }
+  return amount.amount;
+}
+
+/**
+ * Add two amounts of the **same** currency.
+ *
+ * `B extends A` is the enforcement: `addMoney(ron(100), eur(100))` does not type-check,
+ * because `'EUR'` does not extend `'RON'`. Pinned by a `@ts-expect-error` in
+ * `money.currency.test.ts`, which is what makes the claim testable rather than aspirational —
+ * an unused `@ts-expect-error` is itself a `tsc` error, so if this signature ever loosens,
+ * the build fails.
+ */
+export function addMoney<A extends CurrencyCode, B extends A>(a: Money<A>, b: Money<B>): Money<A> {
+  if (a.currency !== b.currency) {
+    throw new MixedCurrencyError(`addMoney: ${a.currency} + ${b.currency}`);
+  }
+  return money(addBani(a.amount, b.amount), a.currency);
+}
+
+/** Subtract two amounts of the same currency. */
+export function subMoney<A extends CurrencyCode, B extends A>(a: Money<A>, b: Money<B>): Money<A> {
+  if (a.currency !== b.currency) {
+    throw new MixedCurrencyError(`subMoney: ${a.currency} - ${b.currency}`);
+  }
+  return money(subBani(a.amount, b.amount), a.currency);
+}
+
+/**
+ * Sum amounts that must all share one currency. The currency of the result is the currency
+ * of the first addend; an empty list needs the currency stated, because a sum of nothing
+ * has no unit and an unqualified `0` is how a currency gets lost.
+ */
+export function sumMoney(values: readonly Money[], currency: CurrencyCode): Money {
+  for (const v of values) {
+    if (v.currency !== currency) {
+      throw new MixedCurrencyError(`sumMoney: expected ${currency}, got ${v.currency}`);
+    }
+  }
+  return money(sumBani(values.map((v) => v.amount)), currency);
+}
+
+/** The larger of two same-currency amounts. `Math.max` would drop the currency. */
+export function maxMoney<A extends CurrencyCode, B extends A>(a: Money<A>, b: Money<B>): Money<A> {
+  if (a.currency !== b.currency) {
+    throw new MixedCurrencyError(`maxMoney: ${a.currency} vs ${b.currency}`);
+  }
+  return money(maxBani(a.amount, b.amount), a.currency);
+}
+
+/** Money as `1.234,56 EUR` — no rounding, same integer formatter as lei. */
+export function formatMoney(amount: Money): string {
+  return `${formatBani(amount.amount)} ${amount.currency}`;
+}
+
+/** A major-unit amount in `currency`, scaled exactly through `Decimal`. */
+export function majorToMinor(major: number, currency: CurrencyCode): Bani {
+  if (typeof major !== 'number' || !Number.isFinite(major)) {
+    throw new RangeError(`majorToMinor(${major}, ${currency}) needs a finite number`);
+  }
+  const scaled = new Decimal(major).times(MINOR_UNITS_PER_MAJOR[currency]);
+  if (!scaled.isInteger() || !Number.isSafeInteger(scaled.toNumber())) {
+    throw new RangeError(`majorToMinor(${major}, ${currency}) is not a whole number of minor units`);
+  }
+  return scaled.toNumber() as Bani;
+}
+
 export const BANIS_PER_LEI = 100 as const;
 
 /** True only for a safe integer — the representation invariant for `Bani`. */
@@ -242,6 +429,45 @@ export function parseLeiInput(text: string): Bani | null {
   if (!Number.isFinite(value)) return null;
   const { bani, exact } = baniFromLei(value);
   return exact ? bani : null;
+}
+
+/**
+ * The currencies a record may be **entered** in.
+ *
+ * Narrower than `CURRENCY_CODES` on purpose: the store can hold any currency the app can name, but a form
+ * only offers the currencies it has a label for and a rounding story for. A currency offered without a
+ * label is a currency the user is asked to trust.
+ */
+export const ENTRY_CURRENCIES = ['RON', 'EUR', 'USD'] as const;
+export type EntryCurrency = (typeof ENTRY_CURRENCIES)[number];
+
+/**
+ * A `Money` as a plain machine-readable major-unit string for an `<input value>` — the currency-carrying
+ * twin of `leiInputValue`. Exact, no rounding, no locale grouping, `.` as the decimal separator.
+ */
+export function moneyInputValue(amount: Money): string {
+  const perMajor = MINOR_UNITS_PER_MAJOR[amount.currency];
+  const bani = assertIntegralBani(amount.amount, 'moneyInputValue');
+  const whole = Math.trunc(bani / perMajor);
+  const fraction = Math.abs(bani - whole * perMajor);
+  return fraction === 0 ? String(whole) : `${whole}.${String(fraction).padStart(2, '0')}`;
+}
+
+/**
+ * Parse a major-unit amount typed by a user, **in the currency the form is set to**.
+ *
+ * Same refusal as `parseLeiInput`: sub-minor-unit precision (`85.555`) returns `null` rather than being
+ * rounded. Rounding a number on the way INTO someone's ledger is the silent money change this codebase
+ * forbids, and it is worse here, because the currency the user chose would also have to be guessed at.
+ */
+export function parseMoneyInput(text: string, currency: CurrencyCode): Money | null {
+  const trimmed = text.trim();
+  if (trimmed === '') return null;
+  const value = Number(trimmed.replace(',', '.'));
+  if (!Number.isFinite(value)) return null;
+  const scaled = new Decimal(value).times(MINOR_UNITS_PER_MAJOR[currency]);
+  if (!scaled.isInteger() || !Number.isSafeInteger(scaled.toNumber())) return null;
+  return money(scaled.toNumber() as Bani, currency);
 }
 
 /**
