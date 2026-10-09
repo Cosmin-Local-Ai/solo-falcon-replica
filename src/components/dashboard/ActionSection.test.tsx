@@ -127,3 +127,42 @@ describe('ActionSection (TASK 8 — the action surface)', () => {
     expect(screen.getByText('Nimic nu necesită atenția ta în acest moment.')).toBeInTheDocument();
   });
 });
+
+describe('ActionSection (TASK 9 — provenance on the action surface)', () => {
+  it('renders a drifted provenance line as a mismatch, and repairs nothing', () => {
+    const recorded = 'b'.repeat(64);
+    const current = 'c'.repeat(64);
+    const { container } = render(
+      <ActionSection
+        actions={[
+          {
+            ...makeActions()[0],
+            source: 'tax',
+            state: 'estimate_review_required',
+            provenance: {
+              state: 'drifted',
+              releaseId: 'PFA_2026_SYSTEM_REAL',
+              recordedHash: recorded,
+              registeredHash: current,
+              citations: [{ act: 'Cod fiscal', article: 'art. 118 alin. (2) lit. b)' }],
+            },
+          },
+        ]}
+      />,
+    );
+    expect(
+      screen.getByText(
+        'Regulile înregistrate acum nu mai corespund digestului consemnat la acest calcul: pachetul a fost modificat după calcul. Aplicația afișează neconcordanța și nu recalculează digestul.',
+      ),
+    ).toBeInTheDocument();
+    // Both digests are on screen: that is the evidence, and it is not overwritten.
+    expect(container.querySelector(`[data-digest-recorded="${recorded}"]`)).not.toBeNull();
+    expect(container.querySelector(`[data-digest-registered="${current}"]`)).not.toBeNull();
+    expect(screen.getByText('Cod fiscal — art. 118 alin. (2) lit. b)')).toBeInTheDocument();
+  });
+
+  it('renders no provenance line for a row about a record or a date', () => {
+    const { container } = render(<ActionSection actions={makeActions()} />);
+    expect(container.querySelector('[data-provenance-state]')).toBeNull();
+  });
+});

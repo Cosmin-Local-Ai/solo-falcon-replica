@@ -51,6 +51,12 @@ export const provenance = {
   digestRegisteredNow: 'Digestul pachetului înregistrat acum',
   /** The provisions the money-producing rules cite — printed beside the digest, never after it. */
   citationsLabel: 'Prevederi pe care se sprijină calculul',
+  /**
+   * The same list under `drifted`. It cannot carry the first label: once the package no longer hashes to
+   * what the record says, the app no longer knows which articles produced the figure, so it names these
+   * as the ones the package holds now.
+   */
+  citationsLabelCurrent: 'Prevederi din pachetul înregistrat acum',
 } as const;
 
 /**

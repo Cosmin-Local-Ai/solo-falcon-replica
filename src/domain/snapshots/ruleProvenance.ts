@@ -156,7 +156,11 @@ export function describeSnapshotRuleProvenance(
     releaseId: snapshot.ruleRelease.releaseId,
     recordedHash: snapshot.ruleSetHash ?? null,
     registeredHash: entry ? ruleSetDigest(rules) : null,
-    citations: moneyCitations(rules),
+    // Only the two states where a release is actually named can cite anything. For `unpinned` and
+    // `unregistered` the app cannot say which rules produced the figure, so it cites none — naming the
+    // current package's articles under a record that predates content addressing would be exactly the
+    // fabricated history TASK 6 refused to write.
+    citations: state === 'pinned' || state === 'drifted' ? moneyCitations(rules) : [],
   };
 }
 

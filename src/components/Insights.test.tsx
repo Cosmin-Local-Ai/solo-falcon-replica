@@ -104,3 +104,69 @@ describe('Insights (TASK 8 — the observation surface)', () => {
     expect(screen.getByText('Third insight')).toBeInTheDocument();
   });
 });
+
+describe('Insights (TASK 9 — the row says which rules produced the figure)', () => {
+  it('renders the provenance line, the recorded digest and the article beside it', () => {
+    const { container } = render(
+      <Insights
+        insights={[
+          makeInsight({
+            provenance: {
+              state: 'pinned',
+              releaseId: 'PFA_2026_SYSTEM_REAL',
+              recordedHash: 'a'.repeat(64),
+              registeredHash: 'a'.repeat(64),
+              citations: [{ act: 'Cod fiscal', article: 'art. 174 alin. (6)' }],
+            },
+          }),
+        ]}
+      />,
+    );
+    expect(
+      screen.getByText(
+        'Calculul folosește pachetul de reguli PFA_2026_SYSTEM_REAL, iar digestul înregistrat se potrivește cu cel al pachetului.',
+      ),
+    ).toBeInTheDocument();
+    expect(container.querySelector('[data-provenance-state="pinned"]')).not.toBeNull();
+    expect(container.querySelector(`[data-digest-recorded="${'a'.repeat(64)}"]`)).not.toBeNull();
+    expect(screen.getByText('Cod fiscal — art. 174 alin. (6)')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Digestul este o adresă de conținut, nu o prevedere legală; articolul rămâne afișat alături de el.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('renders no provenance line on a row that is not about a computed figure', () => {
+    // A rejected document has no calculation behind it. Attaching a provenance line would claim one.
+    const { container } = render(
+      <Insights insights={[makeInsight({ source: 'revenue', state: 'rejected', provenance: null })]} />,
+    );
+    expect(container.querySelector('[data-provenance-state]')).toBeNull();
+  });
+
+  it('renders the unpinned state honestly: no digest is invented for a record that predates one', () => {
+    const { container } = render(
+      <Insights
+        insights={[
+          makeInsight({
+            provenance: {
+              state: 'unpinned',
+              releaseId: 'PFA_2026_SYSTEM_REAL',
+              recordedHash: null,
+              registeredHash: 'a'.repeat(64),
+              citations: [],
+            },
+          }),
+        ]}
+      />,
+    );
+    expect(
+      screen.getByText(
+        'Înregistrarea este anterioară adresării prin digest, așa că regulile din spatele acestei cifre nu pot fi reconstituite.',
+      ),
+    ).toBeInTheDocument();
+    expect(container.querySelector('[data-digest-recorded]')).toBeNull();
+    expect(container.textContent).not.toMatch(/[0-9a-f]{16,}/);
+  });
+});

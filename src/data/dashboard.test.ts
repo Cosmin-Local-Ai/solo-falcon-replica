@@ -9,6 +9,7 @@ import {
   getPendingCounts,
   getTaxEstimate,
   getActionItems,
+  estimateProvenance,
   getLegislationState,
   getThresholdStatuses,
   buildThresholdBases,
@@ -17,6 +18,7 @@ import {
   getTaxReserve,
 } from './dashboard';
 import { selectEstimateOperands } from '../domain/estimateBasis';
+import type { TaxEstimateResult } from '../domain/tax';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from '../domain/fiscal';
 import { seedData } from './seed';
 import { selectYtd } from '../domain/aggregation';
@@ -456,6 +458,71 @@ describe('getLegislationState (sync)', () => {
     expect(anchor!.impact.affects).toBe('yes');
     expect(anchor!.summary).toContain('4.050,00 lei');
     expect(anchor!.impact.note).toContain('art. 135¹ alin. (3)');
+  });
+});
+
+/**
+ * TASK 9 — provenance reaches the data layer exactly once, so no surface can invent its own answer.
+ */
+describe('estimateProvenance and the surfaces that consume it (TASK 9)', () => {
+  it('the seed estimate is pinned: the release is named and the recorded digest verifies', async () => {
+    const tax = await getTaxEstimate(seedData, AS_OF);
+    const view = estimateProvenance(tax)!;
+    expect(view.state).toBe('pinned');
+    expect(view.releaseId).toBe('PFA_2026_SYSTEM_REAL');
+    expect(view.recordedHash).toBe(tax.status === 'computed' ? tax.snapshot.ruleSetHash : null);
+    expect(view.registeredHash).toBe(view.recordedHash);
+    // A digest never travels alone: the provisions behind the money come with it.
+    expect(view.citations.length).toBeGreaterThan(0);
+  });
+
+  it('a withheld conclusion has no snapshot, so there is no provenance to show — and none is invented', () => {
+    const refused: TaxEstimateResult = { status: 'review_required', reason: 'engine refused', lines: [] };
+    expect(estimateProvenance(refused)).toBeNull();
+    expect(estimateProvenance(null)).toBeNull();
+  });
+
+  it('buildDashboardData carries the view, and the legislation items carry the same one', async () => {
+    const tax = await getTaxEstimate(seedData, AS_OF);
+    const dashboard = buildDashboardData(seedData, tax, AS_OF_INSTANT);
+    expect(dashboard.provenance?.state).toBe('pinned');
+    expect(dashboard.legislation.items.length).toBeGreaterThan(0);
+    for (const item of dashboard.legislation.items) {
+      expect(item.provenance?.state).toBe('pinned');
+      expect(item.provenance?.releaseId).toBe('PFA_2026_SYSTEM_REAL');
+    }
+  });
+
+  it('the figure-bearing rows carry provenance; the rows about records and dates carry none', async () => {
+    const tax = await getTaxEstimate(seedData, AS_OF);
+    const dashboard = buildDashboardData(seedData, tax, AS_OF_INSTANT);
+    const all = [...dashboard.insights, ...dashboard.actions];
+    const withProvenance = all.filter(i => i.provenance != null);
+    // Every row that carries one is a row about a computed figure.
+    for (const item of withProvenance) {
+      expect(['tax', 'reserve', 'threshold']).toContain(item.source);
+    }
+    // And on the seed there is at least one such row, so this is not a vacuous pass.
+    expect(withProvenance.length).toBeGreaterThan(0);
+    // A row about a document or a date carries nothing: no calculation produced it.
+    for (const item of all.filter(i => i.source === 'revenue' || i.source === 'expense' || i.source === 'declaration' || i.source === 'deadline')) {
+      expect(item.provenance ?? null).toBeNull();
+    }
+  });
+
+  it('a withheld conclusion gives the figure-bearing rows the no_release answer, not a digest', () => {
+    const refused: TaxEstimateResult = { status: 'review_required', reason: 'engine refused', lines: [] };
+    const dashboard = buildDashboardData(seedData, refused, AS_OF_INSTANT);
+    const all = [...dashboard.insights, ...dashboard.actions];
+    const figureRows = all.filter(i => ['tax', 'reserve', 'threshold'].includes(i.source));
+    expect(figureRows.length).toBeGreaterThan(0);
+    for (const item of figureRows) {
+      expect(item.provenance?.state).toBe('no_release');
+      expect(item.provenance?.recordedHash).toBeNull();
+    }
+    // The hero gets nothing at all: there is no record to attribute, and the estimate state already
+    // says the figure is withheld.
+    expect(dashboard.provenance).toBeNull();
   });
 });
 

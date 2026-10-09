@@ -50,18 +50,24 @@ export function RuleProvenance({ view, id, className }: RuleProvenanceProps) {
     <div className={classes} data-provenance-state={view.state} id={id}>
       <p className="hint">{provenanceSentence(view)}</p>
       {view.recordedHash !== null ? (
-        <p className="hint mono" data-digest-recorded={view.recordedHash}>
-          {provenanceCopy.digestRecorded}: {view.recordedHash}
+        <p className="hint" data-digest-recorded={view.recordedHash}>
+          <span className="label">{provenanceCopy.digestRecorded}</span>{' '}
+          <span className="mono">{view.recordedHash}</span>
         </p>
       ) : null}
       {view.state === 'drifted' && view.registeredHash !== null ? (
-        <p className="hint mono" data-digest-registered={view.registeredHash}>
-          {provenanceCopy.digestRegisteredNow}: {view.registeredHash}
+        <p className="hint" data-digest-registered={view.registeredHash}>
+          <span className="label">{provenanceCopy.digestRegisteredNow}</span>{' '}
+          <span className="mono">{view.registeredHash}</span>
         </p>
       ) : null}
       {view.citations.length > 0 ? (
         <div className="provenance-citations">
-          <div className="label">{provenanceCopy.citationsLabel}</div>
+          <div className="label">
+            {view.state === 'drifted'
+              ? provenanceCopy.citationsLabelCurrent
+              : provenanceCopy.citationsLabel}
+          </div>
           <ul>
             {view.citations.map((citation) => (
               <li key={`${citation.act}|${citation.article}`}>

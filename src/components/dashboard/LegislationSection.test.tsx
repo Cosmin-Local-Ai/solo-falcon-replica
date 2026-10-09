@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import LegislationSection from './LegislationSection';
 import type { LegislationItem, LegislationState } from '../../data/dashboard';
+import type { SnapshotRuleProvenance } from '../../domain/snapshots/ruleProvenance';
 
 function makeItem(overrides: Partial<LegislationItem> = {}): LegislationItem {
   return {
@@ -161,5 +162,37 @@ describe('LegislationSection', () => {
     expect(screen.getByText('Modificare viitoare')).toBeInTheDocument();
     expect(screen.getByText('New e-factura obligation now in force')).toBeInTheDocument();
     expect(screen.getByText('New VAT threshold coming into force')).toBeInTheDocument();
+  });
+});
+
+describe('LegislationSection (TASK 9 — the card says which rule package it was read out of)', () => {
+  const PINNED: SnapshotRuleProvenance = {
+    state: 'pinned',
+    releaseId: 'PFA_2026_SYSTEM_REAL',
+    recordedHash: 'a'.repeat(64),
+    registeredHash: 'a'.repeat(64),
+    citations: [{ act: 'HG 1506/2024', article: 'art. 1' }],
+  };
+
+  it('carries the provenance of the package these rows come from, beside the act it already names', () => {
+    const { container } = render(<LegislationSection state={makeState([makeItem({ provenance: PINNED })])} />);
+    // Opened with a real disclosure, not a hover.
+    expect(screen.getByText('Regulile din spatele acestor rânduri')).toBeInTheDocument();
+    expect(container.querySelector('[data-provenance-state="pinned"]')).not.toBeNull();
+    expect(container.querySelector(`[data-digest-recorded="${'a'.repeat(64)}"]`)).not.toBeNull();
+    // The card still names the act itself — the digest sits beside it, never in place of it.
+    expect(screen.getByText('ANAF / Official Gazette')).toBeInTheDocument();
+    expect(screen.getByText('HG 1506/2024 — art. 1')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Digestul este o adresă de conținut, nu o prevedere legală; articolul rămâne afișat alături de el.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('renders no provenance block when there is no calculation behind the rows', () => {
+    const { container } = render(<LegislationSection state={makeState([makeItem()])} />);
+    expect(container.querySelector('[data-provenance-state]')).toBeNull();
+    expect(screen.queryByText('Regulile din spatele acestor rânduri')).not.toBeInTheDocument();
   });
 });

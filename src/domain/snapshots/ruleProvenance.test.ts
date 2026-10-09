@@ -9,7 +9,13 @@ import { describe, expect, it } from 'vitest';
 import type { PfaProfile } from '../models';
 import { lei } from '../money';
 import { createCalculationSnapshot } from './snapshot';
-import { engineAsOf, resolveSnapshotRules, snapshotRuleState } from './ruleProvenance';
+import {
+  describeSnapshotRuleProvenance,
+  engineAsOf,
+  noRulePackageProvenance,
+  resolveSnapshotRules,
+  snapshotRuleState,
+} from './ruleProvenance';
 import { createRuleReleaseRegistry } from '../fiscal/registry';
 import { ruleSetDigest } from '../fiscal/ruleSetDigest';
 import { selectApplicableRules } from '../fiscal/select';
@@ -116,6 +122,90 @@ describe('snapshotRuleState', () => {
     });
     expect(ruleSetDigest(newerEffective)).not.toBe(recorded);
     expect(r2.digest).not.toBe(r1.digest);
+  });
+});
+
+/**
+ * TASK 9 — the shape the surfaces render. Pinned here because these are the invariants the UI depends
+ * on and cannot enforce itself: the recorded digest is never recomputed, `drifted` is shown with both
+ * digests and repaired with neither, and a record whose rules cannot be reconstructed cites nothing.
+ */
+describe('describeSnapshotRuleProvenance', () => {
+  it('pinned: names the release, shows the recorded digest, and cites the provisions behind the money', async () => {
+    const snap = await snapshotOf(ruleSetDigest(effective2026));
+    const view = describeSnapshotRuleProvenance(snap);
+    expect(view.state).toBe('pinned');
+    expect(view.releaseId).toBe('PFA_2026_SYSTEM_REAL');
+    expect(view.recordedHash).toBe(snap.ruleSetHash);
+    expect(view.registeredHash).toBe(snap.ruleSetHash);
+    // The three calculators whose results `Total taxe` adds up, and no others: the 39 art. 68
+    // deductibility letters and the deadline rules are not what produced the lei figure.
+    expect(view.citations.map((c) => c.act)).toContain(
+      'Cod fiscal — OUG nr. 128/2024, Art. I pct. 20 (MO 1125/11.11.2024)',
+    );
+    expect(view.citations.some((c) => c.article.includes('art. 174'))).toBe(true);
+    expect(view.citations.some((c) => c.article.includes('art. 118'))).toBe(true);
+    expect(view.citations.length).toBeGreaterThan(0);
+  });
+
+  it('drifted: shows the recorded digest AND what the package hashes to now, and writes neither back', async () => {
+    const recorded = 'b'.repeat(64);
+    const snap = await snapshotOf(recorded);
+    const view = describeSnapshotRuleProvenance(snap);
+    expect(view.state).toBe('drifted');
+    expect(view.recordedHash).toBe(recorded);
+    // The mismatch, displayed. This is the evidence of an in-place edit of a published release.
+    expect(view.registeredHash).toBe(ruleSetDigest(effective2026));
+    expect(view.registeredHash).not.toBe(view.recordedHash);
+    // Surfaced, never repaired: the record still carries the digest it was written with.
+    expect(snap.ruleSetHash).toBe(recorded);
+    expect(describeSnapshotRuleProvenance(snap).recordedHash).toBe(recorded);
+  });
+
+  it("drifted compares like with like: the EFFECTIVE digest, not the release's full contentHash", async () => {
+    const snap = await snapshotOf('c'.repeat(64));
+    const view = describeSnapshotRuleProvenance(snap);
+    // phases/20 §3: `RuleRelease.contentHash` covers the full named set (48 rules), `ruleSetHash` the
+    // effective applied set. Showing the full-set digest beside an effective-set digest would report a
+    // mismatch that is only a difference of granularity.
+    expect(view.registeredHash).not.toBe(ruleSetDigest(PFA_2026_SYSTEM_REAL_PACKAGE));
+    expect(view.registeredHash).toBe(ruleSetDigest(effective2026));
+  });
+
+  it('unpinned: no digest, and no citations invented from the package this build happens to carry', async () => {
+    const snap = await snapshotOf(null);
+    const view = describeSnapshotRuleProvenance(snap);
+    expect(view.state).toBe('unpinned');
+    expect(view.recordedHash).toBeNull();
+    // The honest half: the app cannot say which rules produced this figure, so it names no provisions.
+    expect(view.citations).toEqual([]);
+  });
+
+  it('unregistered: names the release the record refers to, cites nothing', async () => {
+    const snap = await snapshotOf(ruleSetDigest(effective2026), 'REL_2024_IESIT');
+    const view = describeSnapshotRuleProvenance(snap);
+    expect(view.state).toBe('unregistered');
+    expect(view.releaseId).toBe('REL_2024_IESIT');
+    expect(view.registeredHash).toBeNull();
+    expect(view.citations).toEqual([]);
+  });
+
+  it('never mutates the record it is reading', async () => {
+    const snap = await snapshotOf('d'.repeat(64));
+    const before = { ...snap };
+    describeSnapshotRuleProvenance(snap);
+    expect(snap.ruleSetHash).toBe(before.ruleSetHash);
+    expect(snap.ruleRelease.releaseId).toBe(before.ruleRelease.releaseId);
+    expect(snap.inputsHash).toBe(before.inputsHash);
+  });
+
+  it('no_release is the answer a surface gives when there is no record to ask', () => {
+    const view = noRulePackageProvenance();
+    expect(view.state).toBe('no_release');
+    expect(view.releaseId).toBeNull();
+    expect(view.recordedHash).toBeNull();
+    expect(view.registeredHash).toBeNull();
+    expect(view.citations).toEqual([]);
   });
 });
 

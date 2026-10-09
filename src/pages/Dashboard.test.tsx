@@ -229,4 +229,54 @@ describe('Dashboard page', () => {
     // that ambiguity is a product defect, registered as B-28, not something a test may paper over.
     expect(card).toHaveTextContent(/—/);
   });
+
+  test('TASK 9: the estimate hero attributes its figure to the rule package that produced it', async () => {
+    // Empty localStorage → the store falls back to the app's own seed dataset, whose estimate computes.
+    renderDashboard();
+    const heroCard = await waitFor(() => {
+      const card = [...document.querySelectorAll('section.card')].find(
+        (s) => s.querySelector('h2.card-title')?.textContent === 'Estimare impozit',
+      );
+      expect(card).toBeDefined();
+      return card!;
+    });
+
+    // The disclosure caption is the copy layer's; the state sentence names the release.
+    await waitFor(() =>
+      expect(heroCard.textContent).toContain(
+        'Calculul folosește pachetul de reguli PFA_2026_SYSTEM_REAL, iar digestul înregistrat se potrivește cu cel al pachetului.',
+      ),
+    );
+    expect(heroCard.textContent).toContain('Regulile din spatele acestei cifre');
+    // A digest is shown, and the provisions are shown beside it — never replaced by it.
+    expect(heroCard.querySelector('[data-digest-recorded]')).not.toBeNull();
+    expect(heroCard.querySelector('.provenance-citations')).not.toBeNull();
+    expect(heroCard.textContent).toContain(
+      'Digestul este o adresă de conținut, nu o prevedere legală; articolul rămâne afișat alături de el.',
+    );
+  });
+
+  test('TASK 9: a refused calculation gives the hero no provenance, and the rows the no_release answer', async () => {
+    writePayload({
+      profile: { ...seedData.profile, pfaStartYear: 2026, fiscalYear: 2026, regime: 'impozit_pe_cit' },
+      revenues: [validRevenue],
+    });
+    renderDashboard();
+    expect(await screen.findByText(/nu poate aparține unui PFA/)).toBeTruthy();
+
+    const heroCard = [...document.querySelectorAll('section.card')].find(
+      (s) => s.querySelector('h2.card-title')?.textContent === 'Estimare impozit',
+    );
+    expect(heroCard).toBeDefined();
+    // No calculation record → nothing to attribute, and the hero does not pretend otherwise.
+    expect(heroCard!.querySelector('[data-provenance-state]')).toBeNull();
+    expect(heroCard!.textContent).not.toContain('Regulile din spatele acestei cifre');
+
+    // The figure-bearing rows do carry an answer, and it is the honest one: no registered package, no
+    // digest. This is `copy.provenance.noRelease` reaching a real surface.
+    const noRelease = document.querySelector('[data-provenance-state="no_release"]');
+    expect(noRelease).not.toBeNull();
+    expect(noRelease!.textContent).toContain('Această cifră nu este legată de un pachet de reguli înregistrat.');
+    expect(noRelease!.querySelector('[data-digest-recorded]')).toBeNull();
+  });
 });
