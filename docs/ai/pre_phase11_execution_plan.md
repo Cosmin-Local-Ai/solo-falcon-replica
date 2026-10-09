@@ -145,6 +145,7 @@ TASK 2a therefore has a duty beyond classification: **where the law says there i
 - Legal uncertainty = **"Notă de interpretare"** + one plain sentence on what the law does not state and what the app does.
 - Breakdown collapsed behind **"Cum am ajuns la această sumă"**; sources behind **"Surse și note de interpretare"**. Never hover-only.
 - `Settings` currently prints the literal `review_required` plus statute paragraphs — in scope.
+- **Grammar pass by a native speaker, not just terminology.** TASK 5 shipped `nu înregistrat` in six Settings dropdowns — ungrammatical (`nu` + past participle with no auxiliary). Corrected 2026-10-09 to `nu este înregistrat`, and the hint that repeated it. Sweep for the same class: bare `nu` + participle, calques from English, and any internal enum token rendered as if it were Romanian.
 
 ### 3.7 TASK 8 — prioritisation and severity
 - Shared attention model: `severity` · `state` · `source` · `title` · `description` · `target`. **Four dimensions, never collapsed into one field.**

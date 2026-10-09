@@ -776,7 +776,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                   value={fiscal.pensionerStatus}
                   onChange={e => setFiscal({ ...fiscal, pensionerStatus: e.target.value as TriState })}
                 >
-                  <option value="">nu înregistrat</option>
+                  <option value="">nu este înregistrat</option>
                   <option value="nu">nu</option>
                   <option value="da">da</option>
                 </select>
@@ -784,8 +784,8 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                   Art. 150 alin. (1) din Codul fiscal: calitatea de pensionar este temeiul pentru care nu
                   se datorează CAS pe venitul din activități independente. Nu este temeiul pentru CASS —
                   art. 174 alin. (7) lit. c) se decide pe sumele primite ca pensii în anul fiscal, nu pe
-                  acest statut. „Nu înregistrat" înseamnă că aplicația nu știe, nu că persoana nu este
-                  pensionară.
+                  acest statut. Valoarea „nu este înregistrat" înseamnă că aplicația nu știe, nu că persoana
+                  nu este pensionară.
                 </span>
               </div>
 
@@ -796,7 +796,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                   value={fiscal.pensionReceipt}
                   onChange={e => setFiscal({ ...fiscal, pensionReceipt: e.target.value as TriState })}
                 >
-                  <option value="">nu înregistrat</option>
+                  <option value="">nu este înregistrat</option>
                   <option value="nu">nu</option>
                   <option value="da">da</option>
                 </select>
@@ -833,7 +833,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                   value={fiscal.previousYearExcepted}
                   onChange={e => setFiscal({ ...fiscal, previousYearExcepted: e.target.value as TriState })}
                 >
-                  <option value="">nu înregistrat</option>
+                  <option value="">nu este înregistrat</option>
                   <option value="nu">nu</option>
                   <option value="da">da</option>
                 </select>
@@ -852,7 +852,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                   value={fiscal.previousYearOption}
                   onChange={e => setFiscal({ ...fiscal, previousYearOption: e.target.value as TriState })}
                 >
-                  <option value="">nu înregistrat</option>
+                  <option value="">nu este înregistrat</option>
                   <option value="nu">nu</option>
                   <option value="da">da</option>
                 </select>
@@ -869,7 +869,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                   value={fiscal.foreignInsuranceHeld}
                   onChange={e => setFiscal({ ...fiscal, foreignInsuranceHeld: e.target.value as TriState })}
                 >
-                  <option value="">nu înregistrat</option>
+                  <option value="">nu este înregistrat</option>
                   <option value="nu">nu</option>
                   <option value="da">da</option>
                 </select>
@@ -887,7 +887,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                   value={fiscal.foreignInsuranceProved}
                   onChange={e => setFiscal({ ...fiscal, foreignInsuranceProved: e.target.value as TriState })}
                 >
-                  <option value="">nu înregistrat</option>
+                  <option value="">nu este înregistrat</option>
                   <option value="nu">nu</option>
                   <option value="da">da</option>
                 </select>
