@@ -78,8 +78,22 @@ export const DATA_VERSION_EXPENSE_CATEGORY = 6;
  * silently clear the „Rezervă fiscală sub țintă” warning the task exists to make clearable.
  */
 export const DATA_VERSION_TAX_RESERVE = 7;
+/**
+ * TASK 5 step 8: the profile may now carry the pension facts that CF art. 174 alin. (7)/(8) and art.
+ * 153 alin. (2) actually test — pension sums received per fiscal year, a recorded suspension, the
+ * previous-year art. 174 alin. (8) context, and proved foreign sickness/maternity insurance. See
+ * `migratePensionFactsV8` and `docs/ai/phases/19_pension_cass_input_model.md`.
+ *
+ * This is the fifth schema-widening step, and the first of them that RENAMES a key. The rename carries
+ * a fact across unchanged; it does not create one. An old `pensionStatus: 'da'` recorded *calitatea de
+ * pensionar*, which is what `pensionerStatus` means, so that value travels. What does NOT travel is any
+ * inference from it: no legacy field records whether pension sums were received in the income year, so
+ * `pensionReceiptYears` stays absent and the art. 174 alin. (7) lit. c) relief becomes undecidable
+ * (`unknown` / REVIEW_REQUIRED) for every migrated profile — neither granted nor refused.
+ */
+export const DATA_VERSION_PENSION_FACTS = 8;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_TAX_RESERVE;
+export const CURRENT_DATA_VERSION = DATA_VERSION_PENSION_FACTS;
 
 export interface MigrationStep {
   readonly from: number;
@@ -136,7 +150,9 @@ export function legacyProfileFromSettings(s: SettingsState, instant: Date = now(
     fiscalYear: localYear(instant),
     regime: 'impozit_pe_venit',
     salaryStatus: 'nu',
-    pensionStatus: 'nu',
+    // TASK 5: no pension fact is minted here. The legacy `settings` block never recorded a pension
+    // status, and minting `pensionerStatus: 'nu'` would assert a checked negative the source never
+    // held. Absence is the honest state, and `readPensionerStatus` reports it as `unknown`.
     otherIncome: [],
     socialInsuranceStatus: 'neplata',
     vatExempt: false,
@@ -523,6 +539,38 @@ export function migrateReservedAmountV7(data: PersistedAppData): PersistedAppDat
   return { ...data, version: DATA_VERSION_TAX_RESERVE };
 }
 
+/**
+ * TASK 5: the v7→v8 step widens the profile with the pension facts and RENAMES one key.
+ *
+ * The rename is a carry, not a reinterpretation. `pensionStatus` recorded *calitatea de pensionar*, and
+ * `pensionerStatus` is the same fact under a name that says what it is — the CAS key under CF art. 150
+ * alin. (1), and nothing else. So the value moves across byte-for-byte and the old key is removed from
+ * the live profile, exactly as step v0→v1 folded `profile.caen` into `identity.caen` and deleted it.
+ *
+ * What the step refuses to do is manufacture the fact the CASS relief actually turns on. CF art. 174
+ * alin. (7) lit. c) asks whether the person „a realizat venituri … din pensii, definite conform art. 99”
+ * in the income year, and art. 99 alin. (1) defines those as „sume primite ca pensii”. A status answers
+ * none of that: a pensioner who received no pension sums that year does not qualify, and someone who
+ * was not a pensioner all year but received some does. Writing `pensionReceiptYears: [{ received: 'da' }]`
+ * for an old `pensionStatus: 'da'` would have granted a tax relief out of a boolean; writing `received:
+ * 'nu'` would have refused one out of the same boolean. Both are legal conclusions the data does not
+ * support, so the field stays ABSENT and the reader reports `unknown`.
+ *
+ * Stored snapshots are untouched, so no `inputsHash` moves: the step edits the live profile only, and
+ * `buildInputSnapshot` embeds the profile a calculation was made with, not the current one. Pinned by
+ * the digest landmine in `store.migration.chain.test.tsx`.
+ */
+export function migratePensionFactsV8(data: PersistedAppData): PersistedAppData {
+  const stamped = { ...data, version: DATA_VERSION_PENSION_FACTS };
+  const profile = data.profile;
+  if (!profile || profile.pensionStatus === undefined) return stamped;
+  // `pensionStatus` stays declared on `PfaProfile` as a deprecated optional precisely so this step can
+  // name it: the value is copied into `pensionerStatus` and the old key is dropped from the live
+  // profile, exactly as step v0→v1 folded `profile.caen` into `identity.caen` and deleted it.
+  const { pensionStatus, ...rest } = profile;
+  return { ...stamped, profile: { ...rest, pensionerStatus: pensionStatus } };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -579,6 +627,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Datele pot înregistra acum suma pusă deoparte pentru impozit (null = nicio sumă înregistrată). Nimic nu a fost completat: o rezervă de 0 lei este o faptă înregistrată de utilizator, nu o presupunere despre banii lui.',
     apply: migrateReservedAmountV7,
+  },
+  {
+    from: DATA_VERSION_TAX_RESERVE,
+    to: DATA_VERSION_PENSION_FACTS,
+    name: 'pension-facts',
+    summary:
+      'Profilul poate consemna acum faptele pensiei pe an fiscal: sume primite ca pensii în an (art. 174 alin. (7) lit. c) din Codul fiscal), suspendarea consemnată, contextul anului precedent (alin. (8)) și asigurarea medicală din alt stat dovedită (art. 153 alin. (2)). „pensionStatus” a fost redenumit în „pensionerStatus”, nu reinterpretat: un vechi „da” nu dovedește nicio sumă încasată în an, deci excepția CASS rămâne nehotărâtă, nici acordată nici refuzată.',
+    apply: migratePensionFactsV8,
   },
 ];
 

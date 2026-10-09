@@ -77,7 +77,43 @@ export const pfaProfileSchema: z.ZodType<PfaProfile> = z.object({
     .finite()
     .transform((n) => n as Bani)
     .optional(),
-  pensionStatus: z.enum(['da', 'nu']),
+  // @deprecated TASK 5: renamed to `pensionerStatus`. OPTIONAL now (it was required) so a payload that
+  // has already been migrated — which no longer carries this key at all — still parses. The migration
+  // step reads the raw key before zod ever sees it, so widening this is what keeps old payloads alive.
+  pensionStatus: z.enum(['da', 'nu']).optional(),
+  // TASK 5 — the pension facts art. 174 alin. (7)/(8) and art. 153 alin. (2) actually test. All
+  // OPTIONAL: this is the persisted gate, and a required field here resets every existing payload to
+  // seed (see the note above and `store.profileBackfill.test.tsx`). Absence is the honest third state,
+  // so none of these may gain a `.default()` — a default would manufacture a legal fact.
+  pensionerStatus: z.enum(['da', 'nu']).optional(),
+  // Year-attributed on purpose: alin. (7) asks about the income year, alin. (8) about the year before.
+  pensionReceiptYears: z
+    .array(z.object({ fiscalYear: z.number().int().min(1990).max(2100), received: z.enum(['da', 'nu']) }))
+    .optional(),
+  // A recorded fact with no legal consequence attached (research 25 gap 1, UNVERIFIED).
+  pensionSuspensionYears: z
+    .array(
+      z.object({
+        fiscalYear: z.number().int().min(1990).max(2100),
+        months: z.array(z.number().int().min(1).max(12)),
+      }),
+    )
+    .optional(),
+  cassPreviousYearContext: z
+    .object({
+      previousFiscalYear: z.number().int().min(1990).max(2100),
+      inExceptedCategory: z.enum(['da', 'nu']).optional(),
+      optedUnderArt180Alin1: z.enum(['da', 'nu']).optional(),
+    })
+    .optional(),
+  // art. 153 alin. (2) requires the insurance AND the proof, so both halves stay separate.
+  foreignSicknessInsurance: z
+    .object({
+      fiscalYear: z.number().int().min(1990).max(2100),
+      held: z.enum(['da', 'nu']).optional(),
+      proved: z.enum(['da', 'nu']).optional(),
+    })
+    .optional(),
   otherIncome: z.array(z.enum(['imobiliare', 'autovehicule', 'dividende', 'concesiune', 'alte'])),
   socialInsuranceStatus: z.enum(['obligatoriu', 'exempt', 'neplata']),
   vatExempt: z.boolean(),

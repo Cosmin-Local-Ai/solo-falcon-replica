@@ -12,6 +12,10 @@ import { selectProjectionV1, type ProjectionV1 } from './projection';
 import type { FiscalRule } from './fiscal/rules';
 import { sumBani, type Bani } from './money';
 import type {
+  CassPreviousYearContext,
+  ForeignSicknessInsurance,
+  PensionReceiptYear,
+  PensionSuspensionYear,
   PfaOtherIncomeFlag,
   PfaPensionStatus,
   PfaProfile,
@@ -105,7 +109,23 @@ export interface TaxInputsReference {
    * `null` means "not recorded" (a payload written before Phase 6); `undefined` would make
    * the canonical key unstable. CASS only — never an input to CAS (CF art. 150 alin. (2)). */
   salaryIncomeLei: Bani | null;
-  pensionStatus: PfaPensionStatus;
+  /**
+   * TASK 5 — CF art. 150 alin. (1) *calitatea de pensionar*, the CAS key and nothing else. `null` means
+   * "not recorded", which `readPensionerStatus` reports as `unknown`.
+   */
+  pensionerStatus: PfaPensionStatus | null;
+  /**
+   * TASK 5 — the CF art. 174 alin. (7) lit. c) facts: pension sums received, per fiscal year. This is
+   * what the CASS art. 174 alin. (6) top-up relief keys on — never `pensionerStatus`. Sorted by year so
+   * the canonical key cannot depend on the order the records happen to be stored in.
+   */
+  pensionReceiptYears: PensionReceiptYear[];
+  /** TASK 5 — recorded suspensions. A fact; research 25 leaves its legal effect UNVERIFIED. */
+  pensionSuspensionYears: PensionSuspensionYear[];
+  /** TASK 5 — the CF art. 174 alin. (8) previous-year route. */
+  cassPreviousYearContext: CassPreviousYearContext | null;
+  /** TASK 5 — CF art. 153 alin. (2), held AND proved; the only ground that removes CASS quality outright. */
+  foreignSicknessInsurance: ForeignSicknessInsurance | null;
   otherIncome: PfaOtherIncomeFlag[];
   socialInsuranceStatus: PfaSocialInsuranceStatus;
   vatExempt: boolean;
@@ -150,7 +170,11 @@ export function selectTaxDerived(data: AppData, activeRules: FiscalRule[]): TaxD
     regime: profile.regime,
     salaryStatus: profile.salaryStatus,
     salaryIncomeLei: profile.salaryIncomeLei ?? null,
-    pensionStatus: profile.pensionStatus,
+    pensionerStatus: profile.pensionerStatus ?? null,
+    pensionReceiptYears: [...(profile.pensionReceiptYears ?? [])].sort((a, b) => a.fiscalYear - b.fiscalYear),
+    pensionSuspensionYears: [...(profile.pensionSuspensionYears ?? [])].sort((a, b) => a.fiscalYear - b.fiscalYear),
+    cassPreviousYearContext: profile.cassPreviousYearContext ?? null,
+    foreignSicknessInsurance: profile.foreignSicknessInsurance ?? null,
     otherIncome: [...profile.otherIncome].sort(),
     socialInsuranceStatus: profile.socialInsuranceStatus,
     vatExempt: profile.vatExempt,

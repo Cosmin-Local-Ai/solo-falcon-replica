@@ -1,4 +1,5 @@
 import type { FiscalRule, FiscalParameter } from './rules';
+import type { FactState } from '../models';
 import { applyRateDecimal, lei, leiText, roundArt66, subBani, type Bani } from '../money';
 
 export type ReviewRequired = { reviewRequired: true; reason: string };
@@ -31,17 +32,51 @@ export type CalculatorInput = {
    * see `calcCass`. */
   base?: Bani;
   /**
-   * CAS — CF art. 150 alin. (1): a natural person earning independent-activity income
-   * who is a pensioner or is insured in their own social insurance system owes NO CAS
-   * for art. 137 alin. (1) lit. b) and b^1) income. Automatic, independent of the
-   * income amount, not optional.
+   * CAS — CF art. 150 alin. (1): a natural person earning independent-activity income who is a pensioner
+   * or is insured in their own social insurance system owes NO CAS for art. 137 alin. (1) lit. b) and
+   * b^1) income. Automatic, independent of the income amount, not optional.
    *
-   * CASS — CF art. 174 alin. (7) lit. c): the SAME flag does NOT exempt. Pension
-   * income realised in that fiscal year removes ONLY the art. 174 alin. (6) top-up to
-   * 6 SM; 10% × net still stands whenever net > 0. CAS and CASS treat pensioners
-   * DIFFERENTLY — do not mirror one branch in the other. See `calcCas` vs `calcCass`.
+   * TASK 5 renamed this from `pensionStatus` and narrowed what it may decide. In `calcCass` it is read
+   * for ONE purpose only — noticing that the receipt fact is missing — and it must NEVER switch anything
+   * off there. `calcCass` relieves on `pensionSumsReceived`, because CF art. 174 alin. (7) lit. c) keys
+   * on pension sums received in the fiscal year, not on *calitatea de pensionar*.
    */
-  pensionStatus?: 'da' | 'nu';
+  pensionerStatus?: FactState;
+  /**
+   * CASS — CF art. 174 alin. (7) lit. c): the art. 174 alin. (6) top-up is not owed where the person
+   * REALISED pension income in that fiscal year. CF art. 99 alin. (1) defines it as „sume primite ca
+   * pensii”, so the test is receipt in the year, at ANY amount.
+   *
+   * No amount threshold may be applied here: lit. a) and lit. b) carry „la un nivel cel puțin egal cu 6
+   * salarii minime brute pe țară” and lit. c) deliberately does not.
+   */
+  pensionSumsReceived?: FactState;
+  /**
+   * CASS — CF art. 174 alin. (8) lit. a): alin. (7) also reaches a person who in the PREVIOUS year was
+   * in art. 154 alin. (1) lit. a), b), e) or f). That list excludes pensioners, so this is never derived
+   * from `pensionerStatus`.
+   */
+  previousYearExceptedCategory?: FactState;
+  /** CASS — CF art. 174 alin. (8) lit. b): an art. 180 alin. (1) option exercised in the previous year. */
+  previousYearArt180Option?: FactState;
+  /**
+   * CASS — CF art. 153 alin. (2): sickness/maternity insurance in another EU/SEE/Elvețian or
+   * bilateral-agreement state, whose validity has been proved. Such a person „nu au calitatea de
+   * contribuabil la sistemul de asigurări sociale de sănătate”, so NO CASS arises at all. This is the
+   * only total CASS exclusion on this path, and it is unrelated to pensions.
+   */
+  foreignSicknessInsuranceProved?: FactState;
+  /**
+   * CASS — months of the year in which a pension was suspended. Recorded and reported, never acted on:
+   * research 25 gap 1 leaves the effect of a suspension on art. 174 alin. (7) UNVERIFIED.
+   */
+  pensionSuspensionMonths?: number[];
+  /**
+   * CASS — whether the profile declares any art. 155 alin. (1) lit. c)-h) income at all. CF art. 174
+   * alin. (7) lit. b) relieves only when such income is at least 6 SM, and the app holds no amount for
+   * those categories, so the branch is reported as unevaluated rather than assumed either way.
+   */
+  otherIncomeArt155LitCH?: boolean;
   /**
    * CASS only — CF art. 174 alin. (7) lit. a): the art. 174 alin. (6) top-up is not
    * owed where salary and assimilated income realised in that fiscal year is "cel puțin
@@ -150,7 +185,7 @@ function calcCas(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
   const tier2Cas = paramBani(rule, 'tier2_cas');
   const realized = input?.base ?? lei(0);
 
-  if (input?.pensionStatus === 'da') {
+  if (input?.pensionerStatus === 'da') {
     return {
       value: lei(0),
       breakdown: [
@@ -231,6 +266,25 @@ function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
   const floorCass = roundArt66(applyRateDecimal(floorBase, ratePercent)); // 2,430 lei for 2026
   const ceilingCass = roundArt66(applyRateDecimal(maxBase, ratePercent)); // 29,160 lei for 2026
 
+  // CF art. 153 alin. (2): holding sickness/maternity insurance in another EU/SEE/Elvețian or
+  // bilateral-agreement state AND proving it leaves the person outside the CASS taxpayer circle
+  // altogether — „nu au calitatea de contribuabil la sistemul de asigurări sociale de sănătate”. This is
+  // the one total exclusion on this path, and it is checked first because it removes the taxpayer
+  // quality the rest of this function computes for. It is NOT a pension rule: art. 154 alin. (2) still
+  // preserves CASS on the other art. 155 alin. (1) incomes for everyone inside the excepted categories.
+  if (input?.foreignSicknessInsuranceProved === 'da') {
+    return {
+      value: lei(0),
+      breakdown: [
+        `venit net anual (VNA): ${leiText(vna)} lei`,
+        'asigurare de sanatate (boala si maternitate) intr-un alt stat membru UE/SEE/Elvetian sau intr-un stat cu acord bilateral, cu dovada valabilitatii facuta — CF art. 153 alin. (2)',
+        'persoana NU are calitatea de contribuabil la sistemul de asigurari sociale de sanatate: nu se datoreaza CASS pentru acest an (art. 153 alin. (2))',
+        'NU este o exceptie pentru pensionari: art. 154 alin. (2) pastreaza CASS pentru celelalte venituri din art. 155 alin. (1) ale persoanelor din categoriile exceptate',
+        'CASS = 0 lei',
+      ],
+    };
+  }
+
   // CF art. 174 alin. (2): a fiscal loss or a net income equal to zero owes NO CASS.
   if (vna <= 0) {
     return {
@@ -239,7 +293,14 @@ function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
         `venit net anual (VNA): ${leiText(vna)} lei`,
         'VNA egal cu zero sau pierdere fiscala — nu se datoreaza CASS: CF art. 174 alin. (2); pierderile fiscale nu intra nici in baza de calcul (art. 170 alin. (1))',
         `OPTIUNE NEMODELATA: aceeasi persoana poate opta pentru plata CASS potrivit CF art. 180 alin. (1) — optiune cu termen, iar baza din art. 180 alin. (2) nu este verificata`,
-        'CASS = 0 lei (pragul de 6 SM din art. 174 alin. (6) NU se aplica automat aici)',
+        // TASK 5: this used to read "pragul de 6 SM din art. 174 alin. (6) NU se aplica automat aici",
+        // which stated as law a question the code does not answer. alin. (2) says the contribution
+        // "potrivit art. 170 alin. (1)" is not owed; alin. (6) speaks of a base "corespunzătoare
+        // veniturilor realizate" below 6 SM. Whether the 6-SM DIFFERENCE survives a zero/loss year is
+        // research 25 gap 2 — UNVERIFIED, and explicitly not to be resolved by inference. The 0 lei
+        // below is the contribution under art. 170 alin. (1); the difference is left undecided and the
+        // CASS_MIN_BASE threshold row reports it as `unknown`.
+        'NOTA DE INTERPRETARE (NEVERIFICATA): art. 174 alin. (2) spune ca nu se datoreaza contributia potrivit art. 170 alin. (1); art. 174 alin. (6) vorbeste despre o diferenta de contributie pentru o baza sub 6 SM. Codul nu spune daca diferenta supravietuieste unui an cu venit zero sau pierdere fiscala — research 25, gap 2. Aplicația calculeaza 0 lei pentru contributia de 10% si NU prezinta rezultatul ca pe o regula verificata privind diferenta.',
       ],
     };
   }
@@ -247,15 +308,42 @@ function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
   if (vna < floorBase) {
     // Checked BEFORE the salary relief: art. 174 alin. (7) lit. c) has no monetary
     // threshold, so it is certain in exactly the case where lit. a) cannot be evaluated.
-    if (input?.pensionStatus === 'da') {
+    //
+    // TASK 5: the key is `pensionSumsReceived`, NOT pensioner status. The chapeau of alin. (7) asks
+    // whether the person „a realizat venituri … din pensii, definite conform art. 99” in the fiscal
+    // year, and art. 99 alin. (1) defines those as „sume primite ca pensii”. A pensioner who received
+    // no pension sums that year does not qualify; someone who was not a pensioner all year but
+    // received some does. No amount is compared — lit. c) carries no 6-SM qualifier.
+    if (input?.pensionSumsReceived === 'da') {
       const cass = roundArt66(applyRateDecimal(vna, ratePercent));
       return {
         value: cass,
         breakdown: [
           `venit net anual (VNA): ${leiText(vna)} lei`,
           `VNA sub pragul de 6 SM (${leiText(floorBase)} lei): art. 174 alin. (6) ar cere o diferenta de contributie pana la ${leiText(floorCass)} lei`,
-          'exceptie: venituri din pensii (art. 99) REALIZATE in anul fiscal — CF art. 174 alin. (7) lit. c); fara prag valoric, nu e un simplu statut',
+          'exceptie: sume primite ca pensii (art. 99 alin. (1)) REALIZATE in anul fiscal — CF art. 174 alin. (7) lit. c); fara prag valoric, nu este un simplu statut de pensionar',
           'lit. c) elimina DOAR diferenta de la art. 174 alin. (6) — contributia de 10% pe VNA ramane datorata (art. 170 alin. (1)); pensia NU scuteste de CASS, spre deosebire de CAS unde art. 150 alin. (1) scuteste integral',
+          `CASS = ${leiText(vna)} x ${ratePercent / 100} = ${leiText(cass)} lei`,
+          ...(input.pensionSuspensionMonths && input.pensionSuspensionMonths.length > 0
+            ? [`NOTA (FAPTA, NU CONCLUZIE): pensia a fost suspendata in lunile ${input.pensionSuspensionMonths.join(',')}; efectul suspendarii asupra art. 174 alin. (7) lit. c) nu este verificat (research 25, gap 1) — aplicatia nu trage nicio concluzie din ea`]
+            : []),
+        ],
+      };
+    }
+    // CF art. 174 alin. (8): alin. (7) also reaches a person who in the PREVIOUS year was in art. 154
+    // alin. (1) lit. a), b), e) or f), or had opted under art. 180 alin. (1). That category list
+    // EXCLUDES pensioners (they sit in lit. h^2)), so this branch can never be reached from
+    // `pensionerStatus` — it needs its own recorded fact.
+    if (input?.previousYearExceptedCategory === 'da' || input?.previousYearArt180Option === 'da') {
+      const cass = roundArt66(applyRateDecimal(vna, ratePercent));
+      return {
+        value: cass,
+        breakdown: [
+          `venit net anual (VNA): ${leiText(vna)} lei`,
+          `VNA sub pragul de 6 SM (${leiText(floorBase)} lei): art. 174 alin. (6) ar cere o diferenta de contributie pana la ${leiText(floorCass)} lei`,
+          `exceptie: in anul precedent persoana s-a incadrat in art. 154 alin. (1) lit. a), b), e) sau f) (${input.previousYearExceptedCategory === 'da' ? 'da' : 'nu'}) sau a optat pentru CASS potrivit art. 180 alin. (1) (${input.previousYearArt180Option === 'da' ? 'da' : 'nu'}) — CF art. 174 alin. (8)`,
+          'alin. (8) lit. a) nu include pensionarii: lista art. 154 alin. (1) lit. a), b), e), f) este inchisa, iar pensionarii sunt la lit. h^2) — aceasta exceptie nu se deduce din calitatea de pensionar',
+          'alin. (8) elimina DOAR diferenta de la art. 174 alin. (6) — contributia de 10% pe VNA ramane datorata (art. 170 alin. (1))',
           `CASS = ${leiText(vna)} x ${ratePercent / 100} = ${leiText(cass)} lei`,
         ],
       };
@@ -317,6 +405,21 @@ function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
           ? [
               `conditia din art. 174 alin. (7) lit. a) nu este indeplinita: venituri din salarii ${leiText(input.salaryIncomeLei!)} lei < 6 salarii minime brute (${leiText(floorBase)} lei), deci diferenta ramane datorata`,
             ]
+          : []),
+        // TASK 5 — the withheld conclusions travel here so a reader sees WHY no relief was granted.
+        // Neither line changes the amount: the app declines to grant an exception it cannot establish,
+        // and says so instead of pretending the fact was checked.
+        ...(input?.pensionerStatus === 'da'
+          ? ['NOTA (EXCEPTIE NESTABILITA): profilul consemneaza calitatea de pensionar, dar nu consemneaza ca in acest an fiscal au fost primite sume ca pensii. art. 174 alin. (7) lit. c) se decide pe incasarea din an (art. 99 alin. (1)), nu pe statut, iar alin. (8) nu extinde exceptia la pensionari — diferenta NU se acorda automat, dar nici nu se refuza pe baza statutului. randul CASS_MIN_BASE raporteaza `unknown`.']
+          : []),
+        ...(input?.pensionSumsReceived === 'unknown'
+          ? ['NOTA: fapta „sume primite ca pensii in acest an fiscal” nu este inregistrata in profil; absenta ei nu este o dovada contrara (research 25, "What fact the input model must actually hold").']
+          : []),
+        ...(input?.pensionSuspensionMonths && input.pensionSuspensionMonths.length > 0
+          ? [`NOTA (FAPTA, NU CONCLUZIE): pensia a fost suspendata in lunile ${input.pensionSuspensionMonths.join(',')}; efectul asupra art. 174 alin. (7) lit. c) nu este verificat (research 25, gap 1)`]
+          : []),
+        ...(input?.otherIncomeArt155LitCH
+          ? ['NOTA: profilul declara venituri din art. 155 alin. (1) lit. c)-h), dar aplicatia nu detine cuantumul lor, deci art. 174 alin. (7) lit. b) (acele venituri cel putin egale cu 6 salarii minime brute) nu a putut fi evaluat — nu a fost nici presupus indeplinit, nici presupus neindeplinit.']
           : []),
       ],
     };

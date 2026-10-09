@@ -35,8 +35,105 @@ export type PfaRegime = 'impozit_pe_venit' | 'impozit_pe_cit' | 'norma_venit';
 /** Whether the PFA holder has a concurrent salary (impozit pe venit thresholds depend on it). */
 export type PfaSalaryStatus = 'da' | 'nu';
 
-/** Whether the PFA holder is a pensioner (affects tax thresholds). */
+/**
+ * Whether the PFA holder holds *calitatea de pensionar*.
+ *
+ * TASK 5 narrowed what this may decide. It is the correct key for exactly two things:
+ * - **CAS** — CF art. 150 alin. (1): a pensioner owes no social insurance contribution on
+ *   art. 137 alin. (1) lit. b)/b^1) income;
+ * - **CASS on pension income** — CF art. 154 alin. (1) lit. h^2), and from 1 ianuarie 2028
+ *   art. 220^8 alin. (4).
+ *
+ * It is NOT the key for CASS on independent-activity income. CF art. 174 alin. (7) lit. c) keys on
+ * pension sums *received in the fiscal year* (see `PensionReceiptYear`), and the only status-based
+ * extension of alin. (7) is alin. (8), whose list — art. 154 alin. (1) lit. a), b), e), f) — excludes
+ * pensioners. See `docs/ai/research/25_pension_cass_exception_2026.md`.
+ */
 export type PfaPensionStatus = 'da' | 'nu';
+
+/**
+ * A recorded yes/no answer. The third state is the ABSENCE of the record, never a stored `nu`:
+ * writing `nu` asserts that the fact was checked and found not to hold.
+ */
+export type PfaYesNo = 'da' | 'nu';
+
+/**
+ * The three states a legal fact can be read in: recorded true, recorded false, or not resolvable from
+ * what the profile holds. `unknown` is not a soft `nu` — where a rule turns on the fact, the app
+ * withholds the conclusion instead of silently picking a side.
+ */
+export type FactState = 'da' | 'nu' | 'unknown';
+
+/**
+ * TASK 5 — CF art. 174 alin. (7) lit. c): the FACT the relief keys on, attributed to one fiscal year.
+ *
+ * The chapeau reads „în anul fiscal pentru care se depune declarația prevăzută la art. 122, persoana
+ * fizică a realizat venituri: … c) venituri din pensii, definite conform art. 99”, and art. 99 alin. (1)
+ * defines those as „sume primite ca pensii”. So the test is receipt of at least one pension sum in that
+ * year — not *calitatea de pensionar*.
+ *
+ * There is NO amount qualifier on lit. c). lit. a) and lit. b) each carry „la un nivel cel puțin egal cu
+ * 6 salarii minime brute pe țară”; applying one here would be an invented rule (research 25, “What the
+ * app must not do” item 4). Quantum belongs to a different computation — the 3.000 lei/month pension
+ * CASS line under art. 154 alin. (1) lit. h^2) — and is deliberately not modelled here.
+ */
+export interface PensionReceiptYear {
+  /** The fiscal year the receipt is attributed to: alin. (7) is year-scoped, not a permanent flag. */
+  fiscalYear: number;
+  /** At least one sum was received as a pension during that year. Any quantum satisfies it. */
+  received: PfaYesNo;
+}
+
+/**
+ * TASK 5 — a recorded pension suspension, stored as a FACT ONLY.
+ *
+ * Whether a suspended month defeats art. 174 alin. (7) lit. c) is UNVERIFIED: research 25 gap 1 found no
+ * Cod fiscal, HG 1/2016 or OPANAF 2.736/2025 provision addressing suspension in connection with art. 174
+ * alin. (7). Nothing in this app may derive a legal consequence from these months; they are recorded so
+ * that a future verified rule has something to read.
+ */
+export interface PensionSuspensionYear {
+  /** The year the suspension belongs to. */
+  fiscalYear: number;
+  /** Calendar months (1-12) of that year in which no pension sum was paid. */
+  months: number[];
+}
+
+/**
+ * TASK 5 — the CF art. 174 alin. (8) route to the same relief: alin. (7) also reaches a person who
+ * „în anul precedent” was in an art. 154 alin. (1) excepted category, or had opted under art. 180 alin. (1).
+ *
+ * The category list in alin. (8) lit. a) is art. 154 alin. (1) lit. a), b), e) și f) — a closed list that
+ * does NOT include pensioners (those sit in lit. h^2)). This fact can therefore never be inferred from
+ * pensioner status, and it is scoped to the PREVIOUS year, not to the income year.
+ */
+export interface CassPreviousYearContext {
+  /** alin. (8) says „în anul precedent”, so a reader only honours this when it is `fiscalYear` − 1. */
+  previousFiscalYear: number;
+  /** art. 154 alin. (1) lit. a), b), e) sau f). Absent = not recorded. */
+  inExceptedCategory?: PfaYesNo;
+  /** Opted for CASS under art. 180 alin. (1). Absent = not recorded. */
+  optedUnderArt180Alin1?: PfaYesNo;
+}
+
+/**
+ * TASK 5 — CF art. 153 alin. (2): the one ground in Titlul V that DOES remove CASS taxpayer quality
+ * outright — „nu au calitatea de contribuabil la sistemul de asigurări sociale de sănătate”. It is
+ * unrelated to pensions and must not be conflated with the art. 174 alin. (7) reliefs, which reach only
+ * the art. 174 alin. (6) difference.
+ *
+ * Both halves are modelled separately because the article requires both: the insurance must exist AND the
+ * taxpayer must „facă dovada valabilității asigurării” under a joint ANAF/CNAS procedure. Holding it
+ * without proving it does nothing.
+ */
+export interface ForeignSicknessInsurance {
+  /** The year the insurance and its proof are asserted for. */
+  fiscalYear: number;
+  /** Holds sickness and maternity insurance in another EU/SEE/Confederația Elvețiană or bilateral-agreement state. */
+  held?: PfaYesNo;
+  /** The validity of that insurance has actually been proved under the joint procedure. */
+  proved?: PfaYesNo;
+}
 
 /** Flags for other relevant income sources (plural — a profile can have several). */
 export type PfaOtherIncomeFlag =
@@ -181,8 +278,43 @@ export interface PfaProfile {
    * hazard is recorded in `docs/ai/phases/10_money_precision.md`.
    */
   salaryIncomeLei?: Bani;
-  /** Pension status. */
-  pensionStatus: PfaPensionStatus;
+  /**
+   * @deprecated TASK 5: renamed to `pensionerStatus`. The old name is what let one boolean answer three
+   * different legal questions at once (CAS art. 150 alin. (1), the CASS art. 174 alin. (7) lit. c) relief,
+   * and pension-income CASS) — the defect that task removes.
+   *
+   * Kept OPTIONAL rather than deleted for the reason Phase 7 kept `caen`: this type also describes the
+   * profile embedded in every stored calculation snapshot, and dropping a persisted key would make old
+   * payloads unreadable. Migration step v7→v8 folds its value into `pensionerStatus` and removes it from
+   * the live profile. No application code reads it any more — the only remaining readers are the migration
+   * and its tests, and `pensionFacts.test.ts` fails if a new reader appears.
+   */
+  pensionStatus?: PfaPensionStatus;
+  /**
+   * TASK 5 — *calitatea de pensionar*, recorded as its own fact and read as exactly one thing: the CF
+   * art. 150 alin. (1) CAS exemption (plus pension-income CASS, which this app does not compute).
+   *
+   * OPTIONAL, and absence is the honest third state: no legacy field ever recorded whether pension sums
+   * were received in a given year, and a status does not record it either.
+   */
+  pensionerStatus?: PfaPensionStatus;
+  /**
+   * TASK 5 — the CF art. 174 alin. (7) lit. c) facts, one per fiscal year. This is what the art. 174
+   * alin. (6) top-up relief actually turns on: pension sums received in the year, at any amount.
+   */
+  pensionReceiptYears?: PensionReceiptYear[];
+  /**
+   * TASK 5 — recorded pension suspensions. A fact with NO legal consequence attached: research 25 marks
+   * the suspension question UNVERIFIED, so the app stores it and draws nothing from it.
+   */
+  pensionSuspensionYears?: PensionSuspensionYear[];
+  /** TASK 5 — the CF art. 174 alin. (8) previous-year route to the same relief. */
+  cassPreviousYearContext?: CassPreviousYearContext;
+  /**
+   * TASK 5 — CF art. 153 alin. (2). The only fact in this group that removes CASS taxpayer quality
+   * entirely, and the only one whose proof is recorded as a separate half.
+   */
+  foreignSicknessInsurance?: ForeignSicknessInsurance;
   /** Other relevant income flags. */
   otherIncome: PfaOtherIncomeFlag[];
   /** CASS status. */
