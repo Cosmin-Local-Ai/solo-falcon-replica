@@ -95,8 +95,6 @@ export const sources = {
     'Data la care cifra de afaceri a depășit pragul de TVA (art. 310 alin. (1)); obligația de înregistrare intervine cel târziu la această dată (art. 316 alin. (1) lit. b)). Necompletat = aplicația nu cunoaște data și nu afișează niciun termen de înregistrare — nu inventează unul.',
   eFacturaDeadline:
     'Termenul legal de transmitere a unei e-Facturi este de maximum 5 zile de la emitere.',
-  eFacturaContact:
-    'Nu este obligatoriu să incluzi datele tale de contact în e-Factura.',
   capReadingChoice:
     'Plafonul este măsurat pe baza art. 68 alin. (6) sub interpretarea «înregistrată» (pre-plafon): baza scade cheltuielile deductibile așa cum au fost înregistrate, nu așa cum rămân după celelalte plafoane alin. (5). Legea nu stabilește care interpretare se aplică — nicio normă nu prescrie o ordine — deci ambele cifre sunt afișate. Cea aplicată este mai puțin generoasă și nu poate produce subimpozitare.',
 } as const;

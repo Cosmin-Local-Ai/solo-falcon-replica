@@ -8,6 +8,7 @@
  */
 import type { DeclStatus, ExpenseStatus, RevenueStatus } from '../../data/types';
 import type { ExpenseCategory } from '../../domain/fiscal/deductibility';
+import { validation } from './common';
 
 export const revenues = {
   title: 'Venituri',
@@ -286,7 +287,7 @@ export const documents = {
   upload: 'Încarcă document',
   preview: 'Previzualizează',
   download: 'Descarcă',
-  empty: 'Nicio document încărcat.',
+  empty: 'Niciun document încărcat.',
   acceptedFormats: 'Format acceptat: PDF, JPG, PNG',
   /**
    * The limit is stated by the caller from `MAX_DOC_BYTES`, not baked into the sentence. The copy used to
@@ -301,8 +302,9 @@ export const documents = {
   deleted: (name: string): string => `„${name}" a fost șters`,
   declaration: {
     addTitle: 'Adaugă declarație depusă',
-    typeRequired: 'Tipul declarației este obligatoriu',
-    periodRequired: 'Perioada este obligatorie',
+    // One wording for "this field is required": the shared validation keys, not a second spelling.
+    typeRequired: validation.declarationTypeRequired,
+    periodRequired: validation.periodRequired,
     type: 'Tip declarație *',
     typePlaceholder: 'ex. D101, D112, D200, 220, 221…',
     period: 'Perioadă *',

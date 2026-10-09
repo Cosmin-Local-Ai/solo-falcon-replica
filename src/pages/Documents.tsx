@@ -169,7 +169,7 @@ function DocumentSection({ code }: { code: DocTypeCode }) {
         </div>
       ) : (
         <div style={{ padding: '14px 18px', fontSize: 13, color: 'var(--text-3)' }}>
-          Niciun document încărcat.
+          {documentsCopy.empty}
         </div>
       )}
 
