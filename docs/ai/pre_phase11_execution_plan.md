@@ -18,7 +18,7 @@ This is not a restatement of the briefs. It is the decision of **how** each task
 
 **TASK 1 is DONE** (`beb4b56` → `8572be9` → `c49d88f`). The annual estimate is fed the run-rate projection; the excl-VAT pair is annualised from its own totals, never scaled from gross; `elapsedMonths === 0` yields explicit actuals-only. YTD summary untouched. `phases/12_projection_annual_estimate.md`.
 
-Remaining: TASKS 2-8 (TASK 2 split into 2a/2b), plus a small hygiene task (TASK 9).
+Remaining: TASKS 2-8 (TASK 2 split into **2a DONE / 2b / 2c**), plus a small hygiene task (TASK 9). **2c exists because the annual caps are cross-record and the protocol cap base is circular** — art. 68 alin. (6) defines it as gross minus deductible expenses *other than* protocol and private scholarships, so the base depends on a deductible total that must itself exclude the categories being capped. A partial implementation there produces a confident wrong number.
 
 ---
 
