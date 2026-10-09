@@ -35,6 +35,17 @@ Evidence is a commit or a file path. `—` means not yet built.
 
 **Partly implemented.** 10a built the representation: `provisional` on the rate record, and `RateStore.replace` keyed by `rateKey` as the provisional → final mechanism. **The caps themselves are TASK 10b** — `docs/ai/briefs/27_task10b_euro_caps_provisional_rates.md`.
 
+### D-FX-5 — USD must work end to end, not merely parse
+**Raised by TASK 10b**, which asked what 'USD to be available' meant, because CF art. 68 alin. (5) states its caps **only in euro** (the package holds exactly seven `capEur` rules) and no rule carries a USD cap.
+**User decision, 2026-10-10:** the multi-currency money type chosen in D-FX-2 was meant to make USD **usable**, not just representable. **Brief 27 under-specified this; the gap was the Orchestrator's, not the Worker's.**
+**Chosen: (b)** — a currency-generic cap converter, **plus** USD rates recordable end to end through a store writer upserting on `rateKey`.
+
+**Constraints placed on it:**
+- **No USD cap may be invented.** The statute states the caps in euro; the generic path exists for a future *verified* non-euro ceiling, not as a licence to manufacture one.
+- **Verified versus pattern-derived stays visible.** BNR's XML carries USD **daily** reference rates, so that path is real. The USD **annual-average** series code is pattern-derived and keeps the `-PATTERN` suffix and unverified label — a code that looks official will be trusted.
+- **Where USD bites is the record, not the cap:** a USD expense or receipt converts at the BNR daily reference rate on the payment / collection date under CF art. 9 alin. (3) lit. b) + alin. (4), which is not EUR-specific.
+- A store writer is **not** a new network path; the deliberate widening is to be stated in the phase doc rather than left to look like creep.
+
 ---
 
 ## Decisions from the same round that are not FX
