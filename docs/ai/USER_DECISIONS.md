@@ -171,6 +171,16 @@ Full report and my in-tree verification of every claim: `docs/ai/notes/romanian_
 
 ---
 
+### D-PROJ-1 — The tax estimate is calculated on **actuals**; a forecast may be shown but never feeds it
+**Chosen:** option 1, and the user checked the scope first — they asked whether this was about the chart or the tax estimate box, and confirmed it is the **tax estimate box**. That distinction is now part of the rule:
+- **The hero figure is computed only from records that actually exist** — receipts actually collected, expenses actually paid — and is labelled with the date it is measured as of. No multiplying by 12, no dividing by months elapsed.
+- **A forecast may exist beside it**, visually distinct, and must never be what the engine or the contribution thresholds are measured on.
+- **The chart's projected series is unaffected as a visual aid** — it stays, and Phase 22 still owes it a non-colour cue so actual and projected are distinguishable without colour. A picture of a forecast is fine; a tax number that is one is not.
+**Why this is now a legal requirement and not a preference:** `research/26_midyear_start_partial_year_2026.md` established that CF art. 118 alin. (3) deems fraction-of-year income to *be* the annual income, that art. 68 alin. (2) lit. a) and alin. (4) lit. b) measure actual receipts and payments with no annualisation, and that the statutory proration for mid-year starters was deleted by OUG 115/2023 art. I pct. 101 from 1 January 2024. The October example: the app's ~40.000 lei annual figure makes CAS look due; on the law's 10.000 lei, none is due.
+**What it does not resolve:** mid-year, whether a threshold will be crossed by December is still unknowable. The app must say **which basis each threshold was tested on** rather than imply the answer is settled. That stays part of PG-1 and PG-4.
+
+---
+
 ## Still open — to be put to the user
 
-**D-4** mid-year projection method — **L-1 has answered the legal half** (`research/26_midyear_start_partial_year_2026.md`): partial-year income *is* the annual income and nothing prorates the thresholds, so the ×12 has no legal basis. What is now a product question is what the hero is allowed to show. **D-6** who owns the disclaimer and terms wording. **D-7** calculation-sheet export format: print stylesheet, PDF, or JSON.
+**D-6** who owns the disclaimer and terms wording. **D-7** calculation-sheet export format: print stylesheet, PDF, or JSON. **D-NORMA-1** is decided in principle (support normă de venit before launch) but its schedule waits on the norm-table research.
