@@ -1,7 +1,7 @@
 import type { AppData } from '../data/types';
 import Decimal from 'decimal.js-light';
 import { selectMonthly, selectYtd } from './aggregation';
-import { daysInMonth } from './date';
+import { daysInMonth, isoCalendarDateProblem } from './date';
 import { allocateBani, subBani, toBaniNearest, type Bani } from './money';
 
 /**
@@ -13,8 +13,29 @@ import { allocateBani, subBani, toBaniNearest, type Bani } from './money';
  *
  *   run rate   = YTD totals / elapsed months, where elapsed months is a fraction:
  *                full months elapsed + day/daysInMonth for the current partial month;
- *                denominator floored to 1 for dates inside the fiscal year, 0 before the fiscal year start.
- *   annual     = run rate × 12
+ *                denominator floored to 1 for dates inside the active period, 0 before it starts.
+ *   annual     = run rate × activeMonths
+ *
+ * PG-4 (B-44) changed ONE term and nothing else: the multiplier is the PFA's **active period**,
+ * `[max(Jan 1, profile.pfaStartDate), Dec 31]`, not the twelve calendar months, and the elapsed
+ * denominator is measured from the same start and clamped at the same end. For a profile with no
+ * start date the active period IS the calendar year, `activeMonths` is 12, and every figure this
+ * module produced before is produced unchanged — which is why the change is safe to make here rather
+ * than in a second, parallel projection.
+ *
+ * Two consequences that are the whole point of the change:
+ *
+ *   1. A PFA that started on 1 Oct 2026 is projected over three months, not twelve. Dividing its
+ *      October money by elapsed *calendar* months and multiplying by 12 invented nine months of
+ *      activity that never happened.
+ *   2. Once the as-of date is past 31 Dec the elapsed measure is clamped to the active period, so
+ *      run rate and horizon are the same number and `annual` collapses onto the actuals exactly.
+ *      A closed year therefore stops drifting day to day, and the engine consumes actuals.
+ *
+ * The horizon is NOT prorated against the statutory thresholds. Art. 151 alin. (2) CF says the
+ * 12-SM / 24-SM / 6-SM / 72-SM figures are NOT reduced for a fraction of a year, so shortening the
+ * projection window changes the projected income and leaves the thresholds alone; that separation is
+ * owned by the threshold layer, not here.
  *
  * Every projected value is explicitly tagged: series entries carry
  * `kind: 'projected'`, and annual totals live under `annualProjected`.
@@ -79,6 +100,19 @@ export interface ProjectionMonth extends Totals {
 
 export interface ProjectionV1 {
   periodActual: ProjectionPeriod;
+  /**
+   * PG-4 — the window the run rate is measured over: `[max(Jan 1, pfaStartDate), Dec 31]`.
+   * `from > to` when the PFA is not active in this fiscal year at all.
+   */
+  activePeriod: ProjectionPeriod;
+  /** Length of `activePeriod` in months, fractional. 12 with no start date; 0 when not active. */
+  activeMonths: number;
+  /**
+   * PG-4 — true when the as-of date is past 31 Dec of the fiscal year. The year is closed: the
+   * figures are final actuals, there is no run rate left to speak of, and no surface may show
+   * run-rate wording ("N din 12 luni") for them.
+   */
+  closed: boolean;
   runRate: RunRate;
   annualProjected: Totals;
   /** VAT-exclusive annual projection — the operands a non-`vatExempt` profile's engine run consumes. */
@@ -88,16 +122,57 @@ export interface ProjectionV1 {
   elapsedMonths: number; // actual denominator used (after the lower bound)
 }
 
-function elapsedMonths(fiscalYear: number, asOfDate: string): number {
+/**
+ * Months from the beginning of `start`'s day up to and including `asOf`'s month fraction.
+ *
+ * The `(sd - 1) / daysInMonth(sy, sm)` term is what makes a start on the first of a month cost
+ * nothing: with `start = `${fiscalYear}-01-01`` this is algebraically the same expression the
+ * calendar-year denominator always was, so a profile with no start date gets the same number it
+ * got before PG-4. With a start on the 19th, January costs 18/31 of a month — the partial first
+ * month is a fraction, not a whole month, because no rule says otherwise.
+ */
+function elapsedMonthsFrom(start: string, asOfDate: string): number {
+  const startY = Number(start.slice(0, 4));
+  const startM = Number(start.slice(5, 7));
+  const startD = Number(start.slice(8, 10));
   const asOfYear = Number(asOfDate.slice(0, 4));
   const asOfMonth = Number(asOfDate.slice(5, 7));
   const asOfDay = Number(asOfDate.slice(8, 10));
-  return (asOfYear - fiscalYear) * 12 + (asOfMonth - 1) + asOfDay / daysInMonth(asOfYear, asOfMonth);
+  return (
+    (asOfYear - startY) * 12 +
+    (asOfMonth - startM) +
+    asOfDay / daysInMonth(asOfYear, asOfMonth) -
+    (startD - 1) / daysInMonth(startY, startM)
+  );
+}
+
+/**
+ * The first day the PFA was active inside this fiscal year.
+ *
+ * A missing or malformed start date is NOT guessed at: the active period falls back to the calendar
+ * year, which is the same assumption the app made before the field existed. Inventing a start date
+ * would invent activity, and inventing a later one would quietly shrink the projection.
+ */
+function activeStartOf(pfaStartDate: string | undefined, yearStart: string): string {
+  if (pfaStartDate === undefined || isoCalendarDateProblem(pfaStartDate) !== null) return yearStart;
+  return pfaStartDate > yearStart ? pfaStartDate : yearStart;
 }
 
 export function selectProjectionV1(data: AppData, asOfDate: string): ProjectionV1 {
   const fiscalYear = data.profile.fiscalYear;
-  const months = elapsedMonths(fiscalYear, asOfDate);
+  const yearStart = `${fiscalYear}-01-01`;
+  const yearEnd = `${fiscalYear}-12-31`;
+  const activeStart = activeStartOf(data.profile.pfaStartDate, yearStart);
+  // The horizon. A PFA whose start date falls after 31 Dec has no active period in this year at all:
+  // `activeMonths` is 0, the denominator is 0, and every projected figure is zero. That is a state,
+  // not a number, and nothing here divides by it.
+  const activeMonths = Math.max(0, elapsedMonthsFrom(activeStart, yearEnd));
+  const closed = asOfDate > yearEnd;
+  // Clamped at both ends: never negative before the active period starts, never past the period's
+  // own end. The upper clamp is what stops a closed year re-annualising itself every day — on
+  // 15 Jan 2027 the elapsed measure for FY2026 is still exactly `activeMonths`, so the run rate is
+  // the year's own average and `annual` lands back on the actuals.
+  const months = Math.min(Math.max(0, elapsedMonthsFrom(activeStart, asOfDate)), activeMonths);
   const denom = months > 0 ? Math.max(1, months) : 0;
 
   const ytd = selectYtd(data, asOfDate);
@@ -116,8 +191,9 @@ export function selectProjectionV1(data: AppData, asOfDate: string): ProjectionV
     netPerMonth: rate.net.toNumber(),
   };
 
-  const annualRevenue = toBaniNearest(rate.revenue.times(12));
-  const annualExpenses = toBaniNearest(rate.expenses.times(12));
+  // `× activeMonths`, not `× 12`: project to the end of the period the PFA was actually open for.
+  const annualRevenue = toBaniNearest(rate.revenue.times(activeMonths));
+  const annualExpenses = toBaniNearest(rate.expenses.times(activeMonths));
   const annualProjected: Totals = {
     revenue: annualRevenue,
     expenses: annualExpenses,
@@ -129,8 +205,8 @@ export function selectProjectionV1(data: AppData, asOfDate: string): ProjectionV
   // to `ytd.revenueNet` / `ytd.expenseNet`. There is no `net` here on purpose — the engine owns
   // `venitulNetDinActivitate`, and this model must not pre-empt it.
   const annualProjectedExclVat: ProjectionExclVat = {
-    revenueNet: toBaniNearest(rate.revenueNet.times(12)),
-    expenseNet: toBaniNearest(rate.expenseNet.times(12)),
+    revenueNet: toBaniNearest(rate.revenueNet.times(activeMonths)),
+    expenseNet: toBaniNearest(rate.expenseNet.times(activeMonths)),
   };
 
   const monthly = selectMonthly(data, asOfDate);
@@ -179,7 +255,10 @@ export function selectProjectionV1(data: AppData, asOfDate: string): ProjectionV
   }
 
   return {
-    periodActual: { from: `${fiscalYear}-01-01`, to: asOfDate },
+    periodActual: { from: yearStart, to: asOfDate },
+    activePeriod: { from: activeStart, to: yearEnd },
+    activeMonths,
+    closed,
     elapsedMonths: denom,
     runRate,
     annualProjected,

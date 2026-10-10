@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import FinancialChart, { FinancialChartTooltip } from './FinancialChart';
 import { lei, money } from '../domain/money';
-import { fx } from '../ui/copy';
+import { chart as chartCopy, dashboard as dashboardCopy, fx } from '../ui/copy';
 
 const { mockUseStore, mockUseDashboardData, mockGetProjectedFinancialSeries } = vi.hoisted(() => ({
   mockUseStore: vi.fn(),
@@ -300,5 +300,69 @@ describe('FinancialChartTooltip', () => {
       <FinancialChartTooltip active={false} payload={[]} label="Iul 2026" />,
     );
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+/**
+ * PG-4 — a closed fiscal year has no forecast left in it.
+ *
+ * The chart is the one surface that draws a projected series, so it is where "the forecast is visually
+ * distinct and never feeds the figure" is checkable: once the year is closed the projected series and
+ * its legend disappear, and the note under the graph names the figure as a final calculation instead of
+ * a run rate.
+ */
+describe('FinancialChart — a closed fiscal year (PG-4)', () => {
+  const CLOSED_AS_OF = '2027-05-26';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fakeResizeObserver();
+    mockGetProjectedFinancialSeries.mockReturnValue({
+      periodActual: { from: '2026-01-01', to: CLOSED_AS_OF },
+      activePeriod: { from: '2026-01-19', to: '2026-12-31' },
+      activeMonths: 354 / 31,
+      closed: true,
+      elapsedMonths: 354 / 31,
+      runRate: { revenuePerMonth: lei(13000), expensesPerMonth: 4500, netPerMonth: 8500 },
+      annualProjected: { revenue: lei(156000), expenses: lei(54000), net: lei(102000) },
+      annualProjectedExclVat: { revenueNet: lei(150000), expenseNet: lei(50000) },
+      series: Array.from({ length: 12 }, (_, i) => ({
+        month: `2026-${String(i + 1).padStart(2, '0')}`,
+        revenue: lei(10000) + i * 500,
+        expenses: lei(4000) + i * 100,
+        net: lei(6000) + i * 400,
+        kind: 'actual' as const,
+      })),
+      method: 'run-rate-v1',
+    });
+    mockUseStore.mockReturnValue({} as never);
+    mockUseDashboardData.mockReturnValue({
+      snapshot: { asOf: CLOSED_AS_OF },
+      year: { year: 2026, closed: true, rulesAvailable: true, currentYear: 2027, advanceTo: null },
+      tax: {
+        status: 'computed',
+        output: { total: lei(3112) },
+        basis: {
+          kind: 'annual-projected',
+          method: 'run-rate-v1',
+          elapsedMonths: 354 / 31,
+          actual: { revenues: lei(9317), expenses: lei(205.5), revenuesNet: lei(7700), expensesNet: lei(120) },
+          projected: { revenues: lei(9317), expenses: lei(205.5), revenuesNet: lei(7700), expensesNet: lei(120) },
+        },
+      },
+      ledger: { conversions: [], unconverted: [] },
+    });
+  });
+
+  it('draws no projected series and names the figure as a final calculation', () => {
+    renderChart();
+
+    // The forecast is gone: no legend entry, no "Proiecție" state anywhere in the chart's own text.
+    expect(screen.queryByText(chartCopy.projectedLegend)).toBeNull();
+    expect(screen.queryByText('Proiecție')).toBeNull();
+    // The note under the graph is the final-calculation label, not a run-rate label. The figure sits in
+    // its own `<strong>`, so the assertion reads the note's textContent rather than one text node.
+    const note = document.querySelector('p.chart-tax-note[data-estimate-state="computed"]');
+    expect(note?.textContent).toBe(`${dashboardCopy.estimate.finalCalculation(2026)}: 3.112,00 RON`);
   });
 });

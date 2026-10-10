@@ -103,41 +103,43 @@ test.describe('Dashboard — cockpit cards (seed data)', () => {
     // only regime a PFA can have in 2026, so the default user gets a number instead of an em dash.
     //
     // Task 1 changed WHAT enters the engine: not the YTD totals but the projection model's annual
-    // figures. At the fixed clock the model's denominator is 10 elapsed months, so each operand is
-    // YTD × 12/10 = YTD × 1,2 — and the pair the engine selects for a non-`vatExempt` profile is the
-    // VAT-exclusive one.
+    // figures. PG-4 (B-44) changed the DENOMINATOR: the model runs over the PFA's active period, and the
+    // seed PFA started on 2026-01-19, so at the fixed clock the elapsed measure is 9 13/31 months of an
+    // 11 13/31-month window — each operand is YTD × 354/292 ≈ YTD × 1,2123, not YTD × 1,2. The pair the
+    // engine selects for a non-`vatExempt` profile is still the VAT-exclusive one.
     //
     // TASK 2b changed WHICH expenses reach that operand: only the confirmed-deductible subset. Of the
     // two 'inregistrata' seed expenses, e1 (CloudHost, 120,00 lei, `postal_and_telecom`) is deductibilă
     // and e2 (Carrefour bon fiscal, 85,50 lei, `personal_or_family_use`) is nedeductibilă expres prin
     // CF art. 68 alin. (7) lit. a) — so the expense operand is 120,00 lei, not 205,50 lei:
-    //   venit brut (excl-VAT)    7.700,00 × 1,2 =  9.240,00 lei
-    //   cheltuieli deductibile     120,00 × 1,2 =    144,00 lei
-    //   VNA                                    =  9.096,00 lei
+    //   venit brut (excl-VAT)    7.700,00 × 354/292 = 9.334,93 lei
+    //   cheltuieli deductibile     120,00 × 354/292 =   145,48 lei
+    //   VNA                                    =  9.189,45 lei
     // still inside 0 < VNA < 6 SM, so B-13 still applies: CASS owed = 2.430 lei (art. 174 alin. (6)
-    // difference to the 6 SM floor), but only 10% × VNA = 909,60 lei (art. 174 alin. (1)) is
+    // difference to the 6 SM floor), but only 10% × VNA = 918,945 lei (art. 174 alin. (1)) is
     // deductible. CF art. 66 alin. (1) rounds each sum DUE to a whole leu, fracțiuni de până la 50
     // de bani inclusiv neglijate:
-    //   deductibilă 909,60 → 60 bani > 50 → majorat la 910,00 lei
-    //   bază        9.096,00 − 910,00 = 8.186,00 lei (the base is never itself rounded)
-    //   impozit     10% × 8.186,00 = 818,60 → 60 bani > 50 → majorat la 819,00 lei
-    //   total       2.430 + 819 = 3.249,00 lei
-    // The same dataset read at 2026-12-31 has elapsed = 12, so the projection is the identity and the
-    // figure is 3.112,00 lei — that case is pinned in src/data/dashboard.test.ts.
+    //   deductibilă 918,945 → 94,5 bani > 50 → majorat la 919,00 lei
+    //   bază        9.189,45 − 919,00 = 8.270,45 lei (the base is never itself rounded)
+    //   impozit     10% × 8.270,45 = 827,045 → 45 bani < 50 → 827,00 lei
+    //   total       2.430 + 827 = 3.257,00 lei
+    // The same dataset read at 2026-12-31 has elapsed = active, so the projection is the identity and the
+    // figure is 3.112,00 lei — that case is pinned in src/data/dashboard.test.ts and, since PG-4, in
+    // e2e/year-rollover.spec.ts for the dates after the year closed.
     const impozit = statCard(page, 'Impozit estimat');
     await expect(impozit).toBeVisible();
-    await expect(impozit.locator('.value')).toHaveText('3.249,00 RON');
+    await expect(impozit.locator('.value')).toHaveText('3.257,00 RON');
     await expect(impozit.locator('.hint')).toHaveText('de pus deoparte');
 
     // A computed tax → a recommended monthly reserve (total / 3 months) and a remaining amount.
     const rezerva = statCard(page, 'Rezervă lunară');
     await expect(rezerva).toBeVisible();
-    // 3.249,00 lei ÷ 3 months remaining (Oct–Dec) = 1.083,00 lei exact — no rounding step at all.
-    await expect(rezerva.locator('.value')).toHaveText('1.083,00 RON');
+    // 3.257,00 lei ÷ 3 months remaining (Oct–Dec) = 1.085,67 lei/month.
+    await expect(rezerva.locator('.value')).toHaveText('1.085,67 RON');
 
     const ramane = statCard(page, 'Rămâne de pus deoparte');
     await expect(ramane).toBeVisible();
-    await expect(ramane.locator('.value')).toHaveText('3.249,00 RON');
+    await expect(ramane.locator('.value')).toHaveText('3.257,00 RON');
 
     // Completeness: 7 of 9 — the check looks for a PERSISTED tax snapshot, and the live estimate is not
     // written to storage (persisting it is Phase 7, not Phase 5).
@@ -188,7 +190,7 @@ test.describe('Dashboard — cockpit cards (seed data)', () => {
       .locator('section.card')
       .filter({ has: page.locator('h2.card-title', { hasText: 'Estimare impozit' }) })
       .first();
-    await expect(heroCard.locator('.tax-hero-value')).toHaveText('3.249,00 RON');
+    await expect(heroCard.locator('.tax-hero-value')).toHaveText('3.257,00 RON');
   });
 });
 
@@ -216,12 +218,12 @@ test.describe('Dashboard — section content (seed data)', () => {
 
     const reserve = sectionWith(page, 'Rezervă fiscală', 'h2');
     await expect(reserve).toBeVisible();
-    // 3.249,00 lei (the annual projection of the DEDUCTIBLE subset at 10 elapsed months — TASK 2b
-    // removed e2's 85,50 lei from the base) over the 3 remaining months of the fiscal year
-    // → 1.083,00 lei/month, exact.
-    await expect(reserve.getByText('1.083,00 RON').first()).toBeVisible();
+    // 3.257,00 lei (the annual projection of the DEDUCTIBLE subset over the seed PFA's active period —
+    // TASK 2b removed e2's 85,50 lei from the base, PG-4 moved the denominator) over the 3 remaining
+    // months of the fiscal year → 1.085,67 lei/month.
+    await expect(reserve.getByText('1.085,67 RON').first()).toBeVisible();
     await expect(
-      reserve.getByText('Rămâne de pus deoparte 3.249,00 RON în următoarele 3 luni.'),
+      reserve.getByText('Rămâne de pus deoparte 3.257,00 RON în următoarele 3 luni.'),
     ).toBeVisible();
     // The no-estimate empty state is gone: the default regime computes (B-14).
     await expect(
@@ -265,9 +267,10 @@ test.describe('Dashboard — section content (seed data)', () => {
     // per CF art. 148 alin. (1)-(2) / art. 170 alin. (1) / art. 174 alin. (6); the VAT row is
     // measured on VAT-exclusive turnover (4.500 + 3.200 = 7.700,00 lei), per art. 310 alin. (1).
     // The four contribution rows measure the engine's `net-income` base, which since Task 1 is the
-    // ANNUAL projected VNA (9.096,00 lei), not the YTD one (7.580,00 lei). The VAT row below is
+    // ANNUAL projected VNA (9.189,45 lei since PG-4; 9.096,00 lei on the old calendar denominator), not
+    // the YTD one (7.580,00 lei). The VAT row below is
     // deliberately still YTD — see docs/ai/phases/12_projection_annual_estimate.md §6.
-    await expect(thresholds.getByText(/Curent: 9\.096,00 lei/)).toHaveCount(4);
+    await expect(thresholds.getByText(/Curent: 9\.189,45 lei/)).toHaveCount(4);
     await expect(thresholds.getByText(/Curent: 7\.700,00 lei/)).toHaveCount(1);
     // The VAT-inclusive figure all the rows used to share is gone from this section. (It is
     // still correct — and still shown — as the "Venituri PFA (an)" cockpit card.)
@@ -785,7 +788,12 @@ test.describe('Dashboard — Grafic financiar & KPI table (seeded FY2025)', () =
         contBancar: 'RO44 BACX 0000 0000 1234 5678 9000',
         banca: 'BCR',
       },
-      updatedAt: '2025-12-31T10:00:00.000Z',
+      // PG-4 (D-YEAR-1): this fixture deliberately views a CLOSED year (2025) while the app runs in 2026.
+      // The automatic year advance moves a profile that was last maintained BEFORE the boundary — which
+      // is exactly what a stale year looks like — so an intentional old-year view has to be stamped after
+      // it. Without this the fixture would be advanced to 2026 on load and the chart would be empty for
+      // a reason that has nothing to do with what these tests assert.
+      updatedAt: '2026-01-05T10:00:00.000Z',
     },
     revenues: Array.from({ length: 12 }, (_, i) => {
       const m = String(i + 1).padStart(2, '0');

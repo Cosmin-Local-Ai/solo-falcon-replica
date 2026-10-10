@@ -226,7 +226,8 @@ describe('selectDeductibleExpenses — the law decides, the record only states',
 
 describe('selectEstimateOperands — one assembler, feeding both selectors the same subset', () => {
   it('the projection annualises the DEDUCTIBLE subset, not the recorded total', () => {
-    // 2026-06-30 -> 6 elapsed months -> x 2.
+    // 2026-06-30 -> 5 13/31 elapsed ACTIVE months of an 11 13/31 active period (the seed PFA started
+    // 2026-01-19, PG-4/B-44) -> x 354/168.
     const operands = selectEstimateOperands(
       dataWith([
         expense({ id: 'deduct', category: 'postal_and_telecom', valoareFaraTva: ron(1000), tva: ron(190) }),
@@ -237,11 +238,11 @@ describe('selectEstimateOperands — one assembler, feeding both selectors the s
     );
     if (operands.kind !== 'run') throw new Error('expected the estimate to run');
     // If the subset were applied only to the YTD argument, `expensesNet` here would be
-    // (1.000 + 5.000) x 2 = 12.000 lei while `actual.expensesNet` said 1.000 — the drift this
+    // (1.000 + 5.000) x 354/168 = 12.642,86 lei while `actual.expensesNet` said 1.000 — the drift this
     // assembler exists to make impossible.
     expect(operands.basis.actual.expensesNet).toBe(lei(1000));
-    expect(operands.amounts.expensesNet).toBe(lei(2000));
-    expect(operands.amounts.expenses).toBe(lei(2380)); // (1.000 + 190) x 2
+    expect(operands.amounts.expensesNet).toBe(lei(2107.14)); // 1.000,00 x 354/168
+    expect(operands.amounts.expenses).toBe(lei(2507.5)); // (1.000 + 190) x 354/168
     expect(operands.deductible.records).toHaveLength(1);
   });
 

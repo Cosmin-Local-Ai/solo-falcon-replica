@@ -13,7 +13,7 @@ import { useDashboardData } from '../data/dashboardAdapter';
 import { getProjectedFinancialSeries } from '../data/dashboard';
 import { estimateFigureLabel } from '../domain/estimateBasis';
 import { formatBaniAxis, formatBaniRON, formatBaniRONOrDash, isBani, type Bani } from '../domain/money';
-import { chart as chartCopy, estimateState as estimateStateCopy, fx } from '../ui/copy';
+import { chart as chartCopy, dashboard as dashboardCopy, estimateState as estimateStateCopy, fx } from '../ui/copy';
 
 
 type Range = 'monthly' | 'ytd' | 'year';
@@ -230,16 +230,24 @@ export default function FinancialChart() {
               {m.label}
             </span>
           ))}
-          <span className="chart-legend-item">
-            <span className="chart-legend-swatch dashed projection" />
-            {chartCopy.projectedLegend}
-          </span>
+          {projection.closed ? null : (
+            /* PG-4: a closed year has no projected months to draw, so the legend must not advertise a
+               series the chart no longer contains. */
+            <span className="chart-legend-item">
+              <span className="chart-legend-swatch dashed projection" />
+              {chartCopy.projectedLegend}
+            </span>
+          )}
         </div>
 
         {tax !== null && tax.status === 'computed' ? (
           <p className="chart-tax-note" data-estimate-state="computed">
-            {/* Task 1: `YTD` is only said when the amount really is actuals-to-date. */}
-            {estimateFigureLabel(tax.basis)}:{' '}
+            {/* Task 1: `YTD` is only said when the amount really is actuals-to-date.
+                PG-4: for a closed year the figure is the year's final actuals, and the run-rate label
+                would describe a calculation that no longer exists. */}
+            {projection.closed
+              ? dashboardCopy.estimate.finalCalculation(dashboard.year.year)
+              : estimateFigureLabel(tax.basis)}:{' '}
             <strong className="mono">{formatBaniRON(tax.output.total)}</strong>
           </p>
         ) : tax === null ? (

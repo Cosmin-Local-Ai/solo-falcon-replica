@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { fixedInstant } from '../src/test/fixedInstant';
-import { seedBrowser, seedBrowserOnce, seedPayload } from './fixtures';
+import { seedBrowser, seedBrowserOnce, seedPayload, type SeedPayload } from './fixtures';
 import { seedData } from '../src/data/seed';
 import type { Bani } from '../src/domain/money';
 
@@ -34,6 +34,17 @@ const MID_2027 = new Date('2027-06-30T12:00:00');
 
 async function fixClock(page: Page, at: Date): Promise<void> {
   await page.clock.setFixedTime(at);
+}
+
+/**
+ * PG-4 (D-YEAR-1). These tests read a CLOSED FY2026 while the clock sits in mid-2027. The app advances a
+ * profile that was last maintained before the year boundary — that is precisely what a stale year looks
+ * like — so an intentional reading of a closed year has to be stamped after the boundary. Without this
+ * the dashboard would show the (empty) FY2027 register and every "before" figure below would be a zero.
+ */
+function closedFY2026Payload(): SeedPayload {
+  const p = seedPayload();
+  return { ...p, profile: { ...p.profile, updatedAt: '2027-01-05T10:00:00.000Z' } };
 }
 
 /** The modal's date inputs in DOM order: the document date, then the money date. */
@@ -71,7 +82,7 @@ function statCard(page: Page, label: string) {
 test.describe('PG-2 — the money date end to end', () => {
   test('an invoice dated 20 Dec 2026 and collected 10 Jan 2027 is not in the FY2026 figure, and says so after a reload', async ({ page }) => {
     await fixClock(page, MID_2027);
-    await seedBrowserOnce(page);
+    await seedBrowserOnce(page, closedFY2026Payload());
     await page.goto('/dashboard');
 
     const revenueCard = statCard(page, 'Venituri PFA (an)');
@@ -107,11 +118,14 @@ test.describe('PG-2 — the money date end to end', () => {
 
   test('an expense documented in Dec 2026 and paid 12 Jan 2027 does not reduce the FY2026 estimate', async ({ page }) => {
     await fixClock(page, MID_2027);
-    await seedBrowserOnce(page);
+    await seedBrowserOnce(page, closedFY2026Payload());
     await page.goto('/dashboard');
     const taxCard = statCard(page, 'Impozit estimat');
     const beforeTax = (await taxCard.locator('.value').textContent())?.trim();
-    expect(beforeTax).toBe('2.885,00 RON');
+    // PG-4 re-pin: this read used to be 2.885,00 lei — the closed FY2026 annualised again over 17,5 of
+    // 12 months, which is the drift the brief's table names. A closed year is now computed from actuals,
+    // so mid-2027 gives the same 3.112,00 lei that 31 Dec 2026 gave.
+    expect(beforeTax).toBe('3.112,00 RON');
     // Read, do not hard-code: the claim under test is that a payment made in 2027 does not move the
     // FY2026 figure, and that is the same claim whatever the FY2026 figure happens to be.
 

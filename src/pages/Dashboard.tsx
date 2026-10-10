@@ -15,6 +15,7 @@ import TaxReserve from '../components/TaxReserve';
 import Insights from '../components/Insights';
 import CurrencySection from '../components/dashboard/CurrencySection';
 import EstimateCoverageRows from '../components/dashboard/EstimateCoverage';
+import { YearLifecycleBanner } from '../components/dashboard/YearLifecycleBanner';
 import ThresholdSection from '../components/dashboard/ThresholdSection';
 import DeadlineSection from '../components/dashboard/DeadlineSection';
 import CompletenessSection from '../components/dashboard/CompletenessSection';
@@ -101,6 +102,11 @@ export default function DashboardPage() {
           the topbar. It uses the given name, not the full name the topbar shows. */}
       {greeting && <p className="greeting">{dashboardCopy.greeting} {greeting}</p>}
 
+      {/* PG-4 (D-YEAR-1): the year the cockpit is speaking about is stated, not assumed. On 1 January
+          the year advances automatically; a year this build has no rules for says so in words rather
+          than through an em dash or a figure carried over from the year before. */}
+      <YearLifecycleBanner year={data.year} />
+
       {/* Phase 11: the zero-record card no longer gates the page. It reports the absence and points at the
           two registers that would fill it; everything below renders regardless, because a deadline does not
           stop existing because the ledger is empty (B-68). */}
@@ -150,10 +156,16 @@ export default function DashboardPage() {
               <div className="row between">
                 {/* Task 1: the label carries the basis, so an annual run-rate figure can never be read as
                     money already collected. `estimateBasisLabel` says YTD only for actuals. With no
-                    calculation there is no basis to name, so the state word stands in for it. */}
+                    calculation there is no basis to name, so the state word stands in for it.
+                    PG-4: a CLOSED year has no basis to name either — its figure is the year's own actuals,
+                    so it is labelled as a final calculation for that year, not as a run rate. */}
                 <span className="muted">
-                  {data.tax ? estimateBasisLabel(data.tax.basis) : estimateStateCopy.badges[estimateState]} ·{' '}
-                  {dashboardCopy.fiscalYearPrefix} {snapshot.taxYear}
+                  {data.year.closed
+                    ? dashboardCopy.estimate.finalCalculation(data.year.year)
+                    : data.tax
+                      ? estimateBasisLabel(data.tax.basis)
+                      : estimateStateCopy.badges[estimateState]}{' '}
+                  · {dashboardCopy.fiscalYearPrefix} {snapshot.taxYear}
                 </span>
                 <span className="row">
                   <span className="muted">
@@ -208,8 +220,13 @@ export default function DashboardPage() {
                     </tbody>
                   </table>
                 ) : null}
-                {/* A run-rate projection is an assumption, not a forecast; the wording says so. */}
-                {data.tax ? <p className="hint">{estimateBasisExplanation(data.tax.basis)}</p> : null}
+                {/* A run-rate projection is an assumption, not a forecast; the wording says so. A closed
+                    year is not a projection at all, so it gets its own sentence instead. */}
+                {data.year.closed ? (
+                  <p className="hint">{dashboardCopy.estimate.finalCalculationNote(fmtDate(snapshot.asOf))}</p>
+                ) : data.tax ? (
+                  <p className="hint">{estimateBasisExplanation(data.tax.basis)}</p>
+                ) : null}
               </Disclosure>
               {/* TASK 9: the figure is attributed. Which rule package produced it, and whether the digest
                   that calculation recorded still matches the registered rules, is its own disclosure —

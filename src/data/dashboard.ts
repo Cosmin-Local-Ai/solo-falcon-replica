@@ -55,7 +55,7 @@ import { selectTaxDerived } from '../domain/derived';
 import { selectRuleSet } from '../domain/fiscal';
 import type { FiscalRule } from '../domain/fiscal/rules';
 import { selectApplicableRules } from '../domain/fiscal/select';
-import { localDateISO, now } from '../domain/date';
+import { localDateISO, localYear, now } from '../domain/date';
 import { formatBaniLei, type Bani } from '../domain/money';
 
 /**
@@ -160,6 +160,69 @@ function estimateStateOf(
   return coverage.some(g => isGapReason(g.reason)) ? 'incomplete' : 'complete';
 }
 
+/**
+ * PG-4 (D-YEAR-1) — the fiscal-year lifecycle, as data rather than as a page-level guess.
+ *
+ * Until now the fiscal year was only a Settings field: nothing in the app noticed 1 January. On
+ * 1 Jan 2027 that is not a cosmetic gap — the build carries no 2027 rule release, so the year the
+ * clock names has nothing to select, and a view that cannot say so falls back to a stale 2026 figure
+ * or to a zero. Both are the worst failure this app can have, and both are prevented by naming the
+ * state here instead of inferring it from a label.
+ *
+ * `closed` is the other half: once the as-of date is past 31 Dec the year is finished, its figures are
+ * final actuals, and no surface may dress them in run-rate wording.
+ */
+export interface FiscalYearView {
+  /** The fiscal year this view describes — the year the estimate, the thresholds and the ledger are for. */
+  year: number;
+  /** True when the as-of date is past 31 Dec of `year`: the year is closed and its figures are final. */
+  closed: boolean;
+  /** True when this build registers a rule release in force for `year` on the as-of date. */
+  rulesAvailable: boolean;
+  /** The calendar year the clock is in. */
+  currentYear: number;
+  /**
+   * The year the clock says this view should move to, or `null` when it should not move.
+   * See `yearAdvanceTarget` for what makes a move automatic and what makes it a deliberate choice.
+   */
+  advanceTo: number | null;
+}
+
+/**
+ * Should the stored fiscal year advance to the year the clock is in?
+ *
+ * D-YEAR-1 says the app switches automatically on 1 January — but a switch the user can undo has to
+ * stay undone, or the "toggle back to a previous year" the same decision asks for is not a toggle. So
+ * the advance fires once, when the stored profile was last maintained BEFORE the boundary. Writing a
+ * year deliberately re-stamps `profile.updatedAt` (store.tsx `updateProfile`), which puts the choice
+ * on the far side of the boundary and stops the automatic move from overwriting it on the next load.
+ *
+ * A profile with no `updatedAt` has never been written, so there is no choice to respect and the
+ * advance proceeds.
+ */
+export function yearAdvanceTarget(profile: AppData['profile'], instant: Date = now()): number | null {
+  const currentYear = localYear(instant);
+  if (currentYear <= profile.fiscalYear) return null;
+  // `updatedAt` is a UTC instant (`toInstantISO`), and the boundary is a Romanian calendar-day fact.
+  // At 00:30 on 1 Jan 2027 in Bucharest the UTC stamp still reads 2026, so reading the year off the
+  // string would treat a choice made after the boundary as one made before it — and the automatic
+  // advance would overwrite the toggle back a second after the person pressed it.
+  const touched = new Date(String(profile.updatedAt ?? ''));
+  if (!Number.isNaN(touched.getTime()) && localYear(touched) >= currentYear) return null;
+  return currentYear;
+}
+
+function fiscalYearView(data: AppData, asOfDate: string, instant: Date): FiscalYearView {
+  const year = data.profile.fiscalYear;
+  return {
+    year,
+    closed: asOfDate > `${year}-12-31`,
+    rulesAvailable: selectRuleSet(year, asOfDate) !== undefined,
+    currentYear: localYear(instant),
+    advanceTo: yearAdvanceTarget(data.profile, instant),
+  };
+}
+
 export interface DashboardData {
   taxYear: number;
   snapshot: DashboardSnapshotView;
@@ -173,6 +236,12 @@ export interface DashboardData {
    */
   tax: TaxEstimateWithBasis | null;
   estimateState: TaxEstimateState;
+  /**
+   * PG-4 — which fiscal year this view is about, whether it is closed, and whether this build has the
+   * rules for it. The banner and the hero label both read this instead of re-deriving a year from the
+   * clock, which is how a stale year could previously be presented as the current one.
+   */
+  year: FiscalYearView;
   /**
    * PG-1 — every recorded record the estimate figure does not describe, with the reason, the amount at
    * stake and the route that fixes it. Assembled from two lists that already exist and never overlap:
@@ -731,6 +800,7 @@ export function buildDashboardData(
     snapshot,
     tax: estimate,
     estimateState: estimateStateOf(estimate, coverage),
+    year: fiscalYearView(data, asOfDate, instant),
     coverage,
     thresholds: getThresholdStatuses(data, asOfDate, estimate),
     deadlines: getUpcomingDeadlines(data, asOfDate),

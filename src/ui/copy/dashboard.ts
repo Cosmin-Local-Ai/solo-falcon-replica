@@ -94,6 +94,29 @@ export const dashboard = {
        */
       amountUnitNote: 'sumele sunt în unitatea în care a fost înregistrată fiecare sumă',
     },
+    /**
+     * PG-4 — a closed fiscal year is not a projection, and the hero must not read like one. The figure
+     * is the year's own actuals, so it is named as a final calculation and dated, and the run-rate
+     * explanation is replaced rather than kept as a footnote.
+     */
+    finalCalculation: (year: number): string => `Calcul final pentru ${year}`,
+    finalCalculationNote: (asOf: string): string =>
+      `Anul fiscal s-a încheiat. Cifrele de mai jos sunt calculate din înregistrările reale, la data de ${asOf}. Nu sunt o rată de desfășurare și nu se mai modifică odată cu trecerea zilelor.`,
+  },
+  /**
+   * PG-4 (D-YEAR-1) — the year lifecycle banner.
+   *
+   * The sentence about missing rules is the whole point of the banner: a year with no rule package
+   * yields no figure, and the banner says why instead of letting the cockpit show an em dash or a
+   * number carried over from the previous year. It claims nothing about when the rules will arrive.
+   */
+  year: {
+    advanced: (year: number): string => `Anul fiscal a fost avansat automat la ${year}.`,
+    rulesMissing: (year: number): string => `Regulile pentru ${year} nu sunt încărcate.`,
+    rulesMissingBody:
+      'Aplicația nu calculează cu regulile unui alt an fiscal și nu afișează nicio cifră pentru acest an până când regulile lui sunt încărcate. Cifrele anului încheiat rămân disponibile.',
+    switchTo: (year: number): string => `Vezi anul fiscal ${year}`,
+    closedArchive: (year: number): string => `Anul fiscal ${year} este încheiat; cifrele lui sunt finale.`,
   },
 } as const;
 

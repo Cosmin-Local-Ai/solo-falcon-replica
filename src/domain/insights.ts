@@ -4,6 +4,11 @@ import type { TaxEstimateResult } from './tax';
 import type { Expense } from '../data/types';
 import { formatRoCalendarDate } from './date';
 import { formatBaniRON } from './money';
+// PG-4 hygiene: this file used to keep its own `FISCAL_DATE_FIELD_LABEL` for the same three words
+// `ui/copy/records.ts` already spells as `fiscalDateSource`. Two maps, two wordings (`data` vs
+// `data documentului`), one idea — the B-70 mistake in miniature. The copy layer owns the words, so
+// the domain reads them from there instead of re-spelling them.
+import { fiscalDateSource } from '../ui/copy/records';
 import {
   deadlineSeverity,
   sortAttention,
@@ -56,12 +61,8 @@ export interface InsightInput {
 // src/domain/deadlines.ts). `new_pfa` keeps its key but no longer reads "Declarație estimativă
 // PFA": that label named an obligation abrogated on 01-01-2025, and no rule emits `new_pfa` today.
 
-/** Fiscal date field → Romanian, for the B-21 item. Raw property names are never rendered. */
-const FISCAL_DATE_FIELD_LABEL: Record<ExcludedFiscalDate['field'], string> = {
-  date: 'data',
-  collected: 'data încasării',
-  paid: 'data plății',
-};
+/** Fiscal date field → Romanian lives in `ui/copy/records.ts` (`fiscalDateSource`). Raw property
+ *  names are never rendered, and the three words are spelled in exactly one place. */
 
 const DEADLINE_LABELS: Record<string, string> = {
   pfa: 'PFA',
@@ -368,7 +369,7 @@ export function getInsights(input: InsightInput): AttentionItem[] {
   if (dateIssues.length > 0) {
     const shown = dateIssues.slice(0, 3);
     const where = shown
-      .map(i => `${i.kind === 'revenue' ? 'Venit' : 'Cheltuială'} ${i.id} · ${FISCAL_DATE_FIELD_LABEL[i.field]}`)
+      .map(i => `${i.kind === 'revenue' ? 'Venit' : 'Cheltuială'} ${i.id} · ${fiscalDateSource[i.field]}`)
       .join('; ');
     const more = dateIssues.length > shown.length ? ` și încă ${dateIssues.length - shown.length}` : '';
     items.push({

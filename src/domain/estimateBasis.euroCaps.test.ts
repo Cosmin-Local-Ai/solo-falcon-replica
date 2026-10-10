@@ -451,10 +451,12 @@ describe('TASK 10b — the ledger is read in lei, and USD travels the same rule 
 
 describe('TASK 10b — the landmine: no money figure moves', () => {
   it('the seed’s deductible total is unchanged at the e2e clock, with no rate recorded', () => {
-    // TASK 2c: 120,00 lei YTD and 144,00 lei projected at 2026-10-31. No seed expense sits in a capped
+    // TASK 2c: 120,00 lei YTD and 145,48 lei projected at 2026-10-31. PG-4 (B-44) moved the projection
+    // from x 12/10 to x 354/292 because the seed PFA started on 2026-01-19 — that is the ONLY reason this
+    // figure is not the 144,00 lei it was; no cap and no FX figure moved. No seed expense sits in a capped
     // category, and the seed records no FX rate, so computing the caps moves nothing.
     const o = mustRun(run(seedData.expenses, undefined, E2E_CLOCK));
-    expect(o.amounts.expensesNet).toBe(lei(144));
+    expect(o.amounts.expensesNet).toBe(lei(145.48));
     expect(o.deductible.counts.capUnresolved).toBe(0);
     expect(o.deductible.counts.annualCapped).toBe(0);
     expect(o.deductible.counts.foreignCurrency).toBe(0);
@@ -463,7 +465,7 @@ describe('TASK 10b — the landmine: no money figure moves', () => {
 
   it('the seed with a FY2026 average recorded still deducts exactly the same, because no seed expense is capped', () => {
     const o = mustRun(run(seedData.expenses, [EUR_ANNUAL_2026_PROVISIONAL], E2E_CLOCK));
-    expect(o.amounts.expensesNet).toBe(lei(144));
+    expect(o.amounts.expensesNet).toBe(lei(145.48));
     expect(o.capAdjustments).toHaveLength(0);
   });
 });

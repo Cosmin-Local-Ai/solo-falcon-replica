@@ -210,11 +210,13 @@ describe('Dashboard page', () => {
     expect(card).not.toBeNull();
     // The seed profile is on the only regime a PFA can have in 2026, so the default user gets a number,
     // not an em dash. Task 1 feeds the engine the ANNUAL projection: at the pinned instant the model's
-    // denominator is 10 elapsed months, so the single revenue (50.000 lei net YTD, no expenses) enters
-    // as 60.000 lei. CAS 12.150 (25% × 12 SM — VNA is still inside [12 SM, 24 SM)) + CASS 6.000
-    // (10% × 60.000) + 10% × (60.000 − 18.150) = 4.185 → 22.335 lei.
+    // denominator is the seed PFA's ACTIVE period — 9 13/31 elapsed of 11 13/31 months, because
+    // `pfaStartDate` is 2026-01-19 (PG-4, B-44) — so the single revenue (50.000 lei net YTD, no expenses)
+    // enters as 50.000 × 354/292 = 60.616,44 lei. CAS 12.150 (25% × 12 SM — VNA is still inside
+    // [12 SM, 24 SM)) + CASS 6.061,64 (10% × 60.616,44) + 10% × (60.616,44 − 18.211,64) = 4.240,48
+    // → 22.452 lei.
     // (On the raw YTD operand the same dataset gave 20.435 lei: 12.150 + 5.000 + 3.285.)
-    await expectTaxFigure(card, /22\.335/);
+    await expectTaxFigure(card, /22\.452/);
   });
 
   test('shows the computed estimate in the cockpit for a PFA profile on the lawful regime', async () => {
@@ -259,12 +261,14 @@ describe('Dashboard page', () => {
     const card = (await screen.findByText('Impozit estimat', { exact: true })).closest('.stat-card');
     expect(card).not.toBeNull();
     // Verified against the tax engine for this dataset AT THE PINNED INSTANT: the two revenues are
-    // 130.000 lei net YTD, which the run-rate model annualises to 156.000 lei (× 12/10), giving
-    // CAS 24.300 (24 SM × 25%) + CASS 15.600 (10% × 156.000) + 10% × (156.000 − 39.900) = 11.610
-    // → 51.510 lei. On the raw YTD operand this dataset gave 46.570 lei (24.300 + 13.000 + 9.270) —
+    // 130.000 lei net YTD, which the run-rate model annualises over the seed PFA's active period —
+    // 11 13/31 months from its 2026-01-19 start, of which 9 13/31 had elapsed — to 130.000 × 354/292
+    // = 157.602,74 lei (PG-4, B-44; this was 156.000 lei on the old × 12/10 calendar denominator), giving
+    // CAS 24.300 (24 SM × 25%) + CASS 15.760,27 (10% × 157.602,74) + 10% × (157.602,74 − 40.060,27)
+    // = 11.754,25 → 51.814 lei. On the raw YTD operand this dataset gave 46.570 lei (24.300 + 13.000 + 9.270) —
     // the same figure it produced under the old impozit_pe_cit gate, because B-14 moved which regime
     // the engine accepts, not the Titlul IV arithmetic. Task 1 moved the OPERAND'S BASIS, not the law.
-    await expectTaxFigure(card, /51\.510/);
+    await expectTaxFigure(card, /51\.814/);
   });
 
   test('a profile recorded as impozit_pe_cit is a data-integrity failure, not a different base (B-14)', async () => {

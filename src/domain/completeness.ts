@@ -23,7 +23,7 @@ import type {
   TaxStatement,
 } from '../data/types';
 import type { PfaProfile } from './models';
-import { expenseFiscalDate, inPeriod } from './aggregation';
+import { expenseFiscalDate, inPeriod, revenueFiscalDate } from './aggregation';
 import { sumBani, type Bani } from './money';
 import { isGapReason, type EstimateCoverageGap } from './estimateBasis';
 import { isoCalendarDateProblem } from './date';
@@ -244,7 +244,12 @@ function amountCoverage(
   const eligible = new Set<string>();
   const amounts: Bani[] = [];
   for (const r of asArray(data.revenues)) {
-    if (r.status !== 'inregistrata' || !inPeriod(r.date, asOf, fiscalYear)) continue;
+    // B-71: the revenue half of this denominator must be filtered by the SAME date the estimate filters
+    // by. `expenseFiscalDate` was already used below for expenses; the revenue side still read `r.date`,
+    // so a revenue documented 20 Dec 2026 and collected 10 Jan 2027 stayed in the 2026 denominator while
+    // the estimate correctly left it out of 2026 — the percentage and the figure disagreed about one
+    // record. `revenueFiscalDate` is `collected ?? date`, so a record with no money date is unaffected.
+    if (r.status !== 'inregistrata' || !inPeriod(revenueFiscalDate(r), asOf, fiscalYear)) continue;
     eligible.add(r.id);
     amounts.push(r.valoareFaraTva.amount);
   }

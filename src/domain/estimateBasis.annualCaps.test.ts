@@ -25,8 +25,12 @@ import { seedData } from '../data/seed';
 import type { AppData, Expense, Revenue } from '../data/types';
 import { lei, ron } from './money';
 
-const YEAR_END = '2026-12-31'; // elapsedMonths = 11 + 31/31 = 12 -> the projection is the identity
-const E2E_CLOCK = '2026-10-31'; // elapsedMonths = 9 + 31/31 = 10 -> every annual figure is YTD x 1,2
+const YEAR_END = '2026-12-31'; // the seed PFA started 2026-01-19, so elapsed = active = 11 13/31 -> identity
+const E2E_CLOCK = '2026-10-31'; // elapsed 9 13/31 of an 11 13/31 active period -> annual = YTD x 354/292
+// PG-4 (B-44): the projection now runs over `[max(Jan 1, profile.pfaStartDate), Dec 31]`. The seed
+// profile carries `pfaStartDate: '2026-01-19'` (seed.ts), so the two clocks above no longer give the
+// round 12 and 10 months they used to. Every hand-derived figure in this file was re-derived from
+// 292/31 elapsed and 354/31 active months — see `docs/ai/phases/31_pg4_active_period.md`.
 
 /**
  * The seed's own revenues are all dated September, so an `asOfDate` before 2026-09-02 legitimately has
@@ -69,6 +73,23 @@ function dataWith(expenses: Expense[], revenues?: Revenue[]): AppData {
 
 function run(expenses: Expense[], asOfDate = YEAR_END, revenues?: Revenue[]): EstimateOperands {
   return selectEstimateOperands(dataWith(expenses, revenues), asOfDate, PFA_2026_SYSTEM_REAL_PACKAGE);
+}
+
+/**
+ * PG-4 — the same run with an explicit start date, for the cases that need the active period to be
+ * the whole calendar year (or to sit outside it) independently of the seed profile's own start.
+ */
+function runWithStart(
+  expenses: Expense[],
+  asOfDate: string,
+  pfaStartDate: string | undefined,
+  revenues?: Revenue[],
+): EstimateOperands {
+  return selectEstimateOperands(
+    { ...dataWith(expenses, revenues), profile: { ...seedData.profile, pfaStartDate } },
+    asOfDate,
+    PFA_2026_SYSTEM_REAL_PACKAGE,
+  );
 }
 
 function amounts(o: EstimateOperands) {
@@ -272,51 +293,53 @@ describe('TASK 2d — the alin. (6) base is struck PRE-cap, and the post-cap rea
 
 describe('TASK 2c — decision 5: the annual ceiling is struck on the ANNUAL figure, not the YTD one', () => {
   it('the YTD deductible is bounded by the ANNUAL ceiling, which a YTD-struck ceiling would fail', () => {
-    // 2026-10-31 -> elapsedMonths = 9 + 31/31 = 10 -> every annual figure is YTD x 1,2. This is the same
-    // clock the e2e dashboard spec pins, so the fixture's revenues are actually in period.
+    // 2026-10-31 -> elapsed 9 13/31 active months (the seed PFA started 2026-01-19), over an active
+    // period of 11 13/31 months -> every annual figure is YTD x 354/292. This is the same clock the
+    // e2e dashboard spec pins, so the fixture's revenues are actually in period.
     // protocol 300,00 lei, no VAT.
-    //   projected gross (excl) = 770.000 / 10 x 12 =   924.000 bani =  9.240,00 lei
-    //   base                   = 924.000 - 0        =   924.000 bani
-    //   ANNUAL ceiling         = floor(924.000 x 2 / 100) = 18.480 bani = 184,80 lei
-    //   claimed annual         = 30.000 / 10 x 12   =    36.000 bani =   360,00 lei
-    //   allowed annual         = min(36.000, 18.480) =  18.480 bani =   184,80 lei  -> amounts.expensesNet
-    //   allowed actual (YTD)   = min(30.000, 18.480) =  18.480 bani =   184,80 lei  -> basis.actual
+    //   projected gross (excl) = 770.000 x 354/292 = 933.493,15 -> 933.493 bani =  9.334,93 lei
+    //   base                   = 933.493 - 0       = 933.493 bani
+    //   ANNUAL ceiling         = floor(933.493 x 2 / 100) = floor(18.669,86) = 18.669 bani = 186,69 lei
+    //   claimed annual         = 30.000 x 354/292  = 36.369,86 -> 36.370 bani = 363,70 lei
+    //   allowed annual         = min(36.370, 18.669) = 18.669 bani = 186,69 lei  -> amounts.expensesNet
+    //   allowed actual (YTD)   = min(30.000, 18.669) = 18.669 bani = 186,69 lei  -> basis.actual
     // THE DISCRIMINATOR. If the ceiling were struck on the YTD base instead:
     //   YTD ceiling = floor(770.000 x 2 / 100) = 15.400 bani = 154,00 lei
     //   allowed actual = min(30.000, 15.400) = 15.400 bani = 154,00 lei  <- this test would fail.
-    // Note the PROJECTED figure is 184,80 lei under BOTH implementations: min() and the x 1,2 scaling
+    // Note the PROJECTED figure is 186,69 lei under BOTH implementations: min() and the x 354/292 scaling
     // commute, so a uniform run rate hides the wrong basis in the headline number. `basis.actual` is what
     // exposes it — which is exactly why the basis decision is written down and pinned here.
     const o = amounts(
       run([expense({ category: 'protocol', valoareFaraTva: ron(300), tva: ron(0) })], E2E_CLOCK),
     );
     expect(o.basis.kind).toBe('annual-projected');
-    expect(o.basis.elapsedMonths).toBe(10);
-    expect(o.amounts.expensesNet).toBe(lei(184.8));
-    expect(o.basis.actual.expensesNet).toBe(lei(184.8)); // NOT lei(154)
-    // incl measure: projected gross 931.700 / 10 x 12 = 1.118.040; base 1.118.040;
-    //   ceiling = floor(1.118.040 x 2 / 100) = floor(22.360,8) = 22.360 bani = 223,60 lei
-    //   claimed annual incl = 36.000 -> allowed 22.360; allowed actual incl = min(30.000, 22.360) = 22.360
-    expect(o.amounts.expenses).toBe(lei(223.6));
-    expect(o.basis.actual.expenses).toBe(lei(223.6));
-    expect(o.capAdjustments[0].claimed).toEqual({ inclVat: lei(360), exclVat: lei(360) });
-    expect(o.capAdjustments[0].ceiling).toEqual({ inclVat: lei(223.6), exclVat: lei(184.8) });
+    expect(o.basis.elapsedMonths).toBe(292 / 31);
+    expect(o.amounts.expensesNet).toBe(lei(186.69));
+    expect(o.basis.actual.expensesNet).toBe(lei(186.69)); // NOT lei(154)
+    // incl measure: projected gross 931.700 x 354/292 = 1.129.526,71 -> 1.129.527 bani;
+    //   ceiling = floor(1.129.527 x 2 / 100) = floor(22.590,54) = 22.590 bani = 225,90 lei
+    //   claimed annual incl = 36.370 -> allowed 22.590; allowed actual incl = min(30.000, 22.590) = 22.590
+    expect(o.amounts.expenses).toBe(lei(225.9));
+    expect(o.basis.actual.expenses).toBe(lei(225.9));
+    expect(o.capAdjustments[0].claimed).toEqual({ inclVat: lei(363.7), exclVat: lei(363.7) });
+    expect(o.capAdjustments[0].ceiling).toEqual({ inclVat: lei(225.9), exclVat: lei(186.69) });
   });
 
   it('a YTD claim inside the ANNUAL ceiling is allowed whole — a YTD-struck ceiling would cut it', () => {
     // The same clock, protocol 170,00 lei. This is the case where the two bases disagree about whether
     // the cap bites at all, not merely about by how much.
-    //   ANNUAL ceiling (excl) = 18.480 bani; claimed YTD = 17.000 bani -> allowed actual = 17.000 = 170,00 lei
+    //   ANNUAL ceiling (excl) = 18.669 bani; claimed YTD = 17.000 bani -> allowed actual = 17.000 = 170,00 lei
     //   YTD ceiling           = 15.400 bani; claimed YTD = 17.000 bani -> allowed actual = 15.400 = 154,00 lei
-    //   claimed annual = 17.000 x 1,2 = 20.400 -> allowed annual = min(20.400, 18.480) = 18.480 = 184,80 lei
-    //   incl measure has its OWN, larger ceiling: base 1.118.040 -> floor(22.360,8) = 22.360 = 223,60 lei,
-    //   and claimed annual incl = 20.400 < 22.360, so the incl measure is allowed whole: 204,00 lei.
+    //   claimed annual = 17.000 x 354/292 = 20.610,27 -> 20.610; allowed annual = min(20.610, 18.669)
+    //     = 18.669 = 186,69 lei
+    //   incl measure has its OWN, larger ceiling: base 1.129.527 -> floor(22.590,54) = 22.590 = 225,90 lei,
+    //   and claimed annual incl = 20.610 < 22.590, so the incl measure is allowed whole: 206,10 lei.
     const o = amounts(
       run([expense({ category: 'protocol', valoareFaraTva: ron(170), tva: ron(0) })], E2E_CLOCK),
     );
-    expect(o.amounts.expensesNet).toBe(lei(184.8));
+    expect(o.amounts.expensesNet).toBe(lei(186.69));
     expect(o.basis.actual.expensesNet).toBe(lei(170)); // NOT lei(154)
-    expect(o.amounts.expenses).toBe(lei(204));
+    expect(o.amounts.expenses).toBe(lei(206.1));
     expect(o.basis.actual.expenses).toBe(lei(170));
   });
 
@@ -324,6 +347,9 @@ describe('TASK 2c — decision 5: the annual ceiling is struck on the ANNUAL fig
     // 2026-01-05 -> elapsedMonths = 5/31 = 0,16, but `selectProjectionV1` uses
     // `denom = months > 0 ? Math.max(1, months) : 0`, so the annual figure is YTD x 12. The ceiling is
     // struck on THAT annual figure, and the YTD deductible is bounded by it — not by a 0,16-month ceiling.
+    // PG-4: the seed PFA starts on 19 Jan, which would put 5 Jan OUTSIDE its active period (the next test
+    // pins that case), so this one pins a PFA that was already active before the year began — the active
+    // period is then the whole calendar year and the floor is the only thing in play.
     // One revenue of 1.000,00 / 190,00 lei dated 2026-01-03 and protocol of 1.000,00 lei, no VAT.
     //   projected gross (excl) = 100.000 x 12 = 1.200.000; base = 1.200.000
     //   ANNUAL ceiling = floor(1.200.000 x 2 / 100) = 24.000 bani = 240,00 lei
@@ -334,9 +360,10 @@ describe('TASK 2c — decision 5: the annual ceiling is struck on the ANNUAL fig
     //   incl measure: projected gross 119.000 x 12 = 1.428.000; ceiling floor(28.560) = 28.560 =
     //   285,60 lei; claimed annual incl 1.200.000 -> allowed 28.560; allowed actual incl = 28.560.
     const o = amounts(
-      run(
+      runWithStart(
         [expense({ category: 'protocol', date: '2026-01-04', valoareFaraTva: ron(1000), tva: ron(0) })],
         '2026-01-05',
+        '2025-11-01',
         [revenue()],
       ),
     );
@@ -345,6 +372,25 @@ describe('TASK 2c — decision 5: the annual ceiling is struck on the ANNUAL fig
     expect(o.basis.actual.expensesNet).toBe(lei(240)); // NOT lei(20)
     expect(o.amounts.expenses).toBe(lei(285.6));
     expect(o.basis.actual.expenses).toBe(lei(285.6));
+  });
+
+  it('before the active period starts there is no run rate at all, and the engine runs on actuals', () => {
+    // PG-4, landmine 4. The seed PFA's own start date is 2026-01-19, so on 2026-01-05 it has not begun:
+    // elapsed active months is 0, the denominator is 0, and there is no rate to project. That is a STATE,
+    // not a zero run rate — the assembler falls back to `actuals-only` and the engine sees the YTD pair.
+    // A calendar-year denominator would have divided 5/31 of a year by 12 and printed a projection for
+    // a business that does not exist yet.
+    const o = amounts(
+      run(
+        [expense({ category: 'postal_and_telecom', date: '2026-01-04', valoareFaraTva: ron(1000), tva: ron(0) })],
+        '2026-01-05',
+        [revenue()],
+      ),
+    );
+    expect(o.basis.kind).toBe('actuals-only');
+    expect(o.basis.elapsedMonths).toBe(0);
+    expect(o.amounts.expensesNet).toBe(lei(1000));
+    expect(o.basis.actual.expensesNet).toBe(lei(1000));
   });
 });
 

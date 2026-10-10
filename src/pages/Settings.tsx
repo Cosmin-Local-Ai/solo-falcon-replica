@@ -12,7 +12,7 @@ import {
   regimeRefusalReason,
   selectableRegimes,
 } from '../domain/regimes';
-import { isoCalendarDateProblem, isoCalendarDateProblemText } from '../domain/date';
+import { epochMs, isoCalendarDateProblem, isoCalendarDateProblemText } from '../domain/date';
 import type {
   PfaRegime,
   PfaSalaryStatus,
@@ -369,7 +369,10 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       ...s,
       bankAccounts: [
         ...s.bankAccounts,
-        { id: `ba-${Date.now().toString(36)}`, banca: newBank.banca.trim(), moneda: newBank.moneda },
+        // PG-4 hygiene: the id comes from the domain's own clock seam, not from a raw `Date.now()`.
+        // A wall-clock read in a page is the B-46 class — it is the one date in this file no fixed clock
+        // can pin, and `epochMs()` is the seam the standing wall-clock guard recognises.
+        { id: `ba-${epochMs().toString(36)}`, banca: newBank.banca.trim(), moneda: newBank.moneda },
       ],
     }));
     setNewBank({ banca: '', moneda: 'RON' });
