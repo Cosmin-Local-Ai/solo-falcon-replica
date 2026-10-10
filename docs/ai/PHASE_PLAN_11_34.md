@@ -2,15 +2,21 @@
 
 **This file is the authoritative forward plan.** It supersedes the phase list in `docs/ai/pre_phase11_execution_plan.md` (that round is finished) and merges the user's *SOLO Orchestrator Prompt Set — Updated Phases 11–34* with the findings of the independent audit of 2026-10-10.
 
-## 0. How to use this file after a compaction
+## 0. Compaction recovery ritual — do this before briefing anything
 
-1. Read §1 for the baseline you must not regress.
-2. Read §2 for what is **already good and must not be rewritten**.
-3. Read §3 before repeating any audit claim — it says which claims were **verified in-repo** and which were not.
-4. Read §5 for the order, §6 for what each phase actually has to do.
-5. Read §9 before writing a brief — several phases are **blocked on a user decision**, and guessing them is how the last round produced rework.
-6. Defect ids **B-36 … B-47** are defined in §4 and each phase names the ones it closes. `docs/ai/STATE.md` holds B-1 … B-35.
-7. User decisions are logged in `docs/ai/USER_DECISIONS.md`; phase status in `docs/ai/phases/NN_*.md`; phase-vs-landed status of the user's original 11–34 list in `docs/ai/roadmap_11_34_mapping.md`.
+**Confirm, do not re-run.** The counts below are recorded facts; re-running the suite costs minutes and proves nothing new unless a Worker has just changed code. Confirm `git log --oneline -1` matches the baseline commit and that the counts in §1 match `docs/ai/STATE.md`. If a Worker has landed something since, read its `docs/ai/phases/NN_*.md` first — that file, not this one, holds the new counts.
+
+**Read in this order:**
+
+1. **This file** — §1 baseline, §2 what must not be rewritten, §3 audit claims already verified, §4 defects **B-36 … B-56**, §4b the open-questions register, §5 order, §6 phase detail, §9 what is blocked on a user decision, §11 PG mapping, **§12 standing operating rules**.
+2. **`docs/ai/briefs/28_pg_production_gate.md`** — the execution order PG-0 … PG-13, each with mission, evidence, files it may touch, acceptance. Plus the scout list and the owner decisions.
+3. **`docs/ai/USER_DECISIONS.md`** — every decision with its reasoning. This is the file that stops the Orchestrator re-asking the user for things already settled.
+4. **`docs/ai/STATE.md`** — baseline, phase status, defects **B-1 … B-35**, and the open-questions register. **Check the register before briefing any research gap**: a Researcher's UNVERIFIED label is not a new open question if the register already closed it. That lesson has cost time twice.
+5. **`docs/ai/research/26_midyear_start_partial_year_2026.md`** and **`27_norme_metodologice_prorating_2026.md`** — the projection question and the code-versus-norm conflict. Both change what PG-4 may claim.
+6. **`docs/ai/notes/romanian_proofcheck_2026-10-10.md`** — the language audit, with the Orchestrator's in-tree verification inline.
+7. **`docs/ai/roadmap_11_34_mapping.md`** — what already landed, so a Worker proves it instead of rebuilding it. Its evidence baseline is **TASK 9 (64 files / 1149 tests)**; §1 below is the current one.
+
+Then, and only then, brief anything.
 
 ---
 
@@ -124,6 +130,9 @@ These are **not** research gaps to re-open. Check the register before a brief as
 | **Q-PENDING-B4-2026**, **Q-PENDING-10MAI** | Pending bills, **not law** | Never encode; recorded so "no pending change" is never claimed |
 | **Q-RESEARCHER-WRITE** | The `researcher` agent has **no file-write tool** | **Every Researcher report must be transcribed to `docs/ai/research/NN_*.md` by the Orchestrator before anything else is done**, or it is lost on compaction |
 | **Q-METHOD-NOTECOUNTS** | Portal Legislativ publishes no note count | Doc id + consolidation date are the anchor; never a count |
+| **Q-NORME-PRORAT** | **Resolved on the published evidence, not formally closed.** The Titlul V norms (HG 1/2016) still contain the prorating paragraphs at pct. 8 alin. (4) and pct. 16 alin. (4); **no act has repealed them** — HG 602/2025, HG 39/2026 and HG 184/2026 are TVA/accize only. But ANAF's current D212 instructions (OpANAF 2736/2025, MO 1207 bis/29.12.2025, pct. 42.1–42.4) and the 2026 DU brochure apply the **unprorated** code rule. See `research/27` §7–§10 | **PG-4 computes on the code and must not claim proration was abolished.** REVIEW_REQUIRED only where prorated and unprorated results differ: mid-year starter whose cumulative income falls between the two thresholds. The CASS norm prorates art. 170 alin. (2) (lit. c)–h)), **not** the PFA base — for a PFA it is not even on point |
+| **Q-OUG156-ART174** | **Open, small.** Whether OUG 156/2024 touched art. 174 CF is unverified — ANAF Brașov's Titlul V table for it exists but its URL would not resolve | Does not block PG-4. One fetch closes it; do not restate the art. 174 history as complete until it does |
+| **Q-NORMS-DATE** | Which HG last rewrote the Titlul V norms is not pinned (candidates HG 354/2018, HG 435/2018, HG 874/2018); the norm text is 2018-vintage | Only needed if PG-9 wants a "norms date" field on the rule record |
 
 ---
 
@@ -143,6 +152,7 @@ Phases in **bold** are new, inserted by the audit. The rest keep the user's numb
 | **12E** | **Activity family wired to the estimate, or explicit refusal** | not started | B-29 |
 | **12F** | **Other income: model the amounts or refuse** | not started | B-41 |
 | **12G** | **Fixed assets and depreciation boundary** | not started | B-31 |
+| **12H** | **Normă de venit — reserved as a decision point, not a plan** | not started; **blocked on research** | D-NORMA-1 |
 | 13 | Annual tax estimate pipeline | largely done — gate it | B-16 remainder, B-30 |
 | 14 | Automatic recalculation | done — extend the triggers | — |
 | 15 | Snapshots + rule-release versioning | partial | B-43, B-45 |
@@ -213,6 +223,13 @@ Phases in **bold** are new, inserted by the audit. The rest keep the user's numb
 ### 12G — Fixed assets and depreciation *(new)*
 - This is **B-31**, open since research 21: CF art. 68 alin. (7) lit. h) makes the purchase or manufacture of depreciable goods **never** a direct expense — only depreciation under art. 28 is. TASK 2a classifies the category as capital; the depreciation model itself was never built.
 - Encode the verified 2026 asset threshold (OUG 8/2026) and the asset facts, or make the expense **visibly unresolved**. Refusing the whole purchase price is not the same as modelling depreciation (B-31).
+
+### 12H — Normă de venit *(reserved: a decision point, not an implementation plan)*
+**Deliberately has no acceptance criteria.** Writing them before the norm tables are verified is how a phase gets built on numbers nobody can cite.
+- **D-NORMA-1** decided the *what*: support normă de venit before launch rather than refuse it silently. The *when* waits on the norm-table research.
+- **The gate question:** can the 2026 normă de venit amounts be obtained from a primary source — an approved HG or an ANAF order published in Monitorul Oficial — at a per-activity-code level the app can actually store? If yes, 12H becomes a normal phase with a citation per code. If no, **the phase collapses**: the app refuses the regime explicitly, and that refusal is the deliverable.
+- **What is already verified and must not be re-researched:** CF art. 122 alin. (2) last sentence prorates the *normă* only — „ajustează norma anuală de venit prin reducerea acesteia proporțional cu perioada în care nu au desfășurat activitate" — and **that adjustment must never be generalised to system-real income**. Art. 68 / 68¹ / 68³ / 69 are the alternative determination systems; art. 148 alin. (3) and art. 170 alin. (1) cumulate „normele anuale de venit" alongside net income.
+- **Why it cannot be deferred indefinitely:** a normă-de-venit PFA is a profile the app currently accepts and then computes wrongly, because sistem real is the only path implemented. That is a silent wrong, not a refusal.
 
 ### 13 — Annual pipeline
 - Largely satisfied. **Gate:** do not declare it complete while required profile facts, FX rates or material expense classifications can be omitted without an incomplete/review state. Depends on 10c, 12C–12G.
@@ -343,3 +360,33 @@ The second audit produced a production-gate brief, saved at `docs/ai/briefs/28_p
 | PG-13 release audit | **30–34** | all open |
 
 **PG-1 goes first after PG-0.** It is the channel every later refusal reuses, and it is the finding that undermines every number on the screen: the hero says Calculat while records are quietly dropped, in both directions — an unconverted euro expense *raises* the tax and an unconverted euro revenue *lowers* it.
+
+---
+
+## 12. Standing operating rules — these are what make the sequence hold
+
+Adopted 2026-10-10 at the user's request, after the audit round produced rework in exactly the places these rules would have prevented.
+
+### 12.1 Research gate — no PG task starts with an open scout on its own subject
+A task whose legal basis is unresolved will be written twice. **PG-4** (projection, mid-year start, year lifecycle) and **PG-6** (unsupported scenarios, L-2…L-7) are the two exposed to this, and PG-4 is the one with a real date attached. Concretely: a PG task may not be briefed while a scout is open on a question its acceptance criteria depend on. If the scout is open, brief the scout.
+
+### 12.2 PG-0 is a hard prerequisite for any date-dependent acceptance criterion
+Several acceptance tests in `briefs/28` are meaningless without the fixed clock — "2026-12-31, 2027-01-15 and 2027-05-26 give an identical estimate" cannot be asserted while the suite reads the wall clock. **No task with a date in its acceptance may be briefed before PG-0 lands.** Same for the UTC-default fix (B-46): a date test written before that passes for the wrong reason.
+
+### 12.3 A finding gets a defect id before it gets a task
+Every new claim about the code becomes a row in §4 (or is marked as a duplicate of an existing id) **before** anyone is briefed on it. This is not bureaucracy: **B-40 and B-42 were minted as new defects and turned out to be B-29 and B-31, already open since research 21.** Minting first and checking later produces two briefs for one bug. Reviewer reports get the same treatment — verify in-tree, then mint, and record a claim that does not reproduce as *not a defect* so it is never re-raised.
+
+### 12.4 The year boundary is a standing task, not a phase
+Phases model sequence; the 2027 rule package has a **trigger**, not a position. **Standing task:** the moment the 2027 minimum-wage act and the 2027 budget/finance act are published, stage the 2027 rule package — rates carried forward with a last-verified stamp, wage-dependent thresholds recomputed, BNR averages left provisional. Per **D-YEAR-2** the app carries forward and updates when the datum arrives; per **D-YEAR-1** the year toggle and the banner handle what the app cannot yet compute. Whoever is briefing anything checks this task first: the first hard date boundary is roughly twelve weeks out.
+
+### 12.5 Researcher reports: transcribe first, then act — and a truncated report is resumed, not guessed at
+- The `researcher` profile has **no write tool** (**Q-RESEARCHER-WRITE**). A report exists only once the Orchestrator has written it to `docs/ai/research/NN_*.md`. **Transcribe before anything else**, including before acting on the report.
+- If a report arrives **truncated**, that means the researcher compacted. Resume the same session and ask it to **re-verify the missing part from sources, not from memory**, then produce the report. Never fill the gap from what the Orchestrator assumes.
+- If a report leaves work unfinished, **spawn a different researcher** for the remainder rather than extending one session past its usefulness.
+- A researcher's UNVERIFIED label is checked against the `STATE.md` register before it becomes a new open question.
+
+### 12.6 One Worker at a time; scouts sequential
+Unchanged and not negotiable: implementation Workers run sequentially, one engine slot, and scouts stay sequential (**C5**, resolved by the user). Two Workers have already been SIGKILLed mid-run; the headroom is roughly 390 MiB.
+
+### 12.7 The release gate is a living document
+**`docs/ai/PG13_GO_NO_GO.md`** accumulates from PG-0 onward rather than being re-derived at the end: every acceptance criterion that passed, every defect still open, every REVIEW_REQUIRED that a user could trip, every decision PG-13 needs. A gate written in the last week of a project is a gate that finds nothing.
