@@ -430,6 +430,8 @@ Unchanged and not negotiable: implementation Workers run sequentially, one engin
 
 **The rule:** before a brief is sent, every stated fact in it is checked against `STATE.md` and `PHASE_PLAN_11_34.md`, and each one carries its source. A premise handed to a researcher that is stale does more damage than no premise, because the researcher builds on it and the error leaves the building wearing a citation.
 
+**A fourth premise of mine that did not reproduce (2026-10-10, brief 31).** I wrote that `caen` and `pensionStatus` are fields the engine reads. **Neither reaches any calculator** — `pensionStatus` has no reader anywhere (renamed in TASK 5 and policed by the `pensionFacts.test.ts` source scan), and `caen` was deprecated into `identity.caen` in Phase 7. The Worker recorded the discrepancy and **changed nothing on the strength of my wording**, which is the correct response. **The register's own deprecation notes were right; my summary of them was not.**
+
 **What this does not mean:** briefs are **not** split into one question each — the user kept bundled briefs deliberately. Bundling is fine; unverified premises are not. The overlap that bundling creates is acceptable **when the shared ground is stated in the brief** so the researcher knows what has already been answered and does not re-derive it.
 
 **Two consolidation traps, both of which cost real time on 2026-10-10.** A consolidated source is not a witness to the amendment history:
@@ -453,3 +455,10 @@ Unchanged and not negotiable: implementation Workers run sequentially, one engin
 
 ### 12.10 The Orchestrator never runs the test suite — **user decision, 2026-10-10**
 **The Worker runs the tests and reports the counts.** Re-measuring them from the orchestrator is wasted time and context, and it duplicates work already done. Take the counts from the handoff. If independent confirmation is genuinely needed, use a cheap non-test check — `tsc`, `git status`, a targeted `grep` — **not** `npm run test`.
+
+### 12.11 After a compaction, re-read the source before writing any document — **user decision, 2026-10-10**
+**A Worker wrote a phase doc from memory after its context compacted, and the doc was fiction.** It contained identifiers that do not exist in the tree — `requiresOnboarding`, `demoMode`, `hasAnyRecord`, `enterDemoMode` — and **a migration step that was never added** (`profile-start-date`, data version 10→11), when `CURRENT_DATA_VERSION` never moved. The Worker caught it, re-read the actual source and rewrote the document; §4 of `phases/28_phase11_first_run.md` now states plainly that no chain step was added and why.
+
+**Why this is the most dangerous failure mode in this project, not an embarrassing one.** This repository's authority lives in documents — `STATE.md`, `PHASE_PLAN_11_34.md`, `phases/NN_*.md`, `research/NN_*.md` — and later agents are instructed to trust them instead of re-deriving. A doc that reads authoritative while describing code that does not exist does not just mislead the next reader; **it becomes a premise**, and §12.8 will check the next brief against it. A hallucinated migration step is worse than no migration step, because it tells a future Worker that a data-version bump already happened and its payload is already readable.
+
+**The rule:** after any compaction, before writing or editing a document that names files, identifiers, versions or line numbers, **re-read the source those claims rest on.** If a document was already written from memory, **say so in the document** and correct it in the same task. Never let a memory-reconstruction reach the register without a source check.
