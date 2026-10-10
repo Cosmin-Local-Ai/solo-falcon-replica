@@ -8,6 +8,7 @@
  */
 import type { DeclStatus, ExpenseStatus, RevenueStatus } from '../../data/types';
 import type { ExpenseCategory } from '../../domain/fiscal/deductibility';
+import type { FiscalDateField } from '../../domain/aggregation';
 import { validation } from './common';
 
 export const revenues = {
@@ -306,6 +307,61 @@ export const recordStatus = {
   notInEstimate: 'nu intră în estimare',
 } as const;
 
+/**
+ * PG-2 — the field a fiscal date actually came from, in Romanian.
+ *
+ * Keyed by `domain/aggregation.ts FiscalDateField`, which is the SAME three values as
+ * `domain/fx/ledger.ts LedgerDateSource` and the same three values `auditFiscalDates` reports. The
+ * type is exhaustive, so a fourth spelling of the idea is a compile error rather than a fourth
+ * sentence on screen (B-70's mistake, prevented rather than re-litigated).
+ */
+export const fiscalDateSource: Record<FiscalDateField, string> = {
+  date: 'data documentului',
+  collected: 'data încasării',
+  paid: 'data plății',
+};
+
+/**
+ * PG-2 — the money date: the day the money actually moved.
+ *
+ * `docs/ai/research/37_cash_basis_date_semantics.md` §5 fixes what this app may claim about the
+ * difference between a document date and a money date. These keys ARE those sentences; they live in one
+ * module so the revenue form, the expense form and the RJIP register cannot each grow their own
+ * paraphrase of art. 68. What §5 forbids is deliberately absent: no key here says the document date
+ * determines the fiscal year, that the law presumes document date = money date, or that the app's
+ * fallback when a money date is missing is mandated by the Cod fiscal. The fallback is a display
+ * default, and `revenueEmpty`/`expenseEmpty` (forms) and `documents.rjip.postedOnDocumentDate`
+ * (the register) say so in those words.
+ *
+ * The two field labels are the words `data/schema.ts` already uses for the same two fields.
+ */
+export const moneyDate = {
+  revenueField: 'Data încasării',
+  expenseField: 'Data plății',
+  optionalTag: '(opțional)',
+  /** research/37 §5 sentence 2, split along the clause each form owns. */
+  revenueHint:
+    'Dacă ai încasat într-un an fiscal diferit de cel al documentului, completează data încasării: '
+    + 'suma se duce în anul fiscal în care a intrat banul.',
+  expenseHint:
+    'Dacă ai plătit într-un an fiscal diferit de cel al documentului, completează data plății: '
+    + 'suma se duce în anul fiscal în care a intrat banul.',
+  /** research/37 §5 sentence 3: absence is a legal state, not an unfinished field. */
+  revenueEmpty:
+    'Poți lăsa câmpul gol cât timp banul nu s-a mișcat: fără încasare suma nu este venit brut '
+    + '(art. 68 alin. (2) lit. a) din Codul fiscal).',
+  expenseEmpty:
+    'Poți lăsa câmpul gol cât timp banul nu s-a mișcat: fără plată cheltuiala nu este deductibilă '
+    + '(art. 68 alin. (4) lit. b) din Codul fiscal).',
+  /** research/37 §5 sentence 1, the claim the whole surface rests on. */
+  rule:
+    'Anul fiscal rezultă din data încasării, respectiv din data plății — nu din data documentului '
+    + '(art. 68 alin. (2) lit. a) și alin. (4) lit. b) din Codul fiscal).',
+  /** The register row: which year the money date put this record in, when it is not the document's year. */
+  collectedIn: (year: number): string => `încasat în ${year}`,
+  paidIn: (year: number): string => `plătit în ${year}`,
+} as const;
+
 export const documents = {
   title: 'Documente',
   subtitle: 'Documente de înregistrare, declarații fiscale și rapoarte de trezorerie — stocate local.',
@@ -404,6 +460,27 @@ export const documents = {
     balance: 'Sold',
     rows: 'Rânduri',
     csvHeader: 'Data;Descriere;Venit (RON);Cheltuiala (RON)',
+    /**
+     * PG-2 (B-66). OMFP 170/2015 cap. V Secțiunea a 2-a makes the register's date column „data
+     * efectuării operațiunii de încasare/plată”, and the justificatory document a separate
+     * cross-reference column — which is what `Descriere` carries (fel + număr). The sentence names the
+     * rule the column follows, so the export never implies the document date is the posting date.
+     */
+    postedOn:
+      'Data din registru este data încasării, respectiv data plății — „data efectuării operațiunii de '
+      + 'încasare/plată” (OMFP 170/2015, cap. V). Documentul stă la baza înregistrării și este menționat '
+      + 'în coloana Descriere.',
+    /**
+     * The honest remainder: a record with no money date is posted on its document date because nothing
+     * else is recorded. That is stated as what the app did, never as what the law prescribes —
+     * research/37 §4.4 found no statutory presumption that fills in a missing money date.
+     */
+    postedOnDocumentDate: (n: number): string =>
+      n === 1
+        ? 'O înregistrare a fost postată pe data documentului pentru că nu are dată de încasare sau de '
+          + 'plată înregistrată.'
+        : `${n} înregistrări au fost postate pe data documentului pentru că nu au dată de încasare sau de plată înregistrată.`,
+    yearFromMoneyDate: (year: number): string => `Anul ${year} cuprinde operațiunile cu dată de încasare sau de plată în ${year}.`,
     /**
      * TASK 10a (B-32). The RJIP is a leu register — its own header says `(RON)`. A record written in euro
      * has no leu amount until a BNR rate is attached to it, so it is left out and said out loud, never

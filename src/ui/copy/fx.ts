@@ -154,8 +154,9 @@ export const fx = {
     },
     /**
      * The anchor date named honestly. `collected` / `paid` are the money dates art. 9 alin. (3) lit. b) asks
-     * for; no screen can write them yet (PG-2), so a conversion anchored on the document date has to say so
-     * instead of reading as if a payment date were known.
+     * for; PG-2 gave the registers fields for both, so a conversion still anchored on the document date now
+     * means what it says — this record has no money date recorded — and the sentence says that instead of
+     * letting the anchor read as if a payment date were known.
      */
     anchoredOnDocumentDate:
       'Cursul este ancorat pe data documentului, pentru că înregistrarea nu are dată de încasare sau de '

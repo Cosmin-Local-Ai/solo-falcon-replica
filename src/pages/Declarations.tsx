@@ -4,6 +4,7 @@ import { useStore } from '../data/store';
 import { fmtDate, declarationNet, statusBadge } from '../data/types';
 import type { Declaration, DeclStatus } from '../data/types';
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
+import { localDateISO } from '../domain/date';
 import { copy, declarations as declarationsCopy, empty, fields, recordStatus, validation } from '../ui/copy';
 
 const TABS = [
@@ -28,7 +29,9 @@ function DeclForm({ initial, onSave, onClose }: {
     venituri: initial ? leiInputValue(initial.venituri) : '',
     cheltuieli: initial ? leiInputValue(initial.cheltuieli) : '',
     status: initial?.status ?? 'inregistrata',
-    dataInregistrare: initial?.dataInregistrare ?? new Date().toISOString().slice(0, 10),
+    // PG-2 (B-46): the third of the three UTC-seeded defaults. `new Date().toISOString().slice(0, 10)` is
+    // the UTC calendar day, so at 00:30 in Bucharest on 1 Jan 2027 this registered the day before.
+    dataInregistrare: initial?.dataInregistrare ?? localDateISO(),
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 

@@ -53,6 +53,8 @@ export {
   clients,
   declarations,
   recordStatus,
+  moneyDate,
+  fiscalDateSource,
   documents,
   eFactura,
 } from './records';
@@ -75,7 +77,8 @@ import { attention, estimateState } from './attention';
 import { settings } from './settings';
 import { onboarding } from './onboarding';
 import {
-  revenues, expenses, expenseCategoryLabels, clients, declarations, recordStatus, documents, eFactura,
+  revenues, expenses, expenseCategoryLabels, clients, declarations, recordStatus,
+  moneyDate, fiscalDateSource, documents, eFactura,
 } from './records';
 
 /** The whole layer as one namespaced object, for call sites that prefer `copy.x.y`. */
@@ -91,5 +94,6 @@ export const copy = {
   attention, estimateState,
   settings,
   onboarding,
-  revenues, expenses, expenseCategoryLabels, clients, declarations, recordStatus, documents, eFactura,
+  revenues, expenses, expenseCategoryLabels, clients, declarations, recordStatus,
+  moneyDate, fiscalDateSource, documents, eFactura,
 };

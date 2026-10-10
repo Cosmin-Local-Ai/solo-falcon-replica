@@ -5,8 +5,12 @@ import {
   docTipFromName, formatBytes, fmtDate, todayISO,
   downloadDataUrl, downloadText, total,
 } from '../data/types';
+import type { AppData } from '../data/types';
 import type { DocTypeCode, CompanyDocument, TaxStatement } from '../data/types';
-import { type Bani, formatBani, formatBaniRON, isRon, requireRon, sumBani, subBani } from '../domain/money';
+import { type Bani, formatBani, formatBaniRON, requireRon, sumBani, subBani } from '../domain/money';
+import { expenseFiscalDate, revenueFiscalDate } from '../domain/aggregation';
+import { localYear } from '../domain/date';
+import { getLedgerDisclosure, type LedgerDisclosure } from '../data/dashboard';
 import { Card, Badge, Modal, Empty } from '../components/ui';
 import { copy, documents as documentsCopy, expenses as expensesCopy } from '../ui/copy';
 
@@ -439,57 +443,127 @@ export function rjipCsv(
   return '\uFEFF' + lines.join('\r\n');
 }
 
-function ReportsTab() {
-  const { revenues, expenses, toast } = useStore();
-  const currentYear = new Date().getFullYear();
+/** One line of the register: the posting date, the document it rests on, and the two leu columns. */
+export interface RjipRow {
+  data: string;
+  descriere: string;
+  venit: Bani;
+  cheltuiala: Bani;
+}
 
+export interface RjipRegister {
+  rows: RjipRow[];
+  /**
+   * How many of this year's rows were posted on the document date because the record carries no money
+   * date. Stated on the surface, because the file itself cannot say it: the register has one date column
+   * and it is the money date.
+   */
+  postedOnDocumentDate: number;
+  /** How many of this year's records the leu register could not hold, because no rate converted them. */
+  unconverted: number;
+}
+
+/**
+ * PG-2 (B-66, B-70) — one fiscal year of the RJIP, built the way the register is required to be kept.
+ *
+ * OMFP 170/2015 cap. V, Secțiunea a 2-a: „fiecare operațiune economico-financiară se va înregistra în
+ * ordine cronologică, **în funcție de data efectuării operațiunii de încasare/plată**”, and the mandatory
+ * information list opens with „data efectuării operațiunii de încasare/plată”, followed by „denumirea și
+ * numărul documentului justificativ care stă la baza înregistrării” — the money date is the register's
+ * date column and the document is a separate cross-reference, which is what `descriere` carries. Before
+ * PG-2 this file filtered the year with `date.slice(0, 4)` and stamped the row with `r.date` / `e.date`,
+ * never reading `collected` / `paid`: a sum collected on 10 Jan 2027 was exported into the **2026**
+ * register, under a date on which nothing was collected. An exported register is a document the tax
+ * office reads, so that was not a display bug.
+ *
+ * The date now comes from `domain/aggregation.ts revenueFiscalDate` / `expenseFiscalDate` — the same two
+ * functions the estimate and the FX anchor use — so the register and the money figure cannot disagree
+ * about which year a record belongs to. The fallback to the document date is the Phase 9 decision, not a
+ * legal one (research/37 §4.4 found no statutory presumption that fills in a missing money date), and the
+ * surface says how many rows rest on it.
+ *
+ * The leu amounts come from `getLedgerDisclosure` rather than from a local `isRon` filter: a foreign
+ * record that a recorded BNR rate converted now enters the register at its lei amount, exactly as it
+ * enters the dashboard's totals, and a record with no rate stays out because a leu register has nowhere
+ * to put an unconverted sum. That was the one place in the app answering the currency question without
+ * the disclosure Phase 10c built.
+ */
+export function buildRjipRegister(data: AppData, year: number): RjipRegister {
+  const ledger = getLedgerDisclosure(data);
+  const convertedLei = new Map<string, Bani>(
+    ledger.conversions.map(c => [c.recordId, sumBani([c.netLei, c.vatLei])]),
+  );
+  const unconvertedIds = new Set(ledger.unconverted.map(u => u.id));
+  const yearKey = String(year);
+
+  /** The leu amount of a record, or `null` when the ledger holds none for it. Never a re-derivation. */
+  const leiOf = (record: { id: string }, fallback: () => Bani): Bani | null => {
+    const converted = convertedLei.get(record.id);
+    if (converted !== undefined) return converted;
+    return unconvertedIds.has(record.id) ? null : fallback();
+  };
+
+  const rows: RjipRow[] = [];
+  let postedOnDocumentDate = 0;
+  let unconverted = 0;
+
+  for (const r of data.revenues) {
+    const on = revenueFiscalDate(r);
+    if (on.slice(0, 4) !== yearKey) continue;
+    if (r.collected === undefined) postedOnDocumentDate += 1;
+    const lei = leiOf(r, () => requireRon(total(r), `revenue ${r.id}`));
+    if (lei === null) {
+      unconverted += 1;
+      continue;
+    }
+    rows.push({
+      data: on,
+      descriere: `${r.tip === 'factura' ? documentsCopy.rjip.invoiceKind.factura : documentsCopy.rjip.invoiceKind.nota} ${r.nr} – ${r.client}`,
+      venit: lei,
+      cheltuiala: 0 as Bani,
+    });
+  }
+  for (const e of data.expenses) {
+    const on = expenseFiscalDate(e);
+    if (on.slice(0, 4) !== yearKey) continue;
+    if (e.paid === undefined) postedOnDocumentDate += 1;
+    const lei = leiOf(e, () => requireRon(total(e), `expense ${e.id}`));
+    if (lei === null) {
+      unconverted += 1;
+      continue;
+    }
+    rows.push({
+      data: on,
+      descriere: `${e.tip === 'factura' ? expensesCopy.documentTypeCell.factura : expensesCopy.documentTypeCell.bon} ${e.nr} – ${e.furnizor}`,
+      venit: 0 as Bani,
+      cheltuiala: lei,
+    });
+  }
+  // „în ordine cronologică” — by the money date, which is the column the order is defined on.
+  return { rows: rows.sort((a, b) => a.data.localeCompare(b.data)), postedOnDocumentDate, unconverted };
+}
+
+function ReportsTab() {
+  const store = useStore();
+  const { revenues, expenses, toast } = store;
+  // PG-2: the year the selector opens on comes from the app's own clock seam, not from a raw
+  // `new Date().getFullYear()` beside it.
+  const currentYear = localYear();
+
+  // PG-2 (B-66): the years offered are the years the OPERATIONS fall into, which is the money date's
+  // year — a collection on 10 Jan 2027 has to make 2027 selectable, or the register for the year the
+  // money actually moved cannot be produced at all.
   const years = useMemo(() => {
     const ys = new Set<number>([currentYear]);
-    for (const r of revenues) ys.add(Number(r.date.slice(0, 4)));
-    for (const e of expenses) ys.add(Number(e.date.slice(0, 4)));
+    for (const r of revenues) ys.add(Number(revenueFiscalDate(r).slice(0, 4)));
+    for (const e of expenses) ys.add(Number(expenseFiscalDate(e).slice(0, 4)));
     return [...ys].sort((a, b) => b - a);
   }, [revenues, expenses, currentYear]);
 
   const [year, setYear] = useState(currentYear);
 
-  const rows = useMemo(() => {
-    const out: { data: string; descriere: string; venit: Bani; cheltuiala: Bani }[] = [];
-    for (const r of revenues) {
-      if (r.date.slice(0, 4) === String(year)) {
-        // TASK 10a: the RJIP is a leu register — its header says `(RON)`. A record in another currency has
-        // no leu amount here (no BNR rate is attached to it yet), so it is left out and counted, never
-        // exported at its cent count relabelled as lei. The count is rendered below.
-        if (!isRon(r.valoareFaraTva) || !isRon(r.tva)) continue;
-        out.push({
-          data: r.date,
-          descriere: `${r.tip === 'factura' ? documentsCopy.rjip.invoiceKind.factura : documentsCopy.rjip.invoiceKind.nota} ${r.nr} – ${r.client}`,
-          venit: requireRon(total(r), `revenue ${r.id}`),
-          cheltuiala: 0 as Bani,
-        });
-      }
-    }
-    for (const e of expenses) {
-      if (e.date.slice(0, 4) === String(year)) {
-        if (!isRon(e.valoareFaraTva) || !isRon(e.tva)) continue;
-        out.push({
-          data: e.date,
-          descriere: `${e.tip === 'factura' ? expensesCopy.documentTypeCell.factura : expensesCopy.documentTypeCell.bon} ${e.nr} – ${e.furnizor}`,
-          venit: 0 as Bani,
-          cheltuiala: requireRon(total(e), `expense ${e.id}`),
-        });
-      }
-    }
-    return out.sort((a, b) => a.data.localeCompare(b.data));
-  }, [revenues, expenses, year]);
-
-  // How many of this year's records the leu register could not hold, so the omission is visible.
-  const foreignCount = useMemo(
-    () =>
-      [...revenues, ...expenses].filter(
-        (r) => r.date.slice(0, 4) === String(year) && !isRon(r.valoareFaraTva),
-      ).length,
-    [revenues, expenses, year],
-  );
+  const register = useMemo(() => buildRjipRegister(store, year), [store, year]);
+  const { rows, postedOnDocumentDate, unconverted: foreignCount } = register;
 
   // Money arithmetic belongs in the domain, not in JSX: `rows.reduce((s, r) => s + r.venit, 0)` starts
   // from an unbranded 0 and widens every Bani addend to a plain number on the way through.
@@ -511,6 +585,12 @@ function ReportsTab() {
       <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 13.5 }}>
           {documentsCopy.rjip.description}
+          {/* PG-2: the register names the date column it posts on, and how much of this year rests on the
+              document-date fallback because no money date was recorded. */}
+          <div className="text-sm muted">{documentsCopy.rjip.postedOn}</div>
+          {postedOnDocumentDate > 0 && (
+            <div className="text-sm muted">{documentsCopy.rjip.postedOnDocumentDate(postedOnDocumentDate)}</div>
+          )}
           {foreignCount > 0 && (
             <div className="text-sm muted">{documentsCopy.rjip.foreignCurrencyExcluded(foreignCount)}</div>
           )}

@@ -3,10 +3,13 @@ import { ENTRY_CURRENCIES, formatMoney, moneyInputValue, parseMoneyInput, type C
 import { useStore } from '../data/store';
 import { fmtDate, total, statusBadge } from '../data/types';
 import type { Revenue } from '../data/types';
+import { revenueFiscalDate, type FiscalDateField } from '../domain/aggregation';
+import { isoCalendarDateProblem, isoCalendarDateProblemText, localDateISO } from '../domain/date';
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
+import { FiscalDateNote } from '../components/ui/FiscalDateNote';
 import { getLedgerDisclosure } from '../data/dashboard';
 import type { CoverageReason } from '../domain/estimateBasis';
-import { copy, empty, fields, recordStatus, revenues as revenuesCopy, validation } from '../ui/copy';
+import { copy, empty, fields, moneyDate, recordStatus, revenues as revenuesCopy, validation } from '../ui/copy';
 
 // Canonical route hash keys (English) mapped to the Romanian data statuses.
 const TABS = [
@@ -46,7 +49,15 @@ function RevenueForm({ initial, onSave, onClose }: {
   const [f, setF] = useState({
     tip: initial?.tip ?? 'factura',
     nr: initial?.nr ?? '',
-    date: initial?.date ?? new Date().toISOString().slice(0, 10),
+    // PG-2 (B-46): the document date used to default to `new Date().toISOString().slice(0, 10)`, which is
+    // the UTC calendar day. At 00:30 in Bucharest on 1 Jan 2027 that seeded 31 Dec 2026 — a new record
+    // born in the wrong fiscal year. `localDateISO()` reads the Romanian calendar day through the one
+    // clock seam (`domain/date.ts now()`), which is what every other date default in the app already does.
+    date: initial?.date ?? localDateISO(),
+    // PG-2: the money date is optional and stays optional. An empty input is stored as an ABSENT field,
+    // never as `''` — an empty string fails the load gate and would quarantine the payload, and inventing
+    // a collection date nobody recorded would mint a legal fact (research/37 §4.4).
+    collected: initial?.collected ?? '',
     client: initial?.client ?? '',
     cui: initial?.cui ?? '',
     // `moneyInputValue`, not `String(...)`: the stored amount is integer minor units, and an input is a screen.
@@ -67,6 +78,10 @@ function RevenueForm({ initial, onSave, onClose }: {
     const e: Record<string, string> = {};
     if (!f.nr.trim()) e.nr = validation.documentNumberRequired;
     if (!f.date) e.date = validation.dateRequired;
+    // The store refuses an unusable calendar date on the write path (`rejectInvalidDates`), but it refuses
+    // the whole record. Checking here keeps the modal open and points at the field that is wrong.
+    const collectedProblem = f.collected === '' ? null : isoCalendarDateProblem(f.collected);
+    if (collectedProblem !== null) e.collected = isoCalendarDateProblemText(collectedProblem);
     if (!f.client.trim()) e.client = validation.clientRequired;
     // Phase 10: the form speaks major units, storage speaks minor units. `parseMoneyInput` is the one
     // boundary, and it REFUSES sub-minor-unit precision (`85.555`) instead of rounding it — rounding on the
@@ -84,6 +99,7 @@ function RevenueForm({ initial, onSave, onClose }: {
     if (v === null || t === null) return;
     onSave({
       tip: f.tip as Revenue['tip'], nr: f.nr, date: f.date, client: f.client, cui: f.cui,
+      collected: f.collected === '' ? undefined : f.collected,
       valoareFaraTva: v, tva: t, status: f.status as Revenue['status'],
       statusDetail: f.statusDetail || undefined,
       eFacturaStatus: f.status === 'inregistrata' ? 'Acceptată' : f.status === 'in-asteptare' ? 'În așteptare' : 'Respinsă',
@@ -116,6 +132,23 @@ function RevenueForm({ initial, onSave, onClose }: {
           <label>{fields.date} <span className="req">*</span></label>
           <input type="date" className={errors.date ? 'invalid' : ''} value={f.date} onChange={e => set('date', e.target.value)} />
           {errors.date && <span className="error">{errors.date}</span>}
+        </div>
+        {/* PG-2 — the collection date, the field the fiscal year actually turns on (CF art. 68 alin. (2)
+            lit. a), „sumele încasate”). It is optional on purpose: while the money has not moved there is
+            no collection to record, and the sentences below are the ones research/37 §5 cleared — the
+            document date is not claimed to set the fiscal year, and an empty field is not treated as one. */}
+        <div className="field">
+          <label>{moneyDate.revenueField} <span className="muted">{moneyDate.optionalTag}</span></label>
+          <input
+            type="date"
+            name="revenue-collected"
+            className={errors.collected ? 'invalid' : ''}
+            value={f.collected}
+            onChange={e => set('collected', e.target.value)}
+          />
+          {errors.collected && <span className="error">{errors.collected}</span>}
+          <span className="text-sm muted">{moneyDate.revenueHint}</span>
+          <span className="text-sm muted">{moneyDate.revenueEmpty}</span>
         </div>
         <div className="field">
           <label>{revenuesCopy.columns.client} <span className="req">*</span></label>
@@ -283,7 +316,15 @@ export default function Revenues({ initialTab, onTabChange, focusRecord }: Reven
                     <td>{r.tip === 'factura' ? revenuesCopy.documentTypeCell.factura : revenuesCopy.documentTypeCell.nota}</td>
                     <td>{r.client}</td>
                     <td className="muted">{r.cui}</td>
-                    <td>{fmtDate(r.date)}</td>
+                    <td>
+                      {fmtDate(r.date)}
+                      <FiscalDateNote
+                        kind="revenue"
+                        source={(r.collected !== undefined ? 'collected' : 'date') as FiscalDateField}
+                        fiscalDate={revenueFiscalDate(r)}
+                        documentDate={r.date}
+                      />
+                    </td>
                     <td>{r.valoareFaraTva.currency}</td>
                     <td className="amount">{formatMoney(r.valoareFaraTva)}</td>
                     <td className="amount">{formatMoney(r.tva)}</td>

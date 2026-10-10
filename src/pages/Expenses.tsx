@@ -5,13 +5,15 @@ import { fmtDate, sumTotalsByCurrency, total, statusBadge } from '../data/types'
 import type { Expense } from '../data/types';
 import { EXPENSE_CATEGORIES } from '../domain/fiscal/deductibility';
 import { selectDeductibleExpenses, selectEstimateOperands, coverageReasonForExclusion, type CoverageReason } from '../domain/estimateBasis';
+import { expenseFiscalDate, type FiscalDateField } from '../domain/aggregation';
 import { selectRuleSet } from '../domain/fiscal';
 import type { FiscalRule } from '../domain/fiscal/rules';
-import { localDateISO, now } from '../domain/date';
+import { isoCalendarDateProblem, isoCalendarDateProblemText, localDateISO, now } from '../domain/date';
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
 import { Disclosure } from '../components/ui/Disclosure';
+import { FiscalDateNote } from '../components/ui/FiscalDateNote';
 import { InterpretationNote } from '../components/ui/InterpretationNote';
-import { copy, empty, expenseCategoryLabels, expenses as expensesCopy, fields, recordStatus, validation } from '../ui/copy';
+import { copy, empty, expenseCategoryLabels, expenses as expensesCopy, fields, moneyDate, recordStatus, validation } from '../ui/copy';
 
 /**
  * TASK 6: the rules in force for the profile's fiscal year, selected rather than imported.
@@ -62,7 +64,13 @@ function ExpenseForm({ initial, onSave, onClose }: {
   const [f, setF] = useState({
     tip: initial?.tip ?? 'factura',
     nr: initial?.nr ?? '',
-    date: initial?.date ?? new Date().toISOString().slice(0, 10),
+    // PG-2 (B-46): see the same fix in `Revenues.tsx` — the UTC calendar day used to seed this field, so a
+    // record created in the first two hours of a Bucharest new year was born in the year before it.
+    date: initial?.date ?? localDateISO(),
+    // PG-2: the payment date, optional and stored as an absent field when empty. CF art. 68 alin. (4) lit. b)
+    // admits a cheltuială „al anului în cursul căruia au fost plătite”, so this is the date the deduction
+    // turns on; an unpaid expense is not deductible in the document year, and nothing here invents one.
+    paid: initial?.paid ?? '',
     furnizor: initial?.furnizor ?? '',
     cui: initial?.cui ?? '',
     // `moneyInputValue`, not `String(...)`: stored money is integer minor units; an input is a screen.
@@ -87,6 +95,8 @@ function ExpenseForm({ initial, onSave, onClose }: {
     const e: Record<string, string> = {};
     if (!f.nr.trim()) e.nr = validation.documentNumberRequired;
     if (!f.date) e.date = validation.dateRequired;
+    const paidProblem = f.paid === '' ? null : isoCalendarDateProblem(f.paid);
+    if (paidProblem !== null) e.paid = isoCalendarDateProblemText(paidProblem);
     if (!f.furnizor.trim()) e.furnizor = validation.providerRequired;
     // Phase 10: form in major units, storage in minor units; `parseMoneyInput` refuses sub-minor-unit
     // precision rather than rounding. TASK 10a: it parses in the currency the form is set to.
@@ -99,6 +109,7 @@ function ExpenseForm({ initial, onSave, onClose }: {
     if (v === null || t === null) return; // unreachable; narrows without a cast
     onSave({
       tip: f.tip as Expense['tip'], nr: f.nr, date: f.date, furnizor: f.furnizor, cui: f.cui,
+      paid: f.paid === '' ? undefined : f.paid,
       valoareFaraTva: v, tva: t, status: f.status as Expense['status'],
       statusDetail: f.statusDetail || undefined,
       category: f.category === '' ? undefined : (f.category as Expense['category']),
@@ -131,6 +142,22 @@ function ExpenseForm({ initial, onSave, onClose }: {
           <label>{fields.date} <span className="req">*</span></label>
           <input type="date" className={errors.date ? 'invalid' : ''} value={f.date} onChange={e => set('date', e.target.value)} />
           {errors.date && <span className="error">{errors.date}</span>}
+        </div>
+        {/* PG-2 — the payment date. Optional, and the two sentences under it are the ones research/37 §5
+            cleared: completing it moves the sum to the year the money moved, and leaving it empty is a
+            legal state (no payment, no deduction), not an unfinished field. */}
+        <div className="field">
+          <label>{moneyDate.expenseField} <span className="muted">{moneyDate.optionalTag}</span></label>
+          <input
+            type="date"
+            name="expense-paid"
+            className={errors.paid ? 'invalid' : ''}
+            value={f.paid}
+            onChange={e => set('paid', e.target.value)}
+          />
+          {errors.paid && <span className="error">{errors.paid}</span>}
+          <span className="text-sm muted">{moneyDate.expenseHint}</span>
+          <span className="text-sm muted">{moneyDate.expenseEmpty}</span>
         </div>
         <div className="field">
           <label>{expensesCopy.columns.provider} <span className="req">*</span></label>
@@ -468,7 +495,15 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
                     <td>{e.tip === 'factura' ? expensesCopy.documentTypeCell.factura : expensesCopy.documentTypeCell.bon}</td>
                     <td>{e.furnizor}</td>
                     <td className="muted">{e.cui}</td>
-                    <td>{fmtDate(e.date)}</td>
+                    <td>
+                      {fmtDate(e.date)}
+                      <FiscalDateNote
+                        kind="expense"
+                        source={(e.paid !== undefined ? 'paid' : 'date') as FiscalDateField}
+                        fiscalDate={expenseFiscalDate(e)}
+                        documentDate={e.date}
+                      />
+                    </td>
                     <td>{e.valoareFaraTva.currency}</td>
                     <td className="amount">{formatMoney(e.valoareFaraTva)}</td>
                     <td className="amount">{formatMoney(e.tva)}</td>

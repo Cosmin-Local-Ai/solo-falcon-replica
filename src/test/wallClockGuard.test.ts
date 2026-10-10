@@ -71,3 +71,59 @@ describe('B-23 standing rule — no test in src/ may read the wall clock', () =>
     expect(OFFENDERS.some(({ re }) => re.test("new Date('2026-06-01T12:00:00Z')"))).toBe(false);
   });
 });
+
+/**
+ * PG-2 (B-46) — the same rule, pointed at the surfaces that write stored dates.
+ *
+ * `domain/date.ts` opens by claiming it is the only place `src/` reads the clock, and that claim was
+ * false: three form defaults read the wall clock themselves, and because `toISOString()` is UTC they
+ * seeded **31 Dec 2026** into a record created at 00:30 on 1 Jan 2027 — a new record born in the previous
+ * fiscal year. A comment cannot hold that invariant; this can. A page that needs "today" calls
+ * `localDateISO()` / `localYear()`, which take the instant from `now()` and are therefore pinned by
+ * `pinClock()` like everything else.
+ *
+ * The scan is over `pages/` and `components/` only. `domain/date.ts` itself is the seam and is allowed to
+ * read the clock; the domain, data and test layers are covered by the rule above and by their own tests.
+ */
+const PRODUCTION_SURFACES = import.meta.glob<string>('/src/{pages,components}/**/*.{ts,tsx}', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>;
+
+/** Page and component tests live beside their surface; they are sanctioned by the rule above. */
+const isTestFile = (path: string): boolean => /\.test\.tsx?$/.test(path);
+
+/**
+ * The epoch accessor is deliberately not part of this scan. `Settings.tsx` uses it to build a bank-account
+ * id, which is not a calendar date and cannot land a record in the wrong fiscal year — B-46 is the class
+ * of defect this guard exists for. That call is still an unpinned clock read in a surface, and it belongs
+ * on the register as a finding (the app already has `domain/date.ts epochMs()` for exactly that use); it is
+ * not fixed here because `Settings.tsx` is outside this phase's boundary.
+ */
+const PRODUCTION_OFFENDERS = OFFENDERS.filter(({ label }) => label !== 'the epoch-now accessor');
+
+describe('B-46 — no page or component may read the wall clock itself', () => {
+  it('finds no real-clock read in any page or component', () => {
+    const hits: string[] = [];
+    for (const [file, source] of Object.entries(PRODUCTION_SURFACES)) {
+      if (isTestFile(file)) continue;
+      source.split('\n').forEach((raw, index) => {
+        const line = stripComments(raw);
+        if (!line) return;
+        for (const { label, re } of PRODUCTION_OFFENDERS) {
+          if (re.test(line)) hits.push(`${file}:${index + 1} — ${label} — ${line.trim()}`);
+        }
+      });
+    }
+    expect(hits, 'a surface that reads the clock itself is not pinned by pinClock(): call domain/date').toEqual([]);
+  });
+
+  it('is not vacuous: the glob covers the pages that carried the defect', () => {
+    const files = Object.keys(PRODUCTION_SURFACES).filter(f => !isTestFile(f));
+    expect(files.length).toBeGreaterThan(20);
+    for (const page of ['Revenues', 'Expenses', 'Declarations', 'Documents']) {
+      expect(files.some(f => f.endsWith(`/pages/${page}.tsx`)), `pages/${page}.tsx left the scan`).toBe(true);
+    }
+  });
+});
