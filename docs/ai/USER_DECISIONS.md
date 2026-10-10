@@ -183,4 +183,16 @@ Full report and my in-tree verification of every claim: `docs/ai/notes/romanian_
 
 ## Still open — to be put to the user
 
-**D-6** who owns the disclaimer and terms wording. **D-7** calculation-sheet export format: print stylesheet, PDF, or JSON. **D-NORMA-1** is decided in principle (support normă de venit before launch) but its schedule waits on the norm-table research.
+**D-6** who owns the disclaimer and terms wording. **D-7** calculation-sheet export format: print stylesheet, PDF, or JSON.
+
+### D-NORMA-2 — Normă de venit: the cost is now known, and it was not known when D-NORMA-1 was decided
+**D-NORMA-1** chose "support it before launch, not a refusal screen" on 2026-10-10. At that moment nobody had verified that the numbers existed anywhere citable, and **D-NORMA-1's own text says the tables are "reissued annually by ministerial order" — which `research/30` proved false.** The research is now done and the cost is attached, so the decision should be re-taken with the number in front of it rather than inherited.
+
+**What building it actually means** (`research/31`): a **42-table county dataset**, not one national table — 128 nomenclator positions × 42 județe × 1-18 locality columns, **not published in Monitorul Oficial**, cited per county decision, with **only 13 of 42 counties carrying a machine-readable act number**. Plus a manual tail: **8 counties unreadable** (7 scans + 1 corrupt text layer) ≈ **1,000-1,300 figures** to OCR or transcribe; **12 counties with deficient correction coefficients** ≈ **~300 coefficient rules** to hand-encode, each county with its own criteria vocabulary and stacking rule; and a **hand-built locality taxonomy** with no official source to derive it from. Re-annual maintenance: 42 county decisions reissued every Q4, and the ANAF index itself has **7 dead links** today.
+
+**The three options, with the consequence of each stated:**
+1. **Build it fully.** 12H becomes a data-engineering phase with a manual tail and a yearly maintenance obligation. It is the only option that is legally complete for a norm-payer.
+2. **Build a partial, honest version:** the 34 readable counties, the statutory floor (12 × SM = 48.600 lei, which is the dominant 2026 value and is citable to art. 69 alin. (3)), and an explicit "this county's norm is not in the app — see the ANAF decision" state for the rest. Legally incomplete by county, but every figure it does show is cited.
+3. **Reverse D-NORMA-1 and refuse the regime explicitly.** `research/30` §7 already drafts what the refusal must say, including everything the user still owes. This is the option the project originally chose deliberately in Phase 6.
+
+**What is not in question:** whichever option is chosen, the app must not compute sistem real for a profile the law puts on normă de venit. That is a silent wrong number, not a refusal — and it is currently what the app does.
