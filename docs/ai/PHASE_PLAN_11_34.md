@@ -409,3 +409,10 @@ Unchanged and not negotiable: implementation Workers run sequentially, one engin
 
 ### 12.7 The release gate is a living document
 **`docs/ai/PG13_GO_NO_GO.md`** accumulates from PG-0 onward rather than being re-derived at the end: every acceptance criterion that passed, every defect still open, every REVIEW_REQUIRED that a user could trip, every decision PG-13 needs. A gate written in the last week of a project is a gate that finds nothing.
+
+### 12.8 Verify every premise against the register before a brief goes out — **user decision, 2026-10-10**
+**Three researchers in a row corrected a premise written into their own brief:** R-E (art. 61 has **ten** letters, not eight; art. 155 alin. (1) runs a)-m) and is the **CASS** list — CAS is art. 137 alin. (1)); R-D (protocol is **2 %** under art. 68 alin. (5) lit. b), not 50 %; **art. 297 alin. (1)** is „Dreptul de deducere ia naștere la momentul exigibilității taxei”, not a registration gate; **art. 311** is the travel-agent regime, not regularizare); and R-C corrected six items in its own lost draft. In two of those cases **the code was already right and only the brief was wrong** — `EXPENSE_PROTOCOL_2026` states the 2 % cap and expressly says the corporate art. 25 caps are not this regime, and `VAT_REGISTRATION_DEADLINE_2026` already encodes „cel târziu la data depășirii plafonului” with `offset_days: 0`.
+
+**The rule:** before a brief is sent, every stated fact in it is checked against `STATE.md` and `PHASE_PLAN_11_34.md`, and each one carries its source. A premise handed to a researcher that is stale does more damage than no premise, because the researcher builds on it and the error leaves the building wearing a citation.
+
+**What this does not mean:** briefs are **not** split into one question each — the user kept bundled briefs deliberately. Bundling is fine; unverified premises are not. The overlap that bundling creates is acceptable **when the shared ground is stated in the brief** so the researcher knows what has already been answered and does not re-derive it.
