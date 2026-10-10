@@ -75,9 +75,35 @@ The Orchestrator's language audit was **wrong three times**; the user corrected 
 
 ---
 
+## 2026-10-10 — the seven decisions from `PHASE_PLAN_11_34.md` §9
+
+Asked after the independent audit. Six settled here; the seventh (wording) is pending the user's numbers.
+
+### D-SEED-2 — Seed scenario: both, and seed data is **test-only**
+**Chosen:** option 3 — a 2026-start PFA as the product scenario, the 2020 PFA surviving as a test fixture. The user's framing: *“the way I understand it is that Seed data is only for tests.”*
+**Consequence, recorded before implementation:** combined with D-RUN-1 below, `seedData` should not be what a production install receives at all. `store.tsx:166-167` returns `seedData` for a first run; that changes to an empty dataset, and `data/seed.ts` becomes fixtures for tests and for the persona demo. **This is a bigger change than a seed edit** — anything that reads seed figures as live app state (the pinned deductible 120,00 / 144,00 lei, VNA 9.096,00, hero 51.510 lei, e2e clock 3.249,00) is pinned through the **test** path, so the figures survive; what dies is the shipped demo bundle. Phase 11 must prove that, not assume it.
+
+### D-RUN-1 — First run: **start empty**
+**Chosen:** option 1. No preloaded data, no banner-on-demo compromise. Closes **D1** at its root rather than papering over it.
+**Deferred by the user, to be specced separately:** a **“Get started” flow or demo showing how the app looks for different kinds of personas**. That is a deliberate, user-entered experience — not silently preloaded records — and belongs to Phase 26, not Phase 11. It is the reason the 2026-start scenario and the 2020 PFA both stay useful.
+
+### D-SCOPE-2 — Supported scope: **broad, with rigour**
+**Chosen:** option 3 — attempt every profile, refuse only where a fact is missing, *“with rigorous planning and execution to remove the risks.”*
+**What that obliges, and it is not optional:** every unsupported case needs an explicit refusal state that is **built and tested**, not assumed. That makes regression scenarios 4 (activity-specific rules), 6 (additional income) and 8 (VAT periodicity) in `PHASE_PLAN_11_34.md` §8 **acceptance criteria**, and it is why 12E, 12F and 13's completion gate cannot be deferred. A broad scope with untested refusals is exactly the confident-wrong-number failure this project has spent the round eliminating.
+**Still true:** Q-VAT-PERIOD is a missing *input*, not a missing source, so 18B is closed by collecting the facts or refusing — not by more research.
+
+### D-SEV-1 — Severity vocabulary: **map back onto `info | warning | danger`**
+**Chosen:** option 2, reversing the roadmap conflict C1 in the roadmap's favour.
+**Implementation constraint the Worker must honour:** TASK 8 deleted the `high→danger / medium→warning / low→info` translation because a single three-value field fused **legal status** with **urgency** and could not express “legally load-bearing, not urgent”. That distinction is a correctness property, not a style choice. So: the **domain keeps its dimensions**, and the three-word vocabulary is applied at the **display boundary**. Mapping at the boundary satisfies the roadmap text without re-fusing the two ideas inside the engine. If a case cannot be expressed in three words, the row shows the word **and** the reason — the word never carries the legal meaning alone.
+
+### D-VER-1 — Rule edition numbers: **bump going forward, never back-fill**
+Asked a second time in non-technical terms (fingerprint vs a typed edition number) at the user's request; they chose **“start edition numbers from now on.”**
+**Meaning:** all 48 rules stay at `version: 1` — the Phase 3/4/5 corrections happened before content addressing existed and minting superseded editions for them would fabricate history. **From the next content change onward**, a rule change issues a superseded release and bumps `version`. The content digest remains the identity that makes an old snapshot replayable; the edition number is a human-readable trail that is only ever written truthfully and only at the moment of change. Closes roadmap conflict C2 without the back-fill the roadmap's wording invited.
+
+### D-DOCS-1 — Phase documents stay in `docs/ai/phases/`
+**Chosen:** option 1. `docs/ai/steps/` is a 33-file frozen archive whose numbering already means something else (`steps/15_tax_engine.md`); writing `steps/15_calculation_snapshots.md` there would overwrite an unrelated frozen record. The roadmap's `steps/NN_<name>.md` filenames are treated as **labels**, not paths. Closes C3.
+
+---
+
 ## Still open — to be put to the user
-1. **Severity vocabulary** — keep `none | low | medium | high` (what ships) or map back onto `info | warning | danger` as Phase 19 asks. Both cannot exist.
-2. **Rule `version` numbers** — the roadmap wants revisions bumped off `version: 1`; TASK 6 left all 48 at 1 because bumping them would invent unreconstructable history.
-3. **Phase docs location** — `docs/ai/phases/` (current) vs the roadmap's `docs/ai/steps/NN_*.md`, which would overwrite unrelated frozen files.
-4. **First-run seed (D1 in the mapping)** — a clean install is handed `seedData` and never told. Should it start empty, or with a clearly-labelled demo the user chooses?
-5. **The nine parked Romanian wording calls** in `phases/21_language_layer.md` §13.
+1. **The nine parked Romanian wording calls** in `phases/21_language_layer.md` §13. **Call 1 is agreed** (`nedeasă` → `nedecisă`). Calls 2–9 were laid out in chat for a numbered answer; the ask_user multi-select did not render for this user, so the answer comes as free text. **Until the numbers arrive, 2–9 stay exactly as written.**

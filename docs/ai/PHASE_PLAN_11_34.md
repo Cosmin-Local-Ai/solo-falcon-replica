@@ -286,17 +286,21 @@ Phases in **bold** are new, inserted by the audit. The rest keep the user's numb
 
 ---
 
-## 9. Open decisions — blocked phases
+## 9. Open decisions — **resolved 2026-10-10**, except the wording calls
 
-| # | Decision | Blocks |
-|---|---|---|
-| 1 | **Severity vocabulary**: keep `none \| low \| medium \| high` (what ships) or map back to `info \| warning \| danger` as Phase 19 asks. Both cannot exist. | 19, 24 |
-| 2 | **Rule `version` numbers**: bump revisions off 1, or keep TASK 6's refusal to mint unreconstructable history? | 15 |
-| 3 | **Phase docs location**: `docs/ai/phases/` (current) or the roadmap's `docs/ai/steps/NN_*.md`, which would overwrite unrelated frozen files. | all |
-| 4 | **First run**: start empty, or start with a clearly-labelled demo the user chooses? | 11, 26 |
-| 5 | **Seed scenario**: 2020-start PFA with a 2025 filing, or a 2026-start PFA with no prior history? | 11 |
-| 6 | **Supported scope for the first cohort**: which profiles are genuinely supported, and how is an unsupported one excluded rather than mis-served? | 12E, 12F, 13, 34 |
-| 7 | **The nine parked Romanian wording calls** in `phases/21_language_layer.md` §13. | 28 |
+Recorded in full in `USER_DECISIONS.md` as D-SEED-2, D-RUN-1, D-SCOPE-2, D-SEV-1, D-VER-1, D-DOCS-1.
+
+| # | Decision | Answer | What it obliges |
+|---|---|---|---|
+| 1 | Severity vocabulary | **`info \| warning \| danger`** at the display boundary | The domain keeps legal status and urgency **separate**; the three words are applied at render. TASK 8's distinction must not be re-fused inside the engine |
+| 2 | Rule edition numbers | **Bump going forward, never back-fill** | All 48 stay at `version: 1`; the next content change issues a superseded release. The digest remains the identity |
+| 3 | Phase docs location | **`docs/ai/phases/`** | The roadmap's `steps/NN_*.md` names are labels, not paths. The frozen archive is never written to |
+| 4 | First run | **Start empty** | `store.tsx:166-167` stops handing out `seedData`. Closes D1 at the root. The “Get started” persona demo is a **Phase 26** feature, user-entered, not preloaded |
+| 5 | Seed scenario | **Both** — 2026 starter as the product scenario, 2020 PFA as a test fixture | Seed data becomes **test-only**. The pinned money figures survive because they are pinned through the test path; what goes away is the shipped demo bundle. Phase 11 must prove that, not assume it |
+| 6 | Supported scope | **Broad — attempt every profile, refuse where a fact is missing**, “with rigorous planning and execution” | Refusals must be **built and tested**. Regression scenarios 4, 6 and 8 in §8 become acceptance criteria, not nice-to-haves. 12E, 12F and 13's gate cannot slip |
+| 7 | Nine Romanian wording calls | **Pending** — call 1 agreed (`nedeasă` → `nedecisă`); 2–9 laid out in chat for a numbered answer | Until the numbers arrive, 2–9 stay exactly as written |
+
+**Phase 11 is unblocked.** Its shape is now defined: a first run returns an empty dataset, `data/seed.ts` becomes test fixtures, the 2026-start scenario is the product story, and the 2020 PFA survives as a fixture for Phases 31–32.
 
 ---
 
