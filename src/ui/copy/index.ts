@@ -45,6 +45,7 @@ export { fx } from './fx';
 export { provenance, severity } from './provenance';
 export { attention, estimateState } from './attention';
 export { settings } from './settings';
+export { onboarding } from './onboarding';
 export {
   revenues,
   expenses,
@@ -72,6 +73,7 @@ import { fx } from './fx';
 import { provenance, severity } from './provenance';
 import { attention, estimateState } from './attention';
 import { settings } from './settings';
+import { onboarding } from './onboarding';
 import {
   revenues, expenses, expenseCategoryLabels, clients, declarations, recordStatus, documents, eFactura,
 } from './records';
@@ -88,5 +90,6 @@ export const copy = {
   provenance, severity,
   attention, estimateState,
   settings,
+  onboarding,
   revenues, expenses, expenseCategoryLabels, clients, declarations, recordStatus, documents, eFactura,
 };

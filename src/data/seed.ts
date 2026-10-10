@@ -1,16 +1,136 @@
-import type { AppData } from './types';
+/**
+ * Phase 11 / PG-3 — this module holds two things, and the difference between them is the whole point.
+ *
+ *   `emptyData()`  what a first run gets. No records, no name, no start date. It is the initial state
+ *                  of a fresh install, and it is what a rejected payload falls back to.
+ *   `seedData`     a FIXTURE. A 2026-start PFA with a coherent year, used by the test suite and by the
+ *                  opt-in demo sandbox. It is never a first run (D-SEED-2, D-RUN-1).
+ *
+ * Before Phase 11 the second one was also the first: `store.tsx` handed a fresh browser `seedData` with
+ * `dataOrigin: 'seed'`, and nothing rendered a banner for it, so a new install opened on "Popescu Andrei"
+ * with four invoices nobody filed. That is defect D1, and it is closed here rather than labelled.
+ *
+ * The fixture is a **2026** PFA: `pfaStartYear: 2026`, `pfaStartDate: '2026-01-19'`, and every recorded
+ * document dated after that start date. It carries no prior-year filing, because a PFA that started in
+ * 2026 has no prior year to file for, and it carries no SRL remnant, because every rule, deadline,
+ * threshold and estimate in this app resolves it as a persoană fizică autorizată.
+ *
+ * It carries **no FX rate**. A rate is a legal datum — the rate a conversion uses has a source, a series
+ * and a date it anchors to — and a seeded rate would be a fabricated one. That is why `fxRates` is absent
+ * here rather than empty, and why no migration step backfills it either.
+ */
+import type { AppData, SettingsState } from './types';
+import { createDefaultProfile } from '../domain/profile';
 import { lei, ron } from '../domain/money';
 
+/** The empty identity block. Every field is present and empty: absence, not a value. */
+const EMPTY_IDENTITY = {
+  nume: '',
+  cnp: '',
+  adresa: '',
+  telefon: '',
+  email: '',
+  denumire: '',
+  cui: '',
+  formaJuridica: '',
+  numarRegComert: '',
+  adresaSocietate: '',
+  telefonSocietate: '',
+  emailSocietate: '',
+  contBancar: '',
+  banca: '',
+  codTvaIntra: '',
+  caen: [],
+  mentiuniFactura: '',
+};
+
+/**
+ * The settings block of a first run. `company` and `personal` are the legacy blocks kept parseable for
+ * pre-Phase-7 payloads (D-1); on a first run they hold nothing, and nothing reads them — the live
+ * identity is `profile.identity`.
+ *
+ * `cotaTva` is an inert settings field: grep finds no reader in the calculation path, only the schema
+ * bound and the schema tests. It is carried at the same value the shipped fixture used so that turning a
+ * first run into an empty one does not also mint a new rate nobody asked for.
+ */
+const EMPTY_SETTINGS: SettingsState = {
+  cotaTva: 9,
+  company: {
+    denumire: '',
+    cui: '',
+    numarRegComert: '',
+    adresa: '',
+    cnp: '',
+    formaJuridica: '',
+    codFiscal: '',
+    codCAEN: '',
+    'regComerț': '',
+    telefon: '',
+    email: '',
+    contBancar: '',
+    banca: '',
+    caen: [],
+  },
+  personal: { nume: '', cnp: '', adresa: '', telefon: '', email: '' },
+  bankAccounts: [],
+  eFactura: { trimitere: 'manual', dateContact: '' },
+};
+
+/**
+ * The dataset a fresh install starts from: one default profile with no facts in it, and nothing else.
+ *
+ * A FUNCTION, not a module constant, on purpose. `createDefaultProfile` derives `pfaStartYear`,
+ * `fiscalYear` and `updatedAt` from the clock, and a module-level constant would freeze them at import
+ * time — before any test has pinned the clock. Called from `loadInitial()`, it reads the clock at the
+ * moment the app loads, which is the fact being modelled.
+ */
+export function emptyData(): AppData {
+  return {
+    profile: createDefaultProfile({ identity: { ...EMPTY_IDENTITY } }),
+    revenues: [],
+    expenses: [],
+    clients: [],
+    declarations: [],
+    documents: [],
+    companyDocs: { im: [], cs: [], tva: [], facturi: [] },
+    statements: [],
+    snapshots: [],
+    settings: {
+      ...EMPTY_SETTINGS,
+      bankAccounts: [],
+      eFactura: { ...EMPTY_SETTINGS.eFactura },
+      company: { ...EMPTY_SETTINGS.company, caen: [] },
+      personal: { ...EMPTY_SETTINGS.personal },
+    },
+    // `null` is „no reserve recorded”, not zero. A first run has recorded nothing.
+    reservedAmount: null,
+    // `fxRates` is deliberately absent rather than `[]`: „no rate has been recorded" and „rates were
+    // fetched and none exist" are different facts, and a seeded rate would be a fabricated legal figure.
+  };
+}
+
+/**
+ * The demo fixture — a 2026-start PFA with a coherent year.
+ *
+ * TEST FIXTURE and OPT-IN SANDBOX ONLY. It is not a first run and it is not what a fresh install
+ * receives; see the header. Everything downstream that pins a figure (the deductible 120,00 / 144,00 lei,
+ * VNA 9.096,00, the e2e 3.249,00 lei) reaches these records through the test path, so the figures survive
+ * the separation — what dies is the shipped demo bundle.
+ */
 export const seedData: AppData = {
   profile: {
     id: 'profile-1',
-    pfaStartYear: 2020,
+    // Phase 11 (PG-3): the fixture is the product scenario, not a 2020 PFA. `pfaStartYear` and
+    // `pfaStartDate` now agree with each other and with every document below — the start date is the
+    // fact the engine reads for the CF art. 118 alin. (3) fraction-of-a-year case, and a start year with
+    // no date behind it is the half-fact Phase 12 will need.
+    pfaStartYear: 2026,
+    pfaStartDate: '2026-01-19',
     fiscalYear: 2026,
     regime: 'impozit_pe_venit',
-    // Phase 7 (D-1): CAEN lives in `identity.caen`; the deprecated `profile.caen`
-    // string is not seeded any more.
+    // Phase 7 (D-1): CAEN lives in `identity.caen`; the deprecated `profile.caen` string is not seeded.
     salaryStatus: 'nu',
-    // TASK 5: the pension facts are split. The seed records the STATUS (the CAS key under CF art. 150
+    // TASK 5: the pension facts are split. The fixture records the STATUS (the CAS key under CF art. 150
     // alin. (1)) and deliberately records NO receipt fact: whether pension sums were received in 2026 is
     // something this demo user never stated, and inventing it would either grant or refuse the art. 174
     // alin. (7) lit. c) relief out of nothing.
@@ -18,6 +138,9 @@ export const seedData: AppData = {
     otherIncome: [],
     socialInsuranceStatus: 'obligatoriu',
     vatExempt: false,
+    // No `vatExceedanceDate`: this PFA is VAT-registered from the start rather than by exceeding the
+    // art. 310 alin. (1) ceiling, so there is no exceedance date to record. The absence is the honest
+    // state and `VAT_REGISTRATION_DEADLINE_2026` correctly resolves to nothing.
     cashFloorLei: lei(0),
     identity: {
       nume: 'Popescu Andrei',
@@ -25,17 +148,16 @@ export const seedData: AppData = {
       adresa: 'Str. Libertății 12, Cluj-Napoca',
       telefon: '0750 123 456',
       email: 'andrei@popescuconsulting.ro',
-      // TASK 9 (identity hygiene): this block described an SRL — `denumire: 'Popescu Consulting SRL'`,
-      // `formaJuridica: 'SRL'` — while every rule, deadline, threshold and estimate in the app resolves
-      // the profile as a persoană fizică autorizată (`regime: 'impozit_pe_venit'`, CF Titlul VI in
-      // sistem real, CAS/CASS under art. 150/174, the D212). A demo that names the taxpayer an SRL
-      // teaches a form the rest of the app contradicts, and an SRL does not file a D212 at all. The
-      // trading name of a PFA is the person's own name; `numarRegComert` stays because a PFA IS registered
-      // at ONRC, and `J40/1234/2020` is what makes `pfaStartYear: 2020` coherent rather than a stray year.
+      // TASK 9 (identity hygiene): the block used to describe an SRL while every rule, deadline,
+      // threshold and estimate in the app resolves this profile as a persoană fizică autorizată. A PFA
+      // has no legal personality separate from the person, and an SRL does not file a D212 at all. The
+      // trading name of a PFA is the person's own name; `numarRegComert` stays because a PFA IS
+      // registered at ONRC (OUG 44/2008 art. 7 alin. (1)), and `J40/1234/2026` is what makes
+      // `pfaStartYear: 2026` coherent rather than a stray year.
       denumire: 'Popescu Andrei PFA',
       cui: 'RO4455667788990',
       formaJuridica: 'Persoană fizică autorizată',
-      numarRegComert: 'J40/1234/2020',
+      numarRegComert: 'J40/1234/2026',
       adresaSocietate: 'Str. Libertății 12, Cluj-Napoca',
       telefonSocietate: '0750 123 456',
       emailSocietate: 'contact@popescuconsulting.ro',
@@ -46,12 +168,17 @@ export const seedData: AppData = {
       caen: [{ cod: '6201', descriere: 'Activități de programare computerizate' }],
       mentiuniFactura: 'Mulțumesc pentru colaborare.',
     },
-    updatedAt: '2026-09-28T10:00:00.000Z',
+    updatedAt: '2026-10-05T10:00:00.000Z',
   },
+  // Phase 11 (PG-3): the six documents are dated across the year that follows the start date — February
+  // to September 2026 — instead of all clustering in one September. A 2026-start PFA whose entire year is
+  // one month is a fixture that teaches a shape the calendar contradicts. The AMOUNTS are unchanged, so
+  // every aggregate, cap and estimate pinned downstream is unchanged; only the month each record lands in
+  // moved, and the invoice numbers stay in date order.
   revenues: [
-    { id: 'r1', tip: 'factura', nr: 'FCT-2026-001', date: '2026-09-02', client: 'Presta Consulting SRL', cui: 'RO12345678', valoareFaraTva: ron(4500), tva: ron(945), status: 'inregistrata', eFacturaStatus: 'Acceptată' },
-    { id: 'r2', tip: 'factura', nr: 'FCT-2026-002', date: '2026-09-10', client: 'Andrei Popescu', cui: '1234567890123', valoareFaraTva: ron(1200), tva: ron(252), status: 'in-asteptare', eFacturaStatus: 'În așteptare' },
-    { id: 'r3', tip: 'notafactura', nr: 'NF-2026-003', date: '2026-09-18', client: 'Marius Ionescu', cui: '9876543210987', valoareFaraTva: ron(800), tva: ron(168), status: 'respinsa', statusDetail: 'CUI nevalid', eFacturaStatus: 'Respinsă' },
+    { id: 'r1', tip: 'factura', nr: 'FCT-2026-001', date: '2026-02-02', client: 'Presta Consulting SRL', cui: 'RO12345678', valoareFaraTva: ron(4500), tva: ron(945), status: 'inregistrata', eFacturaStatus: 'Acceptată' },
+    { id: 'r2', tip: 'factura', nr: 'FCT-2026-002', date: '2026-04-10', client: 'Andrei Popescu', cui: '1234567890123', valoareFaraTva: ron(1200), tva: ron(252), status: 'in-asteptare', eFacturaStatus: 'În așteptare' },
+    { id: 'r3', tip: 'notafactura', nr: 'NF-2026-003', date: '2026-06-18', client: 'Marius Ionescu', cui: '9876543210987', valoareFaraTva: ron(800), tva: ron(168), status: 'respinsa', statusDetail: 'CUI nevalid', eFacturaStatus: 'Respinsă' },
     { id: 'r4', tip: 'factura', nr: 'FCT-2026-004', date: '2026-09-25', client: 'Presta Consulting SRL', cui: 'RO12345678', valoareFaraTva: ron(3200), tva: ron(672), status: 'inregistrata', eFacturaStatus: 'Acceptată' },
   ],
   expenses: [
@@ -69,9 +196,9 @@ export const seedData: AppData = {
     //   before: expenseNet = 120,00 + 85,50 = 205,50 lei (20.550 bani) — every 'inregistrata' record
     //   after:  expenseNet = 120,00 lei (12.000 bani) — only e1 survives classification
     //   and VAT-inclusive: 12.000 + 2.520 = 14.520 bani, down from 24.866 bani.
-    { id: 'e1', tip: 'factura', nr: 'FCT-PRO-118', date: '2026-09-05', furnizor: 'CloudHost SRL', cui: 'RO87654321', valoareFaraTva: ron(120), tva: ron(25.2), status: 'inregistrata', category: 'postal_and_telecom' },
-    { id: 'e2', tip: 'bon-fiscal', nr: 'BF-4471', date: '2026-09-12', furnizor: 'Carrefour', cui: 'RO11223344', valoareFaraTva: ron(85.5), tva: ron(17.96), status: 'inregistrata', category: 'personal_or_family_use' },
-    { id: 'e3', tip: 'factura', nr: 'FCT-PRO-121', date: '2026-09-20', furnizor: 'Office Supplies SA', cui: 'RO55667788', valoareFaraTva: ron(340), tva: ron(71.4), status: 'respinsa', statusDetail: 'Document neconform', category: 'business_space_upkeep' },
+    { id: 'e1', tip: 'factura', nr: 'FCT-PRO-118', date: '2026-03-05', furnizor: 'CloudHost SRL', cui: 'RO87654321', valoareFaraTva: ron(120), tva: ron(25.2), status: 'inregistrata', category: 'postal_and_telecom' },
+    { id: 'e2', tip: 'bon-fiscal', nr: 'BF-4471', date: '2026-05-12', furnizor: 'Carrefour', cui: 'RO11223344', valoareFaraTva: ron(85.5), tva: ron(17.96), status: 'inregistrata', category: 'personal_or_family_use' },
+    { id: 'e3', tip: 'factura', nr: 'FCT-PRO-121', date: '2026-07-20', furnizor: 'Office Supplies SA', cui: 'RO55667788', valoareFaraTva: ron(340), tva: ron(71.4), status: 'respinsa', statusDetail: 'Document neconform', category: 'business_space_upkeep' },
   ],
   clients: [
     { id: 'c1', denumire: 'Presta Consulting SRL', cui: 'RO12345678', email: 'contact@presta.ro', telefon: '0721 111 222', oras: 'București' },
@@ -100,9 +227,12 @@ export const seedData: AppData = {
   // allowed to become a second source of a deadline.
   declarations: [],
   documents: [
-    { id: 'doc1', nume: 'FCT-2026-001.pdf', data: '2026-09-02', categoria: 'Facturi' },
-    { id: 'doc2', nume: 'Declarația 212 – venitul anului 2025.pdf', data: '2026-05-20', categoria: 'Declarații' },
-    { id: 'doc3', nume: 'Contract Presta Consulting.pdf', data: '2026-08-20', categoria: 'Contracte' },
+    { id: 'doc1', nume: 'FCT-2026-001.pdf', data: '2026-02-02', categoria: 'Facturi' },
+    { id: 'doc3', nume: 'Contract Presta Consulting.pdf', data: '2026-01-26', categoria: 'Contracte' },
+    // Phase 11 (PG-3): „Declarația 212 – venitul anului 2025.pdf” is gone. A PFA that started on
+    // 2026-01-19 has no 2025 income year, so a 2025 return is not a document it holds — it is a
+    // prior-year filing the fixture cannot have. Same reason the `im` section and the `212` statement
+    // below are empty.
   ],
   companyDocs: {
     // TASK 9 (seed hygiene): the quarterly D100 and D220 artefacts are gone.
@@ -113,37 +243,39 @@ export const seedData: AppData = {
     //   D220 no longer exists: Declarația Unică 212 replaced form 232 (venit) and form 220
     //   (contribuții sociale) with effect from 1 April 2018 (docs/ai/research/06_2026_fiscal_research.md
     //   §3 row 1). A 2026 D220 is a form that has not existed for eight years.
-    // What replaces them is the one return this profile actually files: the D212 for the 2025 year,
-    // filed inside the 25 May 2026 term (CF art. 122 alin. (3)). It sits under `im` because it is one
-    // form covering the income AND the social contributions — `cs` is left empty rather than given a
-    // second copy of the same document, and an empty section renders its own empty state.
-    im: [
-      { id: 'im1', nume: 'Declarația 212 – venitul anului 2025.pdf', tip: 'factura', content: 'data:text/plain;base64,SW1wb3ppdCBwZSB2ZW5pdQ==', marime: 48210, data: '2026-05-20', dataDepunere: '2026-05-20', depunere: 'ANAF', perioada: '2025' },
-    ],
+    //
+    // Phase 11 (PG-3): what replaced them — the D212 for the 2025 year, filed 2026-05-20 — is gone too.
+    // It was the correct return for the OLD 2020-start fixture and it is an impossible document for a
+    // PFA that began on 2026-01-19: there is no 2025 income year to declare. The first return this
+    // profile files is the D212 for FY2026, due 2027-05-25, and it has not been filed, so nothing here
+    // records it. The deadline for it is emitted by the rule engine, not by a fixture.
+    im: [],
     cs: [],
     tva: [
       { id: 'tva1', nume: 'Declarația 300 – August 2026.pdf', tip: 'factura', content: 'data:text/plain;base64,VERWQSBkZWNsYXJhdGlvbg==', marime: 39870, data: '2026-09-15', dataDepunere: '2026-09-15', depunere: 'ANAF', perioada: 'August 2026' },
     ],
     facturi: [
-      { id: 'f1', nume: 'FCT-2026-001.pdf', tip: 'factura', content: 'data:text/plain;base64,GmFjdHVyYQ==', marime: 12480, data: '2026-09-02' },
-      { id: 'f2', nume: 'NF-2026-003.pdf', tip: 'notafactura', content: 'data:text/plain;base64,Tm90YSBmYXJhIGZhY3R1cmE=', marime: 9210, data: '2026-09-18' },
-      { id: 'f3', nume: 'BF-4471.pdf', tip: 'bon-fiscal', content: 'data:text/plain;base64,Bm9uIGZpc2NhbA==', marime: 4102, data: '2026-09-12' },
+      { id: 'f1', nume: 'FCT-2026-001.pdf', tip: 'factura', content: 'data:text/plain;base64,GmFjdHVyYQ==', marime: 12480, data: '2026-02-02' },
+      { id: 'f2', nume: 'NF-2026-003.pdf', tip: 'notafactura', content: 'data:text/plain;base64,Tm90YSBmYXJhIGZhY3R1cmE=', marime: 9210, data: '2026-06-18' },
+      { id: 'f3', nume: 'BF-4471.pdf', tip: 'bon-fiscal', content: 'data:text/plain;base64,Bm9uIGZpc2NhbA==', marime: 4102, data: '2026-05-12' },
     ],
   },
   statements: [
     // TASK 9: the two quarterly statements (tip '100' and tip '220', both '2026-Q2', both filed 'SOLO')
     // recorded the same two obligations the companyDocs entry above records — see the note there for why
-    // neither is an obligation of this profile. One entry remains: the annual D212 for the 2025 year.
-    // `depunere: 'personală'` because a persoană fizică files the D212 in their own name; 'SOLO' is the
-    // payroll/employer transmission channel.
+    // neither is an obligation of this profile.
+    //
+    // Phase 11 (PG-3): the `212` row for the 2025 year is gone with the document that evidenced it — see
+    // the `im` note above. What remains is the one return this profile actually owes inside its own first
+    // fiscal year.
+    //
     // The D300 row below is NOT touched by this task, and that is a deliberate non-fix: CF art. 322
     // alin. (1)-(4) makes the fiscal period the QUARTER for a taxpayer whose previous-year taxable
     // supplies stayed under the 100.000 € equivalent, and the month only otherwise. Which of those this
-    // profile is depends on its VAT registration date and prior-year turnover — facts the seed does not
-    // record anywhere. Changing 'August 2026' to a quarter would invent one half of that choice; leaving
-    // it is the honest state of a demo whose input fact is missing. Registered as a finding in
-    // docs/ai/phases/23_provenance_hygiene.md §5.
-    { id: 's1', tip: '212', perioada: '2025', depunere: 'personală', dataDepunere: '2026-05-20' },
+    // profile is depends on its VAT registration date and prior-year turnover — facts the fixture does
+    // not record anywhere. Changing 'August 2026' to a quarter would invent one half of that choice;
+    // leaving it is the honest state of a demo whose input fact is missing. Recorded as a finding in
+    // docs/ai/phases/23_provenance_hygiene.md §5, and handed to PG-2/18B as date-shaped work.
     { id: 's3', tip: '300', perioada: '2026-08', depunere: 'personală', dataDepunere: '2026-09-15' },
   ],
   snapshots: [],
@@ -156,7 +288,7 @@ export const seedData: AppData = {
       // migrated identity against these very fields, so the two blocks cannot disagree.
       denumire: 'Popescu Andrei PFA',
       cui: 'RO4455667788990',
-      numarRegComert: 'J40/1234/2020',
+      numarRegComert: 'J40/1234/2026',
       adresa: 'Str. Libertății 12, Cluj-Napoca',
       // A CUI in a CNP field. Nothing in src/ reads `settings.company.cnp` — `identity.cnp` is absorbed
       // from `settings.personal.cnp` — but a PFA has no legal personality separate from the person, so
@@ -165,7 +297,7 @@ export const seedData: AppData = {
       formaJuridica: 'Persoană fizică autorizată',
       codFiscal: 'RO4455667788990',
       codCAEN: '6201',
-      regComerț: 'J40/1234/2020',
+      regComerț: 'J40/1234/2026',
       telefon: '0750 123 456',
       email: 'contact@popescuconsulting.ro',
       contBancar: 'RO44 BACX 0000 0000 1234 5678 9000',
@@ -184,12 +316,15 @@ export const seedData: AppData = {
     ],
     eFactura: {
       trimitere: 'manual',
-      dateContact: '2026-09-01',
+      dateContact: '2026-01-26',
     },
   },
-  // TASK 3: the seed records no reserve. `null` is the honest state — nothing has been set aside that
-  // anyone recorded — and it is what the seed dashboard renders („Nicio sumă înregistrată”). Seeding
-  // `0` would assert an explicit zero the seed has no basis for, and would change the reserve figures
+  // TASK 3: the fixture records no reserve. `null` is the honest state — nothing has been set aside that
+  // anyone recorded — and it is what the sandbox dashboard renders („Nicio sumă înregistrată”). Seeding
+  // `0` would assert an explicit zero the fixture has no basis for, and would change the reserve figures
   // every e2e pin depends on.
   reservedAmount: null,
+  // Phase 11 / landmine 4: NO `fxRates`. A rate is a legal datum with a source, a series and an anchor
+  // date; seeding one would fabricate it. The sandbox therefore shows the unconverted-record disclosure
+  // for any foreign amount, exactly as a real install would.
 };

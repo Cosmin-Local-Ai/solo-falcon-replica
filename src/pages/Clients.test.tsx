@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { StoreProvider } from '../data/store';
+import { seedStorage } from '../test/storage';
 import Clients from './Clients';
 
 describe('Clients (Step 25 — Defect 1)', () => {
   // Do not leak persisted state (e.g. renamed clients) between tests.
+  // Phase 11: the fixture no longer arrives on its own — empty storage is a first run — so the records
+  // these tests edit are loaded explicitly, through the store's own key.
   beforeEach(() => {
     localStorage.clear();
+    seedStorage();
   });
   it('editing a client updates it in place instead of duplicating it', () => {
     render(

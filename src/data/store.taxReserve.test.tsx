@@ -154,9 +154,11 @@ describe('a payload with no reserve field loads as null, not 0', () => {
     expect(persisted().version).toBe(CURRENT_DATA_VERSION);
   });
 
-  it('starts from the seed with no reserve recorded when there is no stored payload at all', () => {
+  it('starts with no reserve recorded when there is no stored payload at all', () => {
+    // Phase 11: no stored payload is a first run, not the fixture. The reserve contract is unchanged —
+    // absence is still `null`, never 0 — only the dataset it sits on.
     load();
-    expect(storeRef!.dataOrigin).toBe('seed');
+    expect(storeRef!.dataOrigin).toBe('empty');
     expect(storeRef!.reservedAmount).toBeNull();
   });
 });

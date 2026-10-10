@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { StoreProvider, STORAGE_KEY } from '../data/store';
 import { seedData } from '../data/seed';
+import { seedStorage } from '../test/storage';
 import type { PfaProfile } from '../domain/models';
 import Settings from './Settings';
 import { lei } from '../domain/money';
@@ -41,8 +42,12 @@ function saveDenumire(denumire: string) {
 }
 
 describe('Settings persistence (Defect 3 regression)', () => {
+  // Phase 11: empty storage is a first run, and the store does not write at all in that state. These
+  // tests are about the write path, so they start from a payload — which is also the only way the fixture
+  // can reach the app now.
   beforeEach(() => {
     localStorage.clear();
+    seedStorage();
   });
 
   afterEach(() => {
@@ -164,6 +169,7 @@ function readStoredProfile(): PfaProfile {
 describe('Settings — identity round-trip (Phase 7)', () => {
   beforeEach(() => {
     localStorage.clear();
+    seedStorage();
   });
 
   afterEach(() => {
@@ -242,6 +248,7 @@ describe('Settings — identity round-trip (Phase 7)', () => {
 describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () => {
   beforeEach(() => {
     localStorage.clear();
+    seedStorage();
   });
 
   afterEach(() => {
@@ -287,7 +294,9 @@ describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () => {
     expect(profile.salaryIncomeLei).toBe(lei(30000));
     // Untouched fields keep their seed values (shallow merge must not blank them).
     expect(profile.regime).toBe('impozit_pe_venit');
-    expect(profile.pfaStartYear).toBe(2020);
+    // Phase 11 re-pin (replaced, not deleted): 2020 → 2026. The fixture is now the product scenario — a
+    // PFA that started in 2026 — instead of a 2020 PFA with a 2025 return attached to it.
+    expect(profile.pfaStartYear).toBe(2026);
     expect(profile.identity.nume).toBe('Popescu Andrei');
   });
 

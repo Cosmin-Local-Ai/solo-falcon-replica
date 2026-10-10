@@ -23,6 +23,7 @@ export const settings = {
     eFactura: 'e-Factura',
     bankAccounts: 'Conturi bancare',
     personal: 'Personal',
+    data: 'Date',
   },
   toasts: {
     pfaSaved: 'Datele PFA au fost salvate',
@@ -148,5 +149,40 @@ export const settings = {
     search: 'Caută codul',
     add: 'Adaugă codul',
     validated: 'Cod validat (căutare simulată ANAF)',
+  },
+  /**
+   * Phase 11 — the two controls that make demo data optional and stored data reversible.
+   *
+   * Before this phase there was no "start from scratch" path anywhere in the UI: the demo dataset was the
+   * initial state, and the only way out was to delete each record by hand. Both controls are worded so
+   * the consequence is stated before the click, and the destructive one names the preserved copy of a
+   * rejected payload too — that copy is data as well, and "start from zero" has to mean zero.
+   */
+  data: {
+    card: 'Datele aplicației',
+    from: (origin: string): string => `Source of the data on screen: ${origin}`,
+    originEmpty: 'Încă nu ai înregistrat nimic.',
+    originPersisted: 'Datele de pe ecran sunt cele salvate pe acest dispozitiv.',
+    originQuarantined: 'Copia salvată a fost respinsă la citire și păstrată; pe ecran nu ai nicio date.',
+    originSandbox: 'Ceea ce vezi este sandboxul cu date de exemplu.',
+    sandboxCard: 'Sandbox cu date de exemplu',
+    sandboxBody:
+      'Datele de exemplu nu se salvează, nu înlocuiesc datele tale și dispar la reîncărcare. Le poți elimina și de aici.',
+    sandboxLoad: 'Încarcă datele de exemplu',
+    sandboxUnload: 'Elimină sandboxul',
+    dangerCard: 'Ștergere totală',
+    dangerBody:
+      'Se șterg toate datele inregistrate pe acest dispozitiv, inclusiv copia păstrată a unei sarcini respinse. Nu se poate anula.',
+    dangerAction: 'Șterge toate datele și începe de la zero',
+    confirmTitle: 'Sigur ștergi toate datele?',
+    confirmBody:
+      'Se elimină profilul, veniturile, cheltuielile, declarațiile, documentele, cursurile de schimb inregistrate și copia păstrată a unei sarcini respinse. Aplicația se întoarce la primul pas, fără nicio date.',
+    confirmCancel: 'Nu șterg',
+    confirmGo: 'Șterge tot',
+  },
+  dataToasts: {
+    sandboxLoaded: 'Sandbox încărcat. Nu se salvează și nu ating datele tale.',
+    sandboxUnloaded: 'Sandbox eliminat. Datele tale sunt exact cum erau.',
+    allCleared: 'Toate datele au fost șterse. Începem de la zero.',
   },
 } as const;

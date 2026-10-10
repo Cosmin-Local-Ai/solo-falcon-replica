@@ -54,22 +54,29 @@ function estimateStateBadgeClass(state: TaxEstimateState): string {
 
 export default function DashboardPage() {
   const data = useDashboardData();
-  const { snapshot, completeness, reserve, pendingCounts } = data;
+  const { snapshot, completeness, reserve } = data;
   const appData = useStore();
   const greeting = identityGreeting(appData.profile.identity);
   const summary = getFinancialSummary(appData, snapshot.asOf);
 
-  const hasData =
-    snapshot.pfaRevenue > 0 ||
-    pendingCounts.revenuesInAsteptare > 0 ||
-    pendingCounts.revenuesRespinsa > 0 ||
-    pendingCounts.expensesRespinsa > 0 ||
-    // Phase 10c (B-37): a ledger whose only record is in a currency the app has no rate for converts to
-    // zero lei, and this gate used to read that zero as „nothing recorded yet”. The onboarding card then
-    // told a user with a real EUR invoice to go add their first invoice — the record had vanished from the
-    // financial picture entirely. A record the totals leave out is still data, and the disclosure below is
-    // what says why it is not in the totals.
-    data.ledger.unconverted.length > 0;
+  // B-68 and B-37, settled by asking a different question.
+  //
+  // Every earlier version of this gate inferred "is there anything here?" from a NUMBER — first
+  // `snapshot.pfaRevenue > 0`, then that plus the pending and rejected counts, then that plus the
+  // unconverted ledger (Phase 10c). Each time, a ledger that EXISTS but is EXCLUDED produced zero and the
+  // page told the user to go record something: a EUR invoice with no rate (B-37), a rejected document, a
+  // record dated outside the fiscal year. B-68 is the standing name for that class, and the fix is not one
+  // more term — it is to stop inferring existence from an aggregate.
+  //
+  // The card's own sentence is "no revenue or expense recorded", so the gate is now that sentence: are the
+  // registers empty? A record the totals leave out keeps the card away, by construction.
+  const hasRecords = appData.revenues.length > 0 || appData.expenses.length > 0;
+
+  // Acceptance 3: the hero's incomplete-profile state is read out of the SAME report the completeness
+  // card renders — `assessCompleteness`, via `useDashboardData`. A second predicate would be a second
+  // completeness model, which is what this file's own header has warned against since Step 17.
+  const profileIncomplete =
+    completeness.checks.find(c => c.key === 'profile')?.satisfied === false;
 
   const taxTotal =
     data.tax !== null && data.tax.status === 'computed' ? data.tax.output.total : null;
@@ -87,18 +94,22 @@ export default function DashboardPage() {
           the topbar. It uses the given name, not the full name the topbar shows. */}
       {greeting && <p className="greeting">{dashboardCopy.greeting} {greeting}</p>}
 
-      {!hasData ? (
-        <div className="empty-state">
-          <h2>{dashboardCopy.onboarding.title}</h2>
-          <p>{dashboardCopy.onboarding.body}</p>
+      {/* Phase 11: the zero-record card no longer gates the page. It reports the absence and points at the
+          two registers that would fill it; everything below renders regardless, because a deadline does not
+          stop existing because the ledger is empty (B-68). */}
+      {!hasRecords && (
+        <div className="empty-state" data-empty-state>
+          <h2>{dashboardCopy.noRecords.title}</h2>
+          <p>{dashboardCopy.noRecords.body}</p>
           <div className="row">
-            <a className="btn btn-primary" href="/revenues">{dashboardCopy.onboarding.addRevenue}</a>
-            <a className="btn" href="/expenses">{dashboardCopy.onboarding.addExpense}</a>
+            <a className="btn btn-primary" href="/revenues">{dashboardCopy.noRecords.addRevenue}</a>
+            <a className="btn" href="/expenses">{dashboardCopy.noRecords.addExpense}</a>
           </div>
         </div>
-      ) : (
-        <>
-          {/* 1. Cockpit strip — headline numbers */}
+      )}
+
+      <>
+        {/* 1. Cockpit strip — headline numbers */}
           <div className="grid grid-5">
             <StatCard label={dashboardCopy.cards.revenueYear} value={formatBaniRON(snapshot.pfaRevenue)} />
             <StatCard
@@ -118,6 +129,17 @@ export default function DashboardPage() {
           {/* 2. Tax hero — estimate, completeness, reserve */}
           <SectionCard title={dashboardCopy.estimate.title}>
             <div className="stack">
+              {/* Acceptance 3: while the required profile facts are missing the hero says so in its own
+                  voice, and the estimate below it stays uncomputed. The app does not fill a gap in the
+                  profile with an assumption and print a number over it. */}
+              {profileIncomplete && (
+                <div className="complete-profile" data-complete-profile>
+                  <a className="btn btn-primary" href="/settings#!/fiscal">
+                    {dashboardCopy.estimate.completeProfile}
+                  </a>
+                  <p className="hint">{dashboardCopy.estimate.completeProfileBody}</p>
+                </div>
+              )}
               <div className="row between">
                 {/* Task 1: the label carries the basis, so an annual run-rate figure can never be read as
                     money already collected. `estimateBasisLabel` says YTD only for actuals. With no
@@ -198,17 +220,15 @@ export default function DashboardPage() {
           {/* 5. Insights (Step 21) */}
           <Insights insights={data.insights} />
 
-          {/* 6. Lower sections — Rezervă fiscală (Step 21); thresholds, deadlines, completeness, actions (Step 22) */}
-          <div className="grid grid-2">
-            <TaxReserve reserve={data.reserve} onRecord={appData.setReservedAmount} />
-            <ThresholdSection thresholds={data.thresholds} />
-            <DeadlineSection deadlines={data.deadlines} asOfDate={data.snapshot.asOf} />
-            <CompletenessSection completeness={data.completeness} />
-            <ActionSection actions={data.actions} />
-            <LegislationSection state={data.legislation} />
-          </div>
-        </>
-      )}
+        <div className="grid grid-2">
+          <TaxReserve reserve={data.reserve} onRecord={appData.setReservedAmount} />
+          <ThresholdSection thresholds={data.thresholds} />
+          <DeadlineSection deadlines={data.deadlines} asOfDate={data.snapshot.asOf} />
+          <CompletenessSection completeness={data.completeness} />
+          <ActionSection actions={data.actions} />
+          <LegislationSection state={data.legislation} />
+        </div>
+      </>
     </div>
   );
 }

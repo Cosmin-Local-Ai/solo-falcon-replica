@@ -22,6 +22,7 @@ import type {
   TaxStatement,
 } from '../data/types';
 import type { PfaProfile } from './models';
+import { isoCalendarDateProblem } from './date';
 import type { TaxCalculationSnapshot } from './snapshots/types';
 
 /** One concrete, checkable fact about data completeness. */
@@ -69,16 +70,32 @@ const REGIME_LABELS: Record<string, string> = {
   impozit_pe_cit: 'impozit pe CIT',
 };
 
-/** profile present and usable: exists, fiscalYear set, regime set. */
+/**
+ * profile present AND carrying the facts onboarding is supposed to collect.
+ *
+ * Phase 11 widened this from "exists, fiscalYear set, regime set" to include the taxpayer's name and the
+ * PFA start date. It is widened here rather than in a new predicate because the hero's „Completează
+ * profilul” has to be driven by the same report the completeness card renders — a second completeness
+ * model is exactly what this file's header forbids, and two models drift the first time one is fixed.
+ *
+ * The start date is required here and optional on the schema, and that is not a contradiction: the
+ * schema stays permissive so an existing payload is never rejected and quarantined for a key it has never
+ * heard of (landmine 3), while completeness reports the missing fact instead of inventing it.
+ */
 function profileCheck(profile: PfaProfile | null | undefined): CompletenessCheck {
   if (profile == null) {
     return { key: 'profile', satisfied: false, detail: 'profil lipsă' };
   }
   const fiscalYearSet = typeof profile.fiscalYear === 'number' && profile.fiscalYear > 0;
   const regimeSet = typeof profile.regime === 'string' && profile.regime.length > 0;
+  const nameSet = typeof profile.identity?.nume === 'string' && profile.identity.nume.trim().length > 0;
+  // Absence and a malformed value are the same finding here: neither is a start date the app can use.
+  const startDateSet = isoCalendarDateProblem(profile.pfaStartDate ?? '') === null;
   const issues: string[] = [];
+  if (!nameSet) issues.push('nume');
   if (!fiscalYearSet) issues.push('an fiscal');
   if (!regimeSet) issues.push('regim');
+  if (!startDateSet) issues.push('data începerii activității');
   const detail =
     issues.length === 0
       ? `profil prezent (an fiscal ${profile.fiscalYear}, regim ${REGIME_LABELS[profile.regime] ?? profile.regime})`

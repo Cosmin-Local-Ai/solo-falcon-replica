@@ -133,7 +133,7 @@ export const nav = {
   settings: 'Setări',
 } as const;
 
-/** The chrome around the pages: the brand, the mobile drawer, and the two storage banners. */
+/** The chrome around the pages: the brand, the mobile drawer, and the storage banners. */
 export const shell = {
   brand: 'SOLO',
   closeMenu: 'Închide meniul',
@@ -144,4 +144,15 @@ export const shell = {
   /** D-3: a migration rewrote the stored data on load, and that has to be announced. */
   migrationToast: (steps: string): string => `Datele salvate au fost aduse la zi (${steps})`,
   migrationStepsFallback: 'format nou',
+  /**
+   * Phase 11 — the sandbox has to be marked where it is seen, not only where it was switched on. The
+   * words say what it is (example data), what it is not (your data), and how it leaves (reload, or the
+   * control in Setări). A demo that is not labelled is the D1 defect with a nicer layout.
+   */
+  sandboxTitle: 'Datele de exemplu sunt încărcate.',
+  sandboxBody:
+    'Ce vezi mai jos este un sandbox cu date de exemplu, nu datele tale. Nu se salvează și dispar la reîncărcare.',
+  sandboxRemove: 'Elimină sandboxul',
+  /** Where the topbar would otherwise print an empty name: an empty profile has no name to show. */
+  noProfile: 'Profil incomplet',
 } as const;

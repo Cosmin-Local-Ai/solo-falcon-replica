@@ -11,8 +11,9 @@ import Declarations from './pages/Declarations';
 import Documents from './pages/Documents';
 import Clients from './pages/Clients';
 import Settings from './pages/Settings';
+import OnboardingPage from './pages/Onboarding';
 import { Toasts } from './components/ui';
-import { disclosure, nav, shell } from './ui/copy';
+import { disclosure, nav, onboarding as onboardingCopy, shell } from './ui/copy';
 
 export type Page =
   | 'dashboard'
@@ -80,7 +81,7 @@ const VALID_TABS: Partial<Record<Page, string[]>> = {
   // Mirrors the live SOLO settings tabs (docs/reference/settings.md);
   // the real app's "Abonament" (subscription) tab is not replicated.
   // `fiscal` is an addition of this replica: the PfaProfile write path (Phase 6).
-  settings: ['company', 'fiscal', 'einvoice', 'bankaccounts', 'account'],
+  settings: ['company', 'fiscal', 'einvoice', 'bankaccounts', 'account', 'data'],
 };
 
 export function parseRoute(): Route {
@@ -133,7 +134,13 @@ function Shell() {
   const [route, setRoute] = useState<Route>(parseRoute);
   const [navOpen, setNavOpen] = useState(false);
   const isMobile = useIsMobile();
-  const { profile, dataOrigin, migration, quarantine, moneyNotices, toast } = useStore();
+  const { profile, dataOrigin, migration, quarantine, moneyNotices, toast, sandboxActive, unloadSandbox } = useStore();
+
+  // Phase 11 (D1, D-RUN-1): empty storage is a first run, not a demo. `dataOrigin === 'empty'` is the
+  // only state that means "nothing this person entered exists yet" — and because the save effect in
+  // `store.tsx` refuses to write while the origin is 'empty', reloading during onboarding lands here
+  // again instead of on a 'persisted' empty shell.
+  const firstRun = dataOrigin === 'empty';
 
   // D-3: a rejected payload must be VISIBLE, not silent (B-11 was the silent
   // reset). The banner below covers the recoverable case; a migration is worth
@@ -216,12 +223,17 @@ function Shell() {
         </div>
         {/* Phase 7: the sidebar shows WHOSE data this is, read from the one
             identity store. It deliberately shows the trade name, not the person
-            name/initials the topbar already renders. */}
-        <div className="sidebar-identity" title={profile.identity.denumire || profile.identity.nume}>
-          {profile.identity.denumire || profile.identity.nume}
-        </div>
+            name/initials the topbar already renders.
+            Phase 11: on a first run there is no name to show, so the block is absent rather than
+            rendering an empty box or the fixture's name. */}
+        {(profile.identity.denumire || profile.identity.nume) && (
+          <div className="sidebar-identity" title={profile.identity.denumire || profile.identity.nume}>
+            {profile.identity.denumire || profile.identity.nume}
+          </div>
+        )}
         <nav>
-          {NAV.map(n => (
+          {!firstRun &&
+            NAV.map(n => (
             <a
               key={n.page}
               className={`nav-item ${route.page === n.page ? 'active' : ''}`}
@@ -238,7 +250,7 @@ function Shell() {
                 <span className="badge-count">{pendingCount}</span>
               )}
             </a>
-          ))}
+            ))}
         </nav>
       </aside>
       {navOpen && (
@@ -255,23 +267,32 @@ function Shell() {
       )}
       <div className="main">
         <header className="topbar">
-          <button
-            type="button"
-            className="nav-toggle"
-            aria-label={shell.menu}
-            aria-expanded={navOpen}
-            onClick={() => setNavOpen(v => !v)}
-          >
-            ☰
-          </button>
-          <span className="page-title">{TITLES[route.page]}</span>
+          {!firstRun && (
+            <button
+              type="button"
+              className="nav-toggle"
+              aria-label={shell.menu}
+              aria-expanded={navOpen}
+              onClick={() => setNavOpen(v => !v)}
+            >
+              ☰
+            </button>
+          )}
+          <span className="page-title">{firstRun ? onboardingCopy.title : TITLES[route.page]}</span>
           <span className="spacer" />
-          <div className="topbar-user">
-            <span>{profile.identity.nume}</span>
-            <span className="avatar">{initials(profile.identity.nume)}</span>
-          </div>
+          {/* Phase 11: the topbar used to print `identity.nume` unconditionally, which on a fresh profile
+              meant the fixture's name sat in the chrome of an app that holds no data. No name, no block. */}
+          {profile.identity.nume && (
+            <div className="topbar-user">
+              <span>{profile.identity.nume}</span>
+              <span className="avatar">{initials(profile.identity.nume)}</span>
+            </div>
+          )}
         </header>
         <div className="main-content">
+          {firstRun && <OnboardingPage />}
+          {!firstRun && (
+            <>
           {dataOrigin === 'quarantined' && quarantine && (
             <div className="banner banner-warn" role="alert">
               <strong>{shell.quarantineTitle}</strong> {quarantineSummary(quarantine)}
@@ -280,6 +301,15 @@ function Shell() {
                 <p>{quarantine.reason} — {quarantine.detail}</p>
                 <p>{shell.savedCopy(quarantine.quarantinedAt)}</p>
               </details>
+            </div>
+          )}
+          {/* Phase 11 — the sandbox is marked where it is seen, not only where it was switched on. */}
+          {sandboxActive && (
+            <div className="banner banner-warn" role="status" data-sandbox-banner>
+              <strong>{shell.sandboxTitle}</strong> {shell.sandboxBody}
+              <button type="button" className="btn" onClick={unloadSandbox}>
+                {shell.sandboxRemove}
+              </button>
             </div>
           )}
           {/* B-26: the money-conversion report has to be visible, not just persisted. `role="status"`, not
@@ -321,6 +351,8 @@ function Shell() {
               initialTab={route.tab ?? undefined}
               onTabChange={t => navigate('settings', t)}
             />
+          )}
+            </>
           )}
         </div>
       </div>

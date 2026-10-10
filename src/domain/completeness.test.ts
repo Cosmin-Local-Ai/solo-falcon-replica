@@ -20,6 +20,10 @@ function makeProfile(): PfaProfile {
   return {
     id: 'profile-test',
     pfaStartYear: 2024,
+    // Phase 11 widened the `profile` completeness check to require the start date and the taxpayer's
+    // name, because that is what the hero's „Completează profilul” now turns on. This fixture is the
+    // fully-populated case, so it carries both.
+    pfaStartDate: '2024-03-01',
     fiscalYear: 2026,
     regime: 'impozit_pe_venit',
     caen: '6201',
@@ -312,6 +316,34 @@ describe('assessCompleteness', () => {
     ).checks.find(c => c.key === 'profile')!;
     expect(noRegime.satisfied).toBe(false);
     expect(noRegime.detail).toBe('profil prezent, dar regim nesetat');
+  });
+
+  /*
+   * Phase 11 — the two facts the widened check adds. They are pinned here rather than only at the hero,
+   * because the hero reads this report: if the check is wrong, the hero is wrong, and a second predicate
+   * somewhere else would be the thing that finally makes the two disagree.
+   */
+  it('reports profile unsatisfied when the PFA start date is absent', () => {
+    const noStart = assessCompleteness(
+      makeData({ profile: { ...makeProfile(), pfaStartDate: undefined } }),
+    ).checks.find(c => c.key === 'profile')!;
+    expect(noStart.satisfied).toBe(false);
+    expect(noStart.detail).toBe('profil prezent, dar data începerii activității nesetat');
+  });
+
+  it('reports profile unsatisfied when the taxpayer name is blank', () => {
+    const noName = assessCompleteness(
+      makeData({ profile: { ...makeProfile(), identity: { ...makeProfile().identity, nume: '   ' } } }),
+    ).checks.find(c => c.key === 'profile')!;
+    expect(noName.satisfied).toBe(false);
+    expect(noName.detail).toBe('profil prezent, dar nume nesetat');
+  });
+
+  it('treats a malformed start date as absent, not as a date', () => {
+    const badStart = assessCompleteness(
+      makeData({ profile: { ...makeProfile(), pfaStartDate: '01.04.2026' } }),
+    ).checks.find(c => c.key === 'profile')!;
+    expect(badStart.satisfied).toBe(false);
   });
 
   it('is deterministic for identical inputs', () => {

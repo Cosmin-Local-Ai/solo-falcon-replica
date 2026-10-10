@@ -3,6 +3,7 @@ import { act, render } from '@testing-library/react';
 import { StoreProvider, useStore, STORAGE_KEY, QUARANTINE_STORAGE_KEY } from './store';
 import { CURRENT_DATA_VERSION } from './migration';
 import { seedData } from './seed';
+import { seedStorage } from '../test/storage';
 import type { Revenue } from './types';
 import { lei, ron } from '../domain/money';
 
@@ -28,8 +29,11 @@ const newRevenue: Omit<Revenue, 'id'> = {
  * cannot be shadowed via own properties, so the write-failure test swaps
  * `window.localStorage` (a configurable accessor) for this plain object.
  */
-function mockStorage(fail: boolean) {
-  const store = new Map<string, string>();
+function mockStorage(fail: boolean, seed: Record<string, string> = {}) {
+  // `seed` pre-populates the backing map WITHOUT recording a call: since Phase 11 the store does not
+  // write at all while it is in the first-run state, so a write-failure test has to start from a payload
+  // for a write to be attempted in the first place.
+  const store = new Map<string, string>(Object.entries(seed));
   const calls: { key: string; value: string }[] = [];
   return {
     calls,
@@ -60,6 +64,11 @@ afterEach(() => {
 
 describe('save effect — serialization contract', () => {
   it('serializes only AppData — no store-level fields (dataOrigin, toasts)', () => {
+    // Phase 11: the save effect deliberately does NOT write while the store is in the first-run state —
+    // an empty dataset is not a fact, and writing it would turn the next load into a 'persisted' one and
+    // drop the user out of onboarding. So this test starts from a payload, which is the state that does
+    // get serialized.
+    seedStorage();
     render(
       <StoreProvider>
         <Probe />
@@ -109,6 +118,7 @@ describe('save effect — serialization contract', () => {
 
 describe('save effect — multiple save cycles', () => {
   it('keeps localStorage in sync across a sequence of mutations', () => {
+    seedStorage();
     render(
       <StoreProvider>
         <Probe />
@@ -179,7 +189,9 @@ describe('save effect — write failure (storage quota)', () => {
   it('does not throw when setItem throws and state remains usable', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const originalDesc = Object.getOwnPropertyDescriptor(window, 'localStorage')!;
-    const mock = mockStorage(true);
+    const mock = mockStorage(true, {
+      [STORAGE_KEY]: JSON.stringify({ ...seedData, version: CURRENT_DATA_VERSION }),
+    });
     Object.defineProperty(window, 'localStorage', { value: mock, configurable: true, writable: true });
 
     try {
@@ -195,7 +207,7 @@ describe('save effect — write failure (storage quota)', () => {
       // In-memory state is intact and usable.
       expect(storeRef!.revenues).toEqual(seedData.revenues);
       expect(storeRef!.settings).toEqual(seedData.settings);
-      expect(storeRef!.dataOrigin).toBe('seed');
+      expect(storeRef!.dataOrigin).toBe('persisted');
 
       // The failure is controlled: a write was attempted and logged.
       expect(mock.calls).toHaveLength(1);
@@ -212,8 +224,9 @@ describe('save effect — write failure (storage quota)', () => {
       expect(mock.calls).toHaveLength(2);
       expect(warn).toHaveBeenCalledTimes(2);
 
-      // localStorage was never partially/corruptly written.
-      expect(mock.getItem(STORAGE_KEY)).toBeNull();
+      // localStorage was never partially/corruptly written: the payload that was there on load is still
+      // byte-identical after two failed writes.
+      expect(mock.getItem(STORAGE_KEY)).toBe(JSON.stringify({ ...seedData, version: CURRENT_DATA_VERSION }));
     } finally {
       Object.defineProperty(window, 'localStorage', originalDesc);
     }

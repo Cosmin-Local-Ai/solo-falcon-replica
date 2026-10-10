@@ -237,7 +237,8 @@ describe('Phase 6 profile fields are accepted when present', () => {
     // D-3: an invalid payload is preserved under the quarantine key instead of
     // being dropped on the floor, and the store says which recovery happened.
     expect(storeRef!.dataOrigin).toBe('quarantined');
-    expect(storeRef!.revenues).toEqual(seedData.revenues);
+    // Phase 11: the recovery target is an EMPTY dataset, not the demo fixture.
+    expect(storeRef!.revenues).toEqual([]);
   });
 
   it('rejects a negative salaryIncomeLei', () => {

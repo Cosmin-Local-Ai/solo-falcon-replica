@@ -5,6 +5,7 @@ import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import { createCalculationSnapshot } from '../domain/snapshots/snapshot';
 import { ruleSetDigest } from '../domain/fiscal/ruleSetDigest';
 import { parseAppData } from './schema';
+import { seedStorage } from '../test/storage';
 import type { PfaProfile } from '../domain/models';
 import type { FiscalRule, RuleRelease } from '../domain/fiscal/rules';
 import { lei, type Bani } from '../domain/money';
@@ -188,6 +189,10 @@ describe('snapshot persistence (Step 12)', () => {
    * which rules produced it.
    */
   it('the ruleSetHash survives the save path and the zod gate', async () => {
+    // Phase 11: the save effect does not write while the store is in the first-run state, so this test
+    // needs a persisted payload to exercise the save path at all. The snapshot itself is built from this
+    // file's own profile fixture, not from the payload below.
+    seedStorage();
     render(
       <StoreProvider>
         <Probe />

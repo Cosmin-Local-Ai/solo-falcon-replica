@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { StoreProvider } from '../data/store';
+import { seedStorage } from '../test/storage';
 import Revenues from './Revenues';
 
 const activeTabText = () => document.querySelector('.tab.active')?.textContent ?? '';
@@ -60,6 +61,13 @@ describe('Revenues — data preservation across tab navigation', () => {
   // Seed data: registered = FCT-2026-001, FCT-2026-004 (2)
   //             pending    = FCT-2026-002 (1)
   //             rejected   = NF-2026-003 (1)
+  // Phase 11: those rows no longer arrive on their own — empty storage is a first run — so the fixture is
+  // loaded through the store's key, which is the only way the app itself can reach it now.
+  beforeEach(() => {
+    localStorage.clear();
+    seedStorage();
+  });
+
   it('rows reappear unchanged after navigating between tabs and back', () => {
     render(
       <StoreProvider>

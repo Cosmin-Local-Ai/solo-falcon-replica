@@ -2,11 +2,17 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { StoreProvider, STORAGE_KEY } from './data/store';
 import { seedData } from './data/seed';
+import { seedStorage } from './test/storage';
 import App from './App';
 
 describe('App topbar identity (Step 25 — Defect 5)', () => {
+  // Phase 11: a fresh profile now opens on onboarding with no name in the chrome — that is the behaviour
+  // acceptance 1 pins, and it is pinned in `e2e/first-run.spec.ts` and in the first-run test below. The
+  // tests in this file are about the identity the shell renders WHEN there is one, so they load the
+  // fixture through the store's key instead of relying on it being handed out.
   beforeEach(() => {
     localStorage.clear();
+    seedStorage();
   });
 
   afterEach(() => {
@@ -37,6 +43,11 @@ describe('App topbar identity (Step 25 — Defect 5)', () => {
  * payload is visible instead of silent (D-3, B-11).
  */
 describe('App shell identity and recovery (Phase 7)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    seedStorage();
+  });
+
   it('renders the company identity in the sidebar from the same store as the topbar', () => {
     render(
       <StoreProvider>

@@ -85,7 +85,7 @@ Four open defects the audit **missed** are carried in §4: **B-30** (input-VAT d
 | **B-44** | Projection divides by fiscal-year elapsed months and multiplies by 12, ignoring the PFA's actual active period; a PFA starting in October is projected as if it had been trading since 1 January | **12** |
 | **B-45** | The FY2026 minimum-wage vintage is recorded UNVERIFIED and is labelled on thresholds, but the same uncertainty applies wherever SM-derived values feed the **calculation**; the assumption is not identifiable later from the calculation record | **17**, **15** |
 | **B-46** | UTC-based date defaults in page forms, and e2e assertions that only pass while today is before 25 May 2027 | **12C** (defaults), **32** (inject a controlled date) |
-| **B-47** | The seed tells two product stories: a 2020-start PFA with a 2025 filing history, against a product specified as starting in 2026 with no prior-year history | **11** / **PG-3** |
+| ~~B-47~~ | **CLOSED by Phase 11 / PG-3 (2026-10-10).** The seed is now a **2026-start** PFA: `pfaStartYear: 2026`, `pfaStartDate: '2026-01-19'`, every recorded document dated after it, and the 2025 D212 removed from `documents`, `statements` and `companyDocs.im` — TASK 9 emptied `declarations` but left that document behind, and it is not merely false, it is **impossible** for a PFA registered in 2026. `fxRates` stays absent rather than `[]`. The fixture lost documents and a filing, not amounts: deductible 120,00 / 144,00 lei, VNA 9.096,00, impozit 819,00, clock 3.249,00, reserve 1.083,00, year-end 3.112,00 all still green. Original wording: ~~The seed tells two product stories: a 2020-start PFA with a 2025 filing history, against a product specified as starting in 2026 with no prior-year history~~ | **11** / **PG-3** |
 | **B-48** | **No fiscal-year lifecycle.** Past 31 December the Dashboard still runs a run-rate: at 15 Jan 2027 it reads 12,5 din 12 luni and 3.086 lei; at 26 May 2027, 16,8 din 12 and 2.916 lei — same data, a different answer every day. There is no 2027 rule package and the fiscal year is only a manual Settings field. The first real boundary is about 12 weeks away | **PG-4** |
 | **B-49** | **`addSnapshot` has no production caller** (`store.tsx:98`, `:349`; the only other mention is a comment). The app never persists a calculation record, so the rule-immutability and R1/R2 replay machinery has no live write path — and `completeness.ts:180` asks for at least one snapshot with status `computed`, which is why Date lipsă: Estimare impozit can never clear. One defect, two symptoms | **PG-8** |
 | **B-50** | All 39 expense rules are ACTIVE with the same `verifiedAt` while most caps carry CONFLICT NEREZOLVAT — contradicting the repo's own rule that ambiguous law is staged for review | **PG-9** |
@@ -158,7 +158,7 @@ Phases in **bold** are new, inserted by the audit. The rest keep the user's numb
 | # | Phase | Status | Closes |
 |---|---|---|---|
 | **10c** | **FX end to end: rate ingress and one normalised-ledger boundary** | **DONE** (2026-10-10, `phases/26_fx_end_to_end.md`) | B-36, B-37 |
-| 11 | Coherent 2026 seed state + first-run separation | partially done by TASK 9 | B-47, D1 |
+| 11 | Coherent 2026 seed state + first-run separation | **DONE** (2026-10-10, `phases/28_phase11_first_run.md`) | B-47, D1 |
 | 12 | Run-rate projection over the **active period** | partial | B-44 |
 | 12A | Expense deductibility model | **DONE** (TASK 2a–2d) — gap-check only | — |
 | 12B | Pension fact for CASS | **DONE** (TASK 5) — gap-check only | — |
@@ -205,7 +205,16 @@ Phases in **bold** are new, inserted by the audit. The rest keep the user's numb
 - Prove: an EUR record with a rate reconciles across summary, graph and estimate; the same record without a rate cannot make the result look complete.
 - Do not add a network path; manual/store ingress only, as 10b left it.
 
-### 11 — Coherent 2026 seed + first-run separation
+### 11 — Coherent 2026 seed + first-run separation *(**DONE 2026-10-10**, see `phases/28_phase11_first_run.md`)*
+
+**Closed as written, with the two §9 blockers resolved by the user (decisions 4 and 5).** Empty storage now
+yields `emptyData()` with `dataOrigin: 'empty'`; `'seed'` is deleted from the union and the demo is a distinct
+`'sandbox'` origin that the save effect refuses to write. `pages/Onboarding.tsx` collects the facts the engine
+reads and refuses the regimes the engine cannot compute, with **no figure on the refusal screen**. **No
+migration step and no data-version bump** — backfilling `pfaStartDate` from `pfaStartYear` would mint a
+registration date nobody recorded. Proven in **Playwright**, per acceptance 1: `e2e/first-run.spec.ts`, and
+proven to bite by reverting the one-line loader change.
+
 - Resolve **B-47**: the seed is a 2020 PFA with a 2025 D212; the product is specified as a 2026-start PFA with no prior-year history. **Blocked on §9 decision 5.** TASK 9's removal of the false quarterly filings was correct and stays.
 - **D1**: `store.tsx:166-167` hands a first-run user `seedData` with `dataOrigin: 'seed'`, and only `'quarantined'` renders a banner. Either start empty or label the demo — **blocked on §9 decision 4**.
 - Keep demo data separate from a clean workspace; expected totals in fixtures are labelled as expected results, not mutable UI state.

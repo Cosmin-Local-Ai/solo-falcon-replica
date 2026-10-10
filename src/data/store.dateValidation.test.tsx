@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, render } from '@testing-library/react';
 import { StoreProvider, useStore } from './store';
+import { CURRENT_DATA_VERSION } from './migration';
 import { seedData } from './seed';
 import type { Expense, Revenue, Toast } from './types';
 import { lei, ron } from '../domain/money';
@@ -27,7 +28,13 @@ afterEach(() => {
   localStorage.clear();
 });
 
+/**
+ * Phase 11: a fresh store is EMPTY now, not the demo fixture. The B-21 assertions below compare against
+ * the fixture's records, so the fixture is loaded the way the app loads data — as a persisted payload at
+ * the current version, which keeps the migration chain out of the picture.
+ */
 function renderStore() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...seedData, version: CURRENT_DATA_VERSION }));
   render(
     <StoreProvider>
       <Probe />

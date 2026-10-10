@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { fixedInstant } from '../src/test/fixedInstant';
+import { seedBrowser, seedBrowserOnce, seedPayload, STORAGE_KEY } from './fixtures';
 
 /**
  * Dashboard e2e coverage (Step 34, Worker 2).
@@ -18,7 +19,8 @@ import { fixedInstant } from '../src/test/fixedInstant';
  *   - "Date complete"            → `${satisfiedCount}/${totalCount}`
  */
 
-const STORAGE_KEY = 'pfa-app-data-v2';
+// Phase 11: `STORAGE_KEY` and the seeding helpers now come from `e2e/fixtures.ts`, which is also where
+// the payload shape (fixture + version stamp) is decided once instead of per spec.
 
 /** Shared settings payload for localStorage-seeded datasets (valid per settingsSchema). */
 // TASK 9 re-pin (replaced, not deleted): the legacy `company` block followed the seed's identity fix —
@@ -80,6 +82,12 @@ async function fixClock(page: Page): Promise<void> {
 }
 
 test.describe('Dashboard — cockpit cards (seed data)', () => {
+  // Phase 11: a fresh browser context no longer receives the fixture — empty storage opens on onboarding —
+  // so every test in this file that renders the fixture loads it as a persisted payload.
+  test.beforeEach(async ({ page }) => {
+    await seedBrowser(page);
+  });
+
   test('renders all cockpit cards with correct labels and seed-derived values', async ({ page }) => {
     await fixClock(page);
     await page.goto('/dashboard');
@@ -185,6 +193,9 @@ test.describe('Dashboard — cockpit cards (seed data)', () => {
 });
 
 test.describe('Dashboard — section content (seed data)', () => {
+  test.beforeEach(async ({ page }) => {
+    await seedBrowser(page);
+  });
   /**
    * Every section renders from the app's built-in seed dataset (fresh
    * browser context, no localStorage) with asOf = today (fiscal year 2026).
@@ -386,7 +397,11 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(completeness.getByText('nu există declarații')).toBeVisible();
     // The company documents the seed does hold, stated per section — the D212 for the 2025 year sits in
     // `im`, and `cs` is empty because D212 is one form covering income and contributions alike.
-    await expect(completeness.getByText(/im: 1, tva: 1, facturi: 3/)).toBeVisible();
+    // Phase 11 re-pin (replaced, not deleted): `im: 1` is gone. The D212 for the 2025 year that sat in
+    // `im` is an impossible document for a PFA that started on 2026-01-19 — there is no 2025 income year
+    // to declare — so the fixture no longer holds it (see the note in src/data/seed.ts). The section list
+    // states what is actually there; `cs` stays absent because it is empty.
+    await expect(completeness.getByText(/tva: 1, facturi: 3/)).toBeVisible();
     await expect(completeness.getByText('Complet', { exact: true })).toHaveCount(7);
     await expect(completeness.getByText('Lipsă', { exact: true })).toHaveCount(2);
   });
@@ -530,6 +545,10 @@ test.describe('Dashboard — section content (seed data)', () => {
 });
 
 test.describe('Dashboard — mobile viewport (390x844)', () => {
+  test.beforeEach(async ({ page }) => {
+    await seedBrowser(page);
+  });
+
   test('renders without horizontal overflow', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/dashboard');
@@ -546,6 +565,10 @@ test.describe('Dashboard — mobile viewport (390x844)', () => {
 });
 
 test.describe('Dashboard — navigation', () => {
+  test.beforeEach(async ({ page }) => {
+    await seedBrowser(page);
+  });
+
   test('normalizes / to /dashboard and shows the dashboard title', async ({ page }) => {
     await page.goto('/');
     await expect(page).toHaveURL(/\/dashboard$/);
@@ -568,15 +591,12 @@ test.describe('Dashboard — navigation', () => {
   });
 });
 
-test.describe('Dashboard — empty state', () => {
-  test('shows the onboarding CTA when no data is recorded', async ({ page }) => {
-    // Seed a valid-but-empty dataset into localStorage *before* the app
-    // scripts run (addInitScript), so the store loads it directly and the
-    // page's hasData gate switches to the onboarding CTA. This avoids a
-    // post-load evaluate + reload, which is racy under parallel execution.
-    //
-    // The persisted schema requires only `revenues` + `settings`; every
-    // other collection is optional and backfilled to empty on load.
+test.describe('Dashboard — zero records (acceptance 6)', () => {
+  test('shows the zero-record card AND the deadline / completeness / next-steps sections', async ({ page }) => {
+    // A valid-but-empty dataset is NOT a first run: the profile exists, the registers do not. Phase 11
+    // rewrote this test rather than re-pinning it — the old version asserted that nothing but the card
+    // renders, which is exactly the B-68 shape: a deadline does not stop existing because the ledger is
+    // empty, and acceptance 6 requires the next deadline, the profile completeness and the next steps.
     const emptyDataset = {
       revenues: [],
       settings: SEED_SETTINGS,
@@ -589,15 +609,24 @@ test.describe('Dashboard — empty state', () => {
       [STORAGE_KEY, emptyDataset],
     );
 
+    await fixClock(page);
     await page.goto('/dashboard');
 
-    await expect(page.getByRole('heading', { name: 'Începe înregistrarea activității' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Nicio înregistrare de venit sau cheltuială' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Adaugă un venit' })).toHaveAttribute('href', '/revenues');
     await expect(page.getByRole('link', { name: 'Adaugă o cheltuială' })).toHaveAttribute('href', '/expenses');
 
-    // No cockpit cards or dashboard sections in the empty state.
-    await expect(page.locator('.stat-card')).toHaveCount(0);
-    await expect(page.locator('h2.card-title')).toHaveCount(0);
+    // The card reports the absence; it no longer replaces the page. The cockpit and every lower section
+    // still mount.
+    await expect(page.locator('.stat-card')).not.toHaveCount(0);
+    await expect(page.locator('h2.card-title')).not.toHaveCount(0);
+    // Acceptance 6, one assertion per thing it names.
+    const deadlines = page
+      .locator('section.card')
+      .filter({ has: page.locator('h2.card-title', { hasText: 'Termene limită' }) });
+    await expect(deadlines.getByText('Depunere D212')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Completitudine date' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Ce trebuie să faci' })).toBeVisible();
   });
 });
 
@@ -1056,10 +1085,14 @@ test.describe('Dashboard — impozit_pe_cit on a PFA is a data-integrity failure
 
 test.describe('Dashboard — a recorded reserve survives a reload (TASK 9)', () => {
   test('the reserve the user records is read back from the store after a reload', async ({ page }) => {
-    // Deliberately NOT seeded with addInitScript: that script re-runs on every document, including
+    // Phase 11: the app no longer loads a fixture on its own, so the payload has to be seeded — but
+    // seeded ONCE. `addInitScript` re-runs on every document including the reload, and an unconditional
+    // seed would overwrite the value the UI just saved, which is the same trap the note below describes.
+    await seedBrowserOnce(page);
+    // Deliberately NOT seeded with a plain addInitScript: that script re-runs on every document, including
     // reload, and would overwrite the value the UI just saved — the assertion would then prove nothing
-    // (the same reason e2e/settings.spec.ts:125 avoids it). The app loads its own seed, the user records
-    // a reserve, and the reload reads back what the store actually persisted.
+    // (the same reason e2e/settings.spec.ts:125 avoids it). The app loads the seeded payload, the user
+    // records a reserve, and the reload reads back what the store actually persisted.
     //
     // This is the round trip the reserve had no coverage for: TASK 3 fixed two read sites that ignored
     // the recorded value, and nothing in the suite proved the value survived the page at all.

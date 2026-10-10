@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { fixedInstant } from '../src/test/fixedInstant';
+import { seedBrowserOnce } from './fixtures';
 
 /**
  * Phase 6 e2e — the fiscal profile is editable, and editing it survives a reload.
@@ -124,10 +125,14 @@ async function storedProfile(page: Page): Promise<Record<string, unknown>> {
 
 test.describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () => {
   test('offers only the regime a PFA can hold, and round-trips an edit through reload', async ({ page }) => {
-    // Deliberately NOT seeded with addInitScript: that script re-runs on every document,
+    // Deliberately NOT seeded with a plain addInitScript: that script re-runs on every document,
     // including reload, and would overwrite the value the UI just saved — the assertion
-    // would then prove nothing. Here the app loads its own seed, edits it, and the reload
+    // would then prove nothing. Here the app loads the seeded payload, edits it, and the reload
     // reads back what the store persisted.
+    //
+    // Phase 11: "the app's own seed" is no longer a thing — empty storage opens on onboarding — so the
+    // payload is seeded explicitly, once.
+    await seedBrowserOnce(page);
     await page.goto('/settings#!/fiscal');
 
     const regime = field(page, 'Regim fiscal').locator('select');
@@ -300,6 +305,8 @@ test.describe('Phase 7 — identity round-trips through the one store', () => {
   }
 
   test('a personal name edit reaches the topbar and the greeting after a reload', async ({ page }) => {
+    // Phase 11: seeded once, so the edit round-trips through the store instead of being re-seeded.
+    await seedBrowserOnce(page);
     await page.goto('/settings#!/account');
     await field(page, 'Nume').locator('input').fill('Georgescu Maria');
     await page.getByRole('button', { name: 'Salvează' }).click();
@@ -318,6 +325,7 @@ test.describe('Phase 7 — identity round-trips through the one store', () => {
   });
 
   test('the sidebar renders the company name from the store, not a hardcoded brand', async ({ page }) => {
+    await seedBrowserOnce(page);
     await page.goto('/settings#!/company');
     await field(page, 'Denumire').locator('input').fill('Georgescu Maria SRL');
     // The PFA tab has two "Salvează" buttons (page header + mențiuni card); the header one saves
@@ -369,7 +377,11 @@ test.describe('Phase 7 — a corrupt payload is quarantined, not silently replac
     // survives the save that follows it (decision D-3).
     const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}'), STORAGE_KEY);
     expect(saved.version).toBeGreaterThan(0);
-    expect(saved.revenues.length).toBeGreaterThan(0);
+    // Phase 11 re-pin (replaced, not deleted): the recovery target is an EMPTY dataset, not the demo
+    // fixture. Handing a user who just lost their data a screenful of someone else's invoices was the D1
+    // defect wearing a banner. What this test guards is unchanged — the rejected bytes survive the save
+    // that follows the load, in the quarantine key.
+    expect(saved.revenues).toEqual([]);
     const afterSave = await page.evaluate(
       (key) => JSON.parse(localStorage.getItem(`${key}:quarantine`) ?? '{}'),
       STORAGE_KEY,
@@ -504,9 +516,12 @@ test.describe('Phase 10c — a rate entered in Settings reconciles the ledger (B
     // pinned instant. Same instant, now through the one constant.
     await fixClock(page);
 
-    // Deliberately NOT seeded with `addInitScript`: that re-runs on every document, so it would re-apply
+    // Deliberately NOT seeded with a plain `addInitScript`: that re-runs on every document, so it would re-apply
     // this payload over the rate the UI is about to save and the reload assertion would prove nothing.
-    // Load the app's own dataset, then rewrite its ledger once, in place.
+    // Seed the payload once, then rewrite its ledger once, in place.
+    //
+    // Phase 11: the app no longer loads a dataset of its own on a fresh profile, so the seed is explicit.
+    await seedBrowserOnce(page);
     await page.goto('/dashboard');
     await page.evaluate(
       ([key, eur]: [string, unknown]) => {
@@ -522,7 +537,10 @@ test.describe('Phase 10c — a rate entered in Settings reconciles the ledger (B
 
     // The record has not vanished: the dashboard renders, and says the totals are not complete.
     await expect(page.getByRole('heading', { name: 'Tablou de bord' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Începe înregistrarea activității' })).toHaveCount(0);
+    // Phase 11 re-pin (replaced, not deleted): the old assertion looked for the start-from-scratch heading,
+    // which no longer exists. The B-68 property is what is asserted now — a record that is present but
+    // excluded from every total must not put the zero-record card on screen.
+    await expect(page.locator('[data-empty-state]')).toHaveCount(0);
     await expect(page.locator('[data-unconverted="rev-eur-1"]')).toContainText('1.000,00 EUR');
 
     // The fix is a rate, entered by the user. Currency, kind and date default to what a EUR daily rate is.
@@ -546,6 +564,8 @@ test.describe('Phase 10c — a rate entered in Settings reconciles the ledger (B
   test('an incomplete rate is refused, and the refusal is the validator’s own words', async ({ page }) => {
     // PG-0: was the fourth inline copy of the pinned instant.
     await fixClock(page);
+    // Phase 11: Settings is not reachable from a first run, so the payload is seeded.
+    await seedBrowserOnce(page);
     await page.goto('/settings#!/fiscal');
 
     await page.locator('[name="fx-rate"]').fill('5.3470'); // a number anchored to nothing

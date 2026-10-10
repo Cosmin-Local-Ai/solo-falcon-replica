@@ -155,21 +155,28 @@ afterEach(() => {
 });
 
 describe('Dashboard page', () => {
-  test('shows the onboarding CTA when no data is recorded', async () => {
-    // Seed a valid-but-empty dataset so the store loads it directly and the
-    // hasData gate switches to the onboarding CTA (an empty localStorage would
-    // fall back to the non-empty seedData instead).
+  test('shows the zero-record card AND still renders the sections when nothing is recorded', async () => {
+    // Phase 11 rewrote this test rather than re-pinning it. The old version asserted that a dashboard with
+    // no records renders NOTHING but a start-from-scratch card — no cockpit, no sections. That is B-68's
+    // shape: the deadlines, the thresholds and the completeness card do not stop existing because the
+    // ledger is empty, and acceptance 6 says the next deadline, the profile completeness and the next
+    // steps have to be visible with zero records.
     writePayload();
     renderDashboard();
 
-    // The store loads from localStorage asynchronously — wait for the CTA.
-    expect(await screen.findByRole('heading', { name: 'Începe înregistrarea activității' })).toBeVisible();
+    // The store loads from localStorage asynchronously — wait for the card.
+    expect(await screen.findByRole('heading', { name: 'Nicio înregistrare de venit sau cheltuială' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Adaugă un venit' })).toHaveAttribute('href', '/revenues');
     expect(screen.getByRole('link', { name: 'Adaugă o cheltuială' })).toHaveAttribute('href', '/expenses');
 
-    // No cockpit cards or dashboard sections in the empty state.
-    expect(document.querySelectorAll('.stat-card')).toHaveLength(0);
-    expect(document.querySelectorAll('h2.card-title')).toHaveLength(0);
+    // The card reports the absence; it no longer replaces the page.
+    expect(document.querySelector('[data-empty-state]')).not.toBeNull();
+    expect(document.querySelectorAll('.stat-card').length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('h2.card-title').length).toBeGreaterThan(0);
+    // Acceptance 6, one assertion per section the old gate used to hide.
+    expect(screen.getByRole('heading', { name: 'Termene limită' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Completitudine date' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Ce trebuie să faci' })).toBeVisible();
   });
 
   test('renders the cockpit cards and all sections when data is recorded', async () => {
@@ -345,7 +352,10 @@ describe('Dashboard page', () => {
     renderDashboard();
 
     expect(await screen.findByRole('heading', { name: 'Tablou de bord' })).toBeVisible();
-    expect(screen.queryByRole('heading', { name: 'Începe înregistrarea activității' })).toBeNull();
+    // Phase 11 re-pin (replaced, not deleted): the old assertion looked for the deleted
+    // „Începe înregistrarea activității” heading. What is asserted is the same property, named directly — a
+    // record that is present but excluded from every lei total must not put the zero-record card on screen.
+    expect(document.querySelector('[data-empty-state]')).toBeNull();
 
     // The summary card says the totals are not complete…
     const notice = document.querySelector('[data-unconverted-count]');

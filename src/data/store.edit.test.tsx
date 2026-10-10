@@ -24,7 +24,13 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function renderStore() {
+/**
+ * Phase 11: a fresh store is now EMPTY, not the demo fixture. These tests edit the fixture's records, so
+ * they load it the way the app now loads data — through the persisted payload, at the current version so
+ * the migration chain stays out of the picture.
+ */
+function renderStore(payload: unknown = { ...seedData, version: CURRENT_DATA_VERSION }) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   render(
     <StoreProvider>
       <Probe />
@@ -52,11 +58,7 @@ const DECLARATION_FIXTURES: Declaration[] = [
 ];
 
 function renderStoreWithDeclarations() {
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({ ...seedData, version: CURRENT_DATA_VERSION, declarations: DECLARATION_FIXTURES }),
-  );
-  renderStore();
+  renderStore({ ...seedData, version: CURRENT_DATA_VERSION, declarations: DECLARATION_FIXTURES });
 }
 
 describe('updateClient', () => {

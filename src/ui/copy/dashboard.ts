@@ -16,9 +16,27 @@ export const dashboard = {
   fiscalYearPrefix: 'An fiscal',
   updatedAt: '· actualizat la',
   greeting: 'Bună,',
-  onboarding: {
-    title: 'Începe înregistrarea activității',
-    body: 'Adaugă prima factură de venit și prima cheltuială pentru a vedea estimarea taxelor, termenele limită și recomandarea de rezervă lunară.',
+  /**
+   * Phase 11: the block that stood here is **deleted, not reworded.** Its title said
+   * „Începe înregistrarea activității” and it rendered as a page that replaced the dashboard. A profile
+   * with no records is not a first run — the profile exists, the registers do not — and a deadline does not
+   * stop existing because the ledger is empty (B-68). `noRecords` below reports the absence while the page
+   * keeps rendering; the first run itself is `pages/Onboarding.tsx`, with its own copy in
+   * `ui/copy/onboarding.ts`.
+   */
+  /**
+   * Phase 11 — the zero-record state, which is NOT the first-run state.
+   *
+   * B-68 is the standing name for what the old gate did: `Dashboard.tsx` gated the whole page on
+   * `pfaRevenue > 0`, so a ledger whose records were all excluded — foreign amounts with no rate, records
+   * with a non-registered status — rendered the "go and record something" card and the deadlines,
+   * thresholds and completeness card disappeared with it. A record the totals leave out is still a
+   * record. The card below now sits ABOVE the sections instead of replacing them: with nothing recorded
+   * the person still gets the next deadline, the profile completeness and what to do next.
+   */
+  noRecords: {
+    title: 'Nicio înregistrare de venit sau cheltuială',
+    body: 'Estimarea nu se poate calcula fără documente, dar termenele, pragurile și completitudinea profilului se afișează și acum.',
     addRevenue: 'Adaugă un venit',
     addExpense: 'Adaugă o cheltuială',
   },
@@ -37,6 +55,14 @@ export const dashboard = {
     /** Split around the interpolated monthly amount so the figure keeps its own node. */
     setAsideLead: 'Impozit estimat de pus deoparte. Pune deoparte',
     setAsideTail: 'pe lună.',
+    /**
+     * Phase 11 — the hero's own incomplete-profile state. It is driven by the `profile` check of
+     * `assessCompleteness`, the same report the completeness card renders, so the hero cannot disagree
+     * with the card the way a second predicate would.
+     */
+    completeProfile: 'Completează profilul',
+    completeProfileBody:
+      'Profilul încă nu are faptele obligatorii. Fără ele estimarea rămâne neîndeplinită în loc să fie aproximată.',
   },
 } as const;
 

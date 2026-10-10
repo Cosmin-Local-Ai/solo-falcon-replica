@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import { StoreProvider, useStore } from './store';
 import { useFinancialDerived, useTaxDerived } from './derived';
+import { seedStorage } from '../test/storage';
 import { lei, ron } from '../domain/money';
 
 const AS_OF = '2026-12-31';
@@ -140,6 +141,10 @@ describe('useTaxDerived (Step 14)', () => {
     // Identity is deliberately NOT part of the tax inputs key. If it were, every
     // name / email / CAEN edit would invalidate the fiscal cache and — once
     // snapshots are persisted — look like a change in the fiscal inputs themselves.
+    // Phase 11: the named identity is a fixture fact, and empty storage is now a first run with no name
+    // in it, so this test loads the fixture the way the app loads data. The other tests in this file read
+    // deltas, so they stay on an empty store on purpose.
+    seedStorage();
     render(
       <StoreProvider>
         <TaxProbe />

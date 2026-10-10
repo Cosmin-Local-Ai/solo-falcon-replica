@@ -30,6 +30,10 @@ const TABS = [
   { key: 'einvoice', label: settingsCopy.tabs.eFactura },
   { key: 'bankaccounts', label: settingsCopy.tabs.bankAccounts },
   { key: 'account', label: settingsCopy.tabs.personal },
+  // Phase 11: where demo data is opted into and where all data is removed. Neither belonged on an
+  // existing tab — "delete everything" next to "change your bank details" is how a destructive control
+  // gets clicked by accident.
+  { key: 'data', label: settingsCopy.tabs.data },
 ] as const;
 type TabKey = (typeof TABS)[number]['key'];
 
@@ -99,8 +103,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
   // all — they are frozen legacy data, read only by the migration chain.
   // `settings` itself stays live for what is genuinely settings: e-Factura
   // behaviour and the bank-account list.
-  const { settings, updateSettings, profile, updateProfile, toast, fxRates } = useStore();
+  const { settings, updateSettings, profile, updateProfile, toast, fxRates, dataOrigin, sandboxActive, loadSandbox, unloadSandbox, resetAllData } = useStore();
   const identity = profile.identity;
+  const [wipeOpen, setWipeOpen] = useState(false);
   const [tab, setTab] = useState<TabKey>(
     TABS.some(t => t.key === initialTab) ? (initialTab as TabKey) : 'company'
   );
@@ -1003,6 +1008,81 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
             />
           </Card>
         </div>
+      )}
+
+      {/* Phase 11 — the two controls that make demo data optional and stored data reversible.
+          Before this phase there was no "start from scratch" path anywhere in the UI: the fixture WAS the
+          initial state, and the only way out was to delete each record by hand. The sandbox is in-memory
+          (`store.tsx` refuses to write while it is active), so loading it cannot damage real records and
+          unloading it restores exactly what was there. */}
+      {tab === 'data' && (
+        <div style={{ display: 'grid', gap: 16, maxWidth: 720 }}>
+          <Card title={settingsCopy.data.card}>
+            <div className="stack">
+              <p data-settings-origin>
+                {dataOrigin === 'empty' && settingsCopy.data.originEmpty}
+                {dataOrigin === 'persisted' && settingsCopy.data.originPersisted}
+                {dataOrigin === 'quarantined' && settingsCopy.data.originQuarantined}
+                {dataOrigin === 'sandbox' && settingsCopy.data.originSandbox}
+              </p>
+            </div>
+          </Card>
+
+          <Card title={settingsCopy.data.sandboxCard}>
+            <div className="stack">
+              <p className="hint">{settingsCopy.data.sandboxBody}</p>
+              <div className="row">
+                {!sandboxActive && (
+                  <button className="btn" onClick={() => { loadSandbox(); toast('success', settingsCopy.dataToasts.sandboxLoaded); }}>
+                    {settingsCopy.data.sandboxLoad}
+                  </button>
+                )}
+                {sandboxActive && (
+                  <button className="btn btn-primary" onClick={() => { unloadSandbox(); toast('success', settingsCopy.dataToasts.sandboxUnloaded); }}>
+                    {settingsCopy.data.sandboxUnload}
+                  </button>
+                )}
+              </div>
+            </div>
+          </Card>
+
+          <Card title={settingsCopy.data.dangerCard}>
+            <div className="stack">
+              <p className="hint">{settingsCopy.data.dangerBody}</p>
+              <div className="row">
+                <button className="btn btn-danger" onClick={() => setWipeOpen(true)}>
+                  {settingsCopy.data.dangerAction}
+                </button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {wipeOpen && (
+        <Modal
+          title={settingsCopy.data.confirmTitle}
+          onClose={() => setWipeOpen(false)}
+          footer={
+            <>
+              <button className="btn btn-ghost" onClick={() => setWipeOpen(false)}>
+                {settingsCopy.data.confirmCancel}
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={() => {
+                  setWipeOpen(false);
+                  resetAllData();
+                  toast('success', settingsCopy.dataToasts.allCleared);
+                }}
+              >
+                {settingsCopy.data.confirmGo}
+              </button>
+            </>
+          }
+        >
+          <p>{settingsCopy.data.confirmBody}</p>
+        </Modal>
       )}
 
       {tvaOpen && (

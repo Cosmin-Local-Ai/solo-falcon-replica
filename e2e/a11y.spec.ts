@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fixedInstant } from '../src/test/fixedInstant';
+import { seedBrowser } from './fixtures';
 
 /**
  * PG-0 — axe-core on `/dashboard`, failing on `serious` and `critical` only.
@@ -62,6 +63,10 @@ function describeViolations(violations: AxeViolation[]): string {
  *  page between the two — a scan that re-navigates would wipe the injected violation and
  *  prove nothing. */
 async function loadDashboard(page: import('@playwright/test').Page): Promise<void> {
+  // Phase 11: a fresh context now opens on onboarding, not on a dashboard full of demo records — which is
+  // the behaviour acceptance 1 pins, and the reason this gate has to seed the fixture explicitly. Without
+  // it axe would scan the first-run screen while believing it scanned /dashboard.
+  await seedBrowser(page);
   await page.clock.setFixedTime(fixedInstant());
   await page.goto('/dashboard');
   // The dashboard paints asynchronously (B-27 is the standing name for that class of flake);

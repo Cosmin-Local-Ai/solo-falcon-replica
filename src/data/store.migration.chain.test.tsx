@@ -708,7 +708,8 @@ describe('load path runs the chain (acceptance criteria 2 and 3)', () => {
     load();
     expect(storeRef!.dataOrigin).toBe('quarantined');
     expect(storeRef!.quarantine!.reason).toBe('unsupported-version');
-    expect(storeRef!.revenues).toEqual(seedData.revenues);
+    // Phase 11: a quarantined payload falls back to an EMPTY dataset, not to the demo fixture.
+    expect(storeRef!.revenues).toEqual([]);
     const preserved = JSON.parse(localStorage.getItem(QUARANTINE_STORAGE_KEY)!) as {
       reason: string;
       raw: string;

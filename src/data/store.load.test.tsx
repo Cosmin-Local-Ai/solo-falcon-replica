@@ -68,15 +68,23 @@ afterEach(() => {
   localStorage.clear();
 });
 
-describe('loadInitial — seed fallback (no stored data)', () => {
-  it('uses seed data when localStorage is empty', () => {
+/**
+ * Phase 11 (D1, D-RUN-1) renamed this whole expectation. Empty storage used to mean "use `seedData`";
+ * it now means "use nothing". The fixture is a test fixture and an opt-in sandbox, never a first run.
+ */
+describe('loadInitial — empty storage starts empty (no fixture)', () => {
+  it('starts with no records when localStorage is empty', () => {
     render(
       <StoreProvider>
         <Probe />
       </StoreProvider>,
     );
-    expect(storeRef!.revenues).toEqual(seedData.revenues);
-    expect(storeRef!.settings).toEqual(seedData.settings);
+    expect(storeRef!.revenues).toEqual([]);
+    expect(storeRef!.expenses).toEqual([]);
+    expect(storeRef!.clients).toEqual([]);
+    // The identity is present as an object and empty as a fact — the app has a profile shape, not a person.
+    expect(storeRef!.profile.identity.nume).toBe('');
+    expect(storeRef!.profile.pfaStartDate).toBeUndefined();
   });
 });
 
@@ -132,18 +140,22 @@ describe('loadInitial — valid persisted data loads (not seed)', () => {
   });
 });
 
-describe('loadInitial — corrupt data recovers to seed', () => {
-  it('falls back to seed on unparseable JSON', () => {
+/**
+ * Phase 11: a rejected payload falls back to an EMPTY dataset, not to the demo fixture. The quarantine
+ * half of the contract is unchanged — the bytes are preserved first, and the state is visible.
+ */
+describe('loadInitial — corrupt data recovers to an empty dataset', () => {
+  it('falls back to nothing on unparseable JSON', () => {
     localStorage.setItem(STORAGE_KEY, '{not json');
     render(
       <StoreProvider>
         <Probe />
       </StoreProvider>,
     );
-    expect(storeRef!.revenues).toEqual(seedData.revenues);
+    expect(storeRef!.revenues).toEqual([]);
   });
 
-  it('falls back to seed when a required collection is missing', () => {
+  it('falls back to nothing when a required collection is missing', () => {
     const { revenues, ...rest } = seedData;
     void revenues;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
@@ -152,20 +164,20 @@ describe('loadInitial — corrupt data recovers to seed', () => {
         <Probe />
       </StoreProvider>,
     );
-    expect(storeRef!.revenues).toEqual(seedData.revenues);
+    expect(storeRef!.revenues).toEqual([]);
   });
 
-  it('falls back to seed on a wrong type for a required collection', () => {
+  it('falls back to nothing on a wrong type for a required collection', () => {
     writePayload({ revenues: 'nope' });
     render(
       <StoreProvider>
         <Probe />
       </StoreProvider>,
     );
-    expect(storeRef!.revenues).toEqual(seedData.revenues);
+    expect(storeRef!.revenues).toEqual([]);
   });
 
-  it('falls back to seed on an invalid number', () => {
+  it('falls back to nothing on an invalid number', () => {
     writePayload({
       revenues: [{ ...validRevenue, valoareFaraTva: lei(-5) }],
     });
@@ -174,10 +186,10 @@ describe('loadInitial — corrupt data recovers to seed', () => {
         <Probe />
       </StoreProvider>,
     );
-    expect(storeRef!.revenues).toEqual(seedData.revenues);
+    expect(storeRef!.revenues).toEqual([]);
   });
 
-  it('falls back to seed on an empty settings object', () => {
+  it('falls back to nothing on an empty settings object', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({ profile: seedData.profile, revenues: [], settings: {} }),
@@ -187,21 +199,21 @@ describe('loadInitial — corrupt data recovers to seed', () => {
         <Probe />
       </StoreProvider>,
     );
-    expect(storeRef!.revenues).toEqual(seedData.revenues);
-    expect(storeRef!.settings).toEqual(seedData.settings);
+    expect(storeRef!.revenues).toEqual([]);
+    expect(storeRef!.settings.company.denumire).toBe('');
   });
 
-  it('falls back to seed on an invalid profile', () => {
+  it('falls back to nothing on an invalid profile', () => {
     writePayload({ profile: { ...seedData.profile, regime: 'impozit_pe_cit2' } });
     render(
       <StoreProvider>
         <Probe />
       </StoreProvider>,
     );
-    expect(storeRef!.revenues).toEqual(seedData.revenues);
+    expect(storeRef!.revenues).toEqual([]);
   });
 
-  it('persists the recovered seed state back to localStorage', () => {
+  it('persists the recovered empty state back to localStorage', () => {
     localStorage.setItem(STORAGE_KEY, '{corrupt');
     render(
       <StoreProvider>
@@ -209,19 +221,22 @@ describe('loadInitial — corrupt data recovers to seed', () => {
       </StoreProvider>,
     );
     const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as AppData;
-    expect(persisted.revenues).toEqual(seedData.revenues);
-    expect(persisted.settings).toEqual(seedData.settings);
+    // The quarantine banner is the only thing that may survive a rejected payload into the data key —
+    // and it survives in the QUARANTINE key, never here.
+    expect(persisted.revenues).toEqual([]);
+    expect(persisted.expenses).toEqual([]);
+    expect(persisted.settings.company.denumire).toBe('');
   });
 });
 
 describe('loadInitial — dataOrigin flag', () => {
-  it("is 'seed' when storage is empty", () => {
+  it("is 'empty' when storage is empty", () => {
     render(
       <StoreProvider>
         <Probe />
       </StoreProvider>,
     );
-    expect(storeRef!.dataOrigin).toBe('seed');
+    expect(storeRef!.dataOrigin).toBe('empty');
   });
 
   it("is 'persisted' when a valid dataset loads", () => {
@@ -235,24 +250,33 @@ describe('loadInitial — dataOrigin flag', () => {
     expect(storeRef!.revenues).not.toEqual(seedData.revenues);
   });
 
-  it("is 'seed' after recovery from corrupt data", () => {
+  it("is 'empty' after recovery when there is nothing to recover", () => {
+    render(
+      <StoreProvider>
+        <Probe />
+      </StoreProvider>,
+    );
+    expect(storeRef!.dataOrigin).toBe('empty');
+  });
+
+  it("is 'quarantined' after recovery from corrupt data, on an empty dataset (D-3, B-11)", () => {
     localStorage.setItem(STORAGE_KEY, '{corrupt');
     render(
       <StoreProvider>
         <Probe />
       </StoreProvider>,
     );
-    // D-3: the payload is no longer silently discarded. The app still recovers to
-    // seed data, but it says so and keeps the rejected copy retrievable (B-11).
+    // D-3: the payload is not silently discarded — it is preserved and the state is visible. Phase 11
+    // changed only WHAT the app recovers TO: an empty dataset, not the demo fixture.
     expect(storeRef!.dataOrigin).toBe('quarantined');
-    expect(storeRef!.revenues).toEqual(seedData.revenues);
+    expect(storeRef!.revenues).toEqual([]);
     expect(storeRef!.quarantine).not.toBeNull();
     expect(storeRef!.quarantine!.reason).toBe('unparseable-json');
     expect(storeRef!.quarantine!.raw).toBe('{corrupt');
     expect(localStorage.getItem(QUARANTINE_STORAGE_KEY)).toContain('{corrupt');
   });
 
-  it("is 'seed' after recovery from a missing required collection", () => {
+  it("is 'quarantined' after recovery from a missing required collection", () => {
     const { revenues, ...rest } = seedData;
     void revenues;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
