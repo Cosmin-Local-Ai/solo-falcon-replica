@@ -5,6 +5,7 @@ import { Card, Badge, Modal } from '../components/ui';
 import { Disclosure } from '../components/ui/Disclosure';
 import { InterpretationNote } from '../components/ui/InterpretationNote';
 import { FxRateProvenance } from '../components/ui/FxRateProvenance';
+import { FxRateEntryForm } from '../components/ui/FxRateEntryForm';
 import { copy, fields, settings as settingsCopy, validation } from '../ui/copy';
 import {
   isSelectableRegime,
@@ -983,16 +984,17 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
           </Card>
 
           {/*
-            TASK 10a — the recorded exchange rates, with their provenance on the face of the card.
-            Read-only here on purpose: 10a builds the store, the fetcher boundary and the conversion rule;
-            the entry form and the provisional → final lifecycle are TASK 10b's. What this card establishes
-            now is that a rate is never shown as a bare number — the series, the source and the fetch date
-            travel with it, because BNR's licence requires the source to be indicated and a conversion the
-            user cannot trace is a conversion they cannot defend.
+            TASK 10a put the recorded rates on this card read-only; Phase 10c (B-36) opens the door they
+            come in through. The form calls the store's existing validated upsert (`recordFxRate`, keyed by
+            `rateKey`) and surfaces its refusals verbatim — it adds no validation of its own and no network
+            path. A user holding a EUR record can now resolve the missing-rate condition here, without a
+            developer: the rate is entered, the record reconciles on the next calculation, and the register
+            above shows what is stored, with its provisional/final state and its source.
           */}
           <Card title={copy.fx.card}>
             <p className="hint">{copy.fx.explanation}</p>
             <FxRateProvenance records={fxRates ?? []} id="fx-rate-provenance" />
+            <FxRateEntryForm id="fx-rate-entry" />
             <p className="hint">{copy.fx.manualEntryHint}</p>
             <InterpretationNote note={copy.notes.fxAnnualNotComputable} />
             <InterpretationNote

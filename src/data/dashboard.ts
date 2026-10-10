@@ -3,10 +3,13 @@ import {
   selectYtd,
   selectMonthly,
   auditFiscalDates,
+  selectUnconvertedRecords,
   type YtdTotals,
   type MonthlyTotals,
   type DashboardSnapshot,
+  type UnconvertedRecord,
 } from '../domain/aggregation';
+import { normaliseStoredLedger, type LedgerConversion } from '../domain/fx/ledger';
 import { assessCompleteness, type CompletenessReport } from '../domain/completeness';
 import { selectProjectionV1, type ProjectionV1 } from '../domain/projection';
 import {
@@ -70,6 +73,45 @@ export interface PendingCounts {
   declarationsInAsteptare: number;
 }
 
+/**
+ * Phase 10c (B-37) — the ledger the money surfaces actually read, and the two lists that make it honest.
+ *
+ * `conversions` names every record that entered the lei totals only because a recorded rate converted it,
+ * with the rate, the date it was keyed to, the citation, the series and whether it is provisional.
+ * `unconverted` names every foreign record the lei totals still leave out, with the datum that is missing.
+ * The second list is the one that stops a total reading as complete.
+ */
+export interface LedgerDisclosure {
+  conversions: LedgerConversion[];
+  unconverted: UnconvertedRecord[];
+}
+
+/**
+ * THE one normalised ledger boundary for every money surface in this file (Phase 10c, B-37).
+ *
+ * Summary, the monthly series, the projection behind the graph, the threshold rows and the snapshot all
+ * read the ledger this returns, and the tax estimate reads the same function through
+ * `estimateBasis.ts selectEstimateOperands`. Before 10c the estimate normalised and these selectors did
+ * not, so a user with one EUR invoice saw two revenue totals — the defect B-37 names.
+ *
+ * The pass is idempotent (`domain/fx/ledger.ts`), so calling it per selector cannot drift and cannot
+ * convert an already-converted record.
+ */
+function ledgerOf(data: AppData) {
+  return normaliseStoredLedger(data);
+}
+
+/** The conversions and the still-unconverted records behind the totals this dashboard renders. */
+export function getLedgerDisclosure(data: AppData): LedgerDisclosure {
+  const ledger = ledgerOf(data);
+  return {
+    conversions: ledger.conversions,
+    // The disclosure mechanism is the one `aggregation.ts` already had — `selectUnconvertedRecords` —
+    // extended with the reason the conversion pass found, not a second list invented beside it.
+    unconverted: selectUnconvertedRecords(ledger.data, ledger.unconverted),
+  };
+}
+
 export interface DashboardSnapshotView extends DashboardSnapshot {
   pfaRevenue: Bani;
 }
@@ -119,6 +161,12 @@ export interface DashboardData {
   pendingCounts: PendingCounts;
   legislation: LegislationState;
   /**
+   * Phase 10c — what the lei totals in this view did with the foreign-currency records: which ones a
+   * recorded rate brought in, and which ones are still out. A total with something still missing from it
+   * must not read as complete, and this is what says so.
+   */
+  ledger: LedgerDisclosure;
+  /**
    * TASK 9 — which rule package produced the figure the hero shows, and whether the digest that record
    * carries still verifies against the registered rules. `null` when there is no calculation to ask.
    */
@@ -134,15 +182,15 @@ function daysBetween(from: string, to: string): number {
 }
 
 export function getFinancialSummary(data: AppData, asOfDate: string): YtdTotals {
-  return selectYtd(data, asOfDate);
+  return selectYtd(ledgerOf(data).data, asOfDate);
 }
 
 export function getMonthlyFinancialSeries(data: AppData, asOfDate: string): Map<string, MonthlyTotals> {
-  return selectMonthly(data, asOfDate);
+  return selectMonthly(ledgerOf(data).data, asOfDate);
 }
 
 export function getProjectedFinancialSeries(data: AppData, asOfDate: string): ProjectionV1 {
-  return selectProjectionV1(data, asOfDate);
+  return selectProjectionV1(ledgerOf(data).data, asOfDate);
 }
 
 export function getDataCompleteness(data: AppData): CompletenessReport {
@@ -271,7 +319,7 @@ export function getThresholdStatuses(
   asOfDate: string,
   tax: TaxEstimateResult | TaxEstimateWithBasis | null,
 ): FiscalThreshold[] {
-  const ytd = selectYtd(data, asOfDate);
+  const ytd = selectYtd(ledgerOf(data).data, asOfDate);
   const estimate = tax === null ? null : withEstimateBasis(tax);
   // TASK 6: selected, not imported. `ruleRelease` on a threshold row is the releaseId of the release that
   // produced the row — it used to be `PFA_2026_RELEASE.ruleIds[0]`, i.e. the first RULE id stamped on a
@@ -542,7 +590,7 @@ function buildSnapshot(
     // to disagree about whether a VAT registration deadline exists.
     vatExceedanceDate: data.profile.vatExceedanceDate,
   });
-  const ytd = selectYtd(data, asOfDate);
+  const ytd = selectYtd(ledgerOf(data).data, asOfDate);
   // Single source for both the snapshot rows and `DashboardData.thresholds` — the inline
   // duplicate that used to live here is what let the two paths drift.
   const thresholds = getThresholdStatuses(data, asOfDate, tax);
@@ -637,6 +685,7 @@ export function buildDashboardData(
     reserve: getTaxReserve(data, asOfDate, estimate),
     insights: attention.observations,
     pendingCounts: getPendingCounts(data),
+    ledger: getLedgerDisclosure(data),
     legislation: getLegislationState(data, asOfDate, estimateProvenance(estimate)),
     provenance: estimateProvenance(estimate),
   };

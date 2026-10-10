@@ -113,4 +113,4 @@ Roadmap Phases 1–10 — DONE. Pre-Phase-11 TASKS 1–9, 10a, 10b — DONE. **T
 6. `tsc` 0 · all unit tests pass · `build` 0 · `e2e` green · guard allow-list empty.
 
 ## HANDOFF
-Write `docs/ai/phases/25_fx_end_to_end.md` in the house format. State plainly **what still cannot be converted and why**, and name anything 10c exposed for PG-2 rather than fixing it silently.
+Write `docs/ai/phases/26_fx_end_to_end.md` in the house format. State plainly **what still cannot be converted and why**, and name anything 10c exposed for PG-2 rather than fixing it silently.

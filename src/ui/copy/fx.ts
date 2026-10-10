@@ -72,4 +72,99 @@ export const fx = {
   /** The source a human is pointed at when a machine-readable export does not exist. */
   manualEntryHint:
     'Media anuală se introduce manual: BNR o publică într-un tabel, nu într-un fișier pe care aplicația să-l poată citi.',
+
+  /**
+   * Phase 10c (B-36) — the entry form. A rate is a legal datum, so the form asks for everything the record
+   * has to carry: the currency, the printed decimal, the kind, the date or year it anchors to, the series,
+   * the source and whether it is final. There is no „fetch” button on purpose: nothing in this app reads
+   * BNR over the network, and a rate that arrives by itself would be a rate nobody can name a source for.
+   */
+  entry: {
+    title: 'Înregistrare manuală a unui curs',
+    intro:
+      'Aplicația nu citește niciun curs de pe internet. Cursul se înregistrează aici, din tabelul publicat '
+      + 'de BNR, și rămâne înregistrat până când o nouă înregistrare cu aceeași monedă, același tip și '
+      + 'aceeași dată sau același an îl înlocuiește.',
+    fields: {
+      currency: 'Moneda',
+      rate: 'Curs (lei pentru o unitate)',
+      rateKind: 'Tip de curs',
+      rateDate: 'Valabil pentru data',
+      rateYear: 'Anul mediei',
+      seriesCode: 'Serie BNR',
+      sourceUrl: 'Sursa (adresa paginii BNR)',
+      status: 'Stare',
+    },
+    rateHelp:
+      'Câți lei face o unitate din monedă, scris exact cum îl publică BNR — de exemplu 5.3470, nu 5,35.',
+    save: 'Înregistrează cursul',
+    /** The upsert, said plainly: this is the correction route, not an edit hidden behind a pencil icon. */
+    upsertHint:
+      'Corectura unui curs deja folosit la o conversie se face tot aici: aceeași monedă, același tip și '
+      + 'aceeași dată sau același an înlocuiesc înregistrarea, iar totalurile se recalculează la următorul calcul.',
+    saved: (currency: string, validFor: string) =>
+      `Cursul ${currency} valabil pentru ${validFor} este înregistrat.`,
+    replaced: (currency: string, validFor: string) =>
+      `Înregistrarea existentă pentru ${currency} / ${validFor} a fost înlocuită — aceeași cheie: monedă, tip și dată sau an.`,
+    /** `problems[]` from `recordFxRate` is shown verbatim under this lead; the app does not reword it. */
+    problemsLead: 'Cursul nu a fost salvat. Motivele, exact cum le-a dat verificarea:',
+    seriesUnverified: (code: string) =>
+      `Seriea „${code}” nu este una dintre seriile BNR verificate în acest proiect; este păstrată așa cum `+
+      'a fost scrisă și nu este prezentată ca o serie oficială.',
+    /** Mirrors `manualAnnualAverage`: the year decides, the entrant does not. */
+    provisionalForced:
+      'Media anuală a unui an care nu s-a încheiat încă se înregistrează provizorie; BNR publică media abia '
+      + 'după închiderea anului.',
+  },
+
+  /**
+   * Phase 10c (B-37) — the disclosure that makes one money path visible. Every lei total on the dashboard
+   * is built on the same normalised ledger; this block says which foreign records a recorded rate brought
+   * in, at which rate, and which ones are still out. The second half is the one that matters: a total with
+   * something missing from it must not read as complete.
+   */
+  ledger: {
+    title: 'Inregistrările în valută și totalurile în lei',
+    lead:
+      'Totalurile în lei de pe acest ecran sunt calculate pe aceeași listă de înregistrări pe care o citește '
+      + 'și calculul de impozit. O înregistrare în valută intră în ele numai când există un curs înregistrat '
+      + 'pentru data la care suma a fost încasată sau plătită.',
+    convertedTitle: 'Intrate în totaluri, cu cursul care le-a adus',
+    unconvertedTitle: 'Lăsate în afara totalurilor în lei',
+    /** Lead/Tail split so the count can sit inside a `<strong>` without splitting the sentence. */
+    unconvertedLead: (n: number) => `${n} înregistrări în valută`,
+    unconvertedTail:
+      'nu sunt în niciun total în lei. Cifrele de pe acest ecran nu sunt complete până când pentru ele este '
+      + 'înregistrat un curs.',
+    convertedCount: (n: number) =>
+      `${n} înregistrări au intrat în totaluri prin curs înregistrat.`,
+    provisionalInTotal:
+      'Cel puțin una dintre conversii folosește un curs provizoriu: cifra care o conține nu este o cifră '
+      + 'definitivă.',
+    columns: {
+      record: 'Inregistrare',
+      kind: 'Tip',
+      original: 'Suma înregistrată',
+      rate: 'Curs folosit',
+      onDate: 'Data care ancorează cursul',
+      basis: 'Temei',
+      status: 'Stare',
+      currency: 'Moneda',
+      detail: 'De ce lipsește',
+    },
+    /**
+     * The anchor date named honestly. `collected` / `paid` are the money dates art. 9 alin. (3) lit. b) asks
+     * for; no screen can write them yet (PG-2), so a conversion anchored on the document date has to say so
+     * instead of reading as if a payment date were known.
+     */
+    anchoredOnDocumentDate:
+      'Cursul este ancorat pe data documentului, pentru că înregistrarea nu are dată de încasare sau de '
+      + 'plată. Data documentului nu este data la care suma a fost încasată ori plătită.',
+    anchoredOnMoneyDate:
+      'Cursul este ancorat pe data încasării ori a plății, așa cum cere art. 9 alin. (3) lit. b).',
+    kinds: {
+      revenue: 'Venit',
+      expense: 'Cheltuială',
+    },
+  },
 };

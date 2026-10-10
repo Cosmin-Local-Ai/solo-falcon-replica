@@ -34,11 +34,24 @@ import { isRon, type Bani, type CurrencyCode, type Money, type RonMoney } from '
 import { revenueFiscalDate, expenseFiscalDate } from '../aggregation';
 import { BASIS_CITATIONS, convertToRon } from './convert';
 import { isISOCalendarDate } from '../date';
-import type { FxRateProvider, RateCurrency } from './provider';
+import { RateStore, type FxRateProvider, type RateCurrency } from './provider';
 import type { FxRateRecord } from './rates';
 
 /** The only basis a ledger amount may convert at. A record has one payment/receipt date, so it has one rate. */
 export const LEDGER_CONVERSION_BASIS = 'payment_date_daily' as const;
+
+/**
+ * Which field the anchor date actually came from.
+ *
+ * `collected` / `paid` are the money dates the law asks for. `date` is the **document** date, reached
+ * through the Phase 9 fallback in `aggregation.ts` (`collected ?? date`, `paid ?? date`) — a fallback that
+ * is a standing reading of a field older payloads only ever had, not a per-record guess. It is recorded
+ * here because the two are not the same datum: art. 9 alin. (3) lit. b) keys the rate to the day the sum
+ * was received or paid, and a document date is not that day. No UI can write `collected` / `paid` yet
+ * (that is PG-2 / Phase 12C), so a conversion anchored on `date` must stay visible rather than read as a
+ * money date. See defect B-66, which is the same confusion in the RJIP export.
+ */
+export type LedgerDateSource = 'collected' | 'paid' | 'date';
 
 /** One record that was brought into the lei base, with the rate that did it. */
 export interface LedgerConversion {
@@ -47,10 +60,21 @@ export interface LedgerConversion {
   currency: RateCurrency;
   /** The date the conversion is keyed to: collection for income, payment for an expense. */
   onDate: string;
+  /** Which field `onDate` came from — see `LedgerDateSource`. */
+  onDateSource: LedgerDateSource;
   basis: typeof LEDGER_CONVERSION_BASIS;
   citation: string;
   /** The printed decimal, exactly as stored. */
   rate: string;
+  /**
+   * The two amounts as the user recorded them, each with the currency it was written in. A converted lei
+   * figure that is not shown beside the amount it came from cannot be checked by the person who entered it,
+   * so the original travels with the result (provenance travels). They are `Money`, not bare `Bani`, because
+   * a record may legitimately carry a lei net and a foreign VAT — printing the lei figure under the foreign
+   * currency would be a lie the display tells.
+   */
+  netRecorded: Money;
+  vatRecorded: Money;
   netLei: Bani;
   vatLei: Bani;
   provisional: boolean;
@@ -103,6 +127,7 @@ function normaliseRecord<T extends Revenue | Expense>(
   record: T,
   kind: 'revenue' | 'expense',
   onDate: string,
+  onDateSource: LedgerDateSource,
   provider: FxRateProvider,
 ): { record: T; conversion: LedgerConversion } | { detail: string } {
   const fields: Array<'valoareFaraTva' | 'tva'> = ['valoareFaraTva', 'tva'];
@@ -143,9 +168,12 @@ function normaliseRecord<T extends Revenue | Expense>(
       recordId: record.id,
       currency: rate.currency,
       onDate,
+      onDateSource,
       basis: LEDGER_CONVERSION_BASIS,
       citation: BASIS_CITATIONS[LEDGER_CONVERSION_BASIS],
       rate: rate.rate,
+      netRecorded: record.valoareFaraTva,
+      vatRecorded: record.tva,
       netLei: converted.valoareFaraTva.amount,
       vatLei: converted.tva.amount,
       provisional: rate.provisional,
@@ -168,7 +196,12 @@ export function normaliseLedgerToRon(data: AppData, provider: FxRateProvider): L
   const conversions: LedgerConversion[] = [];
   const unconverted: UnconvertedLedgerRecord[] = [];
 
-  const mapOne = <T extends Revenue | Expense>(record: T, kind: 'revenue' | 'expense', onDate: string): T => {
+  const mapOne = <T extends Revenue | Expense>(
+    record: T,
+    kind: 'revenue' | 'expense',
+    onDate: string,
+    onDateSource: LedgerDateSource,
+  ): T => {
     if (isRon(record.valoareFaraTva) && isRon(record.tva)) return record;
     if (!isISOCalendarDate(onDate)) {
       unconverted.push({
@@ -182,7 +215,7 @@ export function normaliseLedgerToRon(data: AppData, provider: FxRateProvider): L
       });
       return record;
     }
-    const outcome = normaliseRecord(record, kind, onDate, provider);
+    const outcome = normaliseRecord(record, kind, onDate, onDateSource, provider);
     if ('detail' in outcome) {
       unconverted.push({
         recordKind: kind,
@@ -197,8 +230,40 @@ export function normaliseLedgerToRon(data: AppData, provider: FxRateProvider): L
     return outcome.record;
   };
 
-  const revenues = data.revenues.map(r => mapOne(r, 'revenue', revenueFiscalDate(r)));
-  const expenses = data.expenses.map(e => mapOne(e, 'expense', expenseFiscalDate(e)));
+  const revenues = data.revenues.map(r =>
+    mapOne(r, 'revenue', revenueFiscalDate(r), r.collected !== undefined ? 'collected' : 'date'),
+  );
+  const expenses = data.expenses.map(e =>
+    mapOne(e, 'expense', expenseFiscalDate(e), e.paid !== undefined ? 'paid' : 'date'),
+  );
 
   return { data: { ...data, revenues, expenses }, conversions, unconverted };
+}
+
+/**
+ * The provider built from the rates THIS install has recorded — the only rates the app is allowed to use.
+ *
+ * `RateStore.replace` is the keyed upsert (`rateKey`: currency, kind, date-or-year) that `loadDailyRates`
+ * itself uses, so a final annual average replaces the provisional record standing for the same year.
+ * Nothing here fetches: `FxRateProvider` is synchronous by design, so a rate is a stored fact and never
+ * something a render re-derives.
+ */
+export function recordedRateProvider(data: AppData): FxRateProvider {
+  const store = new RateStore();
+  for (const record of data.fxRates ?? []) store.replace(record);
+  return store;
+}
+
+/**
+ * **The one ledger boundary (Phase 10c, B-37).** Every surface that turns records into lei money goes
+ * through this call: the summary, the monthly series, the projection behind the graph, the threshold rows
+ * and the tax estimate. Before 10c the estimate normalised and the summary did not, so one user saw two
+ * revenue totals.
+ *
+ * It is `normaliseLedgerToRon` over `recordedRateProvider(data)` and nothing more. The pass is idempotent
+ * — a RON record is returned untouched — so two call sites running it on the same data cannot drift, and
+ * a second pass over an already-normalised ledger is a no-op rather than a double conversion.
+ */
+export function normaliseStoredLedger(data: AppData): LedgerNormalisation {
+  return normaliseLedgerToRon(data, recordedRateProvider(data));
 }

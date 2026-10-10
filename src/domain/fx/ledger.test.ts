@@ -12,7 +12,7 @@
  * series page. A real USD rate would arrive through the store, not through a fixture.
  */
 import { describe, expect, it } from 'vitest';
-import { normaliseLedgerToRon } from './ledger';
+import { normaliseLedgerToRon, normaliseStoredLedger } from './ledger';
 import { fixtureRateProvider } from './provider';
 import type { FxRateRecord } from './rates';
 import { seedData } from '../../data/seed';
@@ -202,5 +202,70 @@ describe('a foreign-currency record enters the lei base at the payment-date dail
     expect(outcome.conversions[0].rate).toBe('5.3470');
     expect(outcome.data.expenses[0].valoareFaraTva).toEqual({ amount: 53470 as Bani, currency: 'RON' });
     expect(outcome.conversions[0].netLei).toBe(lei(534.7));
+  });
+});
+
+/**
+ * Phase 10c — the conversion says which date it is anchored on, and the boundary every surface reads.
+ *
+ * `onDate` is a fiscal date: collection for income, payment for an expense. When the record carries no
+ * money date, `aggregation.ts` falls back to the document date — a standing Phase 9 reading of a field
+ * older payloads only ever had, not a per-record guess. What Phase 10c adds is that the fallback is NAMED
+ * on the conversion, so a rate keyed to an invoice date can never be read as a rate keyed to a payment.
+ * The money dates themselves are PG-2's inputs; no screen writes them yet, and nothing here invents one.
+ */
+describe('Phase 10c — the anchor date is named, and the boundary is one call', () => {
+  it('names the document date as the anchor when the record has no money date', () => {
+    const outcome = normaliseLedgerToRon(ledger([], [expense()]), provider);
+    expect(outcome.conversions[0].onDate).toBe('2026-10-08');
+    expect(outcome.conversions[0].onDateSource).toBe('date');
+  });
+
+  it('names the payment date when the record carries one', () => {
+    const outcome = normaliseLedgerToRon(
+      ledger([], [expense({ date: '2026-09-02', paid: '2026-10-08' })]),
+      provider,
+    );
+    expect(outcome.conversions[0].onDate).toBe('2026-10-08');
+    expect(outcome.conversions[0].onDateSource).toBe('paid');
+  });
+
+  it('names the collection date for a revenue, not the invoice date', () => {
+    const outcome = normaliseLedgerToRon(
+      ledger(
+        [revenue({ date: '2026-01-03', collected: '2026-10-08', valoareFaraTva: eur(1000), tva: eur(190) })],
+        [],
+      ),
+      provider,
+    );
+    expect(outcome.conversions[0].onDate).toBe('2026-10-08');
+    expect(outcome.conversions[0].onDateSource).toBe('collected');
+  });
+
+  it('carries the amounts as recorded, each with its own currency, beside the lei result', () => {
+    const c = normaliseLedgerToRon(ledger([], [expense()]), provider).conversions[0];
+    expect(c.netRecorded).toEqual(usd(100));
+    expect(c.vatRecorded).toEqual(usd(19));
+    expect(c.netLei).toBe(45000 as Bani);
+    expect(c.vatLei).toBe(8550 as Bani);
+  });
+
+  it('normaliseStoredLedger reads the rates the app stores, and a second pass converts nothing', () => {
+    const data = { ...ledger([], [expense()]), fxRates: [EUR_DAILY_2026_10_08, USD_DAILY_2026_10_08] };
+    const once = normaliseStoredLedger(data);
+    expect(once.conversions).toHaveLength(1);
+    expect(once.data.expenses[0].valoareFaraTva).toEqual({ amount: 45000 as Bani, currency: 'RON' });
+
+    const twice = normaliseStoredLedger(once.data);
+    expect(twice.conversions).toHaveLength(0);
+    expect(twice.data.expenses[0].valoareFaraTva).toEqual(once.data.expenses[0].valoareFaraTva);
+  });
+
+  it('normaliseStoredLedger with no stored rate converts nothing and says what is missing', () => {
+    const outcome = normaliseStoredLedger({ ...ledger([], [expense()]), fxRates: [] });
+    expect(outcome.conversions).toHaveLength(0);
+    expect(outcome.unconverted).toHaveLength(1);
+    expect(outcome.unconverted[0].detail).toContain('USD');
+    expect(outcome.unconverted[0].onDate).toBe('2026-10-08');
   });
 });

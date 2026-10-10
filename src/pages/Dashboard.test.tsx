@@ -1,6 +1,7 @@
 import { test, expect, describe, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import { StoreProvider } from '../data/store';
+import { CURRENT_DATA_VERSION } from '../data/migration';
 import { seedData } from '../data/seed';
 import type { AppData, LegacyRevenue } from '../data/types';
 import Dashboard from './Dashboard';
@@ -49,6 +50,55 @@ function renderDashboard() {
     </StoreProvider>,
   );
 }
+
+/**
+ * A payload at the CURRENT data version: the money fields already carry their currency, so the migration
+ * chain runs no step and the records reach the app exactly as written. `writePayload` deliberately does not
+ * do this — it writes a versionless legacy payload on purpose, to exercise the chain. Currency tests need
+ * the opposite: a payload the chain leaves alone.
+ */
+function writeCurrentPayload(overrides: Record<string, unknown> = {}) {
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      reservedAmount: null,
+      profile: seedData.profile,
+      revenues: [],
+      expenses: [],
+      clients: [],
+      declarations: [],
+      documents: [],
+      companyDocs: { im: [], cs: [], tva: [], facturi: [] },
+      statements: [],
+      snapshots: [],
+      settings: seedData.settings,
+      version: CURRENT_DATA_VERSION,
+      ...overrides,
+    }),
+  );
+}
+
+/** 1.000,00 EUR, no VAT, collected on the day the rate below was published. */
+function eurRevenue() {
+  return {
+    id: 'rev-eur-1',
+    tip: 'factura',
+    nr: 'FCT-FX-1',
+    date: '2026-10-08',
+    client: 'Client EUR SRL',
+    cui: 'RO12345678',
+    valoareFaraTva: { amount: 100_000 as Bani, currency: 'EUR' },
+    tva: { amount: 0 as Bani, currency: 'EUR' },
+    status: 'inregistrata',
+  };
+}
+
+/** The EUR row research 23 captured from BNR for 2026-10-08 — a real published figure. */
+const EUR_DAILY_2026_10_08 = {
+  currency: 'EUR', rate: '5.3470', rateKind: 'daily_reference', rateDate: '2026-10-08',
+  seriesCode: 'CURSZ_EUR', sourceUrl: 'https://curs.bnr.ro/nbrfxrates.xml',
+  fetchedAt: '2026-10-08T13:05:00Z', provisional: false, entryMode: 'fetched',
+};
 
 /**
  * Assert the figure the cockpit shows, waiting for the estimate to land first.
@@ -280,5 +330,53 @@ describe('Dashboard page', () => {
     expect(noRelease).not.toBeNull();
     expect(noRelease!.textContent).toContain('Această cifră nu este legată de un pachet de reguli înregistrat.');
     expect(noRelease!.querySelector('[data-digest-recorded]')).toBeNull();
+  });
+
+  /**
+   * Phase 10c (B-37) at page level. Two things are asserted here that no selector test can show:
+   *
+   *  - a ledger whose only record is foreign no longer collapses into the onboarding empty state. The
+   *    `hasData` gate used to read "zero lei" as "nothing recorded", which told a user holding a real EUR
+   *    invoice to go and add their first invoice;
+   *  - the record that is out of the totals is visible on the page, beside the totals it is out of.
+   */
+  test('Phase 10c: a EUR record with no rate is out of the lei totals and named on the page', async () => {
+    writeCurrentPayload({ revenues: [eurRevenue()] });
+    renderDashboard();
+
+    expect(await screen.findByRole('heading', { name: 'Tablou de bord' })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Începe înregistrarea activității' })).toBeNull();
+
+    // The summary card says the totals are not complete…
+    const notice = document.querySelector('[data-unconverted-count]');
+    expect(notice).not.toBeNull();
+    expect(notice!.getAttribute('data-unconverted-count')).toBe('1');
+
+    // …and the disclosure names the record, in its own currency.
+    const row = document.querySelector('[data-unconverted="rev-eur-1"]');
+    expect(row).not.toBeNull();
+    expect(row!.textContent).toContain('1.000,00 EUR');
+
+    // The lei total is still zero: the record is absent from it, never added at an invented rate.
+    const summaryCard = [...document.querySelectorAll('section.card')].find(
+      (s) => s.querySelector('h2.card-title')?.textContent === 'Rezumat',
+    );
+    expect(summaryCard).toBeDefined();
+    expect(summaryCard!.textContent).toContain('0,00 RON');
+  });
+
+  test('Phase 10c: with a rate recorded for its date, the same record reads as lei on the page', async () => {
+    writeCurrentPayload({ revenues: [eurRevenue()], fxRates: [EUR_DAILY_2026_10_08] });
+    renderDashboard();
+
+    expect(await screen.findByRole('heading', { name: 'Tablou de bord' })).toBeVisible();
+    const summaryCard = [...document.querySelectorAll('section.card')].find(
+      (s) => s.querySelector('h2.card-title')?.textContent === 'Rezumat',
+    );
+    expect(summaryCard).toBeDefined();
+    // 1.000,00 EUR × 5,3470 = 5.347,00 lei — the same figure the graph and the estimate carry.
+    expect(summaryCard!.textContent).toContain('5.347,00 RON');
+    expect(document.querySelector('[data-unconverted-count]')).toBeNull();
+    expect(document.querySelector('[data-conversion="rev-eur-1"]')).not.toBeNull();
   });
 });

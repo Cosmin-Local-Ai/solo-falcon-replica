@@ -36,8 +36,13 @@ import {
 } from './fiscal/deductibility';
 import type { FiscalRule } from './fiscal/rules';
 import { strikeCapCeiling, type CapCeilingStrike } from './fx/capCeiling';
-import { normaliseLedgerToRon, type LedgerConversion, type UnconvertedLedgerRecord } from './fx/ledger';
-import { RateStore, type FxRateProvider } from './fx/provider';
+import {
+  normaliseLedgerToRon,
+  normaliseStoredLedger,
+  recordedRateProvider,
+  type LedgerConversion,
+  type UnconvertedLedgerRecord,
+} from './fx/ledger';
 import { addBani, applyRateDecimal, isRon, lei, money, requireRon, subBani, type Bani } from './money';
 import { selectProjectionV1, type ProjectionV1 } from './projection';
 import type { TaxEstimateResult } from './tax';
@@ -376,17 +381,12 @@ function zeroPair(): MeasurePair {
 /**
  * TASK 10b — the rates this assembler may use are exactly the rates the app stores.
  *
- * `AppData.fxRates` is the persisted boundary, and every record on it has already passed
- * `fxRateRecordSchema` at the load gate (`data/schema.ts`). `RateStore.replace` is the keyed upsert
- * `loadDailyRates` itself uses, keyed by `rateKey` (currency, kind, date-or-year), which is what makes a
- * final annual average overwrite the provisional one it stands for. Nothing here fetches: `FxRateProvider`
- * is synchronous by design, so a rate is a stored fact and never something a render re-derives.
+ * Phase 10c (B-37) moved that rule into one call: `normaliseStoredLedger` (`domain/fx/ledger.ts`) builds the
+ * provider from `AppData.fxRates` and runs the one conversion pass, and it is the same call the summary, the
+ * graph and the threshold rows make. Before 10c this file had its own copy of the provider builder, which is
+ * exactly how the estimate and the summary came to disagree about one EUR invoice. Nothing here fetches: a
+ * rate is a stored fact, never something a render re-derives.
  */
-function rateProviderFor(data: AppData): FxRateProvider {
-  const store = new RateStore();
-  for (const record of data.fxRates ?? []) store.replace(record);
-  return store;
-}
 
 /** The year a payment falls in — art. 68 alin. (4) lit. b) attributes by payment, not by invoice. */
 function paymentYearOf(fiscalDate: string): number | undefined {
@@ -509,7 +509,7 @@ export function selectDeductibleExpenses(
   // which is the rule the research verified for both directions and which is not EUR-specific, so USD
   // travels it with the same authority as EUR. A record with no rate for that date stays out and is
   // reported below — TASK 10a's exclusion is not deleted, it is now reached by a lookup.
-  const provider = rateProviderFor(data);
+  const provider = recordedRateProvider(data);
   const ledger = normaliseLedgerToRon(data, provider);
 
   const records: Expense[] = [];
@@ -1026,8 +1026,7 @@ export function selectEstimateOperands(
   // TASK 10b — the ledger is read in lei BEFORE anything is aggregated, so the gross, the deductible set,
   // the projection and the ceilings are all struck on the SAME record set. Converting after aggregation
   // would be the Phase 10 drift class in a new costume.
-  const provider = rateProviderFor(data);
-  const ledger = normaliseLedgerToRon(data, provider);
+  const ledger = normaliseStoredLedger(data);
   const deductible = {
     ...selectDeductibleExpenses(ledger.data, asOfDate, rules, context),
     // The assembler's own pass covers revenues as well as expenses, so the audit trail it reports is the

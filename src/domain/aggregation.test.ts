@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AppData, Expense, Revenue, SettingsState } from '../data/types';
 import type { PfaIdentity, PfaProfile } from './models';
-import { inPeriod, selectMonthly, selectYtd, revenueFiscalDate, expenseFiscalDate, auditFiscalDates } from './aggregation';
+import { inPeriod, selectMonthly, selectYtd, revenueFiscalDate, expenseFiscalDate, auditFiscalDates, selectUnconvertedRecords } from './aggregation';
 import { addBani, lei, money, ron, subBani, type Bani } from './money';
 
 function identity(): PfaIdentity {
@@ -527,5 +527,62 @@ describe('auditFiscalDates — the exclusion report (B-21)', () => {
     const report = auditFiscalDates(makeData({ expenses: [bad] }));
     expect(report[0].value).toBe('2026-02-30');
     expect(report[0].reason).toContain('nu există în luna respectivă');
+  });
+});
+
+/**
+ * Phase 10c (B-37) — the skip list, extended rather than replaced.
+ *
+ * `selectUnconvertedRecords` is the disclosure `aggregation.ts` already had. Now that a foreign record CAN
+ * be converted, a record reaching this list means something narrower and needs saying more precisely: the
+ * store holds no rate for it. So the shape gained the record kind, the amount that is out of the totals and
+ * the reason — and the conversion pass supplies that reason instead of the display inventing one.
+ */
+describe('selectUnconvertedRecords — what the lei totals left out, and why', () => {
+  it('reports a foreign revenue with its kind, currency and amount', () => {
+    const data = makeData({
+      revenues: [{
+        ...revenue('2026-04-15', lei(0), lei(0)),
+        valoareFaraTva: money(lei(1000), 'EUR'),
+        tva: money(lei(0), 'EUR'),
+      }],
+    });
+    const out = selectUnconvertedRecords(data);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ id: 'rev-2026-04-15-0', kind: 'revenue', currency: 'EUR' });
+    expect(out[0].amount).toEqual(money(lei(1000), 'EUR'));
+    expect(out[0].detail).toContain('EUR');
+  });
+
+  it('takes the reason from the conversion pass instead of writing its own', () => {
+    const data = makeData({
+      revenues: [{
+        ...revenue('2026-04-15', lei(0), lei(0)),
+        valoareFaraTva: money(lei(1000), 'EUR'),
+      }],
+    });
+    const out = selectUnconvertedRecords(data, [
+      { recordId: 'rev-2026-04-15-0', detail: 'niciun curs BNR înregistrat pentru EUR la data 2026-04-15' },
+    ]);
+    expect(out[0].detail).toBe('niciun curs BNR înregistrat pentru EUR la data 2026-04-15');
+  });
+
+  it('a record with a lei net and a foreign VAT is still reported, in the currency that is foreign', () => {
+    const data = makeData({
+      expenses: [{
+        ...expense('2026-04-15', lei(500), lei(0)),
+        tva: money(lei(95), 'USD'),
+      }],
+    });
+    const out = selectUnconvertedRecords(data);
+    expect(out).toHaveLength(1);
+    expect(out[0].kind).toBe('expense');
+    expect(out[0].currency).toBe('USD');
+    expect(out[0].amount).toEqual(money(lei(95), 'USD'));
+  });
+
+  it('a lei ledger leaves the list empty', () => {
+    const data = makeData({ revenues: [revenue('2026-04-15', lei(100), lei(19))] });
+    expect(selectUnconvertedRecords(data)).toHaveLength(0);
   });
 });

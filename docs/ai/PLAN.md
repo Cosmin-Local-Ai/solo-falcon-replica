@@ -677,6 +677,7 @@ doc. They are **not** new phases and no phase boundary was invented for them:
 | **TASK 9** | **provenance existed as copy and as a domain function and reached no surface; the seed taught filings the law does not ask of it and called the taxpayer an SRL; two card systems and a chart wider than its box** | `phases/23_provenance_hygiene.md` |
 | **TASK 10a** | **a money record carried no currency, so a EUR invoice was silently lei; there was no FX rate store and no conversion rule** | `phases/24_currency_fx_store.md` |
 | **TASK 10b** | **the seven euro caps could not be measured, and a rate carried a `provisional` flag that nothing read — B-33** | `phases/25_euro_caps_provisional_rates.md` |
+| **Phase 10c** | **the FX machinery was built but not wired: `recordFxRate` had zero callers and Settings had no FX input (B-36), and the estimate normalised the ledger while the summary, the graph and the thresholds did not — one user, two revenue totals (B-37)** | `phases/26_fx_end_to_end.md` (brief 29; tracked in `PHASE_PLAN_11_34.md` §4/§5) |
 
 **TASK 6 — the recorded decision and its shape (2026-10-09).** The decision was already made and was not
 reopened: **content-address the rule set; do not redesign the release model.** `releaseId` and

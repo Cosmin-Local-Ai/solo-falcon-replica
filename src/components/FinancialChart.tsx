@@ -13,7 +13,7 @@ import { useDashboardData } from '../data/dashboardAdapter';
 import { getProjectedFinancialSeries } from '../data/dashboard';
 import { estimateFigureLabel } from '../domain/estimateBasis';
 import { formatBaniAxis, formatBaniRON, formatBaniRONOrDash, isBani, type Bani } from '../domain/money';
-import { chart as chartCopy, estimateState as estimateStateCopy } from '../ui/copy';
+import { chart as chartCopy, estimateState as estimateStateCopy, fx } from '../ui/copy';
 
 
 type Range = 'monthly' | 'ytd' | 'year';
@@ -253,6 +253,16 @@ export default function FinancialChart() {
             {chartCopy.taxNoteReview} {tax.reason}
           </p>
         )}
+
+        {/* Phase 10c (B-37): the series above is drawn from the same normalised ledger the summary and the
+            estimate use. A foreign record with no recorded rate is absent from it, and the chart says so
+            rather than letting an incomplete line read as the whole year. */}
+        {dashboard.ledger.unconverted.length > 0 ? (
+          <p className="chart-tax-note" data-unconverted-count={dashboard.ledger.unconverted.length}>
+            <strong className="mono">{fx.ledger.unconvertedLead(dashboard.ledger.unconverted.length)}</strong>{' '}
+            {fx.ledger.unconvertedTail}
+          </p>
+        ) : null}
 
         <div className="visually-hidden">
           {/* The .visually-hidden wrapper already clips the wide SR table. */}

@@ -8,6 +8,7 @@
 
 import type { AppData } from '../data/types';
 import { selectMonthly, selectYtd, inPeriod, revenueFiscalDate, expenseFiscalDate, type MonthlyTotals, type YtdTotals } from './aggregation';
+import { normaliseStoredLedger } from './fx/ledger';
 import { selectProjectionV1, type ProjectionV1 } from './projection';
 import type { FiscalRule } from './fiscal/rules';
 import { sumMoney, type Bani, type Money } from './money';
@@ -87,15 +88,23 @@ function toLines<T extends HasRecordFields>(
 }
 
 /** Single derived financial view for the whole app state.
- *  Recomputes (via the reactive store) whenever any source data changes. */
+ *  Recomputes (via the reactive store) whenever any source data changes.
+ *
+ *  Phase 10c (B-37): the three aggregates are computed over the ONE normalised ledger — the same
+ *  `normaliseStoredLedger` call the summary, the graph, the threshold rows and the estimate make. The
+ *  per-record lines deliberately stay on the records as the user wrote them: a register that printed a
+ *  converted lei figure instead of the euro amount on the invoice would hide the very datum the user needs
+ *  in order to check the conversion.
+ */
 export function selectFinancialDerived(data: AppData, asOfDate: string): FinancialDerivedView {
   const fiscalYear = data.profile.fiscalYear;
+  const ledger = normaliseStoredLedger(data);
   return {
     fiscalYear,
     asOfDate,
-    ytd: selectYtd(data, asOfDate),
-    monthly: selectMonthly(data, asOfDate),
-    projection: selectProjectionV1(data, asOfDate),
+    ytd: selectYtd(ledger.data, asOfDate),
+    monthly: selectMonthly(ledger.data, asOfDate),
+    projection: selectProjectionV1(ledger.data, asOfDate),
     lines: {
       revenues: toLines(data.revenues, asOfDate, fiscalYear, revenueFiscalDate),
       expenses: toLines(data.expenses, asOfDate, fiscalYear, expenseFiscalDate),

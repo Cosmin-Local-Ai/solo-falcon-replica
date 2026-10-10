@@ -12,6 +12,7 @@ import FinancialChart from '../components/FinancialChart';
 import FinancialSummary from '../components/FinancialSummary';
 import TaxReserve from '../components/TaxReserve';
 import Insights from '../components/Insights';
+import CurrencySection from '../components/dashboard/CurrencySection';
 import ThresholdSection from '../components/dashboard/ThresholdSection';
 import DeadlineSection from '../components/dashboard/DeadlineSection';
 import CompletenessSection from '../components/dashboard/CompletenessSection';
@@ -62,7 +63,13 @@ export default function DashboardPage() {
     snapshot.pfaRevenue > 0 ||
     pendingCounts.revenuesInAsteptare > 0 ||
     pendingCounts.revenuesRespinsa > 0 ||
-    pendingCounts.expensesRespinsa > 0;
+    pendingCounts.expensesRespinsa > 0 ||
+    // Phase 10c (B-37): a ledger whose only record is in a currency the app has no rate for converts to
+    // zero lei, and this gate used to read that zero as „nothing recorded yet”. The onboarding card then
+    // told a user with a real EUR invoice to go add their first invoice — the record had vanished from the
+    // financial picture entirely. A record the totals leave out is still data, and the disclosure below is
+    // what says why it is not in the totals.
+    data.ledger.unconverted.length > 0;
 
   const taxTotal =
     data.tax !== null && data.tax.status === 'computed' ? data.tax.output.total : null;
@@ -183,8 +190,10 @@ export default function DashboardPage() {
           {/* 3. Financial graph (Step 20) */}
           <FinancialChart />
 
-          {/* 4. Summary (Step 21) */}
-          <FinancialSummary summary={summary} />
+          {/* 4. Summary (Step 21) — with the ledger disclosure beside it, so a lei total that leaves a
+              foreign record out cannot read as complete (B-37). */}
+          <FinancialSummary summary={summary} ledger={data.ledger} />
+          <CurrencySection disclosure={data.ledger} id="ledger-currency" />
 
           {/* 5. Insights (Step 21) */}
           <Insights insights={data.insights} />

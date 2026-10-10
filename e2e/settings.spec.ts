@@ -466,3 +466,86 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     expect('moneyNotices' in saved).toBe(false);
   });
 });
+
+/**
+ * Phase 10c — the user resolves their own missing rate, in a browser (B-36), and the record then reads the
+ * same way everywhere (B-37).
+ *
+ * Before this phase the app could hold a rate and could show one, but nothing could PRODUCE one:
+ * `recordFxRate` had no caller. A user with a EUR invoice met the missing-rate condition with no route out
+ * except a developer editing localStorage. This is the acceptance proof for B-36 in the only place it can
+ * really be made — a person typing into a form, reloading, and finding the number reconciled.
+ *
+ * The clock is pinned for the same reason `e2e/dashboard.spec.ts` pins it (B-23): the estimate is a run-rate
+ * projection, so a figure asserted against the real "today" would be wrong the day after it was written.
+ */
+test.describe('Phase 10c — a rate entered in Settings reconciles the ledger (B-36, B-37)', () => {
+  /** 1.000,00 EUR, no VAT, dated the day the rate below was published. */
+  const EUR_REVENUE = {
+    id: 'rev-eur-1',
+    tip: 'factura',
+    nr: 'FCT-FX-1',
+    date: '2026-10-08',
+    client: 'Client EUR SRL',
+    cui: 'RO12345678',
+    valoareFaraTva: { amount: 100_000, currency: 'EUR' },
+    tva: { amount: 0, currency: 'EUR' },
+    status: 'inregistrata',
+  };
+
+  test('the record is disclosed as unconverted, the rate is typed in, and after a reload it is lei', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-31T12:00:00'));
+
+    // Deliberately NOT seeded with `addInitScript`: that re-runs on every document, so it would re-apply
+    // this payload over the rate the UI is about to save and the reload assertion would prove nothing.
+    // Load the app's own dataset, then rewrite its ledger once, in place.
+    await page.goto('/dashboard');
+    await page.evaluate(
+      ([key, eur]: [string, unknown]) => {
+        const data = JSON.parse(localStorage.getItem(key) ?? '{}');
+        data.revenues = [eur];
+        data.expenses = [];
+        delete data.fxRates;
+        localStorage.setItem(key, JSON.stringify(data));
+      },
+      [STORAGE_KEY, EUR_REVENUE],
+    );
+    await page.reload();
+
+    // The record has not vanished: the dashboard renders, and says the totals are not complete.
+    await expect(page.getByRole('heading', { name: 'Tablou de bord' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Începe înregistrarea activității' })).toHaveCount(0);
+    await expect(page.locator('[data-unconverted="rev-eur-1"]')).toContainText('1.000,00 EUR');
+
+    // The fix is a rate, entered by the user. Currency, kind and date default to what a EUR daily rate is.
+    await page.goto('/settings#!/fiscal');
+    await page.locator('[name="fx-rate"]').fill('5.3470');
+    await page.locator('[name="fx-date"]').fill('2026-10-08');
+    await page.getByRole('button', { name: 'Înregistrează cursul' }).click();
+    await expect(page.locator('[data-fx-entry-saved]')).toBeVisible();
+    await expect(page.locator('#fx-rate-provenance')).toContainText('5.3470');
+
+    // The reload is the proof: the rate came out of storage, not out of the test.
+    await page.goto('/dashboard');
+    await expect(page.locator('[data-unconverted-count]')).toHaveCount(0);
+    await expect(page.locator('[data-conversion="rev-eur-1"]')).toContainText('5.3470');
+
+    // 1.000,00 EUR × 5,3470 = 5.347,00 lei — the figure the summary, the graph and the estimate now share.
+    const summaryCard = page.locator('.card').filter({ has: page.getByText('Rezumat', { exact: true }) });
+    await expect(summaryCard).toContainText('5.347,00 RON');
+  });
+
+  test('an incomplete rate is refused, and the refusal is the validator’s own words', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-31T12:00:00'));
+    await page.goto('/settings#!/fiscal');
+
+    await page.locator('[name="fx-rate"]').fill('5.3470'); // a number anchored to nothing
+    await page.getByRole('button', { name: 'Înregistrează cursul' }).click();
+
+    await expect(page.locator('[data-fx-entry-refused]')).toContainText(
+      'rateDate: a daily reference rate needs the date it was published for',
+    );
+    const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}'), STORAGE_KEY);
+    expect(saved.fxRates ?? []).toHaveLength(0);
+  });
+});

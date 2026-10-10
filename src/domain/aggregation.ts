@@ -147,26 +147,54 @@ function leiAmount(amount: Money): Bani | null {
 }
 
 /**
- * The records the lei totals above deliberately left out, with the currency they are written in.
+ * The records the lei totals above deliberately left out, with the currency they are written in and the
+ * datum that kept them out.
  *
- * This is the visibility half of `recordTotal`'s `null`. The app can store a foreign-currency amount and
- * cannot yet convert one into the engine's lei operands — conversion needs a BNR rate and a legal basis
- * (`domain/fx/convert.ts`), and which basis applies to a given amount is a decision the euro-cap work
- * (TASK 10b) has not made yet. So the correct output is not a number and not silence; it is this list.
+ * This is the visibility half of `recordTotal`'s `null`. Until Phase 10c the app could store a
+ * foreign-currency amount and had no way to bring it into the lei operands at all. It can now —
+ * `domain/fx/ledger.ts` converts at the BNR daily rate on the money date — so a record reaching this list
+ * means something narrower than it used to: **the store holds no rate for that currency on that date, or
+ * the record has no usable money date to anchor one.** That is why `detail` is part of the shape: "it is
+ * in EUR" is not a reason, "there is no recorded EUR rate for 2026-04-15" is.
+ *
+ * The caller that ran the conversion pass supplies the `detail`s; a caller that did not gets the generic
+ * sentence, which is still honest — the record is not in lei and the totals above do not contain it.
  */
 export interface UnconvertedRecord {
   id: string;
+  kind: 'revenue' | 'expense';
   currency: CurrencyCode;
+  /** The amount that is out of the totals, in the currency it is written in. */
+  amount: Money;
+  /** The datum that is missing, in the words the register shows. */
+  detail: string;
 }
 
-export function selectUnconvertedRecords(data: AppData): UnconvertedRecord[] {
+/** A `detail` supplied by the conversion pass, keyed by record id. */
+export type UnconvertedDetail = { recordId: string; detail: string };
+
+export function selectUnconvertedRecords(
+  data: AppData,
+  details: readonly UnconvertedDetail[] = [],
+): UnconvertedRecord[] {
+  const byId = new Map(details.map(d => [d.recordId, d.detail]));
   const out: UnconvertedRecord[] = [];
-  for (const r of data.revenues) {
-    if (!isRon(r.valoareFaraTva)) out.push({ id: r.id, currency: r.valoareFaraTva.currency });
-  }
-  for (const e of data.expenses) {
-    if (!isRon(e.valoareFaraTva)) out.push({ id: e.id, currency: e.valoareFaraTva.currency });
-  }
+  const push = (record: Revenue | Expense, kind: 'revenue' | 'expense'): void => {
+    const foreign = [record.valoareFaraTva, record.tva].find(a => !isRon(a));
+    if (foreign === undefined) return;
+    out.push({
+      id: record.id,
+      kind,
+      currency: foreign.currency,
+      amount: foreign,
+      detail:
+        byId.get(record.id) ??
+        `înregistrarea este în ${foreign.currency}, iar totalurile de mai sus sunt în lei; nu există curs `
+        + 'BNR înregistrat pentru această sumă, deci nu intră în niciun total în lei.',
+    });
+  };
+  for (const r of data.revenues) push(r, 'revenue');
+  for (const e of data.expenses) push(e, 'expense');
   return out;
 }
 

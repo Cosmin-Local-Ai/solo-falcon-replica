@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import FinancialChart, { FinancialChartTooltip } from './FinancialChart';
-import { lei } from '../domain/money';
+import { lei, money } from '../domain/money';
+import { fx } from '../ui/copy';
 
 const { mockUseStore, mockUseDashboardData, mockGetProjectedFinancialSeries } = vi.hoisted(() => ({
   mockUseStore: vi.fn(),
@@ -94,6 +95,11 @@ beforeEach(() => {
         reason: 'fixture: această dată nu are rată de desfășurare',
       },
     },
+    // Phase 10c: the chart reads the ledger disclosure the dashboard computed, because a foreign record left
+    // out of the series must be named under the graph rather than vanish from it. This fixture has no
+    // foreign records, so both lists are empty — the assertion that nothing is reported is made with real
+    // data in src/components/dashboard/CurrencySection.test.tsx and src/data/dashboard.fx.test.ts.
+    ledger: { conversions: [], unconverted: [] },
   });
 });
 
@@ -213,6 +219,7 @@ describe('FinancialChart', () => {
           },
         },
       },
+      ledger: { conversions: [], unconverted: [] },
     });
     renderChart();
     expect(screen.getByText(/Estimare impozit anuală \(rată de desfășurare\)/)).toBeInTheDocument();
@@ -224,6 +231,7 @@ describe('FinancialChart', () => {
     mockUseDashboardData.mockReturnValue({
       snapshot: { asOf: AS_OF },
       tax: { status: 'computed', output: { total: lei(1234.56) } },
+      ledger: { conversions: [], unconverted: [] },
     });
     renderChart();
     expect(screen.getByText(/Estimare impozit:/)).toBeInTheDocument();
@@ -234,9 +242,37 @@ describe('FinancialChart', () => {
     mockUseDashboardData.mockReturnValue({
       snapshot: { asOf: AS_OF },
       tax: { status: 'review_required', reason: 'date lipsă' },
+      ledger: { conversions: [], unconverted: [] },
     });
     renderChart();
     expect(screen.getByText(/revizuire necesară — date lipsă/)).toBeInTheDocument();
+  });
+
+  /**
+   * Phase 10c (B-37). The series is drawn from the same normalised ledger the summary and the estimate
+   * read, so a foreign record with no rate is absent from the line — and the chart has to say so, because
+   * a line that quietly omits a real invoice reads as a complete year.
+   */
+  it('names the foreign records left out of the series', () => {
+    mockUseDashboardData.mockReturnValue({
+      snapshot: { asOf: AS_OF },
+      tax: { status: 'computed', output: { total: lei(1234.56) } },
+      ledger: {
+        conversions: [],
+        unconverted: [
+          {
+            id: 'rev-eur-1', kind: 'revenue', currency: 'EUR',
+            amount: money(lei(1000), 'EUR'),
+            detail: 'niciun curs BNR înregistrat pentru EUR la data 2026-10-08',
+          },
+        ],
+      },
+    });
+    renderChart();
+    const note = document.querySelector('[data-unconverted-count]');
+    expect(note?.getAttribute('data-unconverted-count')).toBe('1');
+    expect(note?.textContent).toContain(fx.ledger.unconvertedLead(1));
+    expect(note?.textContent).toContain(fx.ledger.unconvertedTail);
   });
 });
 
