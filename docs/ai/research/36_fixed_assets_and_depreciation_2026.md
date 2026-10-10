@@ -150,3 +150,155 @@
 5. **Titlul IV norm pct. 6 not read verbatim.**
 6. **The OMFP 170/2015 Cap. IV retention conflict** with R-D's OMF 1.447/2023 finding.
 7. **No inflation-indexing HG found** for the 5.000-lei limit — treat 5.000 lei as operative for FY2026 and keep the parameter overridable.
+
+---
+
+# SECOND PASS — all seven gaps closed, and the pass corrected the first pass twice
+
+**Same session, resumed 2026-10-10.** Every gap below is now closed against primary text. **Two of the first pass's findings were wrong and are superseded** — marked ⚠️.
+
+## 8. Catalog position of office IT — SETTLED, and it flips the tentative answer
+
+**8.1 FACT — the line, verbatim** (HG nr. 2.139/2004, MO 46/13.01.2005, Anexa, Grupa 2), read from the Portal Legislativ printable consolidated text:
+
+> **2.2. APARATE ȘI INSTALAȚII DE MĂSURARE, CONTROL ȘI REGLARE.**
+> **2.2.9. Calculatoare electronice și echipamente periferice. Mașini și aparate de casă, control și facturat. — 2-4**
+> 2.2.10. Alte aparate și instalații de măsurare, control și reglare neregăsite în cadrul subgrupei 2.2. — 8-12
+
+**Subgrupa 2.2, clasa 2.2.9, durata normală de funcționare 2–4 ani.**
+
+**8.2 FACT — subgrupa 2.4 is „ANIMALE ȘI PLANTAȚII"** (2.4.1 Animale: cai 8-12, vaci/tauri 5-9, oi/capre/porci 4-6, păsări 2-4, câini 4-8; 2.4.2 Plantații). No IT content.
+
+**8.3 FACT — the only IT-adjacent lines inside subgrupa 2.1 are industrial:** **2.1.5.6** „Mașini, utilaje și instalații specifice pentru **producția componentelor** produselor și sistemelor electronice (… calculatoare și periferice, etc)" — 5-9 ani; and **2.1.22.6.4** „receptoare telefonie mobilă" — 2-4 ani, inside class 2.1.22 (exploatarea telecomunicațiilor), i.e. professional radio receivers.
+
+**8.4 DOCUMENTED NEGATIVE — Grupa 3 has no office-IT line.** Classes swept in full: **3.1** mobilier 9-15 / comercial de prezentare 3-5 / firme, panouri, reclame luminoase 2-4 / tablouri, gravuri, decorațiuni 8-12 / inventar gospodăresc 8-12 / **aparate electrocasnice, radio-receptoare, televizoare, aparatură video, mașini de spălat, frigidere, aspiratoare 4-6** / alt mobilier 6-10. **3.2** mașini de scris, de francat, aparate de dictat, de desenat, heliografe, aparate de copiat și multiplicat, de proiecție, de citit microfilme 4-6; **3.2.2 „Aparate de telecomunicații pentru birou: aparate telefonice, telefax, telex, instalații de comandă prin radio, aparate de căutat persoane etc." 3-5**; mașini de numărat și identificat bani 2-4; altă aparatură birotică 3-5. **3.3** 16-24 / unități de depozitare valori și purtători de date 16-24 / automate bancare, bancomate 8-12 / 12-18 / 8-12 / 12-18. **3.4** alte active corporale 8-15.
+
+**8.5 FACT — „server" appears nowhere in the Catalog** (searched the full anexa for `server`, no match). A server is captured by 2.2.9 as a „calculatoare electronice".
+
+**8.6 FACT → product-visible, for a 2026 laptop / desktop / server:**
+
+| Question | Answer | Basis |
+|---|---|---|
+| Catalog class | **2.2.9**, subgrupa **2.2** | HG 2139/2004 Anexa |
+| Duration range | **2–4 ani**, taxpayer picks inside the range | Catalog Cap. I pct. 4 |
+| **65 % super-accelerated** (alin. 8¹)? | **No** — gated on „subgrupa 2.1 … și/sau subgrupa 2.4" | OUG 8/2026 art. 6 pct. 8 |
+| **Accelerated 50 %** (alin. 8)? | **Yes** — alin. (5) lit. b) names „computere și echipamente periferice ale acestora" by **asset type** | CF art. 28 alin. (5) lit. b) + alin. (8) |
+| Degresivă coefficient | **1,5** (durata normală „între 2 și 5 ani") | CF art. 28 alin. (7) |
+
+**⚠️ THE ASYMMETRY TO ENCODE:** art. 28 alin. (5) lit. b) is scoped by **asset type**; art. 28 alin. (8¹) is scoped by **Catalog subgrupa**. A laptop satisfies the first and fails the second. **Do not let one rule feed the other.**
+
+**8.7 CORROBORATED** — solo.ro *Amortizarea mijloacelor fixe pentru PFA: Ghid 2026* independently gives „Laptop, calculator, server, imprimantă, monitor … **de obicei între 2 și 4 ani**".
+
+**8.8 CAVEAT — a mobile phone is a classification judgement, not a Catalog hit.** Best fit **3.2.2** (3-5 ani); 2.1.22.6.4 is professional radio equipment. If the engine classifies phones, default to 3.2.2 and flag it.
+
+**8.9 CAVEAT — amendment state.** The printable consolidated anexa carries **no amendment notes at all** (searched `HG 1496`, `HG 1276`, `MODIFICAT` — no matches). HG 1496/2008 and HG 1276/2021 are the Catalog's only amending acts; HG 1276/2021 touches only pct. 7 of Cap. III (defence-sector). **No amendment found affecting class 2.2.9.**
+
+## 9. ⚠️ CORRECTION to §4.5 — the strongest first-pass argument lost its anchor
+
+The first pass quoted OMFP 170/2015, Registrul-inventar, cap. V: „valoarea de inventar reprezintă diferența între valoarea de intrare și **amortizarea calculată potrivit legislației fiscale**", and used it as the primary textual argument that payment is not the depreciation trigger. **That wording is not in OMFP 170/2015.** Searched the consolidated text for `amortizarea calculată`, `legislației fiscale`, `valoarea de inventar`: the Registru-inventar model (cod 14-1-2/b) says only „În coloana 3 se inscrie valoarea de inventar reprezentată de: – **valoarea de intrare** a elementelor patrimoniale inventariate, potrivit documentelor justificative, sau totalurile din listele de inventariere …; – valoarea rămasă de încasat, respectiv de plată…". **The quoted sentence belongs to OMFP 2861/2009** (entity-level, double-entry). **§4.5 must not be relied on.**
+
+## 10. Aport route vs art. 68 alin. (7) lit. k^1) — CONTESTED, one side better supported
+
+**10.1 DOCUMENTED NEGATIVE.** Nothing resolves it for **depreciable** assets. Swept: Titlul IV Cap. II Secțiunea a 2-a in full (pct. 6 and pct. 7, all alineate); ANAF DGRFP București *Tratamentul fiscal al veniturilor din activități independente*; ANAF Galați/Vrancea *Deduct-ch-auto.pdf*; ANAF Brașov *limite_deductibile.pdf*; portalpfa's aport-în-natură article; portalcodulfiscal Q&A index for „patrimoniu de afectațiune"; OUG 44/2008 commentary. **No ANAF written answer, DGRFP response, or Ministerul Finanțelor response addresses it.**
+
+**10.2 FACT — new, decisive structural evidence: the norms give a depreciation base for contributed depreciable assets only between *businesses*.** Norm pct. 7, verbatim:
+
+> „În cazul schimbării modalităţii de exercitare a unei activităţi, precum şi al transformării formei de exercitare a acesteia într-o altă formă … se include în venitul brut al afacerii care urmează să se transforme/schimbe şi contravaloarea bunurilor şi drepturilor care trec în patrimoniul afacerii … În cazul bunurilor şi al drepturilor amortizabile **care trec în patrimoniul altei afaceri** … se aplică următoarele reguli: **a) cele cu valoare rămasă de amortizat se înscriu în Registrul-inventar la această valoare, care constituie şi bază de calcul al amortizării; b) cele complet amortizate se înscriu în Registrul-inventar la valoarea stabilită prin expertiză tehnică sau la preţul practicat pe piaţă; pentru acestea nu se calculează amortizare şi valoarea acestora nu constituie cheltuială deductibilă din veniturile noii activităţi.**"
+
+**Expressly limited to „altei afaceri" — business→business. PF→PFA is outside it, and the norms supply no substitute.**
+
+**10.3 FACT — the mirror rule runs only one way.** Norm pct. 7 alin. (2) polices business→personal explicitly (treated as „o înstrăinare", evaluated at market price or expertiză tehnică) and is silent on personal→business for depreciable assets.
+
+**10.4 FACT — the strongest argument for the other side, kept because it is real.** **CF art. 7 pct. 44 lit. c)** defines valoarea fiscală as including „**valoarea de piață a mijloacelor fixe dobândite cu titlu gratuit ori constituite ca aport, la data intrării în patrimoniul contribuabilului, utilizată pentru calculul amortizării fiscale** … pentru mijloace fixe amortizabile și terenuri". Read alone, a Titlul II definition expressly contemplates contributed assets acquiring a depreciation base. Combined with norm pct. 7 alin. (8), the aport reading is not frivolous.
+
+**10.5 INFERRED — recommendation: build the `REVIEW_REQUIRED` boundary and warn toward the NON-deductible side.** Weighting: (i) k^1) is an **unqualified absolute** inside „Nu sunt cheltuieli deductibile:" and does not except contributed assets; (ii) the norms' only contributed-asset depreciation base is confined to „altei afaceri"; (iii) ANAF's own deck states the exclusion flatly for this exact profile; (iv) the „potrivit legii" hook (OUG 44/2008 art. 2 lit. j)) is a **civil/liability** device and is **facultative** — taxnews.ro concludes the patrimoniu de afectațiune is optional and the PFA is not a separate legal person; (v) practitioner consensus is squarely on this side: „Ca amortizarea să fie deductibilă, mijlocul fix trebuie să fi intrat în patrimoniul activității **pe baza unui document justificativ emis pe numele activității** … O mașină cumpărată de tine ca persoană fizică, înainte ca PFA-ul să existe, nu îndeplinește condiția, oricât ai folosi-o ulterior în activitate"; comodat de la titular → „Amortizare: **nu**".
+
+**Honest framing for the UI:** default = non-deductible under art. 68 alin. (7) lit. k^1); the aport route is argued from art. 7 pct. 44 lit. c) but is unsupported by any ANAF position for depreciable assets, and the Titlul IV norms' contributed-asset rule is textually limited to business→business.
+
+## 11. Payment vs punere în funcțiune — clean negative, and label the behaviour honestly
+
+**11.1 DOCUMENTED NEGATIVE.** No ANAF primary text resolves it. Swept: HG 1/2016 Partea I Titlul IV Cap. II Secțiunea a 2-a pct. 6 and pct. 7 in full; ANAF DGRFP București deck; ANAF Galați/Vrancea leaflet; ANAF Brașov *limite_deductibile.pdf*; OMFP 3254/2017. The Titlul IV norms make depreciation deductible via pct. 7 alin. (5) lit. n) **with no payment condition attached**.
+
+**11.2 CORROBORATED — now four independent secondary sources, and the split is explicit:**
+- „**Plata și punerea în funcțiune au roluri diferite: prima contează pentru cheltuielile deductibile ale anului, iar a doua stabilește începutul amortizării.**" (financiarul.ro relaying contapp)
+- ContApp's category table: „**Achiziție de imobilizări | 100 % nedeductibile la data plății (se deduc prin amortizare)**".
+- „…timp de 3 ani, **începând cu luna următoare celei în care ai cumpărat și ai început să folosești laptopul**." (solo.ro)
+- „încasările și plățile se înregistrează în RJIP **la data documentului de plată**, nu la data facturii sau a contractului… **Deductibilitatea plăților efectuate se stabilește după încheierea anului fiscal**." (portalpfa.ro)
+
+**11.3 LABEL HONESTLY: the 2026-start behaviour is INFERRED, not FACT.** It rests on art. 28 alin. (12) lit. a) + norm pct. 7 alin. (5) lit. n) + unanimous practitioner consensus, **against** a literal reading of art. 68 alin. (4) lit. b). **No ANAF primary source endorses either reading.** If the product hard-codes 2026-start depreciation, cite the code article and show a visible note that ANAF has not published a position.
+
+## 12. The caps' mechanics — HG 1/2016 Partea I, Titlul II, Cap. II, **SECȚIUNEA a 8-a „Amortizarea fiscală" = pct. 25–31**
+
+**⚠️ CORRECTION: the Titlul II norms for art. 28 are pct. 25–31, not „pct. 26–33".** pct. 32 = „SECȚIUNEA a 9-a Contracte de leasing" (art. 29); pct. 33 = „SECȚIUNEA a 10-a Pierderi fiscale" (art. 31).
+
+**12.1 FACT — pct. 25, the only worked example, and it is annual-only.** „Exemplu de calcul al amortizării prin utilizarea regimului de amortizare degresivă, în aplicarea art. 28 alin. (7)… valoarea de intrare: 350.000 lei; durata normală de funcţionare conform catalogului: 10 ani; cota anuală de amortizare: 10 %; **cota anuală de amortizare degresivă: 10 % × 2,0 = 20 %**". Years 1–5 apply 20 % to the remaining value (70.000 / 56.000 / 44.800 / 35.840 / 28.672); **from year 6 the method switches to straight-line on the remainder: „114.688/5 ani" = 22.937,6 per year for years 6–10.**
+
+**12.2 DOCUMENTED NEGATIVE — there is no pro-rating formula anywhere.** No daily formula, no monthly table, no first-year fraction; pct. 25 uses whole years. The **only** timing mechanic in law is art. 28 alin. (12) lit. a). First-year depreciation = the months from the month after punerea în funcțiune through Decembrie at 1/12 of the annual amount each — **a construction, not a quoted formula.**
+
+**12.3 DOCUMENTED NEGATIVE — the norms never define „punerea în funcțiune".** Searched the whole 624-page Partea I for `punere în funcțiune` / `punerea în funcțiune`. The only definitional-adjacent hit is for fiscal cash registers under the art. 25 norms: „…în luna punerii în funcţiune. **Punerea în funcţiune se face potrivit prevederilor legale.**" — the term is left to other law. **The „procesul-verbal de dare în folosință" requirement is practitioner doctrine only.**
+
+**12.4 FACT — pct. 31, verbatim, the most important new provision:**
+
+> „**31. În aplicarea art. 28 alin. (21) din Codul fiscal, opţiunea se efectuează la data intrării imobilizării corporale în patrimoniul contribuabilului şi determină efecte din punct de vedere al calculului rezultatului fiscal, în funcţie de abordarea pentru care s-a optat, fie la data punerii în funcţiune prin deducerea întregii valori fiscale de la data intrării în patrimoniu, fie începând cu luna următoare celei în care imobilizarea corporală este pusă în funcţiune, prin efectuarea de deduceri de amortizare fiscală, potrivit dispozițiilor art. 28 din Codul fiscal.**"
+
+**Three product consequences:** (a) the sub-threshold election under alin. (21) is **made at the date of entry into the patrimony** — not at payment, not later; (b) **even the full-expensing branch is timed at punerea în funcțiune**, not at payment; (c) the two branches are mutually exclusive per asset, so **the engine needs a per-asset election flag**.
+
+**12.5 FACT — pct. 27, the M1 disposal cap, verbatim:** „În aplicarea prevederilor art. 28 alin. (14) din Codul fiscal, **la momentul scăderii din gestiune** a mijloacelor de transport din categoria M1, valoarea rămasă neamortizată este deductibilă **în limita a 1.500 lei înmulţită cu numărul de luni rămase de amortizat din durata normală de funcţionare stabilită de contribuabil** potrivit Catalogului…" — so on disposal the cap is **1.500 × remaining months**, using the duration **the taxpayer chose** from the Catalog range.
+
+**12.6 DOCUMENTED NEGATIVE — the norms say nothing about how the four M1 exception categories are evidenced.** `M1` occurs exactly **once** in the whole Partea I (in pct. 27). The only evidencing requirement in the Titlul IV norms is for the **50 % vehicle rule**: „În vederea acordării deductibilităţii integrale … justificarea utilizării vehiculelor se efectuează pe baza documentelor justificative și **prin întocmirea foii de parcurs** care trebuie să cuprindă cel puţin: categoria de vehicul utilizat, scopul şi locul deplasării, kilometrii parcurşi, norma proprie de consum carburant pe kilometru parcurs."
+
+**12.7 FACT — the two vehicle lists are different, and the engine must not blur them.**
+- **CF art. 28 alin. (14)** (the 1.500 lei/lună depreciation cap) has **four** exceptions: a) urgency/guarding/courier; b) „agenții de vânzări și de achiziții, **precum și pentru test drive și pentru demonstrații**"; c) paid passenger transport incl. taxi; d) paid services incl. rental, operational leasing, driving-school instruction.
+- **CF art. 68 alin. (7) lit. k)** (the 50 % running-cost rule) has **five** categories, **without** the test-drive wording, adding „5. vehiculele utilizate ca mărfuri în scop comercial", and closes: „**Cheltuielile care intră sub incidența acestor prevederi nu includ cheltuielile privind amortizarea**."
+
+**12.8 ⭐ FACT — the first affirmative VAT-in-expense rule we have ever found, and it is scoped to the depreciable base.** Titlul II norm **pct. 28 lit. b)**, verbatim: „în valoarea fiscală a mijloacelor fixe, la data intrării în patrimoniu, **se include și taxa pe valoarea adăugată devenită nedeductibilă**, potrivit prevederilor titlului VII „Taxa pe valoarea adăugată" din Codul fiscal." **This does not reopen Q-NONDEDUCT-VAT** (`research/35` §1/§9 closed it for *ordinary* expenses): it is an affirmative rule for the **depreciable base**, reached by a PFA because art. 68 alin. (4) lit. d) borrows art. 28 and its norms.
+
+**12.9 FACT — pct. 29, casare:** „(1) …cheltuielile înregistrate ca urmare a casării unui mijloc fix cu valoarea fiscală incomplet amortizată sunt cheltuieli efectuate în scopul desfăşurării activităţii economice. (2) Prin casarea unui mijloc fix se înţelege operaţia de scoatere din funcţiune a activului respectiv, **urmată de dezmembrarea acestuia şi valorificarea părţilor componente rezultate**, prin vânzare sau prin folosirea în activitatea curentă." **A bare „scoatere din uz" is not casare.**
+
+**12.10 FACT — pct. 30:** unfinished investments written off, and the residual value of investments at concessionated/leased/managed assets where the contract ends early, „reprezintă **cheltuieli nedeductibile**, dacă nu au fost valorificate prin vânzare sau casare."
+
+**12.11 FACT — pct. 26** (investments at leased assets, art. 28 alin. (12) lit. c)): (a) initial contract period / remaining initial period, regardless of later extension; (b) extended period / remaining extended period; (c) „pe durata normală de funcţionare, potrivit opţiunii contribuabilului, **începând cu luna următoare finalizării investiţiei**, în cazul investiţiilor ce pot fi identificate potrivit Catalogului".
+
+**12.12 DOCUMENTED NEGATIVE — the norms are silent on art. 28 alin. (12) lit. i1) (the 50 % head-office rule).** Searched the whole 624-page Partea I for `lit. i1)` — **0 hits**; for `sediu social` — **0 hits**. That cap is code-only, with no norm-level gloss. (The norms' mixed-use material is about *in-kind advantages* under art. 76 alin. (3) — „evaluarea folosinţei cu titlu gratuit a vehiculului … aplicându-se un procent de 1,7 % pentru fiecare lună, la valoarea de intrare" — not depreciation.)
+
+**12.13 CORROBORATED, secondary — the 1.500 lei/lună excess is definitively lost:** „Diferența peste acest plafon este nedeductibilă definitiv: nu se reportează și nu se recuperează în anii următori." **No statutory text states this**; it follows from the cap being a deduction limit rather than a timing rule.
+
+## 13. Titlul IV norm pct. 6 — ⚠️ CORRECTION to my brief's premise
+
+**pct. 6 is not an art. 68 norm and does not touch venit brut.** It is the norm for **art. 67** (sfera de aplicare), under a different section: „**6. (1) În aplicarea prevederilor art. 67 din Codul fiscal, se supun impozitului pe veniturile din activităţi independente persoanele fizice care realizează aceste venituri în mod individual și/sau într-o formă de asociere constituită potrivit dispozițiilor legale și care nu dă naștere unei persoane juridice…**". alin. (2) „Exercitarea unei activități independente … presupune desfășurarea acesteia cu regularitate, în mod continuu, pe cont propriu și urmărind obținerea de venituri." alin. (3) the ≥4-of-art. 7 pct. 3 criteria test. alin. (4) an illustrative activity list. alin. (5) consignație, closing „**Nu se încadrează în aceste prevederi bunurile din patrimoniul personal.**" alin. (6) non-residents through a sediu permanent. alin. (7) asocieri. alin. (8) profesii liberale. alin. (9) drepturi de proprietate intelectuală.
+
+**The Titlul IV Cap. II section map, from the primary text:** „SECŢIUNEA a 2-a – Reguli generale de stabilire a venitului net anual din activități independente, determinat în sistem real, pe baza datelor din contabilitate" **begins at pct. 7**; „SECŢIUNEA a 3-a Stabilirea venitului net anual pe baza normelor de venit" **begins at pct. 8**. So **pct. 6 → art. 67; pct. 7 → art. 68; pct. 8 → art. 69.** Nothing in pct. 6 affects venit brut mechanics.
+
+## 14. ⚠️ Retention conflict — settled, and the first pass was wrong
+
+**14.1 FACT — R-D was right; the 10-year rule was abrogated.** Amending act: **OMF nr. 1.447 din 2 mai 2023, MO nr. 453 din 24 mai 2023, Articolul II**:
+
+> „Reglementările contabile privind contabilitatea în partidă simplă, aprobate prin Ordinul … nr. 170/2015 … se modifică și se completează după cum urmează: **1. La capitolul IV, după punctul 1 se introduce un nou punct, punctul 1^1, cu următorul cuprins: 1^1. (1) Registrele de contabilitate obligatorii și documentele justificative care stau la baza înregistrărilor în contabilitatea financiară se păstrează în arhiva persoanelor care conduc contabilitatea în partidă simplă timp de 5 ani calculați de la data de 1 iulie a anului următor celui încheierii exercițiului financiar în care au fost întocmite, inclusiv pentru statele de salarii. (2) Documentele justificative care atestă proveniența unor bunuri cu durată de viată mai mare de 5 ani se păstrează pe perioada corespunzătoare duratei de viață utilă a acestora.** **2. La capitolul IV, punctele 2-4 se abrogă.**"
+
+⚠️ The official text reads „durată de **viată**" (typo for „viață").
+
+**14.2 FACT — consolidated OMFP 170/2015 Cap. IV now reads:** pct. 1 survives (duty to keep registers and justificative documents); **pct. 1¹** as above; **pct. 2 Abrogat** (this was the „10 ani" rule for RJIP 14-1-1/b and Registru-inventar 14-1-2/b); **pct. 3 Abrogat** (justificative 5 ani, „cu excepția statelor de salarii care se păstrează 50 de ani"); **pct. 4 Abrogat** (the „durată de utilizare mai mare" carve-out the first pass quoted); pct. 5-6 survive (dosare numerotate, arhivare electronică per OMF 3.512/2008). Confirmed against the Portal Legislativ printable form with inline „Abrogat … de Punctul 2, Articolul II din ORDINUL nr. 1.447 din 2 mai 2023" markers.
+
+**14.3 Current retention, item by item:**
+
+| Item | Current rule | Basis |
+|---|---|---|
+| (i) Registru-jurnal de încasări și plăți (14-1-1/b) | **5 ani** from **1 July of the following year** | Cap. IV pct. 1¹ alin. (1) — a „registru de contabilitate obligatoriu" per Cap. III pct. 9 |
+| (ii) Registru-inventar (14-1-2/b) | **5 ani**, same anchor | same |
+| (iii) Fișa mijlocului fix (14-2-2) | **INFERRED: 5 ani minimum**, extended where it proves provenance of a good with viață utilă > 5 ani. **Not** listed among the registre obligatorii in Cap. III pct. 9, but it **is** item 3 of the Cap. V nomenclature | Cap. III pct. 17 + Cap. V + pct. 1¹ |
+| (iv) Justificative documents (factură, proces-verbal de dare în folosință, proces-verbal de casare) | **5 ani** from the 1 July anchor; **for the whole useful life** where they attest provenance of goods with viață utilă > 5 ani | pct. 1¹ alin. (1)-(2) |
+
+**The state-of-salaries special case (50 ani under the old pct. 3) is gone** — pct. 1¹ alin. (1) now says „inclusiv pentru statele de salarii" at 5 ani, mirroring Legea 82/1991 art. 25 as amended.
+
+## 15. Inflation indexation — none found
+
+**DOCUMENTED NEGATIVE.** No HG indexing the 5.000-lei limit has been issued. The only hits restate OUG 8/2026's own promise. **Treat 5.000 lei as the operative FY2026 figure and keep the parameter overridable.** The amending text is internally awkward: it puts the sum in the law *and* delegates annual indexation „prin hotărâre a Guvernului", while art. 28 alin. (21) still refers to „limita stabilită prin hotărâre a Guvernului".
+
+## 16. Second-pass gaps
+
+1. **A mobile phone's Catalog class is a judgement**, not a hit. 3.2.2 (3-5 ani) is the best fit. Get a classification opinion rather than hard-coding.
+2. **No ANAF primary on payment vs punere în funcțiune.** Next step is a written request to ANAF / Ministerul Finanțelor, or ANAF's interpretative-response register behind the site.
+3. **No ANAF position on aport of a personally-owned depreciable asset.** Better-supported side is non-deductible (§10.5); art. 7 pct. 44 lit. c) remains a live counter-text.
+4. **„Punerea în funcțiune" is undefined in fiscal law.** The engine must treat the proces-verbal de dare în folosință as the evidentiary anchor on practitioner authority alone.
+5. **Fișa mijlocului fix retention is inferred.** Conservative choice: keep it for the asset's useful life.
+6. **No indexation HG exists yet** for the 5.000-lei limit; the delegation is in force but unexercised.
