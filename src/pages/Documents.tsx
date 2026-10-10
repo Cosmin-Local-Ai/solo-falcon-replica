@@ -12,7 +12,7 @@ import { expenseFiscalDate, revenueFiscalDate } from '../domain/aggregation';
 import { localYear } from '../domain/date';
 import { getLedgerDisclosure, type LedgerDisclosure } from '../data/dashboard';
 import { Card, Badge, Modal, Empty } from '../components/ui';
-import { copy, documents as documentsCopy, expenses as expensesCopy } from '../ui/copy';
+import { copy, documents as documentsCopy, expenses as expensesCopy, moneyDate } from '../ui/copy';
 
 // Canonical route hash keys — mirror the original SOLO Documents feature:
 //   documents.company     → "Documente PFA"  (registration documents, real uploads)
@@ -588,6 +588,9 @@ function ReportsTab() {
           {/* PG-2: the register names the date column it posts on, and how much of this year rests on the
               document-date fallback because no money date was recorded. */}
           <div className="text-sm muted">{documentsCopy.rjip.postedOn}</div>
+          {/* The legal half of the same statement, in the sentence research/37 §5 cleared: the register
+              posts on the money date because the fiscal year is the money date’s, not the document’s. */}
+          <div className="text-sm muted">{moneyDate.rule}</div>
           {postedOnDocumentDate > 0 && (
             <div className="text-sm muted">{documentsCopy.rjip.postedOnDocumentDate(postedOnDocumentDate)}</div>
           )}

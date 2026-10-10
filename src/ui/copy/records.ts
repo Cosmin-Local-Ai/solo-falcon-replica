@@ -480,7 +480,6 @@ export const documents = {
         ? 'O înregistrare a fost postată pe data documentului pentru că nu are dată de încasare sau de '
           + 'plată înregistrată.'
         : `${n} înregistrări au fost postate pe data documentului pentru că nu au dată de încasare sau de plată înregistrată.`,
-    yearFromMoneyDate: (year: number): string => `Anul ${year} cuprinde operațiunile cu dată de încasare sau de plată în ${year}.`,
     /**
      * TASK 10a (B-32). The RJIP is a leu register — its own header says `(RON)`. A record written in euro
      * has no leu amount until a BNR rate is attached to it, so it is left out and said out loud, never
