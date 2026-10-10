@@ -6,8 +6,15 @@
   --border-strong: #d0d5dd;
   --text: #1d2939;
   --text-2: #475467;
-  --text-3: #667085;
-  --text-4: #98a2b3;
+  /* PG-0 a11y minimum-compliance fix. These two tokens failed axe `color-contrast` (serious) on
+     6 nodes of /dashboard: --text-4 measured 2.57:1 on #ffffff, --text-3 measured 4.43:1 on
+     --bg. Both are now dark enough to clear 4.5:1 on every surface they are used on
+     (#ffffff, #f0f2f5, #f8fafc and the three soft tints). This is a contrast floor, NOT a
+     palette decision — it compresses the text ladder, and the proper contrast and
+     colour-coding pass belongs to Phase 28 / PG-12 (defect B-69). See
+     docs/ai/phases/27_pg0_groundwork.md §6. */
+  --text-3: #5b6472;
+  --text-4: #646d7a;
   --primary: #1d4ed8;
   --primary-hover: #1e40af;
   --primary-soft: #eff6ff;

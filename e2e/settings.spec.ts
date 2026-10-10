@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { fixedInstant } from '../src/test/fixedInstant';
 
 /**
  * Phase 6 e2e — the fiscal profile is editable, and editing it survives a reload.
@@ -225,10 +226,15 @@ test.describe('pre-Phase-6 payload survives the new profile fields', () => {
  * Task 1 (pre-Phase-11): the estimate below is an ANNUAL run-rate projection, so it depends on the date
  * the dashboard is read. Pinning the browser clock is what keeps these two figures deterministic instead
  * of pinning a literal that is wrong the day after it is written (the B-23 failure class).
- * 2026-10-31 makes the projection model's denominator a whole 10 elapsed months, so every operand is
- * YTD x 12/10 = YTD x 1,2. Same instant as e2e/dashboard.spec.ts pins.
+ *
+ * PG-0: this used to declare its own `FIXED_AS_OF`, a second copy of the constant
+ * `e2e/dashboard.spec.ts:72` already carried, and two tests further down bypassed even that with an
+ * inline `setFixedTime(new Date('2026-10-31T12:00:00'))`. One value now lives in
+ * `src/test/fixedInstant.ts` and is shared with the unit suite, so the browser layer and the unit layer
+ * pin the same instant and a later date-dependent acceptance criterion is comparable across both.
+ * Why 2026-10-31 is reasoned out there.
  */
-const FIXED_AS_OF = new Date('2026-10-31T12:00:00');
+const FIXED_AS_OF = fixedInstant();
 
 async function fixClock(page: Page): Promise<void> {
   await page.clock.setFixedTime(FIXED_AS_OF);
@@ -494,7 +500,9 @@ test.describe('Phase 10c — a rate entered in Settings reconciles the ledger (B
   };
 
   test('the record is disclosed as unconverted, the rate is typed in, and after a reload it is lei', async ({ page }) => {
-    await page.clock.setFixedTime(new Date('2026-10-31T12:00:00'));
+    // PG-0: was an inline `setFixedTime(new Date('2026-10-31T12:00:00'))`, a fourth copy of the
+    // pinned instant. Same instant, now through the one constant.
+    await fixClock(page);
 
     // Deliberately NOT seeded with `addInitScript`: that re-runs on every document, so it would re-apply
     // this payload over the rate the UI is about to save and the reload assertion would prove nothing.
@@ -536,7 +544,8 @@ test.describe('Phase 10c — a rate entered in Settings reconciles the ledger (B
   });
 
   test('an incomplete rate is refused, and the refusal is the validator’s own words', async ({ page }) => {
-    await page.clock.setFixedTime(new Date('2026-10-31T12:00:00'));
+    // PG-0: was the fourth inline copy of the pinned instant.
+    await fixClock(page);
     await page.goto('/settings#!/fiscal');
 
     await page.locator('[name="fx-rate"]').fill('5.3470'); // a number anchored to nothing

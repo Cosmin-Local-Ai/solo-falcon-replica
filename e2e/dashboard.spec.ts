@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { fixedInstant } from '../src/test/fixedInstant';
 
 /**
  * Dashboard e2e coverage (Step 34, Worker 2).
@@ -67,9 +68,12 @@ function statCard(page: Page, label: string) {
  * 2026-10-31 is chosen because the projection model's own denominator is a whole number there
  * (9 full months + 31/31 days = 10 elapsed months), so every expected figure is hand-checkable as
  * YTD × 12/10 = YTD × 1,2. It also leaves `monthsRemaining` at 3, exactly as the real seed date
- * did, so the reserve arithmetic is unchanged in kind.
+ * PG-0: the instant itself now comes from `src/test/fixedInstant.ts` — one value shared with
+ * `e2e/settings.spec.ts` (which carried a second copy) and with the unit suite, so a figure asserted
+ * in a browser and a figure asserted in vitest are pinned to the same day. Why 2026-10-31 is
+ * reasoned out below.
  */
-const FIXED_AS_OF = new Date('2026-10-31T12:00:00');
+const FIXED_AS_OF = fixedInstant();
 
 async function fixClock(page: Page): Promise<void> {
   await page.clock.setFixedTime(FIXED_AS_OF);
@@ -309,6 +313,11 @@ test.describe('Dashboard — section content (seed data)', () => {
   // dateless here: no profile records a TVA exceedance date, and with offset_days = 0 its deadline IS
   // the exceedance date, so it can never classify as upcoming anyway.
   test('Termene limită: renders the single upcoming filing deadline (D212)', async ({ page }) => {
+    // PG-0: this test had no clock pin, and three of its assertions drift with the real date —
+    // the "upcoming" filter is wall-clock driven, so `25.05.2027` disappears from the list once the
+    // real day passes it, and the `.item-row` and `Activ` counts move with it. Pinning is what the
+    // other tests in this file already do; this one had simply escaped it.
+    await fixClock(page);
     await page.goto('/dashboard');
 
     const deadlines = sectionWith(page, 'Termene limită');
@@ -804,6 +813,9 @@ test.describe('Dashboard — Grafic financiar & KPI table (seeded FY2025)', () =
   });
 
   test('Grafic financiar: "Lunar" range (default) is empty for FY2025 data; month select shows a seeded month', async ({ page }) => {
+    // PG-0: the comment below admits the default month is "the current one" — an assertion about the
+    // real date. Pinned, so "current" means 2026-10, which is outside the FY2025 series for good.
+    await fixClock(page);
     await seedPage(page);
     await page.goto('/dashboard');
 

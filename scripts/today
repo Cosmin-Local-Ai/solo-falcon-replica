@@ -1,0 +1,26 @@
+#!/bin/sh
+# scripts/today — print the date stamp the docs and ledgers use.
+#
+# WHY THIS EXISTS
+# Phase docs, phase handoffs and the STATE.md ledger are stamped by hand, and a
+# hand-typed stamp is a stamp nobody checked. This prints it instead.
+#
+# WHY IT IS `date +%F` AND NOT `date -u +%F`
+# The stamp must be the LOCAL calendar date. Reading the UTC calendar date is
+# defect B-46 (STATE.md): `Expenses.tsx:47`, `Revenues.tsx:30` and
+# `Declarations.tsx:31` all default a record's date with
+# `new Date().toISOString().slice(0, 10)`, which is UTC, so in Europe/Bucharest
+# before 03:00 local the app stamps *yesterday*. A stamp tool that stamps the
+# wrong day is worse than typing it, so the UTC form is deliberately not offered.
+#
+# Usage:
+#   scripts/today            -> 2026-10-10
+#   scripts/today --stamp    -> 2026-10-10T14:03:22+03:00  (local, with offset)
+#
+# No dependencies, no Node: this runs on a clean clone before `npm install`.
+
+if [ "${1:-}" = "--stamp" ]; then
+  date +%Y-%m-%dT%H:%M:%S%:z
+else
+  date +%F
+fi
