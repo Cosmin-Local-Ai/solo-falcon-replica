@@ -197,7 +197,7 @@ Sections: Observații titles must name the threshold (CAS / CASS / cap), not "Ve
 
 | ID | Question | Feeds |
 |---|---|---|
-| **L-1** | Income realised in part of a year: how do art. 118 alin. (3), art. 148, art. 170, art. 174 treat a PFA starting mid-year? Is partial-year income the "annual income"? Are CAS/CASS thresholds prorated — secondary sources say the proration text was abrogated from 2024, **unverified** — and what exactly is declared and paid, when? | PG-4 |
+| **L-1** | ~~Income realised in part of a year~~ **DONE** — `research/26` (partial-year income *is* the annual income; thresholds not prorated; ×12 has no legal basis) and `research/27` (the unrepealed prorating norm vs the code; ANAF's current D212 instructions apply the code rule). **B-54 raised, D-PROJ-1 decided** | PG-4 |
 | **L-2** | Which PFA activities are taxed by a method other than actual expenses (art. 68^1, 68^3, 69)? Is there a verified activity→method mapping, or must the user declare it? | PG-6b |
 | **L-3** | VAT-registered PFA: which input VAT is deductible and which is part of the expense (the 50 % cases, non-recoverable VAT)? | PG-6f / B-30 |
 | **L-4** | Fixed assets for a PFA: the 2026 asset-value threshold (OUG 8/2026?), depreciation methods and useful lives, purchase vs depreciation treatment, cash-basis interaction. | PG-6e / B-31 |
@@ -205,6 +205,19 @@ Sections: Observații titles must name the threshold (CAS / CASS / cap), not "Ve
 | **L-6** | D300 periodicity: the facts needed (registration date, prior-year taxable supplies) and the first-year rules. | PG-5 / B-35 |
 | **L-7** | Cash-basis treatment of an invoice with **no payment date** — income when issued or when collected in sistem real? — and of expenses paid in a different year. | PG-2 / D-1 |
 | **L-8** | After year end: what is filed and paid, when, for FY2026 (D212, CAS/CASS settlement), and the effect of the early-filing bonus — the repo notes OUG 8/2026 art. 8 applies to filing by 15 April 2026; confirm it does not reach FY2026. | PG-4 / PG-5 |
+
+### Open legal questions found after the audit — queued, sequential
+
+These came from the `STATE.md` register, the two Romanian audits and the L-1/L-1b passes. **One scout at a time (C5).** Running as of 2026-10-10: **R-A**.
+
+| ID | Question | Feeds | State |
+|---|---|---|---|
+| **R-A** | **Does a fixed statutory fiscal date roll when it falls on a non-working day?** CF art. 122 alin. (3) = 25 mai. Evidence on both sides: CPC art. 181 alin. (2) extends a „termen"; OUG 15/2019's preamble says a fixed date moves only by an equal-rank instrument; yet DGFP Brașov rolled 25 mai 2025 (a Sunday) to 26 mai by press release. Plus: any Decizia RIL or ÎCCJ on the point; ANAF's record across fixed deadlines; whether 25 mai 2027 is a weekend; and **Q-ANAF-SAMBITA** (has any instrument said how the 5 working days are counted, Saturday included). Cheap extra: did OUG 156/2024 touch art. 174? | **Q-ROLLOVER-FIXED-DATE**, **Q-ANAF-SAMBITA**, **Q-OUG156-ART174**; blocks any working-day primitive in 18B, 24, 32 | **running** |
+| **R-B** | **Normă de venit, 2026: can the amounts be obtained from a primary source at per-CII-code level?** HG / OPANAF tables, the act that sets them for 2026, and whether they are citable per activity code. **This is the 12H gate:** if the tables are not verifiable, 12H collapses and the explicit refusal is the deliverable. Also pin art. 68^1 / 68^3 / 69 scope and the activity→method mapping (**L-2**). | **12H**, D-NORMA-1, PG-6b | queued |
+| **R-C** | **FY2027: what is known now, and what expires on 31 December 2026?** The minimum-wage act for 1 ianuarie 2027 (the governing value under CF art. 135^1 alin. (3)); the 2027 budget/finance law; any CF relief with a sunset date — we already caught one 2025-only measure (OUG 8/2026 art. 8), so "carry forward" is not automatically safe in that direction. Also the pending bills' status (**Q-PENDING-B4-2026**, **Q-PENDING-10MAI**). | **D-YEAR-2** standing task, PG-4 lifecycle | queued |
+| **R-D** | **Three legal claims sitting in user-facing copy, plus one open U-item.** (a) Which declarations does a 2026 sistem-real PFA actually file — the documents copy still teaches **D100 / D220** and lists D101, D112, D200, 220, 221; (b) when is a **cod de TVA intracomunitar** genuinely required — the hint claims any EU collaboration needs it; (c) the **official Romanian name** of the RJIP register/declaration and correct agreement; (d) **Q-NONDEDUCT-VAT (U-1)** — does non-deductible TVA enter the deductible expense for a neplătitor de TVA? Only inference exists today. | PG-12 / proof-check §5, §7; **Q-NONDEDUCT-VAT** | queued |
+| **R-E** | **The closed lists the app is allowed to model.** Art. 155 alin. (1) lit. a)-h) and art. 61 categories verbatim, so **12F** models only what the sources name and refuses the rest (**Q-MULTI-SOURCE**); and art. 322 alin. (3)-(4) VAT periodicity mechanics — what the pro-rated estimate actually requires of the taxpayer, so **18B** knows which input to ask for (**Q-VAT-PERIOD**, **L-6**). | **12F**, **18B**, B-41, B-35 | queued |
+| **L-3 … L-7** | Unchanged from the table above: input VAT deductibility, fixed assets, other income, D300 periodicity, no-payment-date cash basis. | PG-6, PG-5, PG-2 | queued |
 
 Every scout note separates **FACT / INTERPRETATION / UNKNOWN**. Unknowns become `REVIEW_REQUIRED` behaviour, never defaults.
 
