@@ -129,6 +129,48 @@ The user reviewed each sentence in full (not the abbreviated table — that was 
 
 ---
 
+## 2026-10-10 — the PG owner decisions (brief 28 §4)
+
+### D-DATE-1 — Missing payment / collection date: assume the document date, but say so
+**Chosen:** option 1 — the document date stands in for the money date — **plus two things the user added**: the money date must be enterable, and the field carries an informational note explaining *when it matters*. Their suggested wording: something like „completează acest câmp dacă ai încasat plata într-un an fiscal diferit de cel al facturii”.
+**Why this is the right shape:** it keeps entry cheap for the common case (paper and money move together) while making the one case that changes the tax year explicit to the user. It does **not** make the assumption invisible.
+**Still owed:** scout **L-7** confirms the cash-basis rule itself (art. 68 alin. (2) lit. a) / alin. (4) lit. b)) and what the law says about an invoice with no payment date at all. The product decision is made; the legal basis still has to be cited.
+
+### D-RES-1 — Reserve horizon: **spread to 25 May of the following year**
+Because that is the single real deadline for income tax, CAS and CASS together (CF art. 122 alin. (3); art. 68 alin. (9)-(10), art. 151 alin. (1), art. 174 alin. (15)). The monthly figure becomes smaller and matches when cash is actually needed.
+**Consequence, and it is a model change, not a copy change:** the reserve target now **crosses the fiscal-year boundary**. A 2026 obligation with a 2027 due date has to exist as an object — see D-YEAR-1 and the cross-year obligations timeline.
+
+### D-NORMA-1 — Normă de venit: **support it before launch**
+**Chosen:** option 2 — real support, not a refusal screen. This reverses the boundary Phase 6 recorded deliberately (`norma_venit` as a refused boundary with no invented values).
+**Recorded honestly, before any code:** this is the largest scope addition of the round. It needs a second calculation method driven by published norm tables that vary by activity and by region and are reissued annually by ministerial order. **No 2026 norm table has ever been verified in this project** — that is precisely why the boundary was refused in the first place. If the tables cannot be verified from primary sources, the calculation cannot ship and the refusal returns, having cost the time regardless.
+**Therefore:** scout **L-9** (new) answers the eligibility, the source of the tables, and whether a PFA may elect the method for FY2026 **before** any implementation is scheduled. The answer decides the schedule.
+
+### D-YEAR-1 — Fiscal-year rollover: **automatic switch, with a toggle back and a banner**
+**Chosen:** a variant of option 1. On 1 January the app **switches to the new fiscal year automatically**, a **toggle somewhere in the UI** lets the user return to a previous fiscal year to review it, and a **banner on New Year** states what the app did and how to review the closed year.
+**The consequence the user must see, recorded here:** there is **no verified 2027 rule package**, and the 2027 minimum wage is not yet published. So the default screen on 1 January 2027 is a **refusal** — any 2027 figure would be an invented one. The toggle and the banner are what make that survivable. It also creates a **standing task, not a phase**: stage the 2027 package as soon as the 2027 acts are published, or the app is a refusal screen for weeks after New Year.
+
+**Chart continuity — the design rule that came out of the user's own question.** The reviewer asked whether the chart needs changing across years. It does not, and the reason matters:
+1. The **fiscal series belongs to one fiscal year**. No continuous 24-month line: 2026 is *final from actuals*, 2027 is *projected*, and drawing them as one line blends two different kinds of number — the same error the projection already makes. A cross-year view is a **year-over-year comparison**, not one long line.
+2. **Tax paid in May 2027 is not a 2027 expense.** It settles a 2026 obligation. Putting it in the 2027 fiscal series double-counts the burden.
+3. It **is** a real 2027 cash event, and D-RES-1 makes that explicit. So the model needs a **cross-year obligations timeline** — a 2026 obligation with a 2027 due date — in its own series, separate from the fiscal chart.
+**Rule: the chart stays per-year; what crosses the boundary is the obligation, not the chart.**
+
+---
+
+### D-YEAR-2 — New fiscal year: **carry forward, update when the datum arrives**
+**Chosen:** carry forward. The user supplied the minimum-wage history themselves (HG 1091/2014 through HG 146/2026) to make the point that the wage **always** changes, so the app cannot simply stop and wait: it carries the last known value forward and updates the moment the new one is published.
+**What I recorded alongside it, because the direction of the error is not uniform:** carrying an older, lower wage into a new year moves the two contribution lines in **opposite** directions. A lower 12-SM floor makes CAS look **due** when it may not be — overstating, the safe direction. A lower 6-SM CASS floor makes the art. 174 alin. (6) top-up look **smaller** than it will be — understating, the unsafe direction. So "carry forward" is acceptable only with the value visibly stamped as not yet updated for the year, and it is not acceptable as an invisible default.
+**Standing task, not a phase:** stage the 2027 rule package the moment the 2027 acts are published. Until then the app is honest that it is running 2026's rules.
+
+### D-LANG-3 — Second Romanian proof-check: accepted, with three items held for research
+Full report and my in-tree verification of every claim: `docs/ai/notes/romanian_proofcheck_2026-10-10.md`. **All eight concrete claims reproduce.**
+**Accepted now:** the six definite errors; the `Detaliu status` placeholder that asks for a rejection reason on a pending record; informal address throughout; the plain-language rewrites of the research-note phrasings; the terminology standardisation; the 2025 hard-coded default; the file-size message.
+**Held for the researcher, because they carry legal content and are not copy:** the D100 / D220 form categories still taught in the documents copy (the same error TASK 9 removed from the seed); the intra-community VAT-code hint, which claims any EU collaboration needs the code; the official Romanian name of the RJIP register.
+**Held until PG-7 makes it true:** the proposed foreign-currency wording. It says the record is absent from the lei totals — correct as a description of what *should* be visible, wrong as a description of today, where the sentence and the aggregation disagree (B-37).
+**Two findings that are not language problems at all**, and outrank the grammar: **B-55** an internal English identifier printed inside a Romanian sentence, which the copy guard cannot see because it only scans components and pages; and **B-56** `Declarația … a fost transmisă` and `Contul este conectat la platforma e-Factura` sitting on actions that only mutate local state — `sendDeclaration` is a `setData` call and there is no e-Factura integration. In a financial app, a user who believes a declaration was filed may not file it.
+
+---
+
 ## Still open — to be put to the user
 
-The seven §9 decisions are closed (D-SEED-2, D-RUN-1, D-SCOPE-2, D-SEV-1, D-VER-1, D-DOCS-1, D-LANG-2). The owner decisions in `briefs/28_pg_production_gate.md` §4 — **D-1** an invoice with no collection date, **D-2** the reserve horizon, **D-3** normă de venit at launch, **D-5** how the fiscal year advances, **D-6** who owns the disclaimer wording, **D-7** the calculation-sheet export format — are being put to the user now. **D-4** (mid-year projection) waits on scout **L-1**, which is running.
+**D-4** mid-year projection method — **L-1 has answered the legal half** (`research/26_midyear_start_partial_year_2026.md`): partial-year income *is* the annual income and nothing prorates the thresholds, so the ×12 has no legal basis. What is now a product question is what the hero is allowed to show. **D-6** who owns the disclaimer and terms wording. **D-7** calculation-sheet export format: print stylesheet, PDF, or JSON.
