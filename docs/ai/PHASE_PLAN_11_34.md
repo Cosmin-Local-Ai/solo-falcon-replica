@@ -425,3 +425,17 @@ Unchanged and not negotiable: implementation Workers run sequentially, one engin
 **Two consolidation traps, both of which cost real time on 2026-10-10.** A consolidated source is not a witness to the amendment history:
 1. **A modification note beneath an article is not the article text.** We recorded the D392 suspension as sitting in **CF art. 324 alin. (6)**; it does not — alin. (6) is the international bus-ticket notification, and the suspension is a note from **OUG 115/2023 art. LXII** attached under the article.
 2. **A consolidated page can lag the amending law and state the opposite of current law.** The Portal Legislativ consolidated **OUG 120/2021** page still shows **art. 10¹⁰** in its pre-**Legea 88/2026** form — an *enrolment obligation* — when current law makes the same article a *relief*. **This is almost certainly why two sessions of the same researcher contradicted each other and one retracted its own finding**: the first read the amending law, the second re-read the consolidation. **When a finding turns on a recent amendment, cite the amending act and its in-force provision, never the consolidation.**
+
+### 12.9 Every Worker brief must tell the Worker to dispatch its own scouts — **user decision, 2026-10-10**
+**The capability was already there and I never used it.** `~/.pi/agent/agents/worker.md` declares `subagent_agents: scout, researcher` and carries a whole section on it — *"Your context is finite. Reading large or unfamiliar codebases directly will burn it before you can edit anything"*, *"A good rhythm: **scout to find, read to edit**"*, and *"If you need two independent investigations … emit multiple `subagent` tool calls in the same turn — they run in parallel automatically."* **Brief 29 (Phase 10c) said nothing about it**, so that Worker grepped and read the FX layer itself and spent its own context on territory it only needed a map of.
+
+**The rule:** every Worker brief carries a **SCOUT DISPATCH** section stating, explicitly:
+1. **Dispatch scouts up front**, before reading, for the territory the Worker will **not** edit — callers and dependents of the symbols it is about to change, the blast radius, the files it is **forbidden** to touch (so it learns the boundary without reading the file), and any unfamiliar subsystem.
+2. **Dispatch again mid-task** when it reaches a subsystem the brief could not predict.
+3. **Never scout a file it is going to edit.** A scout returns a summary, not verbatim source, and the Worker must re-read the 1–3 files it actually edits regardless — so scouting those is pure waste. This is the failure mode the user named: *"Not scout files they are going to edit regardless."*
+4. Independent investigations go out **in the same turn**, in parallel.
+
+**Why it is a standing rule and not a nicety:** the Worker's context is the scarce resource in this project. A scout costs a haiku run; an unscoped read of `domain/fx/` or `pages/Declarations.tsx` costs the Worker the ability to finish.
+
+### 12.10 The Orchestrator never runs the test suite — **user decision, 2026-10-10**
+**The Worker runs the tests and reports the counts.** Re-measuring them from the orchestrator is wasted time and context, and it duplicates work already done. Take the counts from the handoff. If independent confirmation is genuinely needed, use a cheap non-test check — `tsc`, `git status`, a targeted `grep` — **not** `npm run test`.
