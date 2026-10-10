@@ -295,6 +295,15 @@ export const recordStatus = {
     inregistrata: 'Înregistrată',
     respinsa: 'Respinsă',
   } satisfies Record<ExpenseStatus, string>,
+  /**
+   * PG-1 — the lead of the per-record note that says the row is NOT in the estimate figure. The motive
+   * after it is the shared reason label from `dashboard.estimate.coverage.reasonLabels`, so the register
+   * row and the hero row name the same cause with the same words.
+   *
+   * It belongs to the record, not to the register: the status badge above it answers „ce stare are
+   * înregistrarea?”, this answers „intră în calcul?”. A record can be `Înregistrată` and still not enter.
+   */
+  notInEstimate: 'nu intră în estimare',
 } as const;
 
 export const documents = {

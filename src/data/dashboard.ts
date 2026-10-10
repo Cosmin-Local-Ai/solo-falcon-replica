@@ -14,8 +14,12 @@ import { assessCompleteness, type CompletenessReport } from '../domain/completen
 import { selectProjectionV1, type ProjectionV1 } from '../domain/projection';
 import {
   attachEstimateBasis,
+  coverageFromUnconverted,
+  isGapReason,
+  selectEstimateCoverage,
   selectEstimateOperands,
   withEstimateBasis,
+  type EstimateCoverageGap,
   type TaxEstimateWithBasis,
 } from '../domain/estimateBasis';
 import { computeTaxEstimate, type TaxEstimateResult } from '../domain/tax';
@@ -117,20 +121,43 @@ export interface DashboardSnapshotView extends DashboardSnapshot {
 }
 
 /**
- * TASK 8 — the three epistemic states of the tax estimate.
+ * TASK 8 — the epistemic states of the tax estimate, widened by PG-1 to an explicit status union.
  *
  * `TaxEstimateResult` has two members (`computed` | `review_required`), and the dashboard adapter used
  * to paper over the absence of an estimate with a `review_required` sentinel whose reason was the
  * internal token `loading` — which reached the screen through the chart note. A missing calculation and
  * a refused one are different claims: the first says nothing was produced, the second says the engine
  * ran and withheld a conclusion. `unavailable` is the third state, and it is derived here from the
- * estimate actually being absent, never from a sentinel's reason string.
+ * estimate actually being absent, never from a sentinel's reason string. **That must stay true:**
+ * `unavailable` is not a spelling of `review_required`, and nothing here reintroduces a sentinel.
+ *
+ * PG-1 splits the old `computed` in two, because "the engine produced a figure" and "the figure covers
+ * what was recorded" are different claims and the hero was making only the first one:
+ *
+ * - `complete` — every recorded record is either in the figure or accounted for by a reason the app
+ *   settled (a legal non-deductibility), and nothing is missing.
+ * - `incomplete` — a record is out of the figure for a reason the app could NOT settle: no category, no
+ *   rule answer, no asset register, no rate, no measurable ceiling.
+ *
+ * `refused` and `closed_final` are declared now and produced by nobody: PG-4 (a refusal that is a final
+ * answer rather than a review request) and PG-6 (a closed fiscal year) own their triggers. Declaring
+ * them here is what makes the surfaces exhaustive over the union instead of adding a sixth word later.
  */
-export type TaxEstimateState = 'computed' | 'review_required' | 'unavailable';
+export type TaxEstimateState =
+  | 'complete'
+  | 'incomplete'
+  | 'review_required'
+  | 'refused'
+  | 'closed_final'
+  | 'unavailable';
 
-function estimateStateOf(tax: TaxEstimateResult | TaxEstimateWithBasis | null): TaxEstimateState {
+function estimateStateOf(
+  tax: TaxEstimateResult | TaxEstimateWithBasis | null,
+  coverage: readonly EstimateCoverageGap[],
+): TaxEstimateState {
   if (tax === null) return 'unavailable';
-  return tax.status === 'computed' ? 'computed' : 'review_required';
+  if (tax.status === 'review_required') return 'review_required';
+  return coverage.some(g => isGapReason(g.reason)) ? 'incomplete' : 'complete';
 }
 
 export interface DashboardData {
@@ -146,6 +173,19 @@ export interface DashboardData {
    */
   tax: TaxEstimateWithBasis | null;
   estimateState: TaxEstimateState;
+  /**
+   * PG-1 — every recorded record the estimate figure does not describe, with the reason, the amount at
+   * stake and the route that fixes it. Assembled from two lists that already exist and never overlap:
+   * the assembler's own exclusions (`estimateBasis.ts selectEstimateCoverage`) and the Phase 10c ledger
+   * disclosure (`ledger.unconverted`, via `coverageFromUnconverted`). Foreign records come from the
+   * ledger disclosure ONLY — the assembler's `foreign_currency` entries are dropped rather than
+   * re-reported, so one record carries one reason and reaches one surface.
+   *
+   * Not every entry is a defect in the estimate: a legally non-deductible record is listed so a row can
+   * say why it is out, but it does not make the estimate incomplete. `isGapReason` is the test that
+   * separates the two, and it is the same test the hero badge and the weighted percentage use.
+   */
+  coverage: EstimateCoverageGap[];
   thresholds: FiscalThreshold[];
   deadlines: Deadline[];
   completeness: CompletenessReport;
@@ -193,8 +233,12 @@ export function getProjectedFinancialSeries(data: AppData, asOfDate: string): Pr
   return selectProjectionV1(ledgerOf(data).data, asOfDate);
 }
 
-export function getDataCompleteness(data: AppData): CompletenessReport {
-  return assessCompleteness(data);
+export function getDataCompleteness(
+  data: AppData,
+  coverage: readonly EstimateCoverageGap[] = [],
+  asOfDate?: string,
+): CompletenessReport {
+  return assessCompleteness(data, coverage, asOfDate);
 }
 
 export function getPendingCounts(data: AppData): PendingCounts {
@@ -579,9 +623,10 @@ function buildSnapshot(
   data: AppData,
   asOfDate: string,
   tax: TaxEstimateResult | null,
+  coverage: readonly EstimateCoverageGap[] = [],
 ): DashboardSnapshotView {
   const taxYear = data.profile.fiscalYear;
-  const completeness = assessCompleteness(data);
+  const completeness = assessCompleteness(data, coverage, asOfDate);
   const deadlines = computeDeadlines(selectionRules(data, asOfDate), {
     taxYear,
     asOfDate,
@@ -671,21 +716,30 @@ export function buildDashboardData(
   // stays `null`: it is the absence of a calculation, and `estimateState` says so.
   const estimate = tax === null ? null : withEstimateBasis(tax);
   const asOfDate = isoToday(instant);
-  const snapshot = buildSnapshot(data, asOfDate, estimate);
+  // PG-1, landmine 2: the ledger is disclosed ONCE here, and the FX half of the coverage is read off
+  // that disclosure instead of walking the records for a second time. A second currency pass would
+  // drift from the first the moment either changed, which is what Phase 10c's handoff warned about.
+  const ledger = getLedgerDisclosure(data);
+  const coverage: EstimateCoverageGap[] = [
+    ...selectEstimateCoverage(data, asOfDate, selectionRules(data, asOfDate)),
+    ...coverageFromUnconverted(ledger.unconverted),
+  ];
+  const snapshot = buildSnapshot(data, asOfDate, estimate, coverage);
   const attention = getAttentionItems(data, snapshot, estimate ?? undefined);
   return {
     taxYear: data.profile.fiscalYear,
     snapshot,
     tax: estimate,
-    estimateState: estimateStateOf(estimate),
+    estimateState: estimateStateOf(estimate, coverage),
+    coverage,
     thresholds: getThresholdStatuses(data, asOfDate, estimate),
     deadlines: getUpcomingDeadlines(data, asOfDate),
-    completeness: getDataCompleteness(data),
+    completeness: getDataCompleteness(data, coverage, asOfDate),
     actions: attention.actions,
     reserve: getTaxReserve(data, asOfDate, estimate),
     insights: attention.observations,
     pendingCounts: getPendingCounts(data),
-    ledger: getLedgerDisclosure(data),
+    ledger,
     legislation: getLegislationState(data, asOfDate, estimateProvenance(estimate)),
     provenance: estimateProvenance(estimate),
   };

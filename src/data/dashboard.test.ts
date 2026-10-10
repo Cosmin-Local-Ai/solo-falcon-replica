@@ -429,7 +429,12 @@ describe('getActionItems (sync)', () => {
 
     expect(obsIds.filter(id => actIds.includes(id))).toEqual([]);
     // The three duplications the two pipelines used to produce are gone.
-    expect(actIds).toContain('completeness-taxEstimate');
+    // PG-1: `completeness-taxEstimate` is gone with the check behind it. That row asked whether an
+    // estimate had been calculated and counted the calculation as a completeness fact, so the seed —
+    // which does have a computed estimate — satisfied it while records sat outside the figure. A real
+    // missing register still surfaces.
+    expect(actIds).not.toContain('completeness-taxEstimate');
+    expect(actIds).toContain('completeness-declarations');
     expect(obsIds).not.toContain('completeness');
     expect(obsIds).not.toContain('tax-review');
     expect(obsIds).not.toContain('deadline-PFA_DEADLINE_2026');

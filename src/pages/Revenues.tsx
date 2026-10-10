@@ -4,6 +4,8 @@ import { useStore } from '../data/store';
 import { fmtDate, total, statusBadge } from '../data/types';
 import type { Revenue } from '../data/types';
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
+import { getLedgerDisclosure } from '../data/dashboard';
+import type { CoverageReason } from '../domain/estimateBasis';
 import { copy, empty, fields, recordStatus, revenues as revenuesCopy, validation } from '../ui/copy';
 
 // Canonical route hash keys (English) mapped to the Romanian data statuses.
@@ -17,6 +19,23 @@ const statusFor = (tab: (typeof TABS)[number]['key']) =>
   TABS.find(t => t.key === tab)!.status;
 
 const PAGE_SIZE = 8;
+
+/**
+ * PG-1 — the per-record half of the estimate's coverage, on the revenue side.
+ *
+ * A revenue leaves the estimate for the one reason this app can name: it is written in a currency for
+ * which the store holds no rate, so there is no lei amount to add. That is the Phase 10c ledger
+ * disclosure's own finding, and it is read from `getLedgerDisclosure` — the same pass the dashboard's
+ * money surfaces read — rather than from a second walk of the register looking for foreign amounts.
+ */
+function OutOfEstimateNote({ reason }: { reason: CoverageReason | undefined }) {
+  if (reason === undefined) return null;
+  return (
+    <div className="text-sm muted" data-not-in-estimate style={{ marginTop: 3 }}>
+      {recordStatus.notInEstimate}: {copy.dashboard.estimate.coverage.reasonLabels[reason]}
+    </div>
+  );
+}
 
 function RevenueForm({ initial, onSave, onClose }: {
   initial?: Revenue;
@@ -160,7 +179,8 @@ interface RevenuesProps {
 }
 
 export default function Revenues({ initialTab, onTabChange, focusRecord }: RevenuesProps) {
-  const { revenues, addRevenue, updateRevenue, deleteRevenue, toast } = useStore();
+  const store = useStore();
+  const { revenues, addRevenue, updateRevenue, deleteRevenue, toast } = store;
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>(
     initialTab && TABS.some(t => t.key === initialTab) ? initialTab : 'registered'
   );
@@ -190,6 +210,16 @@ export default function Revenues({ initialTab, onTabChange, focusRecord }: Reven
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const counts = (k: (typeof TABS)[number]['key']) =>
     revenues.filter(r => r.status === statusFor(k)).length;
+
+  // PG-1, landmine 2: the ledger is read through the one disclosure boundary, not re-walked here. The
+  // pass is idempotent (`domain/fx/ledger.ts`), so this cannot disagree with the totals the dashboard
+  // shows — a local `revenues.filter(r => r.valoareFaraTva.currency !== 'RON')` would have been a second
+  // answer to the same question, and the first one to drift.
+  const outOfEstimateById = useMemo(() => {
+    const map = new Map<string, CoverageReason>();
+    for (const u of getLedgerDisclosure(store).unconverted) map.set(u.id, 'missing_fx_rate');
+    return map;
+  }, [store]);
 
   // TASK 8: land the focused record on screen, whatever page of the register it sits on.
   const focusIndex = focusRecord ? rows.findIndex(r => r.id === focusRecord) : -1;
@@ -261,6 +291,7 @@ export default function Revenues({ initialTab, onTabChange, focusRecord }: Reven
                     <td>
                       <Badge kind={statusBadge(r.status)}>{recordStatus.revenueLabels[r.status]}</Badge>
                       {r.statusDetail && <div className="text-sm muted" style={{ marginTop: 3 }}>{r.statusDetail}</div>}
+                      <OutOfEstimateNote reason={outOfEstimateById.get(r.id)} />
                     </td>
                     <td>
                       <div className="row-actions">

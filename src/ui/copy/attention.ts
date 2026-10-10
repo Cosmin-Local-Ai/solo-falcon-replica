@@ -59,17 +59,31 @@ export const attention = {
 } as const;
 
 /**
- * The three epistemic states of the tax estimate. They are not three spellings of one number: a
- * computed figure, a conclusion the engine withheld, and the absence of any calculation are different
- * claims, and each gets its own word, its own badge and its own sentence.
+ * The epistemic states of the tax estimate, widened by PG-1.
+ *
+ * They are not several spellings of one number: a computed figure, a figure that does not cover what
+ * was recorded, a conclusion the engine withheld, and the absence of any calculation are different
+ * claims, and each gets its own word, its own badge and its own sentence. `refused` and `closed_final`
+ * have words before they have triggers — PG-4 and PG-6 produce them — so the surfaces stay exhaustive
+ * over the union instead of inventing a sixth word later.
  */
 export const estimateState = {
   badges: {
-    computed: 'Calculat',
+    complete: 'Calculat',
+    incomplete: 'Estimare incompletă',
     review_required: 'De verificat',
+    refused: 'Refuzat',
+    closed_final: 'Închis definitiv',
     unavailable: 'Indisponibil',
   },
-  computed: 'Estimare calculată pe datele înregistrate acum.',
+  complete: 'Estimare calculată pe datele înregistrate acum, care acoperă tot ce este înregistrat.',
+  /**
+   * PG-1 — the figure is real and the register is not empty; what is missing is coverage. The count is
+   * the number of records left out, so the sentence never claims a defect it cannot enumerate.
+   */
+  incompleteOne: 'Estimarea nu acoperă tot ce ai înregistrat: o înregistrare rămâne în afara cifrei.',
+  incompleteMany: (n: number): string =>
+    `Estimarea nu acoperă tot ce ai înregistrat: ${n} înregistrări rămân în afara cifrei.`,
   /**
    * The refusal reason itself is rendered once, in the chart note under the figure, where it is pinned
    * by name (`e2e/dashboard.spec.ts`, the B-14 describe). Repeating the same cited paragraph in the

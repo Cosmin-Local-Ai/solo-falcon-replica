@@ -7,6 +7,7 @@
  * citations and stay there — see the boundary note in `common.ts`.
  */
 import type { AttentionSource } from '../../domain/attention';
+import type { CoverageReason } from '../../domain/estimateBasis';
 import type { LegislationItem } from '../../data/dashboard';
 import type { Deadline, DeadlineEventType } from '../../domain/deadlines';
 import type { MoneyPrecisionNotice } from '../../data/migration';
@@ -63,6 +64,36 @@ export const dashboard = {
     completeProfile: 'Completează profilul',
     completeProfileBody:
       'Profilul încă nu are faptele obligatorii. Fără ele estimarea rămâne neîndeplinită în loc să fie aproximată.',
+    /**
+     * PG-1 — the coverage rows under the hero figure. One row per reason group, never one row per
+     * record: a profile with nine uncategorised invoices has one thing to fix, not nine screens of
+     * noise. The count, the amount that left the figure and the link to the first record of the group
+     * are all data the estimate already carries.
+     */
+    coverage: {
+      title: 'Ce nu intră în estimare',
+      /** Exhaustive over `CoverageReason`: a new reason is a compile error here, not a raw token on screen. */
+      reasonLabels: {
+        unclassified: 'fără categorie',
+        undetermined: 'regulă fără faptă consemnată',
+        asset_not_modelled: 'mijloc fix fără registru de amortizare',
+        missing_fx_rate: 'fără curs BNR înregistrat',
+        cap_unresolved: 'plafon care nu poate fi măsurat',
+        non_deductible: 'nu este deductibilă prin lege',
+        rejected: 'document respins',
+        pending: 'transmitere în așteptare',
+        fact_missing: 'faptă de profil care lipsește',
+      } satisfies Record<CoverageReason, string>,
+      countOne: 'o înregistrare',
+      countMany: (n: number): string => `${n} înregistrări`,
+      open: 'Deschide înregistrarea',
+      /**
+       * Stated because the amount beside a `missing_fx_rate` row is not a lei figure — the app holds no
+       * rate, so it holds no lei equivalent either. Saying „lei” about it would invent the very number
+       * whose absence the row reports.
+       */
+      amountUnitNote: 'sumele sunt în unitatea în care a fost înregistrată fiecare sumă',
+    },
   },
 } as const;
 
@@ -212,6 +243,20 @@ export const completeness = {
   empty: 'Nicio verificare de completitudine',
   satisfiedBadge: 'Complet',
   unsatisfiedBadge: 'Lipsă',
+  /**
+   * PG-1 — the weighted half. The counts say how many kinds of fact are present; this says how much of
+   * the recorded money the estimate actually describes. The percentage is floored, never rounded up.
+   */
+  amountLead: 'Din sumele înregistrate, intră în estimare',
+  /** Shown instead of a percentage when nothing is recorded — a share of nothing is not 0%. */
+  amountNothingRecorded: 'Nicio sumă înregistrată de ponderat.',
+  /**
+   * Why the denominator is not a lei total: a record with no recorded rate has no lei amount, and the
+   * app would have to invent one to weigh it in lei. It is weighed in the unit it was written in, and
+   * the card says so rather than letting the figure read as a lei ratio.
+   */
+  amountNote:
+    'se ponderază sumele așa cum sunt înregistrate; o sumă în valută fără curs nu are echivalent în lei de ponderat',
 } as const;
 
 /**
@@ -219,6 +264,9 @@ export const completeness = {
  * (`profile`, `income`, …) are internal names; `checkLabel` is the only place that turns one into
  * Romanian. The fallback to the raw key stays for a key this map has never seen — no check may be
  * dropped — and `copy.guard.test.ts` fails if a key the data layer emits is missing here.
+ *
+ * `taxEstimate` is gone with the check it labelled: PG-1 removed the check that asked whether an
+ * estimate had been calculated and counted that as evidence the estimate was complete.
  */
 export const CHECK_LABELS: Record<string, string> = {
   profile: 'Profil',
@@ -229,7 +277,6 @@ export const CHECK_LABELS: Record<string, string> = {
   companyDocuments: 'Documente de firmă',
   declarations: 'Declarații',
   statements: 'Declarații fiscale',
-  taxEstimate: 'Estimare impozit',
 };
 
 export function checkLabel(key: string): string {

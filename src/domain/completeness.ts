@@ -4,8 +4,9 @@
  * Pure, deterministic assessment of how complete an AppData payload is.
  *
  * Invariant: completeness is DERIVED from the actual data present. No
- * percentage, score, or fabricated value is produced — the output is a list
- * of concrete, checkable facts (checks) plus deterministic counts.
+ * fabricated value is produced — the output is a list of concrete, checkable
+ * facts (checks) plus deterministic counts, and since PG-1 one percentage that
+ * is a division of two amounts this file can name.
  *
  * No AppData is mutated, no store/persistence access, no LLM, no fiscal
  * rules, no internet, no UI.
@@ -22,8 +23,10 @@ import type {
   TaxStatement,
 } from '../data/types';
 import type { PfaProfile } from './models';
+import { expenseFiscalDate, inPeriod } from './aggregation';
+import { sumBani, type Bani } from './money';
+import { isGapReason, type EstimateCoverageGap } from './estimateBasis';
 import { isoCalendarDateProblem } from './date';
-import type { TaxCalculationSnapshot } from './snapshots/types';
 
 /** One concrete, checkable fact about data completeness. */
 export interface CompletenessCheck {
@@ -36,8 +39,34 @@ export interface CompletenessCheck {
 }
 
 /**
- * Completeness report — a list of concrete facts plus deterministic counts.
- * Deliberately NO percentage and NO score: only counts of satisfied checks.
+ * PG-1 — the amount-weighted half of completeness.
+ *
+ * The counts answer "how many kinds of fact are present?". They cannot answer "how much of the money
+ * the estimate is supposed to describe actually reached it?", and a profile with one huge uncategorised
+ * invoice and three small satisfied checks used to read as more complete than the reverse.
+ *
+ * Both terms are sums of stored minor units (`Bani`), never floats, and the percentage is FLOORED: an
+ * app that cannot measure the last 0.6% must not claim it. The denominator is the amounts the estimate
+ * could have consumed — records whose own status and date make them eligible — so a rejected document or
+ * a record from another fiscal year does not sit in a denominator nothing can ever satisfy.
+ *
+ * One caveat stated rather than hidden: a record with no recorded BNR rate has no lei amount, so its
+ * amount enters the denominator in the minor units it is written in. That is the only unit the app
+ * holds for it, and the alternative — leaving it out of the denominator — is what made the old figure
+ * read as complete while a real sum was missing from it.
+ */
+export interface AmountCoverage {
+  /** Recorded amounts the estimate could have consumed, in stored minor units. */
+  recordedBani: Bani;
+  /** The part of that which reached the estimate. */
+  includedBani: Bani;
+  /** `included / recorded × 100`, floored. `null` when there is nothing recorded to weigh. */
+  percent: number | null;
+}
+
+/**
+ * Completeness report — concrete facts, deterministic counts, and since PG-1 the amount-weighted
+ * coverage of the estimate's own inputs.
  */
 export interface CompletenessReport {
   /** The concrete, checkable facts, in a fixed deterministic order. */
@@ -46,6 +75,8 @@ export interface CompletenessReport {
   satisfiedCount: number;
   /** Total number of checks (deterministic count only). */
   totalCount: number;
+  /** PG-1 — the share of recorded amount that entered the estimate. */
+  coverage: AmountCoverage;
 }
 
 /** Fixed order of the company-documents sections (im, cs, tva, facturi). */
@@ -194,21 +225,47 @@ function statementCheck(statements: TaxStatement[] | null | undefined): Complete
 }
 
 /**
- * tax estimate available — at least one snapshot with status 'computed'.
- * Handles the seed case of zero snapshots without crashing.
+ * PG-1 — the amount-weighted coverage, from the coverage gaps the estimate assembler reported.
+ *
+ * This does NOT re-classify, re-convert or re-decide anything: the gaps arrive already decided, and
+ * this only divides them by the population they were drawn from. The eligibility test is the SAME
+ * `inPeriod` the aggregates use, so the denominator cannot drift from the totals the dashboard shows.
  */
-function taxEstimateCheck(snapshots: TaxCalculationSnapshot[] | null | undefined): CompletenessCheck {
-  const list = asArray(snapshots);
-  const computed = list.filter(s => s.status === 'computed').length;
-  let detail: string;
-  if (computed > 0) {
-    detail = ro(computed, 'estimare de taxe calculată disponibilă', 'estimări de taxe calculate disponibile');
-  } else if (list.length > 0) {
-    detail = `nicio estimare de taxe calculată (0 din ${list.length} instantanee calculate)`;
-  } else {
-    detail = 'nu există instantanee de taxe';
+function amountCoverage(
+  data: AppData,
+  gaps: readonly EstimateCoverageGap[],
+  asOfDate: string | undefined,
+): AmountCoverage {
+  const fiscalYear = data.profile?.fiscalYear ?? 0;
+  // No as-of date supplied: the whole fiscal year is in scope. Stated as a date rather than as a
+  // special case, so `inPeriod` stays the single definition of "in the period".
+  const asOf = asOfDate ?? `${fiscalYear}-12-31`;
+
+  const eligible = new Set<string>();
+  const amounts: Bani[] = [];
+  for (const r of asArray(data.revenues)) {
+    if (r.status !== 'inregistrata' || !inPeriod(r.date, asOf, fiscalYear)) continue;
+    eligible.add(r.id);
+    amounts.push(r.valoareFaraTva.amount);
   }
-  return { key: 'taxEstimate', satisfied: computed > 0, detail };
+  for (const e of asArray(data.expenses)) {
+    if (e.status !== 'inregistrata' || !inPeriod(expenseFiscalDate(e), asOf, fiscalYear)) continue;
+    eligible.add(e.id);
+    amounts.push(e.valoareFaraTva.amount);
+  }
+
+  const recorded = sumBani(amounts);
+  // A gap for a record this population does not contain is not subtracted from a denominator that
+  // never counted it; a gap for a record the law settled (`non_deductible`) is not missing coverage.
+  const excluded = sumBani(
+    gaps.filter(g => isGapReason(g.reason) && eligible.has(g.recordId)).map(g => g.amount),
+  );
+  const included: Bani = (recorded - excluded) as Bani;
+  return {
+    recordedBani: recorded,
+    includedBani: included,
+    percent: recorded === 0 ? null : Math.floor((Number(included) * 100) / Number(recorded)),
+  };
 }
 
 /**
@@ -216,11 +273,22 @@ function taxEstimateCheck(snapshots: TaxCalculationSnapshot[] | null | undefined
  *
  * Pure and deterministic: same `data` ⇒ same report. Checks are derived
  * strictly from real AppData fields (profile, revenues, expenses, clients,
- * documents, companyDocs, declarations, statements, snapshots); every
+ * documents, companyDocs, declarations, statements); every
  * optional/nullable field is guarded. The report carries concrete checkable
- * facts and deterministic counts only — no percentage, no score.
+ * facts, deterministic counts, and the amount-weighted coverage of the
+ * estimate's inputs.
+ *
+ * PG-1 removed the ninth check, `taxEstimate`. It asked whether a calculation snapshot with status
+ * `computed` existed — i.e. whether the estimate RAN — and then counted that as evidence the estimate
+ * was complete. A run is not a coverage result: the same profile that dropped an uncategorised expense
+ * out of the base still had a computed snapshot, so the check was satisfied by exactly the failure it
+ * was supposed to catch. Coverage is now measured directly, from the gaps the assembler reports.
  */
-export function assessCompleteness(data: AppData): CompletenessReport {
+export function assessCompleteness(
+  data: AppData,
+  gaps: readonly EstimateCoverageGap[] = [],
+  asOfDate?: string,
+): CompletenessReport {
   const checks = [
     profileCheck(data.profile),
     incomeCheck(data.revenues),
@@ -230,8 +298,12 @@ export function assessCompleteness(data: AppData): CompletenessReport {
     companyDocumentCheck(data.companyDocs),
     declarationCheck(data.declarations),
     statementCheck(data.statements),
-    taxEstimateCheck(data.snapshots),
   ];
   const satisfiedCount = checks.filter(c => c.satisfied).length;
-  return { checks, satisfiedCount, totalCount: checks.length };
+  return {
+    checks,
+    satisfiedCount,
+    totalCount: checks.length,
+    coverage: amountCoverage(data, gaps, asOfDate),
+  };
 }

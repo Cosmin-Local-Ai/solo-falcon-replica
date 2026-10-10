@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { fixedInstant } from '../src/test/fixedInstant';
-import { seedBrowser, seedBrowserOnce, seedPayload, STORAGE_KEY } from './fixtures';
+import { seedBrowser, seedBrowserOnce, STORAGE_KEY } from './fixtures';
 
 /**
  * Dashboard e2e coverage (Step 34, Worker 2).
@@ -147,7 +147,7 @@ test.describe('Dashboard — cockpit cards (seed data)', () => {
     // about the data it has; the missing record is the honest state of the demo, not a bug to paper over.
     const dateComplete = statCard(page, 'Date complete');
     await expect(dateComplete).toBeVisible();
-    await expect(dateComplete.locator('.value')).toHaveText('7/9');
+    await expect(dateComplete.locator('.value')).toHaveText('7/8');
     await expect(dateComplete.locator('.hint')).toHaveText('verificări');
   });
 
@@ -367,16 +367,19 @@ test.describe('Dashboard — section content (seed data)', () => {
     }
   });
 
-  test('Completitudine date: renders 9 checks, 7 satisfied, and the two facts the app does not hold', async ({ page }) => {
+  test('Completitudine date: renders 8 checks, 7 satisfied, and the weighted share of the recorded money', async ({ page }) => {
+    // PG-1 re-pin (replaced, not deleted): nine checks became eight. The removed one was `taxEstimate`,
+    // which asked whether a calculation snapshot with status `computed` existed and counted that as a
+    // completeness fact — so it was satisfied by exactly the failure it claimed to catch: a profile that
+    // dropped a real expense out of the estimate still had a computed snapshot. The clock is pinned here
+    // because the weighted figure is period-scoped, and an unpinned date would move it.
+    await fixClock(page);
     await page.goto('/dashboard');
 
     const completeness = sectionWith(page, 'Completitudine date');
-    // TASK 9 re-pin (replaced, not deleted): '8 din 9' → '7 din 9', and one 'Lipsă' became two. The new
-    // unsatisfied check is 'Declarații' — the seed holds no declaration record now. The nine checks and
-    // their labels are unchanged.
-    await expect(completeness.getByText('7 din 9 verificări îndeplinite')).toBeVisible();
+    await expect(completeness.getByText('7 din 8 verificări îndeplinite')).toBeVisible();
     // CompletenessSection renders one .check-row per check (not .item-row).
-    await expect(completeness.locator('.check-row')).toHaveCount(9);
+    await expect(completeness.locator('.check-row')).toHaveCount(8);
 
     for (const label of [
       'Profil',
@@ -391,10 +394,12 @@ test.describe('Dashboard — section content (seed data)', () => {
       await expect(completeness.getByText(label, { exact: true })).toBeVisible();
     }
 
-    // The two unsatisfied checks: no persisted tax snapshot, and no declaration record.
-    await expect(completeness.getByText('Estimare impozit', { exact: true })).toBeVisible();
-    await expect(completeness.getByText('nu există instantanee de taxe')).toBeVisible();
+    // The one unsatisfied check: the seed holds no declaration record.
     await expect(completeness.getByText('nu există declarații')).toBeVisible();
+    // PG-1: the circular row is gone, and so is its label — a label with no check behind it is how a
+    // dead row comes back.
+    await expect(completeness.getByText('Estimare impozit', { exact: true })).toHaveCount(0);
+    await expect(completeness.getByText('nu există instantanee de taxe')).toHaveCount(0);
     // The company documents the seed does hold, stated per section — the D212 for the 2025 year sits in
     // `im`, and `cs` is empty because D212 is one form covering income and contributions alike.
     // Phase 11 re-pin (replaced, not deleted): `im: 1` is gone. The D212 for the 2025 year that sat in
@@ -403,10 +408,17 @@ test.describe('Dashboard — section content (seed data)', () => {
     // states what is actually there; `cs` stays absent because it is empty.
     await expect(completeness.getByText(/tva: 1, facturi: 3/)).toBeVisible();
     await expect(completeness.getByText('Complet', { exact: true })).toHaveCount(7);
-    await expect(completeness.getByText('Lipsă', { exact: true })).toHaveCount(2);
+    await expect(completeness.getByText('Lipsă', { exact: true })).toHaveCount(1);
+
+    // PG-1: the weighted line. The seed records everything it holds in the estimate, so the honest
+    // figure is 100 — and it is now a figure that would DROP if a record were excluded, which the old
+    // counts could not do.
+    await expect(completeness.locator('[data-amount-coverage]')).toBeVisible();
+    await expect(completeness.getByText('Din sumele înregistrate, intră în estimare')).toBeVisible();
+    await expect(completeness.locator('[data-amount-percent]')).toHaveAttribute('data-amount-percent', '100');
   });
 
-  test('Ce trebuie să faci: renders the 6 pending action items', async ({ page }) => {
+  test('Ce trebuie să faci: renders the 5 pending action items', async ({ page }) => {
     await page.goto('/dashboard');
 
     const actions = sectionWith(page, 'Ce trebuie să faci');
@@ -421,9 +433,12 @@ test.describe('Dashboard — section content (seed data)', () => {
     // and the seed no longer holds it. What takes its place is the honest one: the app holds no
     // declaration record at all, so the 'Declarații' completeness check is unsatisfied and says so.
     // Six now = 3 records + 2 completeness + 1 deadline.
-    await expect(actions.getByText('6 elemente de rezolvat')).toBeVisible();
+    // PG-1 re-pin (replaced, not deleted): 6 → 5. The row that left is the completeness row for the
+    // removed `taxEstimate` check — the one that reported whether an estimate had been calculated. The
+    // seed does have one, so it was never actionable, and it disappeared with the check.
+    await expect(actions.getByText('5 elemente de rezolvat')).toBeVisible();
     // ActionSection renders one .action-label per item (not .item-row).
-    await expect(actions.locator('.action-label')).toHaveCount(6);
+    await expect(actions.locator('.action-label')).toHaveCount(5);
 
     // Each record carries the reason its own row holds — `statusDetail` verbatim, nothing invented.
     await expect(actions.getByText('Document de venit respins: NF-2026-003')).toBeVisible();
@@ -439,19 +454,21 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(actions.getByText('Date lipsă: Declarații')).toBeVisible();
     await expect(actions.getByText(/nu este îndeplinită: Declarații/)).toBeVisible();
     await expect(actions.getByText('Declarație fără depunere înregistrată: 2026-06')).toHaveCount(0);
+    // PG-1: the completeness row that asked whether an estimate existed is gone with the check.
+    await expect(actions.getByText('Date lipsă: Estimare impozit')).toHaveCount(0);
 
     // Source badges — one per attention source. Old: deadline / completeness / tax only.
     await expect(actions.getByText('Termen limită', { exact: true })).toHaveCount(1);
-    await expect(actions.getByText('Completitudine', { exact: true })).toHaveCount(2);
+    await expect(actions.getByText('Completitudine', { exact: true })).toHaveCount(1);
     await expect(actions.getByText('Venit', { exact: true })).toHaveCount(2);
     await expect(actions.getByText('Cheltuială', { exact: true })).toHaveCount(1);
     await expect(actions.getByText('Declarație', { exact: true })).toHaveCount(0);
     await expect(actions.getByText('Revizuire estimări fiscale')).toHaveCount(0);
 
-    // Severity is the domain's decision, and the row is styled from it alone. Unchanged by TASK 9: the
-    // row that left was `medium` and the row that arrived is `medium`.
+    // Severity is the domain's decision, and the row is styled from it alone. PG-1 re-pin: the row that
+    // left was `medium`, so the medium band drops 4 → 3.
     await expect(actions.getByText('prioritate ridicată', { exact: true })).toHaveCount(1);
-    await expect(actions.getByText('prioritate medie', { exact: true })).toHaveCount(4);
+    await expect(actions.getByText('prioritate medie', { exact: true })).toHaveCount(3);
     await expect(actions.getByText('prioritate scăzută', { exact: true })).toHaveCount(1);
   });
 
@@ -515,7 +532,11 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(insights.getByText('Rezervă fiscală sub țintă')).toBeVisible();
     // And the missing check appears exactly once, on the action surface.
     const actionSection = sectionWith(page, 'Ce trebuie să faci');
-    await expect(actionSection.getByText('Date lipsă: Estimare impozit')).toBeVisible();
+    // PG-1 re-pin (replaced, not deleted): the row asserted here was the completeness action for the
+    // `taxEstimate` check — "an estimate has been calculated", offered as something to fix. The check is
+    // gone, so the row is gone from BOTH surfaces, and the coverage of the estimate is now stated on the
+    // hero instead.
+    await expect(actionSection.getByText('Date lipsă: Estimare impozit')).toHaveCount(0);
     await expect(insights.getByText('Date lipsă: Estimare impozit')).toHaveCount(0);
 
     // TASK 4 re-pinned: the two contribution FLOORS (CAS_MIN_BASE, CASS_MIN_BASE) no longer reach

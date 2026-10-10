@@ -1,6 +1,7 @@
 import { useDashboardData } from '../data/dashboardAdapter';
 import { useStore } from '../data/store';
 import { getFinancialSummary, type TaxEstimateState } from '../data/dashboard';
+import { isGapReason } from '../domain/estimateBasis';
 import { identityGreeting } from '../domain/profile';
 import { fmtDate } from '../data/types';
 import { formatBaniRON } from '../domain/money';
@@ -13,6 +14,7 @@ import FinancialSummary from '../components/FinancialSummary';
 import TaxReserve from '../components/TaxReserve';
 import Insights from '../components/Insights';
 import CurrencySection from '../components/dashboard/CurrencySection';
+import EstimateCoverageRows from '../components/dashboard/EstimateCoverage';
 import ThresholdSection from '../components/dashboard/ThresholdSection';
 import DeadlineSection from '../components/dashboard/DeadlineSection';
 import CompletenessSection from '../components/dashboard/CompletenessSection';
@@ -41,14 +43,19 @@ function SectionCard({ title, children }: { title: string; children: React.React
 }
 
 /**
- * TASK 8 — the estimate is rendered from `estimateState`, and the three states are visually distinct:
- * a computed figure carries a `Calculat` badge, a withheld conclusion carries `De verificat` plus the
+ * TASK 8 — the estimate is rendered from `estimateState`, and its states are visually distinct: a
+ * computed figure carries a `Calculat` badge, a withheld conclusion carries `De verificat` plus the
  * engine's own reason, and the absence of any calculation carries `Indisponibil` and no number at all.
  * They are not one number with a footnote, and none of them is styled from anything but the state.
+ *
+ * PG-1 adds `Estimare incompletă` — the state the old `Calculat` covered up. A figure that leaves a
+ * recorded record out is not wrong, and it is not finished either, so it gets its own colour rather
+ * than the success green of a figure that describes everything.
  */
 function estimateStateBadgeClass(state: TaxEstimateState): string {
-  if (state === 'computed') return 'badge-success';
-  if (state === 'review_required') return 'badge-warning';
+  if (state === 'complete') return 'badge-success';
+  if (state === 'incomplete' || state === 'review_required') return 'badge-warning';
+  if (state === 'refused') return 'badge-danger';
   return 'badge-neutral';
 }
 
@@ -161,16 +168,24 @@ export default function DashboardPage() {
                 </span>
               </div>
               <div className="tax-hero-value mono">{taxTotal === null ? copy.ui.noValue : formatBaniRON(taxTotal)}</div>
-              {estimateState === 'computed' ? (
-                <p className="hint">{estimateStateCopy.computed}</p>
+              {estimateState === 'complete' ? (
+                <p className="hint">{estimateStateCopy.complete}</p>
               ) : (
                 <p className="hint estimate-state-note" data-estimate-state={estimateState}>
-                  {estimateState === 'review_required'
-                    ? estimateStateCopy.reviewRequired
-                    : estimateStateCopy.unavailable}
+                  {estimateState === 'incomplete'
+                    ? (data.coverage.filter(g => isGapReason(g.reason)).length === 1
+                        ? estimateStateCopy.incompleteOne
+                        : estimateStateCopy.incompleteMany(data.coverage.filter(g => isGapReason(g.reason)).length))
+                    : estimateState === 'review_required'
+                      ? estimateStateCopy.reviewRequired
+                      : estimateStateCopy.unavailable}
                 </p>
               )}
-              {estimateState === 'computed' ? (
+              {/* PG-1: the badge says the figure is incomplete; these rows say which records, for which
+                  reason, at which amount, and where to fix each one. Without them the badge is a warning
+                  with nothing to act on. */}
+              <EstimateCoverageRows coverage={data.coverage} />
+              {estimateState === 'complete' ? (
                 <p className="hint">
                   {dashboardCopy.estimate.setAsideLead}{' '}
                   <strong className="mono">{formatBaniRON(reserve.recommendedMonthlyReserve)}</strong>{' '}

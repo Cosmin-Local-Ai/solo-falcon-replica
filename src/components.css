@@ -185,5 +185,33 @@
 .estimate-state-note[data-estimate-state="review_required"] { color: var(--warning-text); }
 .estimate-state-note[data-estimate-state="unavailable"] { color: var(--text-3); font-style: italic; }
 
+/* PG-1 — a state the old three covered up: a figure that is real but does not describe everything
+   recorded. It is warned, never greened. */
+.estimate-state-note[data-estimate-state="incomplete"] { color: var(--warning-text); }
+
+/* PG-1 — the coverage rows under the hero figure: one per reason group, each with its own link. */
+.estimate-coverage {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.estimate-coverage-title { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.estimate-coverage-row {
+  padding: 6px 0 0;
+  margin-top: 6px;
+  font-size: 13px;
+  border-top: 1px solid var(--border);
+  gap: 10px;
+}
+
+/* PG-1 — the weighted line in the completeness card, kept apart from the fact checks below it. */
+.amount-coverage {
+  padding: 6px 0 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
 /* The record an attention target pointed at. */
 .row-focus { background: var(--warning-soft); box-shadow: inset 3px 0 0 var(--warning-text); }

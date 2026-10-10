@@ -651,10 +651,12 @@ describe('completeness', () => {
 
     const report = assessCompleteness(emptyData);
     const missing = report.checks.filter((c) => !c.satisfied).map((c) => c.key);
-    expect(missing).toHaveLength(9); // every check fails on empty data
+    // PG-1: nine checks became eight — `taxEstimate` asked whether a calculation had run, which is not
+    // a fact about the data's completeness.
+    expect(missing).toHaveLength(8); // every check fails on empty data
 
     const insights = getInsights(input({ snapshot: snapshot({ missing }) }));
-    expect(insights).toHaveLength(9);
+    expect(insights).toHaveLength(8);
     for (const item of insights) {
       expect(item.severity).toBe('medium');
       expect(item.state).toBe('data_missing');
@@ -662,7 +664,10 @@ describe('completeness', () => {
     // Every Romanian label must appear, one per item now that each key is its own item.
     const all = insights.map(i => i.description).join('\n');
     expect(all).toContain('Profil');
-    expect(all).toContain('Estimare impozit');
+    // PG-1: `Estimare impozit` was the label of the removed check. Nothing emits it now, and the row
+    // that claimed a calculated estimate was a completeness fact is gone with it.
+    expect(all).toContain('Declarații fiscale');
+    expect(all).not.toContain('Estimare impozit');
   });
 });
 

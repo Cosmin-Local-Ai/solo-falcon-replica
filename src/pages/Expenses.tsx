@@ -4,7 +4,7 @@ import { useStore } from '../data/store';
 import { fmtDate, sumTotalsByCurrency, total, statusBadge } from '../data/types';
 import type { Expense } from '../data/types';
 import { EXPENSE_CATEGORIES } from '../domain/fiscal/deductibility';
-import { selectDeductibleExpenses, selectEstimateOperands } from '../domain/estimateBasis';
+import { selectDeductibleExpenses, selectEstimateOperands, coverageReasonForExclusion, type CoverageReason } from '../domain/estimateBasis';
 import { selectRuleSet } from '../domain/fiscal';
 import type { FiscalRule } from '../domain/fiscal/rules';
 import { localDateISO, now } from '../domain/date';
@@ -35,6 +35,24 @@ const statusFor = (tab: (typeof TABS)[number]['key']) =>
   TABS.find(t => t.key === tab)!.status;
 
 const PAGE_SIZE = 8;
+
+/**
+ * PG-1 — the per-record half of the estimate's coverage.
+ *
+ * The hero says how many records sit outside the figure; the register has to say WHICH, on the record
+ * itself, because a table row is where the person can actually do something about it. The reason comes
+ * from the same `ExcludedReason` the banner above counts — projected through `coverageReasonForExclusion`
+ * and labelled with the shared coverage label — so a row and a hero row can never name different causes
+ * for the same record.
+ */
+function OutOfEstimateNote({ reason }: { reason: CoverageReason | undefined }) {
+  if (reason === undefined) return null;
+  return (
+    <div className="text-sm muted" data-not-in-estimate style={{ marginTop: 3 }}>
+      {recordStatus.notInEstimate}: {copy.dashboard.estimate.coverage.reasonLabels[reason]}
+    </div>
+  );
+}
 
 function ExpenseForm({ initial, onSave, onClose }: {
   initial?: Expense;
@@ -231,6 +249,13 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
   // register says what left the deductible base — the same selector the estimate runs, so the count on this
   // screen and the total the engine used cannot disagree.
   const foreignBlocked = classification.excluded.filter(x => x.reason === 'foreign_currency');
+  // PG-1 — the same exclusion list, keyed by record, for the row note. One list, three surfaces (hero
+  // count, banner, row), no second walk of the register.
+  const excludedReasonById = useMemo(() => {
+    const map = new Map<string, CoverageReason>();
+    for (const x of classification.excluded) map.set(x.id, coverageReasonForExclusion(x));
+    return map;
+  }, [classification]);
 
   // TASK 2d — a ceiling that WAS struck must be explained, not just applied. These are the numbers the
   // estimate itself produced: the SAME assembler the tax engine runs (`selectEstimateOperands`), so the
@@ -451,6 +476,7 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
                     <td>
                       <Badge kind={statusBadge(e.status)}>{recordStatus.expenseLabels[e.status]}</Badge>
                       {e.statusDetail && <div className="text-sm muted" style={{ marginTop: 3 }}>{e.statusDetail}</div>}
+                      <OutOfEstimateNote reason={excludedReasonById.get(e.id)} />
                     </td>
                     <td>
                       <div className="row-actions">

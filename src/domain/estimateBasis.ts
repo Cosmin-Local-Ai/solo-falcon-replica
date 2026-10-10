@@ -22,7 +22,7 @@
  *
  * No fiscal value, rate, parameter or rule lives here.
  */
-import type { YtdTotals } from './aggregation';
+import type { UnconvertedRecord, YtdTotals } from './aggregation';
 import { expenseFiscalDate, inPeriod, selectYtd } from './aggregation';
 import type { AppData, Expense } from '../data/types';
 import {
@@ -43,7 +43,7 @@ import {
   type LedgerConversion,
   type UnconvertedLedgerRecord,
 } from './fx/ledger';
-import { addBani, applyRateDecimal, isRon, lei, money, requireRon, subBani, type Bani } from './money';
+import { addBani, applyRateDecimal, isRon, lei, money, requireRon, subBani, type Bani, type CurrencyCode } from './money';
 import { selectProjectionV1, type ProjectionV1 } from './projection';
 import type { TaxEstimateResult } from './tax';
 import Decimal from 'decimal.js-light';
@@ -234,6 +234,187 @@ export interface ExcludedExpenseRecord {
   sourceArticle: string | null;
   /** The missing fact, the litera that disqualifies it, or the cap base this build cannot compute. */
   detail: string;
+}
+
+// ── PG-1: one vocabulary for "this record did not reach the estimate" ─────────
+//
+// `ExcludedReason` already says why an EXPENSE left the deductible base, and the ledger disclosure
+// (Phase 10c) already says why a FOREIGN record left the lei totals. PG-1 does not add a third
+// account of the same records. It projects the two existing ones onto one surface, because the hero
+// has to answer a question neither one answers alone: is every recorded record either included in the
+// estimate or visibly, deliberately kept out of it?
+//
+// Two rules keep this from becoming a fork:
+//
+// 1. **One record, one reason.** A foreign-currency expense appears in BOTH `excluded` (as
+//    `foreign_currency`) and the ledger disclosure. The ledger disclosure owns it here, and the
+//    exclusion entry is skipped — so `missing_fx_rate` is produced by exactly one path, the one
+//    Phase 10c's handoff asked for. No record can be counted twice under two names.
+// 2. **Nothing is re-derived.** Every reason below is a projection of a decision the assembler or the
+//    conversion pass already made. No classification, no rate lookup and no cap arithmetic happens
+//    here.
+
+/**
+ * Why a recorded record is not in the estimate figure.
+ *
+ * `unclassified`, `undetermined`, `asset_not_modelled`, `cap_unresolved` and `missing_fx_rate` are
+ * produced today. `rejected` and `pending` are declared but NOT produced: a record whose own status
+ * says it is unsettled is already surfaced by the attention model (`data/attention.ts
+ * recordAttentionItems`), with its own row badge and its own deep link — re-listing it here would put
+ * one record on two surfaces in two vocabularies, which is the defect this section exists to avoid.
+ * `fact_missing` is reserved for PG-6 (profile facts, not record facts).
+ */
+export type CoverageReason =
+  | 'unclassified'
+  | 'undetermined'
+  | 'asset_not_modelled'
+  | 'missing_fx_rate'
+  | 'cap_unresolved'
+  | 'non_deductible'
+  | 'rejected'
+  | 'pending'
+  | 'fact_missing';
+
+/**
+ * The reasons that make an estimate INCOMPLETE, as opposed to merely exclusive.
+ *
+ * `non_deductible` is deliberately absent. A fine, a donation or a loan principal is out of the
+ * deductible base because art. 68 alin. (7) says so — the app settled that record, it did not fail to
+ * settle it. Counting a legal answer as a missing fact would hold the hero at „Estimare incompletă”
+ * forever for a profile that has nothing left to fix.
+ */
+const GAP_REASONS: readonly CoverageReason[] = [
+  'unclassified',
+  'undetermined',
+  'asset_not_modelled',
+  'missing_fx_rate',
+  'cap_unresolved',
+  'fact_missing',
+];
+
+export function isGapReason(reason: CoverageReason): boolean {
+  return GAP_REASONS.includes(reason);
+}
+
+/** One record kept out of the estimate, with the reason, the amount at stake and where to fix it. */
+export interface EstimateCoverageGap {
+  recordId: string;
+  kind: 'revenue' | 'expense';
+  reason: CoverageReason;
+  /**
+   * The amount that left the estimate, in the minor units the record is written in (`Bani`, like every
+   * stored amount). For a record with no recorded rate this is NOT a lei quantity — the app cannot
+   * express it in lei, and that is the finding, not a rounding detail. `currency` travels with it for
+   * that reason: an amount rendered without its unit is a number invented twice over.
+   */
+  amount: Bani;
+  /** The unit `amount` is written in. `RON` for every exclusion the classifier produced. */
+  currency: CurrencyCode;
+  /** The route that lands on this record (`src/App.tsx parseRoute`: `/<page>#!/<tab>?f=<id>`). */
+  fixTarget: string;
+  /** The assembler's or the conversion pass's own sentence — never a paraphrase written here. */
+  detail: string;
+}
+
+/**
+ * Categories whose deductibility the law routes through depreciation, which this app cannot compute
+ * because it holds no asset register (defect B-31). The rule is right that the purchase is not a
+ * direct expense; what is missing is the amortisation side, and that is a different sentence.
+ */
+const ASSET_NOT_MODELLED: readonly ExpenseCategory[] = ['depreciable_asset_purchase'];
+
+/**
+ * Project an `ExcludedReason` onto the coverage vocabulary. Total, and it does not invent a reason: a
+ * `non_deductible` record with no category is reported as `non_deductible`, an uncategorised record is
+ * `unclassified` because no rule could be applied to it at all.
+ */
+export function coverageReasonForExclusion(x: ExcludedExpenseRecord): CoverageReason {
+  switch (x.reason) {
+    case 'foreign_currency':
+      return 'missing_fx_rate';
+    case 'cap_unresolved':
+      return 'cap_unresolved';
+    case 'non_deductible':
+      return x.category !== null && ASSET_NOT_MODELLED.includes(x.category)
+        ? 'asset_not_modelled'
+        : 'non_deductible';
+    case 'undetermined':
+      return x.category === null ? 'unclassified' : 'undetermined';
+  }
+}
+
+/**
+ * The register route that holds the record, on the tab its own status selects, with the focus token
+ * the page consumes to page to it. Same shape as `data/attention.ts recordTarget` — the tab is not
+ * guessed, it is the status a record with a coverage gap necessarily carries (`inregistrata`).
+ */
+export function estimateFixTarget(kind: 'revenue' | 'expense', recordId: string): string {
+  const page = kind === 'revenue' ? 'revenues' : 'expenses';
+  return `/${page}#!/registered?f=${encodeURIComponent(recordId)}`;
+}
+
+/**
+ * The coverage gaps the assembler itself produced: every expense it classified and kept out, with the
+ * amount that left the base and the rule's own reason.
+ *
+ * Foreign-currency exclusions are skipped on purpose — the ledger disclosure reports them, and it is
+ * the wider list (revenues included) and the one the money surfaces already read. Reporting the same
+ * record from both would double-count it in the hero's count and in the weighted percentage.
+ *
+ * This calls the SAME selector the estimate runs, on the SAME normalised ledger, so the reasons here
+ * cannot disagree with the total the engine used. It is a repeat of one pass, not a second
+ * implementation of one.
+ */
+export function selectEstimateCoverage(
+  data: AppData,
+  asOfDate: string,
+  rules: FiscalRule[],
+  context: ExpenseClassificationContext = {},
+): EstimateCoverageGap[] {
+  const ledger = normaliseStoredLedger(data);
+  const set = selectDeductibleExpenses(ledger.data, asOfDate, rules, context);
+  const amounts = new Map<string, Bani>(
+    ledger.data.expenses.map(e => [e.id, e.valoareFaraTva.amount]),
+  );
+  const out: EstimateCoverageGap[] = [];
+  for (const x of set.excluded) {
+    const reason = coverageReasonForExclusion(x);
+    if (reason === 'missing_fx_rate') continue;
+    const amount = amounts.get(x.id);
+    if (amount === undefined) continue;
+    out.push({
+      recordId: x.id,
+      kind: 'expense',
+      reason,
+      amount,
+      currency: 'RON',
+      fixTarget: estimateFixTarget('expense', x.id),
+      detail: x.detail,
+    });
+  }
+  return out;
+}
+
+/**
+ * The FX half of the coverage, read off the ledger disclosure — not off a fresh currency walk.
+ *
+ * `getLedgerDisclosure` is the pass the money surfaces already read; this only re-types its
+ * `unconverted` list into the coverage shape, carrying its `detail` verbatim. That is why the €5.000
+ * revenue with no rate reaches the hero at all: the assembler never sees a revenue it cannot convert,
+ * and nothing here goes looking for one.
+ */
+export function coverageFromUnconverted(
+  unconverted: readonly UnconvertedRecord[],
+): EstimateCoverageGap[] {
+  return unconverted.map(u => ({
+    recordId: u.id,
+    kind: u.kind,
+    reason: 'missing_fx_rate' as const,
+    amount: u.amount.amount,
+    currency: u.currency,
+    fixTarget: estimateFixTarget(u.kind, u.id),
+    detail: u.detail,
+  }));
 }
 
 /**

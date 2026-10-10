@@ -13,8 +13,25 @@ import type {
 import type { RuleRelease } from './fiscal/rules';
 import type { PfaProfile, PfaRegime } from './models';
 import { assessCompleteness } from './completeness';
+import type { CoverageReason, EstimateCoverageGap } from './estimateBasis';
 import type { TaxCalculationSnapshot } from './snapshots/types';
-import { lei, ron } from './money';
+import { lei, ron, type Bani } from './money';
+
+/**
+ * A coverage gap for the weighting tests: everything the weighting reads, with the rest defaulted.
+ * The amounts are written in bani because that is what the weighting divides.
+ */
+function gap(over: { recordId: string; reason?: CoverageReason; amount?: Bani; kind?: 'revenue' | 'expense' }): EstimateCoverageGap {
+  return {
+    recordId: over.recordId,
+    kind: over.kind ?? 'expense',
+    reason: over.reason ?? 'unclassified',
+    amount: over.amount ?? (10000 as Bani),
+    currency: 'RON',
+    fixTarget: `/${over.kind === 'revenue' ? 'revenues' : 'expenses'}#!/registered?f=${over.recordId}`,
+    detail: 'test gap',
+  };
+}
 
 function makeProfile(): PfaProfile {
   return {
@@ -206,13 +223,12 @@ const CHECK_KEYS = [
   'companyDocuments',
   'declarations',
   'statements',
-  'taxEstimate',
 ];
 
 describe('assessCompleteness', () => {
   it('reports every check unsatisfied for empty data without crashing', () => {
     const report = assessCompleteness(makeEmptyData());
-    expect(report.totalCount).toBe(9);
+    expect(report.totalCount).toBe(8);
     expect(report.satisfiedCount).toBe(0);
     expect(report.checks.map(c => c.key)).toEqual(CHECK_KEYS);
     for (const check of report.checks) {
@@ -220,13 +236,13 @@ describe('assessCompleteness', () => {
     }
     expect(report.checks[0].detail).toBe('profil lipsă');
     expect(report.checks[1].detail).toBe('nu există înregistrări de venituri');
-    expect(report.checks[8].detail).toBe('nu există instantanee de taxe');
+    expect(report.checks[7].detail).toBe('nu există situații de taxe');
   });
 
   it('reports every check satisfied for fully-populated data', () => {
     const report = assessCompleteness(makeData());
-    expect(report.totalCount).toBe(9);
-    expect(report.satisfiedCount).toBe(9);
+    expect(report.totalCount).toBe(8);
+    expect(report.satisfiedCount).toBe(8);
     for (const check of report.checks) {
       expect(check.satisfied).toBe(true);
     }
@@ -239,29 +255,25 @@ describe('assessCompleteness', () => {
       snapshots: [makeSnapshot('superseded')],
     });
     const report = assessCompleteness(data);
-    expect(report.totalCount).toBe(9);
+    expect(report.totalCount).toBe(8);
     expect(report.satisfiedCount).toBe(6);
     const byKey = Object.fromEntries(report.checks.map(c => [c.key, c]));
     expect(byKey.expenses.satisfied).toBe(false);
     expect(byKey.expenses.detail).toBe('nu există înregistrări de cheltuieli');
     expect(byKey.statements.satisfied).toBe(false);
     expect(byKey.statements.detail).toBe('nu există situații de taxe');
-    expect(byKey.taxEstimate.satisfied).toBe(false);
-    expect(byKey.taxEstimate.detail).toBe('nicio estimare de taxe calculată (0 din 1 instantanee calculate)');
   });
 
-  it('satisfies the tax estimate check only when a snapshot is computed', () => {
-    const withComputed = assessCompleteness(
-      makeData({ snapshots: [makeSnapshot('computed'), makeSnapshot('superseded')] }),
-    ).checks.find(c => c.key === 'taxEstimate')!;
-    expect(withComputed.satisfied).toBe(true);
-    expect(withComputed.detail).toBe('1 estimare de taxe calculată disponibilă');
-
-    const withoutComputed = assessCompleteness(
-      makeData({ snapshots: [makeSnapshot('superseded'), makeSnapshot('void')] }),
-    ).checks.find(c => c.key === 'taxEstimate')!;
-    expect(withoutComputed.satisfied).toBe(false);
-    expect(withoutComputed.detail).toBe('nicio estimare de taxe calculată (0 din 2 instantanee calculate)');
+  // PG-1, acceptance 6: the circular check is gone, and the reason it was circular is pinned so it
+  // cannot come back under another name.
+  it('has no check that reports whether an estimate was calculated', () => {
+    const computed = assessCompleteness(makeData({ snapshots: [makeSnapshot('computed')] }));
+    const neverCalculated = assessCompleteness(makeData({ snapshots: [] }));
+    expect(computed.checks.map(c => c.key)).not.toContain('taxEstimate');
+    // A computed snapshot and no snapshot at all produce the same checks: running a calculation is not
+    // evidence about the data, and the old check was satisfied by exactly the failure it claimed to catch.
+    expect(computed.checks.map(c => c.key)).toEqual(neverCalculated.checks.map(c => c.key));
+    expect(computed.satisfiedCount).toBe(neverCalculated.satisfiedCount);
   });
 
   it('satisfies the company documents check when any section has entries', () => {
@@ -351,8 +363,71 @@ describe('assessCompleteness', () => {
     expect(assessCompleteness(data)).toEqual(assessCompleteness(data));
   });
 
-  it('carries no percentage or score field — only counts', () => {
+  it('carries the amount-weighted coverage beside the counts (PG-1)', () => {
     const report = assessCompleteness(makeData());
-    expect(Object.keys(report).sort()).toEqual(['checks', 'satisfiedCount', 'totalCount']);
+    expect(Object.keys(report).sort()).toEqual([
+      'checks',
+      'coverage',
+      'satisfiedCount',
+      'totalCount',
+    ]);
+  });
+
+  describe('the weighted coverage (PG-1)', () => {
+    // The fixture's eligible amounts: rev-1 1.000 lei + rev-2 1.000 lei + exp-1 500 lei = 2.500 lei,
+    // i.e. 250 000 bani. `rev-3` is `in-asteptare`, so it is not eligible and does not sit in a
+    // denominator nothing could ever satisfy.
+    const RECORDED = 250000 as Bani;
+
+    it('is 100 when nothing is kept out', () => {
+      const coverage = assessCompleteness(makeData()).coverage;
+      expect(coverage.recordedBani).toBe(RECORDED);
+      expect(coverage.includedBani).toBe(RECORDED);
+      expect(coverage.percent).toBe(100);
+    });
+
+    it('is null, not 0, when there is nothing recorded to weigh', () => {
+      const coverage = assessCompleteness(makeEmptyData()).coverage;
+      expect(coverage.recordedBani).toBe(0);
+      expect(coverage.percent).toBeNull();
+    });
+
+    it('drops by the excluded amount, not by the record count', () => {
+      const data = makeData();
+      // One gap of a tenth of the recorded amount (250,00 lei) moves the figure ten points…
+      const oneTenth = assessCompleteness(data, [gap({ recordId: 'exp-1', amount: 25000 as Bani })]).coverage;
+      expect(oneTenth.percent).toBe(90);
+      expect(oneTenth.includedBani).toBe(225000 as Bani);
+      // …while three gaps of 2,50 lei each — three times as many records — move it by less than one.
+      const threeTiny = assessCompleteness(data, [
+        gap({ recordId: 'rev-1', kind: 'revenue', amount: 250 as Bani }),
+        gap({ recordId: 'rev-2', kind: 'revenue', amount: 250 as Bani }),
+        gap({ recordId: 'exp-1', amount: 250 as Bani }),
+      ]).coverage;
+      expect(threeTiny.percent).toBe(99);
+    });
+
+    it('does not let a legally non-deductible record lower the figure', () => {
+      const settled = assessCompleteness(makeData(), [
+        gap({ recordId: 'exp-1', reason: 'non_deductible' }),
+      ]).coverage;
+      expect(settled.percent).toBe(100);
+    });
+
+    it('never subtracts a gap for a record the denominator never counted', () => {
+      const other = assessCompleteness(makeData(), [gap({ recordId: 'not-in-the-register' })]).coverage;
+      expect(other.percent).toBe(100);
+    });
+
+    it('floors the percentage rather than rounding the last fraction up', () => {
+      // 31 250 bani out of 250 000 is exactly 12,5 %: the app may claim 87 %, not 88 %.
+      const odd = assessCompleteness(makeData(), [gap({ recordId: 'exp-1', amount: 31250 as Bani })]).coverage;
+      expect(odd.percent).toBe(87);
+    });
+
+    it('excludes a record dated outside the fiscal year from the denominator', () => {
+      const data = makeData({ expenses: [makeExpense({ date: '2025-06-02' })] });
+      expect(assessCompleteness(data).coverage.recordedBani).toBe(200000 as Bani);
+    });
   });
 });
