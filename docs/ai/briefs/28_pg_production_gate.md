@@ -240,17 +240,19 @@ Every scout note separates **FACT / INTERPRETATION / UNKNOWN**. Unknowns become 
 
 ---
 
-## 4. Decisions only the owner can make
+## 4. Decisions only the owner can make — **reconciled against `USER_DECISIONS.md` 2026-10-10**
 
-| ID | Decision |
-|---|---|
-| **D-1** | An invoice with no collection date: keep "use the document date" (today's behaviour), require a date, or treat it as not yet collected? |
-| **D-2** | Reserve horizon: spread to year end (today) or to 25 May of the following year? |
-| **D-3** | `normă de venit` at launch: confirm "not supported, explicit screen". |
-| **D-4** | Mid-year start: the projection method, **after L-1 answers**. |
-| **D-5** | Year change: auto-prompt on 1 January, or manual only. |
-| **D-6** | Who owns the disclaimer and terms wording. |
-| **D-7** | Calculation sheet export: print stylesheet, PDF, or JSON. |
+Five of the seven below were decided in the 2026-10-10 round under different ids. The table originally read as if all seven were still open, which would have re-asked the user for five answers they had already given.
+
+| ID | Decision | State |
+|---|---|---|
+| ~~**D-1**~~ | An invoice with no collection date: keep "use the document date", require a date, or treat it as not yet collected? | **DECIDED — `D-DATE-1`.** The document date stands in, **plus** the money date must be enterable and the field carries an informational note saying when it matters („completează acest câmp dacă ai încasat plata într-un an fiscal diferit de cel al facturii”). **What is still owed is not the decision but its legal basis — scout R-G.** |
+| ~~**D-2**~~ | Reserve horizon: spread to year end (today) or to 25 May of the following year? | **DECIDED — `D-RES-1`: spread to 25 May of the following year**, that being the single real deadline for income tax, CAS and CASS together. Consequence: the reserve target **crosses the fiscal-year boundary**, so a 2026 obligation with a 2027 due date must exist as an object. |
+| ~~**D-3**~~ | `normă de venit` at launch: confirm "not supported, explicit screen". | **REVERSED — `D-NORMA-1` chose real support before launch.** Now **reopened as `D-NORMA-2`**, because `research/31` attached a cost that was unknown when the reversal was made. Three options are set out in `USER_DECISIONS.md`. **This is the only genuinely live owner decision on this list.** |
+| ~~**D-4**~~ | Mid-year start: the projection method, **after L-1 answers**. | **DECIDED — `D-PROJ-1`,** and L-1's answer removed the question: the engine is fed **actuals**, never a projection, so there is no projection method to choose. |
+| ~~**D-5**~~ | Year change: auto-prompt on 1 January, or manual only. | **DECIDED — `D-YEAR-1`: automatic switch on 1 January, with a toggle back and a banner,** combined with `D-YEAR-2` (carry the last known values forward, update when the act lands). |
+| **D-6** | Who owns the disclaimer and terms wording. | **OPEN.** Blocks PG-10 (**B-51**, no disclaimer exists anywhere in user-facing copy). Needs an owner named, not an answer given. |
+| **D-7** | Calculation sheet export: print stylesheet, PDF, or JSON. | **OPEN.** Optional in PG-8; interacts with PG-11, where no export or import exists at all. |
 
 ---
 

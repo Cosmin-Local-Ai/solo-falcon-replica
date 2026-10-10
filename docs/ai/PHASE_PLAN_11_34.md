@@ -8,11 +8,11 @@
 
 **Read in this order:**
 
-1. **This file** — §1 baseline, §2 what must not be rewritten, §3 audit claims already verified, §4 defects **B-36 … B-56**, §4b the open-questions register, §5 order, §6 phase detail, §9 what is blocked on a user decision, §11 PG mapping, **§12 standing operating rules**.
+1. **This file** — §1 baseline, §2 what must not be rewritten, §3 audit claims already verified, §4 defects **B-36 … B-57**, §4b the open-questions register, §5 order, §6 phase detail, §9 what is blocked on a user decision, §11 PG mapping, **§12 standing operating rules**.
 2. **`docs/ai/briefs/28_pg_production_gate.md`** — the execution order PG-0 … PG-13, each with mission, evidence, files it may touch, acceptance. Plus the scout list and the owner decisions.
 3. **`docs/ai/USER_DECISIONS.md`** — every decision with its reasoning. This is the file that stops the Orchestrator re-asking the user for things already settled.
 4. **`docs/ai/STATE.md`** — baseline, phase status, defects **B-1 … B-35**, and the open-questions register. **Check the register before briefing any research gap**: a Researcher's UNVERIFIED label is not a new open question if the register already closed it. That lesson has cost time twice.
-5. **`docs/ai/research/26_midyear_start_partial_year_2026.md`** and **`27_norme_metodologice_prorating_2026.md`** — the projection question and the code-versus-norm conflict. Both change what PG-4 may claim.
+5. **`docs/ai/research/26_midyear_start_partial_year_2026.md`** and **`27_norme_metodologice_prorating_2026.md`** — the projection question and the code-versus-norm conflict. Both change what PG-4 may claim. Then the four later passes, each of which superseded something in the first two: **`28_fixed_date_rollover_2026.md`** and **`29_anaf_calendar_2026_and_rollover_authority.md`** (fixed-date rollover; ANAF rolls some obligations and expressly not others; **B-57**), **`30_norma_venit_2026.md`** (the 12H gate, and the negative that closes **L-2**), **`31_norma_feasibility_42_counties.md`** (the cost of 12H, and why the dataset must key on activity description and never on position number).
 6. **`docs/ai/notes/romanian_proofcheck_2026-10-10.md`** — the language audit, with the Orchestrator's in-tree verification inline.
 7. **`docs/ai/roadmap_11_34_mapping.md`** — what already landed, so a Worker proves it instead of rebuilding it. Its evidence baseline is **TASK 9 (64 files / 1149 tests)**; §1 below is the current one.
 
