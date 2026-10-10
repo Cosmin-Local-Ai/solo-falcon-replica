@@ -105,5 +105,30 @@ Asked a second time in non-technical terms (fingerprint vs a typed edition numbe
 
 ---
 
+### D-LANG-2 — The nine parked wording calls: **all eight remaining approved**, with the user's variants
+
+The user reviewed each sentence in full (not the abbreviated table — that was my first mistake) and ruled. Recorded here as the authority for Phase 28 / PG-12.
+
+| # | Ruling | Final wording |
+|---|---|---|
+| 1 | Change | `nedeasă` → **`nedecisă`** |
+| 2 | Change | `… art. 123 alin. (1). **I**mpozitul pe profit nu este oferit: …` |
+| 3 | Change | `Art. 174 alin. (8) **se întemeiază pe** o faptă din anul precedent, …` |
+| 4 | Change — **variant B** | `… banda de 10 % este o politică de afișare a aplicației și **nu este o regulă legală**.` The user took my counter-recommendation over my own first proposal: `nu are nicio bază legală` can read as “unlawful” |
+| 5 | Change | `cassFlagUnverified`: `lasă linia de verificat` → **`marchează linia ca fiind de verificat`**, matching the three notes already using it |
+| 6 | Change, **with a qualification** | **`amprentă de conținut`** in user-facing labels and explanations; `digest` / `contentHash` stay in code identifiers; **the term is explained once in plain Romanian** where it first appears. This settles the objection TASK 9 recorded (half-renaming the family) — it does not, because the whole user-facing family moves together |
+| 7 | Change — **variant B** | `Praguri fiscale **comparate cu valorile înregistrate**` |
+| 8 | Change — both, plus the optional improvement | `Dacă nu se completează, profilul rămâne fără dată de înființare.` / `Dacă nu se completează, aplicația nu cunoaște data și nu afișează niciun termen de înregistrare — nu inventează unul.` And `baza nu se proratează` → **`baza nu se ajustează proporțional cu perioada de activitate`**. **The nuance the user attached:** the shorter wording replaces the *missing-value* explanation only — the substantive legal explanation and why the date matters stay |
+| 9 | Change | `«înregistrată»` → **`„înregistrată”`** in both `sources.capReadingChoice` and `records.capAppliedReading` |
+
+**The principle the user stated, which governs the rest of the language work:** consistency is not correctness. A wording change must not alter fiscal meaning. Their example is the right one — moving a CASS sentence from `calitatea de pensionar` to `sume primite ca pensii` changes **which fact is being evaluated**, and the code deliberately separates pensioner status from pension income received in the fiscal year. That distinction survives in both the calculation and the explanation.
+
+**One reviewer claim that does not reproduce.** The report says the fallback for an unrecognised completeness key is “the English word *date*”. There is no such fallback in `domain/completeness.ts` (grep for a `'date'` literal or a label fallback returns nothing), and the string the report is almost certainly reading is `copy.dashboard.completenessTitle` = **`Completitudine date`** — where **`date` is Romanian for “data”**. Same class of false positive as the CUI collision and the three withdrawn language findings, and recorded for the same reason: a plausible finding still has to be checked.
+
+**The broader language findings from the same review** — `Estimare impozit` naming a figure that includes CAS and CASS, the generic `Venit PFA` threshold label where CAS/CASS and VAT measure different bases, `Prag de înregistrare depășit` stating an arithmetic comparison instead of the obligation, `Nivel de calcul modificat` stating an abstraction instead of the consequence, `Aproape de prag` firing when the user is already above a floor, the completeness messages reading as internal software terminology, and the Settings explanations being one dense legal paragraph — are **Phase 28 / PG-12 work**, listed in `briefs/28_pg_production_gate.md` §2 PG-12 and in the reviewer's own §2 A–E. They are terminology and information-architecture changes, and each must be checked against the rule it describes before it moves.
+
+---
+
 ## Still open — to be put to the user
-1. **The nine parked Romanian wording calls** in `phases/21_language_layer.md` §13. **Call 1 is agreed** (`nedeasă` → `nedecisă`). Calls 2–9 were laid out in chat for a numbered answer; the ask_user multi-select did not render for this user, so the answer comes as free text. **Until the numbers arrive, 2–9 stay exactly as written.**
+
+The seven §9 decisions are closed (D-SEED-2, D-RUN-1, D-SCOPE-2, D-SEV-1, D-VER-1, D-DOCS-1, D-LANG-2). The owner decisions in `briefs/28_pg_production_gate.md` §4 — **D-1** an invoice with no collection date, **D-2** the reserve horizon, **D-3** normă de venit at launch, **D-5** how the fiscal year advances, **D-6** who owns the disclaimer wording, **D-7** the calculation-sheet export format — are being put to the user now. **D-4** (mid-year projection) waits on scout **L-1**, which is running.

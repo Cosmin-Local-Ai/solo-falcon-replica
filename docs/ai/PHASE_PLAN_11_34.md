@@ -79,7 +79,13 @@ Four open defects the audit **missed** are carried in §4: **B-30** (input-VAT d
 | **B-44** | Projection divides by fiscal-year elapsed months and multiplies by 12, ignoring the PFA's actual active period; a PFA starting in October is projected as if it had been trading since 1 January | **12** |
 | **B-45** | The FY2026 minimum-wage vintage is recorded UNVERIFIED and is labelled on thresholds, but the same uncertainty applies wherever SM-derived values feed the **calculation**; the assumption is not identifiable later from the calculation record | **17**, **15** |
 | **B-46** | UTC-based date defaults in page forms, and e2e assertions that only pass while today is before 25 May 2027 | **12C** (defaults), **32** (inject a controlled date) |
-| **B-47** | The seed tells two product stories: a 2020-start PFA with a 2025 filing history, against a product specified as starting in 2026 with no prior-year history | **11** (needs the §9 decision) |
+| **B-47** | The seed tells two product stories: a 2020-start PFA with a 2025 filing history, against a product specified as starting in 2026 with no prior-year history | **11** / **PG-3** |
+| **B-48** | **No fiscal-year lifecycle.** Past 31 December the Dashboard still runs a run-rate: at 15 Jan 2027 it reads 12,5 din 12 luni and 3.086 lei; at 26 May 2027, 16,8 din 12 and 2.916 lei — same data, a different answer every day. There is no 2027 rule package and the fiscal year is only a manual Settings field. The first real boundary is about 12 weeks away | **PG-4** |
+| **B-49** | **`addSnapshot` has no production caller** (`store.tsx:98`, `:349`; the only other mention is a comment). The app never persists a calculation record, so the rule-immutability and R1/R2 replay machinery has no live write path — and `completeness.ts:180` asks for at least one snapshot with status `computed`, which is why Date lipsă: Estimare impozit can never clear. One defect, two symptoms | **PG-8** |
+| **B-50** | All 39 expense rules are ACTIVE with the same `verifiedAt` while most caps carry CONFLICT NEREZOLVAT — contradicting the repo's own rule that ambiguous law is staged for review | **PG-9** |
+| **B-51** | **No disclaimer anywhere in user-facing copy** — consultanță, nu constituie and informativ all return zero hits. For production this is not polish | **PG-10** |
+| **B-52** | Accessibility: `.muted` `#667085` is 4.43:1 against a 4.5 requirement in 6 places; no `<main>` landmark (54 elements outside landmarks); no skip link; 4-5 links read only Deschide | **PG-12** |
+| **B-53** | Performance and coupling: `useDashboardData()` runs three times per view (shell, Dashboard, `FinancialChart`) with three separate async estimates; one 902 kB chunk; the headline Venituri is VAT-inclusive (9.317) while the estimate uses net (7.700) | **PG-12** |
 
 ### Already open in `STATE.md` — carried forward, not re-minted
 
@@ -298,7 +304,7 @@ Recorded in full in `USER_DECISIONS.md` as D-SEED-2, D-RUN-1, D-SCOPE-2, D-SEV-1
 | 4 | First run | **Start empty** | `store.tsx:166-167` stops handing out `seedData`. Closes D1 at the root. The “Get started” persona demo is a **Phase 26** feature, user-entered, not preloaded |
 | 5 | Seed scenario | **Both** — 2026 starter as the product scenario, 2020 PFA as a test fixture | Seed data becomes **test-only**. The pinned money figures survive because they are pinned through the test path; what goes away is the shipped demo bundle. Phase 11 must prove that, not assume it |
 | 6 | Supported scope | **Broad — attempt every profile, refuse where a fact is missing**, “with rigorous planning and execution” | Refusals must be **built and tested**. Regression scenarios 4, 6 and 8 in §8 become acceptance criteria, not nice-to-haves. 12E, 12F and 13's gate cannot slip |
-| 7 | Nine Romanian wording calls | **Pending** — call 1 agreed (`nedeasă` → `nedecisă`); 2–9 laid out in chat for a numbered answer | Until the numbers arrive, 2–9 stay exactly as written |
+| 7 | Nine Romanian wording calls | **Resolved 2026-10-10 — all eight remaining approved**, with the user's variants chosen | `USER_DECISIONS.md` D-LANG-2; Phase 28 / PG-12 |
 
 **Phase 11 is unblocked.** Its shape is now defined: a first run returns an empty dataset, `data/seed.ts` becomes test fixtures, the 2026-start scenario is the product story, and the 2020 PFA survives as a fixture for Phases 31–32.
 
@@ -307,3 +313,30 @@ Recorded in full in `USER_DECISIONS.md` as D-SEED-2, D-RUN-1, D-SCOPE-2, D-SEV-1
 ## 10. Release gates
 
 Not release-ready until: **10c** (one money path), **12C** (fiscally correct dates enterable), **12E/12F** (unsupported cases refused, not mis-calculated), **18A** (declaration model honest), **29** (export/import and blob storage), **26 + 30 + 33** (the flow proven in a real browser), and **34** with no CRITICAL/HIGH open.
+
+**The target is production, not a friends pilot** — confirmed 2026-10-10. That retires the narrow-scope mitigation the first audit offered: every unsupported case needs real support or an explicit refusal.
+
+---
+
+## 11. PG to Phase mapping — one plan, two vocabularies
+
+The second audit produced a production-gate brief, saved at `docs/ai/briefs/28_pg_production_gate.md`. **PG is the execution order; the phase numbers stay the record of what already landed.** Where they disagree, PG wins on sequence and the phase plan wins on what is already done and what must be preserved.
+
+| PG | Phase(s) | Defects |
+|---|---|---|
+| PG-0 groundwork | 32 (date-independent suite) + STATE hygiene | B-46 |
+| **PG-1 estimate coverage** | the gate on 13 — **no phase owned this before** | B-28 adjacent; the silent-exclusion finding |
+| PG-2 dates | **12C** | B-38, B-46 |
+| PG-3 first run, onboarding, seed | **11** + **26** | B-47, D1 |
+| PG-4 projection + year lifecycle | **12** | B-44, **B-48** |
+| PG-5 annual filing | **18A**, **18B** | B-34, B-35 |
+| PG-6 unsupported scenarios | **12D, 12E, 12F, 12G**, 13 | B-39, B-29, B-41, B-31, B-30 |
+| PG-7 FX end to end | **10c** | B-36, B-37 |
+| PG-8 evidence + snapshots | **15** + **20** | B-43, **B-49** |
+| PG-9 rule governance | 25 + new | **B-50**, C2 resolved by D-VER-1 |
+| PG-10 trust copy | new | **B-51** |
+| PG-11 data safety | **29** | — |
+| PG-12 UX, a11y, performance | **27, 28, 33** | **B-52**, **B-53**, the nine wording calls |
+| PG-13 release audit | **30–34** | all open |
+
+**PG-1 goes first after PG-0.** It is the channel every later refusal reuses, and it is the finding that undermines every number on the screen: the hero says Calculat while records are quietly dropped, in both directions — an unconverted euro expense *raises* the tax and an unconverted euro revenue *lowers* it.
