@@ -15,6 +15,7 @@ Worker rules
 4. **OVERRIDE — Scouts run SEQUENTIALLY.** One at a time, waiting for each report. Standing user decision (2026-10-10); the roadmap's parallel-Scout permission is not adopted.
 5. Each Scout inspects the smallest relevant territory and returns a compact report.
 6. If the Worker finds missing local information, it spawns another narrow Scout — it does not search broadly.
+6a. **UNDER NO CIRCUMSTANCES does the Worker do any work while a Scout is running.** After dispatching a Scout, **stop and end the turn.** No side-quests, no "meanwhile I'll read this", no drafting, no edits, no repository searching while waiting. Strict sequence: **dispatch one Scout → stop → receive report → read only the files you will actually edit → edit → dispatch the next Scout if needed → stop → …** If work was already started in parallel with a Scout, stop, discard that parallel searching, and wait. The failure mode this prevents: the Scout's report arrives after the Worker has already searched the repository itself, which wastes the Scout, burns the Worker's context, and defeats §12.9 entirely.
 7. One Worker = one coherent, tightly scoped job.
 8. Do NOT spawn a post-Worker Scout verification pass. The Worker self-validates instead.
 9. Self-validate: npx tsc --noEmit, npm run build, npm run test, npm run test:e2e.
