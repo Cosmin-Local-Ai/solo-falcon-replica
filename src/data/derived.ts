@@ -84,7 +84,10 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
     if (operands.kind === 'refused') {
       // Art. 68^3 (defect B-29): there is no expense engine for this activity, so the engine is never
       // called and no number is rendered. The refusal arrives as `review_required` naming the rule.
-      setEstimate(attachEstimateBasis(operands.result, operands.basis));
+      // PG-6a: the refusal is no longer composed here or in the assembler as a special case — the
+      // scenario registry decided it, and the scenario travels on the estimate so the hero can name it
+      // and link to the control that fixes it.
+      setEstimate(attachEstimateBasis(operands.result, operands.basis, operands.scenarios));
       setLoading(false);
       return;
     }
@@ -107,7 +110,7 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
       rules,
     }).then((result) => {
       if (!cancelled) {
-        setEstimate(attachEstimateBasis(result, basis));
+        setEstimate(attachEstimateBasis(result, basis, operands.scenarios));
         setLoading(false);
       }
     });

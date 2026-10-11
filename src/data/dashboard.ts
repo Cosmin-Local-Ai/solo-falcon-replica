@@ -15,7 +15,9 @@ import { selectProjectionV1, type ProjectionV1 } from '../domain/projection';
 import {
   attachEstimateBasis,
   coverageFromUnconverted,
+  estimateBasisOf,
   isGapReason,
+  scenarioCoverageGaps,
   selectEstimateCoverage,
   selectEstimateOperands,
   withEstimateBasis,
@@ -147,8 +149,7 @@ export interface DashboardSnapshotView extends DashboardSnapshot {
  * `refused` and `closed_final` are declared now and produced by nobody: PG-4 (a refusal that is a final
  * answer rather than a review request) and PG-6 (a closed fiscal year) own their triggers. Declaring
  * them here is what makes the surfaces exhaustive over the union instead of adding a sixth word later.
- */
-export type TaxEstimateState =
+ */export type TaxEstimateState =
   | 'complete'
   | 'incomplete'
   | 'review_required'
@@ -161,6 +162,14 @@ function estimateStateOf(
   coverage: readonly EstimateCoverageGap[],
 ): TaxEstimateState {
   if (tax === null) return 'unavailable';
+  // PG-6a — a scenario refusal is read off the basis the assembler stamped, not off `status`.
+  //
+  // Both arrive as `status: 'review_required'`, and collapsing them would be the exact defect this state
+  // exists to prevent: `review_required` says an engine ran and withheld a conclusion, `refused` says the
+  // calculation was never allowed to run. The basis is the only place that distinction survives, because
+  // it records whether the engine was reached at all — and a hand-built result with no basis stays
+  // `review_required` rather than being guessed into a refusal.
+  if (estimateBasisOf(tax)?.kind === 'refused') return 'refused';
   if (tax.status === 'review_required') return 'review_required';
   return coverage.some(g => isGapReason(g.reason)) ? 'incomplete' : 'complete';
 }
@@ -362,7 +371,7 @@ export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEsti
   const rules = selection ? [...selection.rules] : [];
   const operands = selectEstimateOperands(data, asOfDate, rules);
   if (operands.kind === 'refused') {
-    return Promise.resolve(attachEstimateBasis(operands.result, operands.basis));
+    return Promise.resolve(attachEstimateBasis(operands.result, operands.basis, operands.scenarios));
   }
   const { basis, amounts } = operands;
   // TASK 6 also closes a drift Scout-level review found: this path used to hand the UNFILTERED package to
@@ -381,7 +390,7 @@ export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEsti
     expensesNet: amounts.expensesNet,
     ruleRelease: selection ? selection.release : null,
     rules,
-  }).then((result) => attachEstimateBasis(result, basis));
+  }).then((result) => attachEstimateBasis(result, basis, operands.scenarios));
 }
 
 /**
@@ -849,6 +858,12 @@ export function buildDashboardData(
   const coverage: EstimateCoverageGap[] = [
     ...selectEstimateCoverage(data, asOfDate, selectionRules(data, asOfDate)),
     ...coverageFromUnconverted(ledger.unconverted),
+    // PG-6a — a scenario whose effect is `incomplete` joins this same list rather than starting a second
+    // warning surface beside it (brief 28 §0 rule 6). It is projected onto the `fact_missing` reason PG-1
+    // reserved for exactly this, so the badge, the rows, the attention items and the weighted percentage
+    // all keep reading one channel. The scenarios themselves were produced once, by the assembler, and
+    // travel here on the estimate; nothing in this file runs the registry.
+    ...scenarioCoverageGaps(estimate?.scenarios ?? []),
   ];
   // PG-5: the deadline engine runs ONCE per build. The card, the snapshot's attention rows and the
   // completeness check's filing term all read this one list, so they cannot disagree about whether a

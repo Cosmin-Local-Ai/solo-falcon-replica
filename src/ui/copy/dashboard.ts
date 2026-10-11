@@ -168,6 +168,13 @@ export const chart = {
   },
   /** The estimate is not computed: say so, then give the engine's reason. */
   taxNoteReview: 'Estimare impozit: revizuire necesară —',
+  /**
+   * PG-6a — a scenario refusal. The chart does not carry this one: the rule's own sentence is rendered
+   * once, in the estimate section, beside the control that fixes it. Repeating a cited paragraph twice on
+   * one screen is the defect `ui/copy/attention.ts` already names for the hero, and a refusal would
+   * inherit it the moment the chart quoted it too.
+   */
+  taxNoteRefused: 'Estimare impozit: calcul refuzat — motivul este redat integral în secțiunea Estimare impozit.',
 } as const;
 
 export const summary = {

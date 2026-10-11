@@ -53,6 +53,13 @@ import {
 } from './fx/ledger';
 import { addBani, applyRateDecimal, isRon, lei, money, requireRon, subBani, type Bani, type CurrencyCode } from './money';
 import { selectProjectionV1, type ProjectionV1 } from './projection';
+import {
+  evaluateScenarios,
+  scenarioFixHref,
+  scenarioGaps,
+  scenarioRefusal,
+  type ScenarioOutcome,
+} from './scenarios';
 import type { TaxEstimateResult } from './tax';
 import Decimal from 'decimal.js-light';
 
@@ -167,6 +174,12 @@ export type TaxEstimateBasis =
       method: null;
       elapsedMonths: null;
       reason: string;
+      /**
+       * PG-6a — which scenario stopped the calculation, with the copy key that frames it and the route
+       * that fixes it. The reason alone used to be all a refusal could offer, which left the user with
+       * a sentence and nowhere to act on it.
+       */
+      scenario: ScenarioOutcome;
     }
   | {
       kind: 'unknown';
@@ -401,15 +414,23 @@ export function isGapReason(reason: CoverageReason): boolean {
 /** One record kept out of the estimate, with the reason, the amount at stake and where to fix it. */
 export interface EstimateCoverageGap {
   recordId: string;
-  kind: 'revenue' | 'expense';
+  /**
+   * `profile` is PG-6a: a scenario gap is a missing profile- or activity-level fact, not a record the
+   * register holds. It is a third value rather than a record kind stretched to cover it, because
+   * `recordId` on such a row is the scenario's own id and no register row answers to it.
+   */
+  kind: 'revenue' | 'expense' | 'profile';
   reason: CoverageReason;
   /**
    * The amount that left the estimate, in the minor units the record is written in (`Bani`, like every
    * stored amount). For a record with no recorded rate this is NOT a lei quantity — the app cannot
    * express it in lei, and that is the finding, not a rounding detail. `currency` travels with it for
    * that reason: an amount rendered without its unit is a number invented twice over.
+   *
+   * `null` for a `profile` gap: a fact the app does not hold has no amount at stake, and writing `0`
+   * beside it would put a lei figure on the screen for a number that was never recorded.
    */
-  amount: Bani;
+  amount: Bani | null;
   /** The unit `amount` is written in. `RON` for every exclusion the classifier produced. */
   currency: CurrencyCode;
   /** The route that lands on this record (`src/App.tsx parseRoute`: `/<page>#!/<tab>?f=<id>`). */
@@ -449,8 +470,7 @@ export function coverageReasonForExclusion(x: ExcludedExpenseRecord): CoverageRe
  * The register route that holds the record, on the tab its own status selects, with the focus token
  * the page consumes to page to it. Same shape as `data/attention.ts recordTarget` — the tab is not
  * guessed, it is the status a record with a coverage gap necessarily carries (`inregistrata`).
- */
-export function estimateFixTarget(kind: 'revenue' | 'expense', recordId: string): string {
+ */export function estimateFixTarget(kind: 'revenue' | 'expense', recordId: string): string {
   const page = kind === 'revenue' ? 'revenues' : 'expenses';
   return `/${page}#!/registered?f=${encodeURIComponent(recordId)}`;
 }
@@ -516,6 +536,37 @@ export function coverageFromUnconverted(
     currency: u.currency,
     fixTarget: estimateFixTarget(u.kind, u.id),
     detail: u.detail,
+  }));
+}
+
+/**
+ * PG-6a — the scenario half of the coverage, projected onto PG-1's channel rather than put beside it.
+ *
+ * A scenario whose effect is `incomplete` is a fact the user can still supply, which is precisely what
+ * `CoverageReason.fact_missing` was reserved for when PG-1 declared it and produced nothing. Routing it
+ * through the same list is what keeps brief 28 §0 rule 6 true: the hero badge, the coverage rows, the
+ * attention rows and the weighted percentage all read one channel, so a later part that registers a
+ * detector gets all four for free and cannot create a second place that says „the estimate is not
+ * complete”.
+ *
+ * Two fields carry the difference between a missing record and a missing fact, and both of them are the
+ * reason the field exists: `kind: 'profile'` says no register row is being described, and `amount: null`
+ * says nothing was taken out of the figure. A profile fact has no amount at stake, and writing `0` would
+ * put a lei figure on screen for a number nobody ever recorded. Because `recordId` is the scenario's own
+ * id, `completeness.ts amountCoverage` leaves these rows out of the weighted denominator — a population
+ * that never contained the row cannot be discounted by it.
+ */
+export function scenarioCoverageGaps(
+  scenarios: readonly ScenarioOutcome[],
+): EstimateCoverageGap[] {
+  return scenarioGaps(scenarios).map(o => ({
+    recordId: `scenario:${o.id}`,
+    kind: 'profile' as const,
+    reason: 'fact_missing' as const,
+    amount: null,
+    currency: 'RON' as CurrencyCode,
+    fixTarget: scenarioFixHref(o.fixTarget),
+    detail: o.detail ?? '',
   }));
 }
 
@@ -1258,14 +1309,6 @@ function claimAnnualMeasure(line: AnnualCapLine): MeasurePair {
   return { inclVat: line.inclVat, exclVat: line.exclVat };
 }
 
-/** The sentence a refused estimate says out loud, naming the rule and the article behind it. */
-export function estimateRefusalReason(refusal: RefusedExpense): string {
-  return (
-    `Calculul anual s-a oprit: regula ${refusal.rule.ruleId} (${refusal.rule.sourceArticle}) nu lasă niciun motor de cheltuieli pentru această activitate. ` +
-    refusal.reason
-  );
-}
-
 /**
  * What the estimate is built from: the deductible subset, the operands derived from it, and either the
  * basis the engine will run on or the refusal that stopped it.
@@ -1285,6 +1328,11 @@ export type EstimateOperands =
       capAdjustments: AnnualCapAdjustment[];
       /** TASK 10b — ledger records that entered the operands only because a recorded rate converted them. */
       conversions: LedgerConversion[];
+      /**
+       * PG-6a — the scenario registry's answer for this register. It is produced here, at the one
+       * evaluation point, and travels with the estimate so no surface runs the registry again.
+       */
+      scenarios: ScenarioOutcome[];
     }
   | {
       kind: 'refused';
@@ -1294,6 +1342,7 @@ export type EstimateOperands =
       deductible: DeductibleExpenseSet;
       capAdjustments: AnnualCapAdjustment[];
       conversions: LedgerConversion[];
+      scenarios: ScenarioOutcome[];
     };
 
 export function selectEstimateOperands(
@@ -1314,15 +1363,28 @@ export function selectEstimateOperands(
     unconverted: ledger.unconverted,
   };
 
-  if (deductible.refusal) {
-    const reason = estimateRefusalReason(deductible.refusal);
+  // PG-6a — the scenario registry, run once, here.
+  //
+  // This block replaces the inline `if (deductible.refusal)` special case that used to sit where this
+  // line is. The decision it made is unchanged — a classifier with no expense engine must not reach the
+  // engine — but the mechanism is now the registry's, so PG-6b…6g add a detector to
+  // `scenarios.ts SCENARIO_SUPPORT` instead of adding a branch to this function.
+  //
+  // The classifier's refusal is handed to the registry as a fact the app already holds rather than
+  // re-detected here: the rule layer decides whether an activity has an expense engine, and a second
+  // place deciding that is how two answers to one question start.
+  const scenarios = evaluateScenarios({ data: ledger.data, classifierRefusal: deductible.refusal ?? null });
+  const refusal = scenarioRefusal(scenarios);
+  if (refusal !== null) {
+    const reason = refusal.detail ?? '';
     return {
       kind: 'refused',
-      basis: { kind: 'refused', method: null, elapsedMonths: null, reason },
+      basis: { kind: 'refused', method: null, elapsedMonths: null, reason, scenario: refusal },
       result: { status: 'review_required', reason, lines: [] },
       deductible,
       capAdjustments: [],
       conversions: ledger.conversions,
+      scenarios,
     };
   }
 
@@ -1343,6 +1405,7 @@ export function selectEstimateOperands(
       deductible,
       capAdjustments: [],
       conversions: ledger.conversions,
+      scenarios,
     };
   }
 
@@ -1361,6 +1424,7 @@ export function selectEstimateOperands(
     deductible,
     capAdjustments: adjustments,
     conversions: ledger.conversions,
+    scenarios,
   };
 }
 
@@ -1368,14 +1432,26 @@ export function selectEstimateOperands(
  * The engine’s result plus the basis that produced it. This is an intersection, not a new shape:
  * it stays assignable to `TaxEstimateResult`, so every consumer that does not care about the basis
  * keeps compiling and keeps reading exactly the fields it read before.
+ *
+ * PG-6a adds `scenarios`, and adds it as optional on purpose. It is produced by exactly one place —
+ * `selectEstimateOperands`, the one evaluation point — and a result that never went through the
+ * assembler (a hand-built fixture, a stored snapshot) genuinely has no scenario answer rather than an
+ * empty one. Reading `?? []` at the surface keeps that distinction visible instead of pretending every
+ * result was screened.
  */
-export type TaxEstimateWithBasis = TaxEstimateResult & { basis: TaxEstimateBasis };
+export type TaxEstimateWithBasis = TaxEstimateResult & {
+  basis: TaxEstimateBasis;
+  scenarios?: ScenarioOutcome[];
+};
 
 export function attachEstimateBasis(
   result: TaxEstimateResult,
   basis: TaxEstimateBasis,
+  scenarios?: readonly ScenarioOutcome[],
 ): TaxEstimateWithBasis {
-  return { ...result, basis };
+  return scenarios === undefined
+    ? { ...result, basis }
+    : { ...result, basis, scenarios: [...scenarios] };
 }
 
 /** The recorded basis, or `null` when this result never had one. */
@@ -1438,7 +1514,7 @@ function monthsPhrase(forecast: { elapsedMonths: number | null; activeMonths?: n
  */
 export function estimateBasisLabel(basis: TaxEstimateBasis | null | undefined): string {
   if (!basis || basis.kind === 'unknown') return 'Estimare impozit';
-  if (basis.kind === 'refused') return 'Estimare blocată — revizuire necesară';
+  if (basis.kind === 'refused') return 'Nu putem calcula';
   if (basis.closed) return 'Calcul final pe înregistrările anului';
   return 'Calculat din încasări și plăți înregistrate';
 }
@@ -1452,7 +1528,7 @@ export function estimateBasisLabel(basis: TaxEstimateBasis | null | undefined): 
  */
 export function estimateFigureLabel(basis: TaxEstimateBasis | null | undefined): string {
   if (!basis || basis.kind === 'unknown') return 'Estimare impozit';
-  if (basis.kind === 'refused') return 'Estimare impozit (calculată nu s-a făcut)';
+  if (basis.kind === 'refused') return 'Nu putem calcula';
   if (basis.closed) return 'Impozit final pe înregistrările anului';
   return 'Impozit calculat din încasări și plăți înregistrate';
 }
@@ -1473,7 +1549,10 @@ export function estimateBasisExplanation(basis: TaxEstimateBasis | null | undefi
     return 'Baza acestei estimări nu este înregistrată, deci valorile nu pot fi prezentate nici ca realizate, nici ca proiectate.';
   }
   if (basis.kind === 'refused') {
-    return 'Calculul nu s-a făcut, deci nu există valori de afișat. ' + basis.reason;
+    // PG-6a — the rule's own sentence is rendered once, in the refusal block beside the control that
+    // fixes it. Quoting it again here is how one legal paragraph ends up printed three times on one
+    // screen, which is what the B-14 tests caught the first time this changed.
+    return 'Calculul nu s-a făcut, deci nu există valori de afișat. Motivul este redat integral mai sus, în aceeași secțiune.';
   }
   if (basis.closed) {
     return (

@@ -354,8 +354,13 @@ function amountCoverage(
   const recorded = sumBani(amounts);
   // A gap for a record this population does not contain is not subtracted from a denominator that
   // never counted it; a gap for a record the law settled (`non_deductible`) is not missing coverage.
+  // A PG-6a scenario gap (`kind: 'profile'`) is excluded by the same test rather than a new one: its
+  // `recordId` is the scenario's id, so no register row answers to it — and it carries `amount: null`
+  // anyway, because a fact the app never held took no sum out of the figure.
   const excluded = sumBani(
-    gaps.filter(g => isGapReason(g.reason) && eligible.has(g.recordId)).map(g => g.amount),
+    gaps.flatMap(g =>
+      isGapReason(g.reason) && eligible.has(g.recordId) && g.amount !== null ? [g.amount] : [],
+    ),
   );
   const included: Bani = (recorded - excluded) as Bani;
   return {

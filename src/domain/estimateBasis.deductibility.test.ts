@@ -11,10 +11,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   estimateFigureLabel,
-  estimateRefusalReason,
   selectDeductibleExpenses,
   selectEstimateOperands,
 } from './estimateBasis';
+import { estimateRefusalReason } from './scenarios';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal';
 import { seedData } from '../data/seed';
 import type { AppData, Expense } from '../data/types';
@@ -280,10 +280,17 @@ describe('selectEstimateOperands — one assembler, feeding both selectors the s
     expect(operands.deductible.records).toHaveLength(0);
     // The basis says nothing was computed — it does not pretend the operands were zero.
     expect(operands.basis.kind).toBe('refused');
-    expect(estimateFigureLabel(operands.basis)).toBe('Estimare impozit (calculată nu s-a făcut)');
+    expect(estimateFigureLabel(operands.basis)).toBe('Nu putem calcula');
     expect(estimateRefusalReason(operands.deductible.refusal!)).toContain(
       'nu lasă niciun motor de cheltuieli',
     );
+    // PG-6a — the refusal is the registry's answer, not a branch of this function. The scenario id and
+    // its fix route travel on the basis, so the hero can name the case and link to what settles it.
+    if (operands.basis.kind !== 'refused') return;
+    expect(operands.basis.scenario.id).toBe('no-expense-engine');
+    expect(operands.basis.scenario.effect).toBe('refuse');
+    expect(operands.basis.scenario.fixTarget).toEqual({ page: 'settings', tab: 'fiscal' });
+    expect(operands.scenarios.map(s => s.id)).toContain('no-expense-engine');
   });
 
   it('without the cazare fact the engine still runs — the app holds no activity-family fact and invents none', () => {

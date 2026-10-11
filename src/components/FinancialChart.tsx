@@ -256,8 +256,19 @@ export default function FinancialChart() {
           <p className="chart-tax-note" data-estimate-state="unavailable">
             {estimateStateCopy.unavailable}
           </p>
+        ) : dashboard.estimateState === 'refused' ? (
+          /* PG-6a — a refusal is not a withheld conclusion. The chart points at the estimate section
+             instead of quoting the rule again: one cited paragraph, rendered once, beside the control
+             that settles it. */
+          <p className="chart-tax-note" data-estimate-state="refused">
+            {chartCopy.taxNoteRefused}
+          </p>
         ) : (
-          <p className="chart-tax-note" data-estimate-state="review_required">
+          /* PG-6a: this attribute used to hard-code `review_required`, which put a second answer to one
+             question on the screen next to the hero's. A withheld conclusion and a refused calculation are
+             different states, and the chart is not entitled to decide which one applies — it reads the
+             state the estimate already carries. The reason itself is still printed verbatim, as B-14 pins. */
+          <p className="chart-tax-note" data-estimate-state={dashboard.estimateState}>
             {chartCopy.taxNoteReview} {tax.reason}
           </p>
         )}

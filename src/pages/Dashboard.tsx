@@ -6,7 +6,7 @@ import { identityGreeting } from '../domain/profile';
 import { fmtDate } from '../data/types';
 import { formatBaniRON } from '../domain/money';
 import { estimateBasisExplanation, estimateBasisLabel, estimateForecastExplanation, estimateForecastLabel } from '../domain/estimateBasis';
-import { copy, dashboard as dashboardCopy, estimateState as estimateStateCopy, provenance as provenanceCopy } from '../ui/copy';
+import { copy, dashboard as dashboardCopy, estimateState as estimateStateCopy, provenance as provenanceCopy, scenarios as scenariosCopy } from '../ui/copy';
 import { Disclosure } from '../components/ui/Disclosure';
 import { RuleProvenance } from '../components/ui/RuleProvenance';
 import FinancialChart from '../components/FinancialChart';
@@ -15,6 +15,7 @@ import TaxReserve from '../components/TaxReserve';
 import Insights from '../components/Insights';
 import CurrencySection from '../components/dashboard/CurrencySection';
 import EstimateCoverageRows from '../components/dashboard/EstimateCoverage';
+import ScenarioRefusal from '../components/dashboard/ScenarioRefusal';
 import { YearLifecycleBanner } from '../components/dashboard/YearLifecycleBanner';
 import ThresholdSection from '../components/dashboard/ThresholdSection';
 import DeadlineSection from '../components/dashboard/DeadlineSection';
@@ -97,6 +98,11 @@ export default function DashboardPage() {
     data.tax !== null && data.tax.basis.kind === 'recorded-actuals'
       ? data.tax.basis.forecast
       : undefined;
+  // PG-6a — the scenario that stopped the calculation, if one did. It is read off the basis the
+  // assembler stamped, not re-derived here: `estimateBasis.ts selectEstimateOperands` is the one place
+  // the registry runs, and a page that ran it a second time would be a second answer to one question.
+  const refusal =
+    data.tax !== null && data.tax.basis.kind === 'refused' ? data.tax.basis.scenario : null;
 
   return (
     <div className="dashboard">
@@ -170,12 +176,18 @@ export default function DashboardPage() {
                 <span className="muted">
                   {data.year.closed
                     ? dashboardCopy.estimate.finalCalculation(data.year.year)
-                    : data.tax
-                      ? estimateBasisLabel(data.tax.basis)
-                      : estimateStateCopy.badges[estimateState]}{' '}
+                    : refusal
+                      ? estimateStateCopy.badges.refused
+                      : data.tax
+                        ? estimateBasisLabel(data.tax.basis)
+                        : estimateStateCopy.badges[estimateState]}{' '}
                   · {dashboardCopy.fiscalYearPrefix} {snapshot.taxYear}
                   {' · '}
-                  {dashboardCopy.estimate.measuredAsOf(fmtDate(snapshot.asOf))}
+                  {/* A refused estimate measured nothing, so the date beside it names the reading of the
+                      register rather than a measurement that never happened. */}
+                  {refusal
+                    ? scenariosCopy.registerReadAsOf(fmtDate(snapshot.asOf))
+                    : dashboardCopy.estimate.measuredAsOf(fmtDate(snapshot.asOf))}
                 </span>
                 <span className="row">
                   <span className="muted">
@@ -198,11 +210,17 @@ export default function DashboardPage() {
                     ? (data.coverage.filter(g => isGapReason(g.reason)).length === 1
                         ? estimateStateCopy.incompleteOne
                         : estimateStateCopy.incompleteMany(data.coverage.filter(g => isGapReason(g.reason)).length))
-                    : estimateState === 'review_required'
-                      ? estimateStateCopy.reviewRequired
-                      : estimateStateCopy.unavailable}
+                    : estimateState === 'refused'
+                      ? estimateStateCopy.refused
+                      : estimateState === 'review_required'
+                        ? estimateStateCopy.reviewRequired
+                        : estimateStateCopy.unavailable}
                 </p>
               )}
+              {/* PG-6a — the refusal says what could not be computed, in the rule's own words, and points
+                  at the control that fixes it. It sits above the coverage rows because a refusal is not a
+                  coverage problem: there is no figure for records to be missing from. */}
+              {refusal ? <ScenarioRefusal scenario={refusal} /> : null}
               {/* PG-1: the badge says the figure is incomplete; these rows say which records, for which
                   reason, at which amount, and where to fix each one. Without them the badge is a warning
                   with nothing to act on. */}

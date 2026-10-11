@@ -72,7 +72,7 @@ export const estimateState = {
     complete: 'Calculat',
     incomplete: 'Estimare incompletă',
     review_required: 'De verificat',
-    refused: 'Refuzat',
+    refused: 'Nu putem calcula',
     closed_final: 'Închis definitiv',
     unavailable: 'Indisponibil',
   },
@@ -91,6 +91,15 @@ export const estimateState = {
    */
   reviewRequired:
     'Motorul de calcul a refuzat estimarea pe datele înregistrate. Cauza este redată integral la graficul financiar.',
+  /**
+   * PG-6a — the state a scenario refusal carries, and the one word the hero is allowed to say when no
+   * number exists. It is not a softer `De verificat`: `review_required` means an engine ran and withheld
+   * a conclusion, `refused` means the calculation was never allowed to run. The cause and the control
+   * that fixes it are rendered in the hero itself — not deferred to the chart the way a withheld
+   * conclusion is — because there is no figure on screen for the reader to be confused about.
+   */
+  refused:
+    'Nu există nicio cifră de verificat: calculul nu a fost permis de regulile acestui an fiscal. Motivul și unde se corectează sunt mai jos.',
   unavailable:
     'Niciun calcul nu este disponibil pentru aceste date — cifra lipsește, nu este zero.',
 } as const;

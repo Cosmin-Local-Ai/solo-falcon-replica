@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { isGapReason, type CoverageReason, type EstimateCoverageGap } from '../../domain/estimateBasis';
-import { formatMoney, money, sumBani } from '../../domain/money';
+import { formatMoney, money, sumBani, type Bani } from '../../domain/money';
 import { dashboard as dashboardCopy } from '../../ui/copy';
 
 /**
@@ -44,11 +44,15 @@ function groupByReason(coverage: readonly EstimateCoverageGap[]): ReasonGroup[] 
   // and it puts the reason the estimate hit first where a reader looks first.
   return [...byReason.entries()].map(([reason, items]) => {
     const units = new Set(items.map(i => i.currency));
+    // A `profile` gap carries no amount at all (PG-6a): a missing profile fact did not take a sum out of
+    // the figure. A group with such a row in it shows no total rather than a total that quietly counts
+    // the missing row as zero.
+    const amounts = items.map(i => i.amount).filter((a): a is Bani => a !== null);
     return {
       reason,
       count: items.length,
-      amount: units.size === 1
-        ? formatMoney(money(sumBani(items.map(i => i.amount)), items[0].currency))
+      amount: amounts.length === items.length && units.size === 1
+        ? formatMoney(money(sumBani(amounts), items[0].currency))
         : null,
       href: items[0].fixTarget,
     };
