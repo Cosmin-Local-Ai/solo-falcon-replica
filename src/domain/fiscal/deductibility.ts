@@ -113,8 +113,18 @@ export const EXPENSE_CATEGORIES: readonly ExpenseCategory[] = [
 // ── The facts about an expense that the law keys on ─────────────────────────
 
 /** Whether the activity is `prestarea de servicii de cazare`, which from FY2026 falls under
- *  art. 68^3 — a flat 30 % of gross with NO expense engine at all (defect B-29). */
+ *  art. 68^3 — a flat 30 % of gross with NO expense engine at all (defect B-29).
+ *
+ *  PG-6b: this is now also a PROFILE fact (`PfaProfile.activityFamily`), declared by the person and not
+ *  inferred. The values are spelled once, here, and the persisted schema reads `ACTIVITY_FAMILY_VALUES`
+ *  rather than restating the pair — a second spelling of one vocabulary is the B-70 defect class.
+ *  Absence is deliberately NOT a member of this union: "the person has not answered" is a different
+ *  state from "the person answered: other", and collapsing them would assert that the ordinary rules
+ *  apply to somebody who was never asked. */
 export type ActivityFamily = 'other' | 'cazare';
+
+/** The same two families, as a value, so the persisted schema and any option list read one source. */
+export const ACTIVITY_FAMILY_VALUES: [ActivityFamily, ...ActivityFamily[]] = ['other', 'cazare'];
 
 /** CF art. 68 alin. (4) lit. a): a deductible expense must be „justificate prin documente". */
 export type DocumentEvidence = 'present' | 'absent' | 'unknown';

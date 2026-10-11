@@ -1,4 +1,8 @@
 import type { Bani } from './money';
+// PG-6b — the activity family is the classifier's own vocabulary (`fiscal/deductibility.ts`), and the
+// profile stores a value of it. Type-only import: no runtime coupling between the profile model and the
+// rule layer, and one declaration of the two families instead of two.
+import type { ActivityFamily } from './fiscal/deductibility';
 
 /**
  * PFA/profile domain model — the single source of truth for the PFA profile.
@@ -317,6 +321,24 @@ export interface PfaProfile {
   foreignSicknessInsurance?: ForeignSicknessInsurance;
   /** Other relevant income flags. */
   otherIncome: PfaOtherIncomeFlag[];
+  /**
+   * PG-6b (B-29) — the activity family the person **declared**. `cazare` is `prestarea de servicii de
+   * cazare`, which from FY2026 is taxed under CF art. 68^3 on a flat 30 % expense ratio and has no
+   * expense engine at all; `other` is the sistem real the rest of this app computes.
+   *
+   * Three facts about this field, all load-bearing:
+   *
+   * - **It is asked, never inferred.** `research/30` §3 records that OMFP 925/2017 art. 2 alin. (4) keys
+   *   the determination method to the activity description „independent de codurile CAEN menționate cu
+   *   titlu exemplificativ”, so a CAEN code is not evidence about how the law taxes this person. No code
+   *   in this repository may derive this value from `identity.caen`.
+   * - **Optional means unanswered, not `other`.** Absence is the third state; it is reported as a missing
+   *   profile fact (`scenarios.ts activity-family-undeclared` → PG-1's `fact_missing` coverage row), not
+   *   treated as a pass. Migration step v11→v12 backfills nothing for the same reason.
+   * - **It is a fact, not a conclusion.** The rule layer (`EXPENSE_ENGINE_CAZARE_2026`) decides what the
+   *   family means for a calculation; this field only records what the person said.
+   */
+  activityFamily?: ActivityFamily;
   /** CASS status. */
   socialInsuranceStatus: PfaSocialInsuranceStatus;
   /** VAT-exempt (scutire de TVA). */

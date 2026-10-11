@@ -10,6 +10,9 @@ import { z } from 'zod';
 import type { Bani } from './money';
 import type { PfaProfile } from './models';
 import { PFA_REGIME_VALUES } from './regimes';
+// PG-6b — one spelling of the activity families. The classifier owns the vocabulary; the persisted
+// profile reads its value list instead of restating the pair.
+import { ACTIVITY_FAMILY_VALUES } from './fiscal/deductibility';
 import { ISO_CALENDAR_DATE } from './date';
 
 /**
@@ -115,6 +118,12 @@ export const pfaProfileSchema: z.ZodType<PfaProfile> = z.object({
     })
     .optional(),
   otherIncome: z.array(z.enum(['imobiliare', 'autovehicule', 'dividende', 'concesiune', 'alte'])),
+  // PG-6b (B-29) — the declared activity family. OPTIONAL, and deliberately without `.default()`:
+  // absence means the person was never asked, and defaulting it to `'other'` would assert that the
+  // ordinary sistem real rules apply to somebody who has not said so. The values come from
+  // `fiscal/deductibility.ts ACTIVITY_FAMILY_VALUES` — the same pair the classifier matches on — so the
+  // persisted shape and the rule condition cannot drift into two vocabularies.
+  activityFamily: z.enum(ACTIVITY_FAMILY_VALUES).optional(),
   socialInsuranceStatus: z.enum(['obligatoriu', 'exempt', 'neplata']),
   vatExempt: z.boolean(),
   // The one input `VAT_REGISTRATION_DEADLINE_2026` was still missing (P-PROFILE-VAT-DATE).

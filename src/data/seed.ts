@@ -136,6 +136,12 @@ export const seedData: AppData = {
     // alin. (7) lit. c) relief out of nothing.
     pensionerStatus: 'nu',
     otherIncome: [],
+    // PG-6b (B-29): the demo profile DECLARES its activity family. This is a fixture answering a question,
+    // not a default — `domain/profile.ts createDefaultProfile` deliberately leaves the field absent, and an
+    // absent field stays an unanswered question (`scenarios.ts activity-family-undeclared` → a
+    // `fact_missing` coverage row). Leaving the fixture unanswered would have made every test that reads
+    // the demo profile assert an incomplete estimate for a reason unrelated to what that test is about.
+    activityFamily: 'other',
     socialInsuranceStatus: 'obligatoriu',
     vatExempt: false,
     // No `vatExceedanceDate`: this PFA is VAT-registered from the start rather than by exceeding the

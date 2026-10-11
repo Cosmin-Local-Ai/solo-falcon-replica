@@ -180,8 +180,25 @@ export const DATA_VERSION_RECORD_CURRENCY = 10;
  * the way out.
  */
 export const DATA_VERSION_ANNUAL_FILING = 11;
+/**
+ * PG-6b (B-29): the profile can now record the **declared** activity family — `other` or `cazare`.
+ *
+ * This step backfills nothing, and that is the whole content of it. No pre-v12 field holds the fact, and
+ * defaulting an unanswered profile to `'other'` would assert that the ordinary sistem real rules apply to
+ * a person who was never asked — the exact move `research/30` §3 forbids, because OMFP 925/2017 art. 2
+ * alin. (4) keys the determination method to the activity description „independent de codurile CAEN
+ * menționate cu titlu exemplificativ”. A code is not a statement about how the law taxes this person, and
+ * neither is an absent field.
+ *
+ * So the payload keeps its silence, and the silence is now *reported*: `scenarios.ts
+ * activity-family-undeclared` reads the absence and routes it through PG-1's `fact_missing` coverage
+ * channel, which makes the estimate `incomplete` instead of quietly complete. That is the difference
+ * between an unanswered question and an answered one, and it is the reason this step exists at all — a
+ * field added without a version stamp would let a stored payload look identical to one that answered.
+ */
+export const DATA_VERSION_ACTIVITY_FAMILY = 12;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_ANNUAL_FILING;
+export const CURRENT_DATA_VERSION = DATA_VERSION_ACTIVITY_FAMILY;
 
 export interface MigrationStep {
   readonly from: number;
@@ -779,6 +796,19 @@ export function migrateAnnualFilingV11(data: PersistedAppData): PersistedAppData
   };
 }
 
+/**
+ * PG-6b: the v11→v12 step. It opens `profile.activityFamily` and backfills nothing.
+ *
+ * Idempotent-safe by construction — it writes the version and touches no value, so a second run produces
+ * the same payload. The temptation this step refuses is the harmless-looking one: `activityFamily:
+ * profile.activityFamily ?? 'other'`. That single `??` would mint a legal fact for every stored profile,
+ * would make the undeclared-family scenario unfireable, and would present an accommodation taxpayer's
+ * register under rules the law does not apply to them.
+ */
+export function migrateActivityFamilyV12(data: PersistedAppData): PersistedAppData {
+  return { ...data, version: DATA_VERSION_ACTIVITY_FAMILY };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -867,6 +897,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Aplicația poate înregistra acum declarația anuală (Declarația Unică 212) pe an fiscal declarat, nu pe lună. Înregistrările lunare vechi au fost eliminate: un PFA în sistem real depune o singură Declarație Unică pe an fiscal (art. 122 alin. (3) din Codul fiscal), deci nu există nicio declarație lunară al cărei record ar fi fost. Niciuna nu a fost transformată în depunere anuală — un rând lunar cu status „inregistrata” nu este dovada că cineva a depus ceva, iar o depunere inventată ar fi o faptă pe care utilizatorul nu a făcut-o. „filings” pornește gol.',
     apply: migrateAnnualFilingV11,
+  },
+  {
+    from: DATA_VERSION_ANNUAL_FILING,
+    to: DATA_VERSION_ACTIVITY_FAMILY,
+    name: 'activity-family',
+    summary:
+      'Profilul poate înregistra acum familia de activități declarată de persoana fizică: „altă activitate” sau „prestare de servicii de cazare”. Nimic nu a fost completat în acest pas: niciun câmp vechi conține acest fapt, iar o valoare implicită „altă activitate” ar afirma că regulile obișnuite se aplică unei persoane care nu a fost niciodată întrebată. Codul CAEN nu este un răspuns — OMFP 925/2017 art. 2 alin. (4) leagă metoda de impunere de descrierea activității „independent de codurile CAEN menționate cu titlu exemplificativ”. Un profil fără răspuns rămâne fără răspuns și este raportat ca faptă de profil care lipsește, nu ca profil complet.',
+    apply: migrateActivityFamilyV12,
   },
 ];
 

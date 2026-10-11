@@ -84,7 +84,10 @@ export function scenarioFixHref(target: ScenarioFixTarget): string {
 }
 
 /** A key into `ui/copy/scenarios.ts`. The registry never carries a sentence of its own. */
-export type ScenarioMessageKey = 'noExpenseEngine' | 'regimeNotComputable';
+export type ScenarioMessageKey =
+  | 'noExpenseEngine'
+  | 'regimeNotComputable'
+  | 'activityFamilyUndeclared';
 
 /**
  * Everything a detector is allowed to look at.
@@ -190,12 +193,52 @@ const regimeScenario: ScenarioSupport = {
 };
 
 /**
+ * The profile has never been asked which activity family applies (PG-6b, B-29).
+ *
+ * This is the `incomplete` half of B-29, and the half that decides what the other half means. Before 6b
+ * the profile could not record the fact at all, so the app computed every register under the sistem real
+ * rules and said nothing — a cazare taxpayer and a software consultant got the same confident figure.
+ * 6b asks the question; this entry reports the person who has not answered it.
+ *
+ * It is `incomplete`, not `refuse`, and the distinction is the point: an unanswered question is a fact the
+ * user can still supply, and the figure beside it is still the figure the app can produce from the records
+ * it holds. A case the law does not let this build compute is the entry above it. Collapsing the two would
+ * have made "I never asked you" and "the law gives me nothing to compute with" the same claim.
+ *
+ * The detector reads one field and infers nothing. It does not look at `identity.caen`, at the expense
+ * categories, or at the regime to guess what the person does — `research/30` §3 records that OMFP
+ * 925/2017 art. 2 alin. (4) keys the determination method to the activity description „independent de
+ * codurile CAEN menționate cu titlu exemplificativ”, so inferring the family from a code would manufacture
+ * the very fact this entry reports is missing. Absence of the field is the whole trigger, and a profile
+ * that declares either family clears it.
+ */
+const activityFamilyScenario: ScenarioSupport = {
+  id: 'activity-family-undeclared',
+  effect: 'incomplete',
+  message: 'activityFamilyUndeclared',
+  fixTarget: { page: 'settings', tab: 'fiscal' },
+  detect(facts) {
+    // Optional chaining, not a guard clause: `detect` is total, and a payload whose profile object is
+    // absent is a shape the registry is tested against. Such a payload has no profile to have failed to
+    // answer, and reporting a missing profile fact about it would be a claim about a person the payload
+    // does not describe. No profile is therefore no outcome — the same answer `regimeScenario` gives for
+    // a missing regime.
+    const profile = facts.data?.profile;
+    if (!profile) return null;
+    const declared = profile.activityFamily;
+    if (declared === 'cazare' || declared === 'other') return null;
+    return {};
+  },
+};
+
+/**
  * The registry. Order is precedence: the first `refuse` outcome is the one that stops the estimate,
  * and an entry added by PG-6b…6g is inserted here and nowhere else.
  */
 export const SCENARIO_SUPPORT: readonly ScenarioSupport[] = [
   noExpenseEngineScenario,
   regimeScenario,
+  activityFamilyScenario,
 ];
 
 /**

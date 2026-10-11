@@ -27,6 +27,18 @@ export const scenarios = {
       'Pentru această activitate legea nu lasă o bază pe cheltuieli înregistrate, iar aplicația nu are cum să calculeze. Refuză un rezultat în loc să inventeze unul.',
     regimeNotComputable:
       'Regimul fiscal din profil nu este unul pe care acest pachet de reguli să îl poată calcula. Aplicația refuză un rezultat în loc să inventeze unul.',
+    /**
+     * PG-6b — the profile has not declared its activity family.
+     *
+     * This sentence frames a gap, it does not announce one: the figure stays on screen because the app can
+     * still produce it from the records it holds, and what is missing is the fact that decides whether the
+     * rules used are the right ones. It therefore says what was not asked, what the figure assumes, and
+     * that the app will not guess from a CAEN code — `research/30` §3 records that OMFP 925/2017 art. 2
+     * alin. (4) keys the determination method to the activity description „independent de codurile CAEN
+     * menționate cu titlu exemplificativ”, so a code is not evidence about how the law taxes this person.
+     */
+    activityFamilyUndeclared:
+      'Profilul nu declară ce activitate desfășori, iar aplicația nu ghicește acest lucru din codul CAEN. Cifra de mai jos este calculată pe regulile de cheltuieli efective (sistem real); dacă activitatea ta se impune prin altă metodă legală, cifra nu este a ta.',
   } satisfies Record<ScenarioMessageKey, string>,
 
   /** The control the scenario points at. */

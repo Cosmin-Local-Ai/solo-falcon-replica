@@ -149,7 +149,7 @@ describe('a payload with no reserve field loads as null, not 0', () => {
     load();
     expect(storeRef!.dataOrigin).toBe('persisted');
     // PG-5 re-pin: the chain grew by the `annual-filing` step; the reserve contract is untouched.
-    expect(storeRef!.migration!.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing']);
+    expect(storeRef!.migration!.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family']);
     expect(storeRef!.reservedAmount).toBeNull();
     // And the next write stamps the current version — the upgrade is one-way and additive.
     expect(persisted().version).toBe(CURRENT_DATA_VERSION);

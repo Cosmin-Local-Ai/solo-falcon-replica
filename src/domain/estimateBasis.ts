@@ -822,6 +822,21 @@ export function selectDeductibleExpenses(
   context: ExpenseClassificationContext = {},
 ): DeductibleExpenseSet {
   const fiscalYear = data.profile.fiscalYear;
+  // PG-6b (B-29) — THREADING, NOT MECHANISM. The classifier has accepted an `activityFamily` since the
+  // rule was written, and nothing ever supplied one, which is why the art. 68^3 refusal was dead code
+  // (PG-6a's handoff names this as the one thing 6b had to fix). The fact lives on the profile, and this
+  // is the single place it is read into the classification context: every live path — the estimate, the
+  // coverage rows and the expense register — funnels through this function, so threading here is what
+  // keeps those three from disagreeing about which activity they classified. Threading it at the five
+  // call sites instead would have put the same fact in five places, where the sixth would forget it.
+  //
+  // The caller's own context still wins: a test or a later phase that hands in a per-record or
+  // per-call fact is not overwritten by the profile. And absence stays absence — `undefined` is not
+  // coerced to `'other'`, because "not asked" and "answered: other" are different claims.
+  const ctx: ExpenseClassificationContext = {
+    activityFamily: data.profile.activityFamily,
+    ...context,
+  };
   const empty: DeductibleExpenseSet = {
     records: [],
     lines: [],
@@ -835,7 +850,7 @@ export function selectDeductibleExpenses(
 
   // Checked ONCE for the whole set: where the law supplies no expense engine there is no category to
   // resolve, and classifying into nothing would produce a confident wrong number (defect B-29).
-  const refusal = expenseEngineRefusal(context, rules, { taxYear: fiscalYear, asOfDate });
+  const refusal = expenseEngineRefusal(ctx, rules, { taxYear: fiscalYear, asOfDate });
   if (refusal) return { ...empty, refusal };
 
   // TASK 10b — the ledger is read in lei. A record written in a foreign currency is converted at the BNR
@@ -887,7 +902,7 @@ export function selectDeductibleExpenses(
     }
 
     const c = classifyExpenseDeductibility(
-      { category: e.category, context },
+      { category: e.category, context: ctx },
       rules,
       { taxYear: fiscalYear, asOfDate: fiscalDate },
     );
