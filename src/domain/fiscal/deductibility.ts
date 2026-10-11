@@ -232,7 +232,11 @@ export type UndeterminedExpense = {
 
 export type RefusedExpense = {
   status: 'refused';
-  /** Art. 68^3 leaves no expense engine to classify into. The app must decline, not compute. */
+  /**
+   * Art. 68^3 routes expenses through a flat 30 % ratio instead of into the categories this classifier
+   * holds, so there is nothing here to classify into. This build has no flat-ratio engine and declines;
+   * D-CAZ-1 assigns that engine to PG-6h, which will read the same `activityFamily` fact to pick a method.
+   */
   rule: FiscalRule;
   reason: string;
 };

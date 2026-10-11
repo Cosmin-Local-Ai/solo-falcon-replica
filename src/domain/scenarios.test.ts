@@ -95,7 +95,8 @@ describe('the registered scenarios fire on recorded facts only', () => {
     const outcomes = evaluateScenarios(facts({}, refusal));
     const fired = scenarioRefusal(outcomes);
     expect(fired?.id).toBe('no-expense-engine');
-    expect(fired?.detail).toContain('nu lasă niciun motor de cheltuieli');
+    // D-CAZ-1: the sentence names this build's gap, not a permanent verdict on the activity.
+    expect(fired?.detail).toContain('nu o implementă încă');
   });
 
   it('no activity-family fact means no scenario — the app holds the gap and invents no answer', () => {

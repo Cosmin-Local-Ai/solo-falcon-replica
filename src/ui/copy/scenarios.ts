@@ -23,8 +23,15 @@ export const scenarios = {
    * without a sentence is a compile error here rather than a raw token on screen.
    */
   messages: {
+    /**
+     * The art. 68^3 accommodation case. D-CAZ-1 (`docs/ai/USER_DECISIONS.md`) decided this regime is
+     * supported, not permanently refused, and PG-6h builds it — so the sentence says the app does not
+     * implement the method **yet**, never that the activity cannot be calculated. It still refuses, because
+     * today the only calculation this build has is the effective-expense one, and applying it to
+     * accommodation income would produce a figure under rules that are not that taxpayer's.
+     */
     noExpenseEngine:
-      'Pentru această activitate legea nu lasă o bază pe cheltuieli înregistrate, iar aplicația nu are cum să calculeze. Refuză un rezultat în loc să inventeze unul.',
+      'Pentru această activitate legea a ales o altă metodă de calcul, pe o cotă forfetară de cheltuieli, iar aplicația încă nu implementează metoda aceasta. Refuză un rezultat în loc să aplice asupra venitului tău regulile unei alte activități.',
     regimeNotComputable:
       'Regimul fiscal din profil nu este unul pe care acest pachet de reguli să îl poată calcula. Aplicația refuză un rezultat în loc să inventeze unul.',
     /**

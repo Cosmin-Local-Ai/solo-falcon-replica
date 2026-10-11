@@ -78,6 +78,22 @@ describe('the activity family reaches the hero state', () => {
     expect(Number.isInteger(unanswered.completeness.coverage.recordedBani)).toBe(true);
   });
 
+  it('answering no moves no figure at all — the same register, the same lines, the same total', async () => {
+    // Acceptance 2. The pre-6b state is a profile with no activity-family fact anywhere; the post-6b state
+    // is the same profile declaring 'other'. Both must produce identical output, because 'other' is the
+    // family the classifier already used by default. If this test moved a number, the new field would be
+    // changing the arithmetic rather than declaring which arithmetic applies — the same defect this phase
+    // exists to remove, reintroduced from the other side.
+    pinClock(fixedInstant());
+    const before = await getTaxEstimate(unansweredData(), '2026-10-31');
+    const after = await getTaxEstimate(profileData({ activityFamily: 'other' }), '2026-10-31');
+    if (before.status !== 'computed' || after.status !== 'computed') {
+      throw new Error('expected both estimates to compute');
+    }
+    expect(after.output).toEqual(before.output);
+    expect(after.output.total).toBe(before.output.total);
+  });
+
   it('a profile that declares cazare is `refused`: no figure, and the refusal carries the fix route', async () => {
     pinClock(fixedInstant());
     const data = profileData({ activityFamily: 'cazare' });

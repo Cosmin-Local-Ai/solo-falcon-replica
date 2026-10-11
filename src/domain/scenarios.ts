@@ -140,21 +140,45 @@ export interface ScenarioOutcome {
  * It lives here rather than in `estimateBasis.ts` because the scenario channel is what renders it:
  * the assembler no longer composes a refusal sentence of its own, it hands the classifier's refusal
  * to the registry and the registry says it once.
+ *
+ * The framing is about **this build's** capability, and the wording is deliberate. D-CAZ-1
+ * (`docs/ai/USER_DECISIONS.md`) decided that art. 68^3 accommodation income will be supported, not
+ * permanently refused: PG-6h implements it. So this sentence says the rule asks for a method this rule
+ * package does not implement **yet** — it does not say the activity can never be calculated, because
+ * that would be a verdict the product has already decided against, and a user reading it would stop
+ * looking for the feature that is coming.
  */
 export function estimateRefusalReason(refusal: RefusedExpense): string {
   return (
-    `Calculul anual s-a oprit: regula ${refusal.rule.ruleId} (${refusal.rule.sourceArticle}) nu lasă niciun motor de cheltuieli pentru această activitate. ` +
+    `Calculul anual s-a oprit: regula ${refusal.rule.ruleId} (${refusal.rule.sourceArticle}) cere o metodă de calcul pe care acest pachet de reguli nu o implementă încă pentru această activitate. ` +
     refusal.reason
   );
 }
 
 /**
- * The activity has no expense engine at all (CF art. 68^3, defect B-29).
+ * The activity has no expense engine **in this build** (CF art. 68^3, defect B-29).
  *
- * This is the one scenario that already refused before this module existed — it is here so the
- * framework demonstrably carries a live case rather than only demo ones. It does not detect the
- * activity family: the classifier does, from the rule's own condition, and this entry only carries
- * the answer to the surface. Supplying the fact that would make it fire in real data is PG-6b.
+ * This is the one scenario that already refused before this module existed — it is here so the framework
+ * demonstrably carries a live case rather than only demo ones. It does not detect the activity family:
+ * the classifier does, from the rule's own condition, and this entry only carries the answer to the
+ * surface. PG-6b supplied the fact that makes it fire in real data — `profile.activityFamily`, asked and
+ * stored, never inferred from a CAEN code.
+ *
+ * **How PG-6h flips this, and why the fact stays put.** D-CAZ-1 decided accommodation income is supported,
+ * not refused. The separation that makes that cheap is the one this entry keeps:
+ *
+ * - the **fact** lives on the profile (`activityFamily: 'cazare'`) and is a declared description, not a
+ *   flag meaning "refuse me". PG-6h reads the same value to *choose a method*; nothing about it changes,
+ *   so flipping the effect is not a data migration and no stored payload needs a new version;
+ * - the **effect** lives here and in the rule's `treatment: 'no_expense_engine'`. PG-6h replaces that
+ *   treatment with a computed path; this entry then stops firing because `facts.classifierRefusal` goes
+ *   null, and the id, the message key and the `fixTarget` stay where they are for the next scenario that
+ *   needs them.
+ *
+ * What 6b deliberately does **not** do is pre-build any part of that path — no 30 % ratio, no 10 % rate,
+ * no room threshold. `research/30` §10 leaves two questions open (whether the 68^3 net enters the CASS
+ * base and the 6-SM floor, and whether the ANAF order approving the new fișa de ocupare a fost published),
+ * and a number built on those gaps would be the exact defect this series removes.
  */
 const noExpenseEngineScenario: ScenarioSupport = {
   id: 'no-expense-engine',

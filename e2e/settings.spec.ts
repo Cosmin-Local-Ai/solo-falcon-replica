@@ -454,7 +454,16 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // as the two re-pins above — one more step, so the bytes written back carry one more version. What
     // this test exists for is untouched: the notice is still one long, `original` is still the verbatim
     // 674.504 and `converted` is still 67450 bani. The v11 step opens a collection and converts no amount.
-    expect(saved.version).toBe(11);
+    // Re-pinned 2026-10-11 (PG-6b): 11 → 12, because `activity-family` (11→12) follows it — the same
+    // discipline a fourth time: one more step, so the bytes written back carry one more version. What this
+    // test exists for is untouched: the notice is still one long, `original` is still the verbatim 674.504
+    // and `converted` is still 67450 bani. The v12 step writes a version and touches no value.
+    expect(saved.version).toBe(12);
+    // The v12 step's own half, asserted on the store's bytes: this legacy profile carried no activity
+    // family, and the step did not give it one. `'other'` here would have been exactly the default the
+    // brief forbids — it reads as "the ordinary rules apply", asserted by the migration rather than chosen
+    // by anybody who was asked. Absence is what comes back out.
+    expect('activityFamily' in saved.profile).toBe(false);
     // And the half of the v11 step that is a NON-write, asserted on the bytes: this payload carried no
     // `declarations` collection, so nothing was moved and nothing was invented. PG-5b re-pin: the monthly
     // key is now absent from the written bytes rather than present and empty — the record type is gone, so

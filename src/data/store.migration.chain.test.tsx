@@ -308,8 +308,7 @@ describe('migration chain (pure)', () => {
       'rule-set-digest',
       'record-currency',
       'annual-filing',
-
-    'activity-family',
+      'activity-family',
     ]);
     expect(outcome.data.version).toBe(CURRENT_DATA_VERSION);
   });
@@ -714,8 +713,7 @@ describe('load path runs the chain (acceptance criteria 2 and 3)', () => {
         'rule-set-digest',
         'record-currency',
         'annual-filing',
-
-      'activity-family',
+        'activity-family',
       ],
     });
     // Not the seed: the seed's ids are different.

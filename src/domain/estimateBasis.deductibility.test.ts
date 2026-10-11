@@ -282,7 +282,7 @@ describe('selectEstimateOperands — one assembler, feeding both selectors the s
     expect(operands.basis.kind).toBe('refused');
     expect(estimateFigureLabel(operands.basis)).toBe('Nu putem calcula');
     expect(estimateRefusalReason(operands.deductible.refusal!)).toContain(
-      'nu lasă niciun motor de cheltuieli',
+      'nu o implementă încă',
     );
     // PG-6a — the refusal is the registry's answer, not a branch of this function. The scenario id and
     // its fix route travel on the basis, so the hero can name the case and link to what settles it.

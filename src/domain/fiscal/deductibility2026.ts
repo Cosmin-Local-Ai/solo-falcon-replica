@@ -616,11 +616,11 @@ export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
   // ── Where the law says there is no expense engine at all (defect B-29) ─────────────────────────
   rule({
     ruleId: 'EXPENSE_ENGINE_CAZARE_2026',
-    name: 'Prestarea de servicii de cazare — regim forfetar 30%, fără cheltuieli deductibile',
+    name: 'Prestarea de servicii de cazare — cheltuieli forfetare de 30 %, fără evidență contabilă',
     category: '*',
     treatment: 'no_expense_engine',
     condition: 'activity_cazare',
-    missingFact: 'art. 68 alin. (1) excepts art. 68^1, 68^3 și 69. Art. 68^3 alin. (2): „Venitul net anual din prestarea de servicii de cazare se determină prin deducerea din venitul brut a cheltuielilor determinate prin aplicarea cotei forfetare de 30% asupra venitului brut." alin. (7) removes the accounting obligation entirely: „contribuabilii completează numai partea referitoare la venituri din Registrul de evidență fiscală și nu au obligații privind evidența contabilă." There is therefore NO expense classification for this activity from FY2026 — the app must decline, not compute.',
+    missingFact: 'art. 68 alin. (1) excepts art. 68^1, 68^3 și 69. Art. 68^3 alin. (2): „Venitul net anual din prestarea de servicii de cazare se determină prin deducerea din venitul brut a cheltuielilor determinate prin aplicarea cotei forfetare de 30% asupra venitului brut." alin. (7) removes the accounting obligation entirely: „contribuabilii completează numai partea referitoare la venituri din Registrul de evidență fiscală și nu au obligații privind evidența contabilă." There is therefore NO expense classification for this activity from FY2026: the flat ratio is a different engine, and this build does not have it yet. D-CAZ-1 (`docs/ai/USER_DECISIONS.md`) assigns that engine to PG-6h; until it exists the classifier declines rather than computing accommodation income on effective-expense rules.',
     note: 'Introduced by Legea nr. 239 din 15.12.2025 (MO 1160/15.12.2025), art. XII, applicable începând cu veniturile aferente anului 2026 (art. XIII alin. (2) lit. b)). Which CAEN falls under „prestarea de servicii de cazare" is itself a classification fact with a hard legal consequence, and the boundary is defined only by reference to the tourism-sector definitions — not analysed in research 21.',
     ...CF('art. 68 alin. (1) (excepția art. 68^1, 68^3 și 69); art. 68^3 alin. (2) și (7); introdus prin Legea nr. 239/2025 (MO 1160/15.12.2025), art. XII, aplicabil art. XIII alin. (2) lit. b)'),
   }),

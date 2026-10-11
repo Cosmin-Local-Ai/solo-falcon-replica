@@ -116,7 +116,7 @@ export const settings = {
      */
     activityFamily: 'Familia de activități declarată',
     activityFamilyHint:
-      'Faptă declarată de tine, nu dedusă din codul CAEN. Determină dacă regula de calcul este cea a cheltuielilor efective sau una pentru care acest pachet de reguli nu are calcul.',
+      'Fapt declarat de tine, nu dedus din codul CAEN. Determină dacă regula de calcul este cea a cheltuielilor efective sau una pentru care acest pachet de reguli nu are încă calcul.',
     activityFamilyUnanswered:
       'Fără răspuns. Calculul de pe tabloul de bord folosește regulile cheltuielilor efective; dacă activitatea ta se impune prin altă metodă, aplicația semnalează că acest fapt lipsește în loc să ghicească.',
     activityFamilyOptions: {
