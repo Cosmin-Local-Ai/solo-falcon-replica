@@ -12,21 +12,22 @@
  * rules, no internet, no UI.
  */
 import type {
+  AnnualFiling,
   AppData,
   Client,
   CompanyDocument,
-  Declaration,
   DocTypeCode,
   DocumentItem,
   Expense,
   Revenue,
   TaxStatement,
 } from '../data/types';
+import { isFiledFiling } from '../data/types';
 import type { PfaProfile } from './models';
 import { expenseFiscalDate, inPeriod, revenueFiscalDate } from './aggregation';
 import { sumBani, type Bani } from './money';
 import { isGapReason, type EstimateCoverageGap } from './estimateBasis';
-import { isoCalendarDateProblem } from './date';
+import { formatRoCalendarDate, isoCalendarDateProblem } from './date';
 
 /** One concrete, checkable fact about data completeness. */
 export interface CompletenessCheck {
@@ -202,14 +203,105 @@ function companyDocumentCheck(
   return { key: 'companyDocuments', satisfied: total > 0, detail };
 }
 
-/** declarations present. */
-function declarationCheck(declarations: Declaration[] | null | undefined): CompletenessCheck {
-  const list = asArray(declarations);
+/**
+ * The annual return for the year this view is about — PG-5 replaces "any declaration exists".
+ *
+ * The old predicate was `list.length > 0`: it was satisfied by a monthly row for any year, and
+ * unsatisfied forever on a profile that had correctly filed nothing yet. Neither answer described the
+ * fact. What is actually checkable is narrower and depends on which year is being looked at:
+ *
+ * - a filed return for this tax year → satisfied, and it is the same fact the deadline is marked done
+ *   from (`domain/deadlines.ts isDeadlineDone`) — one predicate, two surfaces;
+ * - a return recorded but not filed → NOT satisfied, and the detail says which half is missing;
+ * - no return, and the term has not arrived → satisfied. Nothing is missing from the data; the
+ *   obligation simply is not owed yet. This is the half that made "Date lipsă: Declarații" a
+ *   permanent action on a profile whose only return was due in May of the following year;
+ * - no return, and the term has passed → not satisfied, naming the term that passed;
+ * - no return and no term at all (no rule package for that year) → not satisfied, and the detail says
+ *   the term is unknown rather than inventing one.
+ *
+ * `term` is passed in, never derived here: the date comes from the rule package through the deadline
+ * engine, and a completeness layer that computed its own statutory date would be a second source of
+ * the law.
+ */
+function annualFilingCheck(
+  filings: readonly AnnualFiling[] | null | undefined,
+  taxYear: number,
+  term: string | null,
+  asOfDate: string | null,
+): CompletenessCheck {
+  const label = `Declarația unică (D212) pentru ${taxYear}`;
+  const list: readonly AnnualFiling[] = Array.isArray(filings) ? filings : [];
+  const filing = list.find((f) => f.form === 'D212' && f.taxYear === taxYear) ?? null;
+
+  if (filing !== null && isFiledFiling(filing)) {
+    return {
+      key: 'annualFiling',
+      satisfied: true,
+      detail: `${label} depusă${filing.filedOn ? ` pe ${formatRoCalendarDate(filing.filedOn)}` : ' (fără dată de depunere înregistrată)'}`,
+    };
+  }
+  if (filing !== null) {
+    return {
+      key: 'annualFiling',
+      satisfied: false,
+      detail: `${label} este înregistrată în aplicație dar nu este depusă`,
+    };
+  }
+  if (term !== null && asOfDate !== null && asOfDate <= term) {
+    return {
+      key: 'annualFiling',
+      satisfied: true,
+      detail: `${label} nu se datorează încă — termenul este ${formatRoCalendarDate(term)}`,
+    };
+  }
+  if (term !== null) {
+    return {
+      key: 'annualFiling',
+      satisfied: false,
+      detail: `${label} nu este înregistrată; termenul a fost ${formatRoCalendarDate(term)}`,
+    };
+  }
   return {
-    key: 'declarations',
-    satisfied: list.length > 0,
+    key: 'annualFiling',
+    satisfied: false,
+    detail: `${label}: termenul nu poate fi stabilit — niciun pachet de reguli pentru ${taxYear}`,
+  };
+}
+
+/**
+ * B-35 — the VAT filing period, stated as the unknown it is.
+ *
+ * CF art. 322 alin. (1)-(4) makes the VAT fiscal period the quarter when the previous year's taxable
+ * supplies stayed under the 100.000 € equivalent, and the month otherwise. Which of those a taxpayer
+ * is turns on the VAT registration date and the prior-year taxable supplies. This dataset records
+ * neither: `vatExempt` says only that the taxpayer is not exempt, and `vatExceedanceDate` is the date
+ * the ceiling was crossed, which a taxpayer registered from the start never had. So the honest output
+ * is the sentence the brief asks for, and the check asks for the fact.
+ *
+ * A profile that IS exempt is a real satisfied state, not a dodge: scutirea de TVA removes the
+ * periodic return, so there is no period to establish.
+ */
+function vatFilingPeriodCheck(profile: PfaProfile | null | undefined): CompletenessCheck {
+  if (profile == null) {
+    return {
+      key: 'vatFilingPeriod',
+      satisfied: false,
+      detail: 'perioada de depunere pentru declarația de TVA nu poate fi stabilită — profil lipsă',
+    };
+  }
+  if (profile.vatExempt) {
+    return {
+      key: 'vatFilingPeriod',
+      satisfied: true,
+      detail: 'scutit de TVA — nicio declarație periodică de TVA de depus',
+    };
+  }
+  return {
+    key: 'vatFilingPeriod',
+    satisfied: false,
     detail:
-      list.length > 0 ? ro(list.length, 'declarație prezentă', 'declarații prezente') : 'nu există declarații',
+      'perioada de depunere nu poate fi stabilită — completează data înregistrării în TVA și venitul de TVA pe anul precedent (CF art. 322 alin. (1)-(4))',
   };
 }
 
@@ -288,11 +380,17 @@ function amountCoverage(
  * was complete. A run is not a coverage result: the same profile that dropped an uncategorised expense
  * out of the base still had a computed snapshot, so the check was satisfied by exactly the failure it
  * was supposed to catch. Coverage is now measured directly, from the gaps the assembler reports.
+ *
+ * PG-5 changed the tenth check's question, not its mechanism. `declarations` asked whether any
+ * declaration record existed; `annualFiling` asks whether the return this fiscal year owes is on the
+ * record, and `vatFilingPeriod` states the one periodic obligation whose period the recorded facts
+ * cannot fix. Both route through this one report — no second warning channel beside it.
  */
 export function assessCompleteness(
   data: AppData,
   gaps: readonly EstimateCoverageGap[] = [],
   asOfDate?: string,
+  filingTerm: string | null = null,
 ): CompletenessReport {
   const checks = [
     profileCheck(data.profile),
@@ -301,7 +399,8 @@ export function assessCompleteness(
     clientCheck(data.clients),
     documentCheck(data.documents),
     companyDocumentCheck(data.companyDocs),
-    declarationCheck(data.declarations),
+    annualFilingCheck(data.filings, data.profile?.fiscalYear ?? 0, filingTerm, asOfDate ?? null),
+    vatFilingPeriodCheck(data.profile),
     statementCheck(data.statements),
   ];
   const satisfiedCount = checks.filter(c => c.satisfied).length;

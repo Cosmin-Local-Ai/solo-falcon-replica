@@ -6,7 +6,7 @@
  * modal captions, the same „Niciun rezultat pentru căutare." — and each copy used to keep its own
  * copy-paste of the sentence. One key now, shared.
  */
-import type { DeclStatus, ExpenseStatus, RevenueStatus } from '../../data/types';
+import type { DeclStatus, ExpenseStatus, FilingStatus, RevenueStatus } from '../../data/types';
 import type { ExpenseCategory } from '../../domain/fiscal/deductibility';
 import type { FiscalDateField } from '../../domain/aggregation';
 import { validation } from './common';
@@ -229,39 +229,58 @@ export const clients = {
 } as const;
 
 export const declarations = {
-  title: 'Declarații',
-  // TASK 9: this used to read 'Declarații fiscale lunare — IM, CS, TVA'. It stated a monthly filing
-  // cadence that does not exist for this profile: a persoană fizică autorizată în sistem real files the
-  // Declarația Unică 212 once a year, by 25 May of the following year (CF art. 122 alin. (3)), and the
-  // estimated-advance filings art. 120 / 120¹ were abrogated by OUG 128/2024 from 01-01-2025
-  // (docs/ai/research/12_quarterly_payment_deadlines_2026.md §6). The page is a register of the
-  // declaration records the app holds; it cannot promise a statutory cadence it does not model, and the
-  // seed no longer carries monthly rows for the old wording to describe.
-  subtitle: 'Declarații fiscale — ce ai înregistrat în aplicație',
-  searchPlaceholder: 'Caută după perioadă…',
-  add: 'Adaugă declarație',
-  addTitle: 'Adaugă declarație',
-  editTitle: (perioada: string): string => `Editează declarația ${perioada}`,
-  emptyTitle: 'Nicio declarație în această categorie',
-  emptyBody: 'Adăugați prima declarație pentru a o vedea aici.',
-  added: (perioada: string): string => `Declarația ${perioada} a fost adăugată`,
-  updated: (perioada: string): string => `Declarația ${perioada} a fost actualizată`,
-  submitted: (perioada: string): string => `Declarația ${perioada} a fost transmisă`,
-  submit: 'Transmite',
-  submittedOn: 'Trimisă',
-  year: 'An',
-  month: 'Lună',
-  revenue: 'Venituri (RON)',
-  expenses: 'Cheltuieli (RON)',
-  registrationDate: 'Data înregistrării',
+  title: 'Declarația unică (D212)',
+  // PG-5 (B-34): the page is annual now. The record it registers is the one return this profile
+  // actually owes — a Declarația Unică 212 per fiscal year, filed by 25 May of the following year
+  // (CF art. 122 alin. (3)) — not a monthly row for an obligation that does not exist. TASK 9 had
+  // already removed the monthly cadence claim from the old subtitle; this removes the shape that
+  // implied it.
+  subtitle: 'Câte o declarație pentru fiecare an fiscal declarat — nu pe lună',
+  searchPlaceholder: 'Caută după an fiscal…',
+  add: 'Adaugă declarație anuală',
+  addTitle: 'Adaugă declarație anuală',
+  editTitle: (taxYear: number): string => `Editează declarația pentru ${taxYear}`,
+  emptyTitle: 'Nicio declarație anuală înregistrată',
+  // States the obligation without pretending the app knows it was met: the term is the rule engine's,
+  // the article is the citation the rule carries, and whether a return is owed yet is a fact about the
+  // year, not a prompt to invent one.
+  emptyBody: 'Aplicația înregistrează aici declarațiile pe care le-ai depus sau le pregătești. Termenul și anului declarat i le dă motorul de reguli.',
+  added: (taxYear: number): string => `Declarația pentru ${taxYear} a fost adăugată`,
+  updated: (taxYear: number): string => `Declarația pentru ${taxYear} a fost actualizată`,
+  markFiled: 'Marchează ca depusă',
+  filed: (taxYear: number): string => `Declarația pentru ${taxYear} este înregistrată ca depusă`,
+  form: 'Formular',
+  taxYear: 'An fiscal declarat',
+  filedOn: 'Data depunerii',
+  filedOnHint: 'Se completează doar când declarația a fost efectiv depusă.',
+  filedOnRequired: 'O declarație marcată „Depusă” are nevoie de data depunerii.',
+  reference: 'Număr de înregistrare / referință',
+  referenceHint: 'Dacă ANAF ți-a dat un număr de înregistrare, notează-l aici.',
+  statusRequired: 'Alege starea declarației.',
   columns: {
+    taxYear: 'An fiscal',
+    form: 'Formular',
+    status: 'Status',
+    filedOn: 'Depusă la',
+    reference: 'Referință',
+  },
+  /**
+   * PG-5: the monthly rows a pre-v11 install carried, shown read-only.
+   *
+   * The wording does two things at once: it says the rows were kept (they are the only place some of
+   * those figures exist), and it refuses to let them mean more than they do. They are not filings, and
+   * the app will not treat one as proof that anything was submitted.
+   */
+  legacyTitle: 'Înregistrări lunare dintr-o versiune veche a aplicației',
+  legacyNote:
+    'Rândurile de mai jos vin dintr-o versiune veche, care înregistra declarații pe lună. Un PFA în sistem real depune o singură Declarație Unică pe an fiscal, deci rândurile nu sunt depuneri și nu dovedesc că ceva a fost transmis. Le păstrăm ca să nu pierzi informația, dar nu se mai pot adăuga sau modifica.',
+  legacyEmpty: 'Nicio înregistrare lunară moștenită.',
+  legacyColumns: {
     period: 'Perioadă',
-    year: 'An',
-    month: 'Lună',
     revenue: 'Venituri',
     expenses: 'Cheltuieli',
-    taxableBase: 'Baza impozabilă',
     status: 'Status',
+    registeredOn: 'Înregistrată la',
   },
   months: [
     'Ianuarie', 'Februarie', 'Martie', 'Aprilie', 'Mai', 'Iunie',
@@ -287,6 +306,17 @@ export const recordStatus = {
     transmisa: 'Transmisa',
     respinsa: 'Respinsă',
   } satisfies Record<DeclStatus, string>,
+  /**
+   * PG-5: the annual return's own three states, kept separate from `labels` above on purpose. The
+   * monthly words describe a record in this app; `depusa` is the only word in the app that says a
+   * return reached ANAF, and sharing a label map between the two is how a monthly 'Înregistrată' could
+   * be read as a filing.
+   */
+  filingLabels: {
+    in_pregatire: 'În pregătire',
+    depusa: 'Depusă',
+    respinsa: 'Respinsă',
+  } satisfies Record<FilingStatus, string>,
   revenueLabels: {
     inregistrata: 'Înregistrată',
     'in-asteptare': 'În așteptare',

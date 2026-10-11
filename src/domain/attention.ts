@@ -276,16 +276,16 @@ interface RecordSource {
     statusDetail?: string;
     valoareFaraTva: Money;
   }[];
-  declarations: readonly {
-    id: string;
-    an: number;
-    luna: number;
-    status: string;
-    dataInregistrare: string;
-    dataTrimitere?: string;
-    venituri: Bani;
-  }[];
-}
+  /**
+   * PG-5: the pre-v11 monthly rows are deliberately NOT a source of attention items.
+   *
+   * An action row for one of them read „Declarație fără depunere înregistrată: 2026-06” — which asserts
+   * a submission this profile does not owe. A PFA în sistem real files one Declarația Unică per fiscal
+   * year; there is no monthly return for a monthly row to be missing. The rows are preserved and shown
+   * on the Declarations page, but they are inert: they generate no obligation, and the annual filing
+   * model (`AnnualFiling`, `domain/deadlines.ts`) is what carries the obligation that does exist.
+   */
+} 
 
 /**
  * Severity for a record, decided once. It is NOT read off `status`: a rejected income document and a
@@ -364,29 +364,6 @@ export function unresolvedRecords(data: RecordSource): UnresolvedRecord[] {
         amountNet: e.valoareFaraTva,
       });
     }
-  }
-
-  for (const d of data.declarations) {
-    // `transmisa` carries a submission date and is settled, and so does `inregistrata`: the app holds
-    // no expectation that a merely-registered declaration was due to be filed, so calling it
-    // unresolved would invent a reason the record does not state. `in-asteptare` and `respinsa` are the
-    // record's own "not settled" markers — the same words the revenue register uses.
-    if (d.status !== 'in-asteptare' && d.status !== 'respinsa') continue;
-    if (d.dataTrimitere) continue;
-    out.push({
-      kind: 'declaration',
-      id: d.id,
-      reference: periodLabel(d.an, d.luna),
-      status: d.status,
-      date: d.dataInregistrare,
-      state: d.status === 'respinsa' ? 'rejected' : 'not_submitted',
-      severity: recordSeverity('declaration', d.status === 'respinsa' ? 'rejected' : 'not_submitted'),
-      reason: null,
-      eFacturaStatus: null,
-      registeredOn: d.dataInregistrare,
-      submittedOn: d.dataTrimitere ?? null,
-      amountNet: money(d.venituri, 'RON'),
-    });
   }
 
   return out;

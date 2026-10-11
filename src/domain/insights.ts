@@ -9,6 +9,11 @@ import { formatBaniRON } from './money';
 // `data documentului`), one idea — the B-70 mistake in miniature. The copy layer owns the words, so
 // the domain reads them from there instead of re-spelling them.
 import { fiscalDateSource } from '../ui/copy/records';
+// PG-5: the deadline family's Romanian moved to `ui/copy/dashboard.ts` for the same reason PG-4 moved
+// the fiscal-date words — this file had its own `DEADLINE_LABELS`, a third spelling of the same seven
+// keys, and its D212 row read "PFA". A term that names only an audience is not actionable: the row now
+// names the return and the year it declares.
+import { deadlineLabelFor } from '../ui/copy/dashboard';
 import {
   deadlineSeverity,
   sortAttention,
@@ -54,25 +59,19 @@ export interface InsightInput {
 // string comes from `formatBaniRON`, which performs no rounding at all.
 
 
-// ── Romanian label maps (never render raw keys) ────────────
+// ── Romanian labels (never render raw keys) ───────────────
 //
 // Phase 9b removed `cas_quarterly`, `cass_quarterly` and `pfa_estimated_declaration` — those
 // obligations do not exist in fiscal year 2026 (see the `DeadlineEventType` doc comment in
 // src/domain/deadlines.ts). `new_pfa` keeps its key but no longer reads "Declarație estimativă
 // PFA": that label named an obligation abrogated on 01-01-2025, and no rule emits `new_pfa` today.
+//
+// The words themselves live in `ui/copy/dashboard.ts` (`deadlineLabels` / `deadlineLabelFor`), together
+// with the card's audience chip (`deadlineAppliesToLabels`). An unknown key renders its RAW key there,
+// not a plausible generic — see the pin in `src/domain/insights.labels.test.ts`.
 
 /** Fiscal date field → Romanian lives in `ui/copy/records.ts` (`fiscalDateSource`). Raw property
  *  names are never rendered, and the three words are spelled in exactly one place. */
-
-const DEADLINE_LABELS: Record<string, string> = {
-  pfa: 'PFA',
-  new_pfa: 'PFA nou',
-  'vat-registered-pfa': 'Înregistrare în scop de TVA',
-  cas_annual: 'CAS anual',
-  cass_annual: 'CASS anual',
-  vat_periodic: 'TVA periodic',
-  vat_registration: 'Înregistrare în scop de TVA',
-};
 
 const THRESHOLD_LABELS: Record<string, string> = {
   'pfa-revenue': 'Venit PFA',
@@ -108,10 +107,6 @@ const COMPLETENESS_TARGETS: Record<string, AttentionTarget | null> = {
   statements: { href: '/documents#!/statements' },
   taxEstimate: null,
 };
-
-function deadlineLabel(label: string): string {
-  return DEADLINE_LABELS[label] ?? 'Termen fiscal';
-}
 
 function thresholdLabel(label: string): string {
   return THRESHOLD_LABELS[label] ?? 'Prag fiscal';
@@ -269,7 +264,7 @@ export function getInsights(input: InsightInput): AttentionItem[] {
   for (const d of snapshot.deadlines) {
     if (typeof d.daysUntil !== 'number' || !Number.isFinite(d.daysUntil)) continue;
     if (typeof d.date !== 'string' || d.date.length === 0) continue;
-    const label = deadlineLabel(d.label);
+    const label = deadlineLabelFor(d.label, snapshot.taxYear);
     const date = formatRoCalendarDate(d.date);
     const severity = deadlineSeverity(d.daysUntil);
     if (severity === 'none') continue;

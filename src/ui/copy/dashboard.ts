@@ -231,16 +231,46 @@ export const deadlineAppliesToLabels: Record<string, string> = {
   vat_registration: 'Înregistrare în scop de TVA',
 };
 
-/** The action list's shorter form of the same key. */
-export const actionAppliesToLabels: Record<string, string> = {
-  pfa: 'PFA',
-  new_pfa: 'PFA nou',
-  'vat-registered-pfa': 'Înregistrare în scop de TVA',
-  cas_annual: 'CAS anual',
-  cass_annual: 'CASS anual',
-  vat_periodic: 'TVA periodic',
-  vat_registration: 'Înregistrare în scop de TVA',
+/**
+ * PG-5 — what a deadline row IS, named for the taxpayer rather than for the rule's audience key.
+ *
+ * `deadlineAppliesToLabels` above answers „cui i se aplică?” and stays a chip. This answers „ce
+ * termen este?” for the action row, and it takes the tax year because a return is identified by the
+ * year it declares: „Termen depășit: PFA” told a taxpayer that something was late without saying what,
+ * and the D212 row used to read exactly that way.
+ *
+ * Replaces `actionAppliesToLabels`, which was the same seven keys spelled a third time and had no call
+ * site — the B-70 shape (one idea, several spellings) in the language layer.
+ */
+export const deadlineLabels: Record<string, (taxYear: number) => string> = {
+  pfa: (taxYear) => `Declarația unică (D212) pentru ${taxYear}`,
+  new_pfa: () => 'Declarația unică a unui PFA nou',
+  'vat-registered-pfa': () => 'Înregistrare în scop de TVA',
+  cas_annual: () => 'Declarație și plată CAS',
+  cass_annual: () => 'Declarație și plată CASS',
+  vat_periodic: () => 'Declarație periodică de TVA',
+  vat_registration: () => 'Înregistrare în scop de TVA',
 };
+
+/**
+ * The label for one deadline row.
+ *
+ * An unknown key renders its RAW key. It used to render 'Termen fiscal', a plausible generic that
+ * made a brand-new obligation look handled; a raw key on screen is ugly in a way the reader notices,
+ * and `src/domain/insights.labels.test.ts` fails on it before it can ship.
+ */
+export function deadlineLabelFor(appliesTo: string, taxYear: number): string {
+  const phrase = deadlineLabels[appliesTo];
+  return phrase ? phrase(taxYear) : appliesTo;
+}
+
+/**
+ * B-35, in one sentence with one home. The completeness check and the Termene limită card both say
+ * this, and they say it with the same words: the obligation exists, and the facts that would fix its
+ * period (CF art. 322 alin. (1)-(4)) are not in the record.
+ */
+export const vatFilingPeriodUnknown =
+  'Perioada de depunere nu poate fi stabilită — completează data înregistrării în TVA și venitul de TVA pe anul precedent (CF art. 322 alin. (1)-(4)).';
 
 export const deadlines = {
   title: 'Termene limită',
@@ -249,6 +279,11 @@ export const deadlines = {
   notApplicable: 'Neaplicabil',
   oneDayLeft: '1 zi rămasă',
   daysLeft: (n: number): string => `${n} zile rămase`,
+  /** PG-5: a term the record already discharges says so, instead of going quiet. */
+  doneBadge: 'Depusă',
+  filedOn: (date: string): string => `Depusă pe ${date}`,
+  /** PG-5 / B-35: the section for terms the rules resolved but the facts cannot date. */
+  undatedLead: 'Termen a cărui perioadă nu poate fi stabilită',
   statusLabels: {
     active: 'Activ',
     not_applicable: 'Neaplicabil',
@@ -298,7 +333,13 @@ export const CHECK_LABELS: Record<string, string> = {
   clients: 'Clienți',
   documents: 'Documente',
   companyDocuments: 'Documente de firmă',
-  declarations: 'Declarații',
+  /**
+   * PG-5: `declarations` is gone with the check it labelled — „any declaration record exists” was
+   * satisfied by a monthly row for any year and unsatisfied forever on a profile that had correctly
+   * filed nothing yet. `annualFiling` asks about the return this fiscal year owes.
+   */
+  annualFiling: 'Declarația unică (D212)',
+  vatFilingPeriod: 'Perioada de depunere TVA',
   statements: 'Declarații fiscale',
 };
 

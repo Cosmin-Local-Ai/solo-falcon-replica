@@ -30,7 +30,9 @@ export {
   CHECK_LABELS,
   checkLabel,
   deadlineAppliesToLabels,
-  actionAppliesToLabels,
+  deadlineLabels,
+  deadlineLabelFor,
+  vatFilingPeriodUnknown,
 } from './dashboard';
 export {
   thresholds,
@@ -64,7 +66,8 @@ import {
 } from './common';
 import {
   dashboard, chart, summary, insights, reserve, actions, deadlines, completeness,
-  legislation, moneyPrecision, checkLabel, deadlineAppliesToLabels, actionAppliesToLabels,
+  legislation, moneyPrecision, checkLabel, deadlineAppliesToLabels, deadlineLabels,
+  deadlineLabelFor, vatFilingPeriodUnknown,
 } from './dashboard';
 import {
   thresholds, thresholdStatusLabels, measuredBasisLabels, thresholdDomainLabels,
@@ -85,7 +88,8 @@ import {
 export const copy = {
   ui, disclosure, noteLabel, fields, validation, empty, nav, shell,
   dashboard, chart, summary, insights, reserve, actions, deadlines, completeness,
-  legislation, moneyPrecision, checkLabel, deadlineAppliesToLabels, actionAppliesToLabels,
+  legislation, moneyPrecision, checkLabel, deadlineAppliesToLabels, deadlineLabels,
+  deadlineLabelFor, vatFilingPeriodUnknown,
   thresholds, thresholdStatusLabels, measuredBasisLabels, thresholdDomainLabels,
   thresholdRowLabels, thresholdKindLabels,
   notes, sources,

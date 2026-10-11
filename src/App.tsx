@@ -13,6 +13,7 @@ import Clients from './pages/Clients';
 import Settings from './pages/Settings';
 import OnboardingPage from './pages/Onboarding';
 import { Toasts } from './components/ui';
+import { FiscalYearAdvance } from './components/dashboard/YearLifecycleBanner';
 import { disclosure, nav, onboarding as onboardingCopy, shell } from './ui/copy';
 
 export type Page =
@@ -74,9 +75,6 @@ interface Route {
 const VALID_TABS: Partial<Record<Page, string[]>> = {
   revenues: ['registered', 'pending', 'rejected'],
   expenses: ['registered', 'rejected'],
-  // The declarations register keys its tabs off the declaration's own status; the attention target for
-  // a declaration with no recorded submission needs to land on the tab that holds it.
-  declarations: ['inregistrata', 'in-asteptare', 'transmisa', 'respinsa'],
   documents: ['company', 'statements', 'reports'],
   // Mirrors the live SOLO settings tabs (docs/reference/settings.md);
   // the real app's "Abonament" (subscription) tab is not replicated.
@@ -160,7 +158,7 @@ function Shell() {
   const pendingCount =
     pendingCounts.revenuesInAsteptare +
     pendingCounts.expensesRespinsa +
-    pendingCounts.declarationsInAsteptare;
+    pendingCounts.filingsInAsteptare;
 
   const navigate = useCallback((page: Page, tab: string | null = null) => {
     const url = routeToUrl(page, tab);
@@ -213,6 +211,9 @@ function Shell() {
 
   return (
     <div className="app">
+      {/* PG-5 (B-73): the fiscal-year advance is mounted here, not on the dashboard, so it does not
+          depend on which page a person opens first on 2 January. It renders nothing. */}
+      <FiscalYearAdvance />
       <aside
         className={`sidebar${navOpen ? ' open' : ''}`}
         aria-hidden={isMobile && !navOpen}
@@ -333,11 +334,7 @@ function Shell() {
           )}
           {route.page === 'e-factura' && <EFactura />}
           {route.page === 'declarations' && (
-            <Declarations
-              initialTab={route.tab as 'inregistrata' | 'in-asteptare' | 'transmisa' | 'respinsa' | undefined}
-              onTabChange={t => navigate('declarations', t)}
-              focusRecord={route.focus ?? undefined}
-            />
+            <Declarations focusRecord={route.focus ?? undefined} />
           )}
           {route.page === 'documents' && (
             <Documents

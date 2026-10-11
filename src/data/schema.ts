@@ -10,6 +10,7 @@ import type { RuleRelease } from '../domain/fiscal/rules';
 import { EXPENSE_CATEGORIES } from '../domain/fiscal/deductibility';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import type {
+  AnnualFiling,
   Client,
   CompanyDocument,
   Declaration,
@@ -149,6 +150,24 @@ export const declarationSchema = z.object({
   status: z.enum(['inregistrata', 'in-asteptare', 'transmisa', 'respinsa']),
   dataInregistrare: z.string(),
   dataTrimitere: z.string().optional(),
+});
+
+/**
+ * PG-5 (B-34): the annual return. `taxYear` is the year the return DECLARES, so the FY2026 return
+ * carries `taxYear: 2026` and a `filedOn` in 2027 — the shape a monthly `{an, luna}` record could not
+ * hold, which is the whole of B-34.
+ *
+ * `status` is deliberately NOT the monthly `DeclStatus`: `depusa` is the only value that says a filing
+ * happened, and keeping the two vocabularies apart is what stops a monthly `'inregistrata'` row from
+ * being read as proof of a submission.
+ */
+export const annualFilingSchema = z.object({
+  id: nonEmptyString,
+  taxYear: z.number().int(),
+  form: z.enum(['D212']),
+  status: z.enum(['in_pregatire', 'depusa', 'respinsa']),
+  filedOn: z.string().optional(),
+  reference: z.string().optional(),
 });
 
 export const documentItemSchema = z.object({
@@ -315,7 +334,17 @@ export interface PersistedAppData {
   revenues: Revenue[];
   expenses?: Expense[];
   clients?: Client[];
+  /**
+   * The pre-v11 monthly rows, kept declared AFTER the rename so zod cannot strip them before the
+   * `annual-filing` step has read them. Zod strips undeclared keys: dropping this line would erase a
+   * user's monthly records on load, before any migration code ever saw them. The v10→v11 step moves
+   * them to `legacyDeclarations`; this key is what carries them into that step.
+   */
   declarations?: Declaration[];
+  /** PG-5: the annual returns. Absent means none recorded — never backfilled. */
+  filings?: AnnualFiling[];
+  /** PG-5: the monthly rows preserved by the v10→v11 step, read-only. */
+  legacyDeclarations?: Declaration[];
   documents?: DocumentItem[];
   companyDocs?: Record<DocTypeCode, CompanyDocument[]>;
   statements?: TaxStatement[];
@@ -361,7 +390,11 @@ export const persistedAppDataSchema = z.object({
   revenues: z.array(revenueSchema),
   expenses: z.array(expenseSchema).optional(),
   clients: z.array(clientSchema).optional(),
+  // PG-5: declared, not dropped — see `PersistedAppData.declarations`. The v10→v11 step reads this
+  // key and moves it to `legacyDeclarations`; both stay declared so neither is stripped on load.
   declarations: z.array(declarationSchema).optional(),
+  filings: z.array(annualFilingSchema).optional(),
+  legacyDeclarations: z.array(declarationSchema).optional(),
   documents: z.array(documentItemSchema).optional(),
   companyDocs: z
     .record(z.enum(['im', 'cs', 'tva', 'facturi']), z.array(companyDocumentSchema))
@@ -449,7 +482,7 @@ export function parseAppData(raw: string): PersistedAppData | null {
 // `domain/aggregation.ts` → `auditFiscalDates` as `review_required`, never rewritten.
 // ---------------------------------------------------------------------------
 
-export type RecordKind = 'revenue' | 'expense' | 'declaration' | 'companyDocument' | 'statement';
+export type RecordKind = 'revenue' | 'expense' | 'declaration' | 'filing' | 'companyDocument' | 'statement';
 
 interface DateFieldSpec {
   /** Property name on the record. */
@@ -489,6 +522,7 @@ const RECORD_DATE_FIELDS: Record<RecordKind, readonly DateFieldSpec[]> = {
     { field: 'dataInregistrare', label: 'data înregistrării', required: true },
     { field: 'dataTrimitere', label: 'data trimiterii', required: false },
   ],
+  filing: [{ field: 'filedOn', label: 'data depunerii', required: false }],
   companyDocument: [
     { field: 'data', label: 'data', required: true },
     { field: 'dataDepunere', label: 'data depunerii', required: false },
@@ -508,6 +542,8 @@ export type DateBearingRecord =
   | Omit<Expense, 'id'>
   | Declaration
   | Omit<Declaration, 'id'>
+  | AnnualFiling
+  | Omit<AnnualFiling, 'id'>
   | CompanyDocument
   | Omit<CompanyDocument, 'id'>
   | TaxStatement
@@ -551,6 +587,7 @@ export type _checks = [
   Expect<Equal<z.output<typeof expenseSchema>, Expense>>,
   Expect<Equal<z.output<typeof clientSchema>, Client>>,
   Expect<Equal<z.output<typeof declarationSchema>, Declaration>>,
+  Expect<Equal<z.output<typeof annualFilingSchema>, AnnualFiling>>,
   Expect<Equal<z.output<typeof documentItemSchema>, DocumentItem>>,
   Expect<Equal<z.output<typeof companyDocumentSchema>, CompanyDocument>>,
   Expect<Equal<z.output<typeof taxStatementSchema>, TaxStatement>>,

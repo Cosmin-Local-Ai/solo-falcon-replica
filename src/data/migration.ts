@@ -158,8 +158,25 @@ export const DATA_VERSION_RULE_SET_DIGEST = 9;
  * `schema.ts`. This step is where the shape actually changes.
  */
 export const DATA_VERSION_RECORD_CURRENCY = 10;
+/**
+ * PG-5 (B-34): the dataset can now hold an annual return (`AnnualFiling`), and the monthly rows a
+ * pre-v11 payload carried move to `legacyDeclarations`.
+ *
+ * What this step does NOT do is the important half. It does not turn a monthly row into an annual
+ * filing. A monthly `{an, luna, status: 'inregistrata'}` record is not evidence that a Declarația
+ * Unică was filed for that year — it is a row this app registered in itself, for an obligation that
+ * does not exist for this profile. Converting one would mint a filing the user never made, which is
+ * the failure mode the whole phase exists to avoid. So the monthly rows are MOVED, verbatim, and
+ * `filings` starts empty: absence stays representable, and the old rows stay readable on the
+ * Declarations page under their own heading.
+ *
+ * The rename is a real step, not a cosmetic one: `schema.ts` keeps BOTH keys declared, because zod
+ * strips undeclared keys and a payload whose `declarations` key were stripped before the step ran
+ * would lose those records outright.
+ */
+export const DATA_VERSION_ANNUAL_FILING = 11;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_RECORD_CURRENCY;
+export const CURRENT_DATA_VERSION = DATA_VERSION_ANNUAL_FILING;
 
 export interface MigrationStep {
   readonly from: number;
@@ -719,8 +736,44 @@ export function migrateRecordCurrencyV10(data: PersistedAppData): PersistedAppDa
   };
 }
 
-/** The chain, in order. Append new steps at the end; never renumber old ones. */
-export const MIGRATION_CHAIN: MigrationStep[] = [
+/**
+ * PG-5: the v10→v11 step. It moves the monthly rows to `legacyDeclarations` and opens `filings` empty.
+ *
+ * Idempotent-safe as the chain contract requires: if `legacyDeclarations` already exists it is left
+ * exactly as it is, and an existing `filings` array is never replaced. Nothing is derived, converted
+ * or summarised — the rows travel byte for byte, because they are the only place some of those facts
+ * exist and this step has no authority to reinterpret them.
+ */
+export function migrateAnnualFilingV11(data: PersistedAppData): PersistedAppData {
+  const stamped = { ...data, version: DATA_VERSION_ANNUAL_FILING };
+  const monthly = data.declarations;
+
+  // A payload that already carries the renamed key has been through this step (or was written by a
+  // v11 build). Leave it alone apart from the version stamp and any stray `declarations` key.
+  if (data.legacyDeclarations !== undefined) {
+    if (monthly === undefined) return stamped;
+    const { declarations: moved, ...rest } = data;
+    void moved;
+    return { ...stamped, ...rest } as PersistedAppData;
+  }
+
+  if (monthly === undefined) {
+    // Nothing to move. `filings` is opened empty only so the shape is explicit; the load path treats an
+    // absent key identically.
+    return data.filings === undefined ? { ...stamped, filings: [] } : stamped;
+  }
+
+  const { declarations: moved, ...rest } = data;
+  void moved;
+  return {
+    ...stamped,
+    ...rest,
+    legacyDeclarations: monthly,
+    filings: data.filings ?? [],
+  };
+}
+
+/** The chain, in order. Append new steps at the end; never renumber old ones. */export const MIGRATION_CHAIN: MigrationStep[] = [
   {
     from: DATA_VERSION_BASE,
     to: DATA_VERSION_PROFILE,
@@ -799,6 +852,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Fiecare venit și cheltuială stocată primește moneda în care e scrisă: un număr simplu devine `{ amount, currency: "RON" }`. Nimic nu a fost recalculat — suma rămâne bit cu bit aceeași, se schimbă doar forma. RON pentru că așa au fost mereu aceste înregistrări: au intrat printr-un formular etichetat „(RON)” și un motor care știa să le adune doar în lei. „declarations”, „profile.cashFloorLei” și „profile.salaryIncomeLei” rămân în lei — o Declarația Unică se depune în lei. Niciun „inputsHash" stocat nu se mișcă și nu se scrie niciun „preMigrationInputsHash": amprenta se calculează pe `{ profile, revenues, expenses }`, unde „revenues" și „expenses" sunt totaluri agregate în lei, nu șirul de înregistrări, deci o monedă pusă pe înregistrare nu ajunge niciodată în octetul hash-ului. O înregistrare istorică rămâne la fel de interpretabilă ca înainte.',
     apply: migrateRecordCurrencyV10,
+  },
+  {
+    from: DATA_VERSION_RECORD_CURRENCY,
+    to: DATA_VERSION_ANNUAL_FILING,
+    name: 'annual-filing',
+    summary:
+      'Aplicația poate înregistra acum declarația anuală (Declarația Unică 212) pe an fiscal declarat, nu pe lună. Înregistrările lunare vechi sunt mutate neschimbate în „legacyDeclarations” și rămân de citit — niciuna nu a fost transformată în depunere anuală: un rând lunar cu status „inregistrata” nu este dovada că cineva a depus ceva, iar o depunere inventată ar fi o faptă pe care utilizatorul nu a făcut-o. „filings” pornește gol.',
+    apply: migrateAnnualFilingV11,
   },
 ];
 

@@ -74,6 +74,18 @@ export type TaxEstimateBasis =
       method: 'run-rate-v1';
       /** The denominator the projection model actually used, after its own lower bound. */
       elapsedMonths: number;
+      /**
+       * B-72 — the length of the period the PFA was actually open for, read straight off the model
+       * (`projection.activeMonths`). It changes no arithmetic; it exists so the sentence beside the
+       * figure can name the same period the figure was computed over. PG-4 clamped `elapsedMonths` so
+       * it can never exceed 12, but for a PFA that started in October the „din 12” half still described
+       * the calendar year while the number beside it came from three months.
+       *
+       * Optional because a basis can arrive from elsewhere (a hand-built fixture, an older result) and a
+       * wording layer may not invent an active period it was never given: with no `activeMonths` the
+       * label states the elapsed measure and stops there.
+       */
+      activeMonths?: number;
       actual: EstimateAmounts;
       projected: EstimateAmounts;
     }
@@ -81,6 +93,8 @@ export type TaxEstimateBasis =
       kind: 'actuals-only';
       method: null;
       elapsedMonths: number;
+      /** B-72 — see the note on the `annual-projected` kind above. */
+      activeMonths?: number;
       actual: EstimateAmounts;
       reason: string;
     }
@@ -141,15 +155,20 @@ export function selectTaxEstimateBasis(
 ): AttributedEstimateBasis {
   const actual = actualEstimateAmounts(ytd);
   const elapsedMonths = projection.elapsedMonths;
+  // B-72: read, never recomputed. The wording layer is allowed to say how long the active period was
+  // because the model already measured it; duplicating that measure here is how a label and a figure
+  // start disagreeing.
+  const activeMonths = projection.activeMonths;
 
   if (!(elapsedMonths > 0) || !Number.isFinite(elapsedMonths)) {
     return {
       kind: 'actuals-only',
       method: null,
       elapsedMonths: Number.isFinite(elapsedMonths) ? elapsedMonths : 0,
+      activeMonths,
       actual,
       reason:
-        'Nu există o rată de desfășurare pentru această dată (0 luni scurse din anul fiscal); ' +
+        'Nu există o rată de desfășurare pentru această dată (0 luni scurse din perioada de activitate); ' +
         'valorile sunt cele înregistrate până acum, neannualizate.',
     };
   }
@@ -158,6 +177,7 @@ export function selectTaxEstimateBasis(
     kind: 'annual-projected',
     method: projection.method,
     elapsedMonths,
+    activeMonths,
     actual,
     projected: {
       revenues: projection.annualProjected.revenue,
@@ -1310,6 +1330,23 @@ export function formatElapsedMonths(months: number): string {
 }
 
 /**
+ * The months phrase of the basis wording (B-72).
+ *
+ * With an active period known, the sentence names it: the figure beside it is a run rate over the
+ * months the PFA was open, not over the calendar year, and „din 12” said the calendar year. With none
+ * known, the phrase states the elapsed measure and stops — a wording layer that has not been given the
+ * active period must not borrow 12 from the calendar to fill the gap.
+ */
+function monthsPhrase(basis: { elapsedMonths: number | null; activeMonths?: number }): string {
+  const elapsed = formatElapsedMonths(basis.elapsedMonths ?? 0);
+  const active = basis.activeMonths;
+  if (typeof active === 'number' && Number.isFinite(active) && active > 0) {
+    return `${elapsed} din ${formatElapsedMonths(active)} luni de activitate`;
+  }
+  return `${elapsed} luni scurse`;
+}
+
+/**
  * The wording rule. A run-rate projection is an assumption about the rest of the year, not a
  * forecast of fact, so the label names the assumption and states how many months it rests on.
  * `YTD` is only ever said when the numbers really are actuals-to-date.
@@ -1318,11 +1355,7 @@ export function estimateBasisLabel(basis: TaxEstimateBasis | null | undefined): 
   if (!basis || basis.kind === 'unknown') return 'Estimare impozit';
   if (basis.kind === 'refused') return 'Estimare blocată — revizuire necesară';
   if (basis.kind === 'actuals-only') return 'Înregistrat până acum (neannualizat)';
-  return (
-    'Estimare anuală pe rată de desfășurare (' +
-    formatElapsedMonths(basis.elapsedMonths) +
-    ' din 12 luni scurse)'
-  );
+  return `Estimare anuală pe rată de desfășurare (${monthsPhrase(basis)})`;
 }
 
 /**
@@ -1357,7 +1390,7 @@ export function estimateBasisExplanation(basis: TaxEstimateBasis | null | undefi
   }
   return (
     'Valorile anuale sunt extrapolate din rata de desfășurare a lunilor înregistrate până acum ' +
-    '(' + formatElapsedMonths(basis.elapsedMonths) + ' din 12). Nu sunt o previziune a cifrelor reale: ' +
+    `(${monthsPhrase(basis)}). Nu sunt o previziune a cifrelor reale: ` +
     'se ajustează pe măsură ce anul fiscal avansează.'
   );
 }

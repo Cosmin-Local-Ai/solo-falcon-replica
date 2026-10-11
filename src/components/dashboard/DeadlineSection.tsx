@@ -1,19 +1,22 @@
-import type { Deadline } from '../../domain/deadlines';
+import type { Deadline, DeadlineView } from '../../domain/deadlines';
 import { classifyDeadline, daysRemaining } from '../../domain/deadlines';
 import { formatRoCalendarDate } from '../../domain/date';
 import { Card, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { deadlineAppliesToLabels, deadlines as deadlineCopy } from '../../ui/copy';
 
 /**
- * DeadlineSection (Step 22, verified Step 31) — presentational only.
+ * DeadlineSection (Step 22, verified Step 31, PG-5) — presentational only.
  *
- * Formats and presents upcoming `Deadline` items: no deadline calculation,
- * no data fetching, no persistence. Temporal classification uses the domain
- * `classifyDeadline(deadline, asOfDate)` and days remaining come from the
- * pure `daysRemaining(deadlineDate, asOfDate)` helper — no local date math.
- * Only deadlines classified as `'upcoming'` are shown; past, due-today, and
- * null-dated deadlines are excluded (defensively, on top of the data layer's
- * `filterUpcoming`).
+ * Formats and presents upcoming deadline rows: no deadline calculation, no data fetching, no
+ * persistence. Temporal classification uses the domain `classifyDeadline(deadline, asOfDate)` and days
+ * remaining come from the pure `daysRemaining(deadlineDate, asOfDate)` helper — no local date math.
+ * Only deadlines classified as `'upcoming'` are shown; past, due-today, and null-dated deadlines are
+ * excluded (defensively, on top of the data layer's filter).
+ *
+ * PG-5 added one thing and removed a wrong one. A term the dataset already discharges now carries a
+ * „Depusă” badge and the date on the filing, instead of rendering as still open: the row used to be
+ * identical whether or not the return had been filed, because the row came from the rule engine and the
+ * rule engine has never seen a filing.
  */
 
 /** Human-readable label derived from the event type (presentation only).
@@ -29,7 +32,7 @@ function labelFor(d: Deadline): string {
 }
 
 export interface DeadlineSectionProps {
-  deadlines: Deadline[];
+  deadlines: DeadlineView[];
   asOfDate: string;
 }
 
@@ -65,9 +68,15 @@ export default function DeadlineSection({ deadlines, asOfDate }: DeadlineSection
                     ? deadlineCopy.notApplicable
                     : `${formatRoCalendarDate(d.date)} (${days === 1 ? deadlineCopy.oneDayLeft : deadlineCopy.daysLeft(days)})`}
                 </div>
+                {d.done && d.filedOn ? (
+                  <div className="hint">{deadlineCopy.filedOn(formatRoCalendarDate(d.filedOn))}</div>
+                ) : null}
               </div>
-              <span className={`badge ${d.status === 'active' ? 'badge-info' : 'badge-neutral'}`}>
-                {deadlineCopy.statusLabels[d.status]}
+              <span
+                className={`badge ${d.done ? 'badge-success' : d.status === 'active' ? 'badge-info' : 'badge-neutral'}`}
+                data-deadline-done={d.done ? 'true' : 'false'}
+              >
+                {d.done ? deadlineCopy.doneBadge : deadlineCopy.statusLabels[d.status]}
               </span>
             </div>
           );

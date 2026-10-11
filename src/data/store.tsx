@@ -1,12 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type {
-  AppData, Client, CompanyDocument, Declaration, DocTypeCode, DocumentItem,
+  AnnualFiling, AppData, Client, CompanyDocument, Declaration, DocTypeCode, DocumentItem,
   Expense, Revenue, SettingsState, TaxStatement, Toast, ToastKind,
 } from './types';
 import type { PfaProfile } from '../domain/models';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
-import { todayISO } from './types';
 import { epochMs, isoCalendarDateProblemText, toInstantISO } from '../domain/date';
 import { maxBani, type Bani } from '../domain/money';
 import { rateKey } from '../domain/fx/provider';
@@ -102,9 +101,14 @@ interface StoreValue extends AppData {
   deleteExpense: (id: string) => void;
   addClient: (c: Omit<Client, 'id'>) => void;
   updateClient: (c: Client) => void;
-  addDeclaration: (d: Omit<Declaration, 'id'>) => boolean;
-  updateDeclaration: (d: Declaration) => boolean;
-  sendDeclaration: (id: string) => void;
+  /**
+   * PG-5: record an annual return. `addDeclaration` / `updateDeclaration` / `sendDeclaration` are gone
+   * with them — the app no longer offers to mint monthly declaration rows, because it has no evidence
+   * that a monthly return exists for this profile and no right to create records it cannot stand behind.
+   * The monthly rows that already exist are preserved read-only as `legacyDeclarations`.
+   */
+  addFiling: (f: Omit<AnnualFiling, 'id'>) => boolean;
+  updateFiling: (f: AnnualFiling) => boolean;
   uploadDocument: (code: DocTypeCode, doc: Omit<CompanyDocument, 'id'>) => boolean;
   deleteDocument: (code: DocTypeCode, id: string) => void;
   addStatement: (s: Omit<TaxStatement, 'id'>) => boolean;
@@ -164,7 +168,11 @@ function toAppData(parsed: PersistedAppData): AppData {
     revenues: parsed.revenues,
     expenses: parsed.expenses ?? [],
     clients: parsed.clients ?? [],
-    declarations: parsed.declarations ?? [],
+    // PG-5: the annual returns, and the monthly rows the v10→v11 step preserved. Both default to empty
+    // rather than to anything derived — an absent `filings` key means nobody recorded a filing, which is
+    // a fact about the data, not a filing that did not happen.
+    filings: parsed.filings ?? [],
+    legacyDeclarations: parsed.legacyDeclarations ?? [],
     documents: parsed.documents ?? [],
     companyDocs: parsed.companyDocs ?? { im: [], cs: [], tva: [], facturi: [] },
     statements: parsed.statements ?? [],
@@ -366,22 +374,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addClient: c => setData(d => ({ ...d, clients: [...d.clients, { ...c, id: uid() }] })),
     updateClient: c => setData(d => ({ ...d, clients: d.clients.map(x => x.id === c.id ? c : x) })),
 
-    addDeclaration: decl => {
-      if (rejectInvalidDates('declaration', decl, 'Declarație')) return false;
-      setData(d => ({ ...d, declarations: [{ ...decl, id: uid() }, ...d.declarations] }));
+    addFiling: f => {
+      if (rejectInvalidDates('filing', f, 'Declarația unică')) return false;
+      setData(d => ({ ...d, filings: [{ ...f, id: uid() }, ...d.filings] }));
       return true;
     },
-    updateDeclaration: d => {
-      if (rejectInvalidDates('declaration', d, 'Declarație', d.id)) return false;
-      setData(prev => ({ ...prev, declarations: prev.declarations.map(x => x.id === d.id ? d : x) }));
+    updateFiling: f => {
+      if (rejectInvalidDates('filing', f, 'Declarația unică', f.id)) return false;
+      setData(prev => ({ ...prev, filings: prev.filings.map(x => (x.id === f.id ? f : x)) }));
       return true;
     },
-    sendDeclaration: id => setData(d => ({
-      ...d,
-      declarations: d.declarations.map(x =>
-        x.id === id ? { ...x, status: 'transmisa', dataTrimitere: todayISO() } : x
-      ),
-    })),
 
     uploadDocument: (code, doc) => {
       if (rejectInvalidDates('companyDocument', doc, 'Document')) return false;

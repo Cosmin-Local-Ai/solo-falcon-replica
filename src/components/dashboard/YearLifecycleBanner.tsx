@@ -1,18 +1,50 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useStore } from '../../data/store';
-import type { FiscalYearView } from '../../data/dashboard';
+import { yearAdvanceTarget, type FiscalYearView } from '../../data/dashboard';
 import { dashboard as copy } from '../../ui/copy';
+
+/**
+ * PG-5 (B-73) — the automatic year advance, moved out of the banner and into the shell.
+ *
+ * PG-4 mounted the advance on the dashboard, so the year only moved the first time the dashboard was
+ * opened in the new year. A person who landed on Revenues on 2 January got last year's register, and
+ * „last year” was no longer what the clock said. The trigger now lives where every route starts, and it
+ * is the ONLY writer of the automatic advance — two components writing the same year is how a toggle
+ * back gets overwritten.
+ *
+ * What PG-4 established still holds and is not re-implemented here: `yearAdvanceTarget` decides, it
+ * compares `profile.updatedAt` in the LOCAL year (a UTC prefix comparison re-advanced over the toggle
+ * back and Playwright caught it), and the write re-stamps `updatedAt`, which is what makes a deliberate
+ * year choice stick across a reload.
+ */
+export function FiscalYearAdvance() {
+  const { profile, updateProfile } = useStore();
+  /** The year this session has already written, so a target that will not clear cannot spin. */
+  const written = useRef<number | null>(null);
+  const target = yearAdvanceTarget(profile);
+
+  useEffect(() => {
+    if (target === null || written.current === target) return;
+    written.current = target;
+    updateProfile({ fiscalYear: target });
+    // `updateProfile` is recreated with the store value on every write; `target` is the guard, because
+    // it goes null as soon as the write lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+
+  return null;
+}
 
 /**
  * PG-4 (D-YEAR-1) — the fiscal-year lifecycle, on the face of the dashboard.
  *
  * Three things happen here and nothing else:
  *
- * 1. **The automatic advance.** On 1 January the clock names a new fiscal year and the stored profile
- *    still names the old one. `data/dashboard.ts yearAdvanceTarget` decides whether the year moves;
- *    this component is where that decision is written back through `updateProfile`. It fires once:
- *    the write re-stamps `profile.updatedAt`, which is what tells the next load that the year on the
- *    record is a choice, not a stale value.
+ * 1. **The automatic advance — reported here, written by `FiscalYearAdvance` in the shell.** On 1
+ *    January the clock names a new fiscal year and the stored profile still names the old one.
+ *    `data/dashboard.ts yearAdvanceTarget` decides whether the year moves. B-73 moved the write out of
+ *    this component because a trigger mounted on one page only fires on that page; the banner now only
+ *    says that the year moved while it was open.
  *
  * 2. **The missing rule package.** A year the build has no rules for gets a sentence, not a number.
  *    This is the failure mode the whole phase exists to prevent: on 1 Jan 2027 the app has no 2027
@@ -34,18 +66,14 @@ export interface YearLifecycleBannerProps {
 
 export function YearLifecycleBanner({ year }: YearLifecycleBannerProps) {
   const { updateProfile } = useStore();
-  /** The year this session advanced to, so the banner can say so after the write lands. */
-  const [advancedTo, setAdvancedTo] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (year.advanceTo === null) return;
-    setAdvancedTo(year.advanceTo);
-    updateProfile({ fiscalYear: year.advanceTo });
-    // `updateProfile` is recreated with the store value on every write; the guard is `year.advanceTo`,
-    // which is null again as soon as the write lands. Adding the callback to the deps would re-run the
-    // effect on every store change for no reason.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year.advanceTo]);
+  /**
+   * The year this banner was first shown. When the year it is shown moves to the year the clock is in,
+   * the advance happened while the dashboard was open and that is worth one sentence. A deliberate
+   * toggle back moves to a year the clock is NOT in, so it never reads as an automatic advance.
+   */
+  const mountedYear = useRef(year.year);
+  const advancedTo =
+    year.year !== mountedYear.current && year.year === year.currentYear ? year.year : null;
 
   const rulesMissing = !year.rulesAvailable;
   if (!rulesMissing && !year.closed && advancedTo === null) return null;

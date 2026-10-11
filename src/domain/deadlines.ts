@@ -1,5 +1,7 @@
 import type { FiscalRule } from './fiscal/rules';
 import { selectApplicableRules } from './fiscal/select';
+import type { AnnualFiling } from '../data/types';
+import { isFiledFiling } from '../data/types';
 
 /**
  * The ONLY deadline event types this application models.
@@ -94,6 +96,36 @@ const EVENT_DATE: Record<DeadlineEventKey, (query: DeadlineQuery) => string | un
 };
 
 export type DeadlinePhase = 'past' | 'due_today' | 'upcoming';
+
+/**
+ * PG-5 — what the app KNOWS about a term, temporal phase plus the filing that discharges it.
+ *
+ * `classifyDeadline` answers only "when is it?". That was never the whole question, and after the
+ * term passes it becomes the wrong one: a return filed on time and a return never filed both
+ * classify as `past`, which is how the dashboard raised an overdue item at high priority on a
+ * taxpayer who had filed. `done` is a different fact and it comes from a different place — an
+ * `AnnualFiling` for that tax year with a filed status, nothing else.
+ *
+ * `undated` is the state CF art. 322 leaves the app in for a VAT return: the obligation exists, the
+ * facts that would fix its period (the registration date and the prior-year taxable supplies) are not
+ * recorded, so there is no date to classify. It is reported as an unknown, never as a guessed term.
+ */
+export type DeadlineOutcome = 'done' | 'overdue' | 'due_today' | 'upcoming' | 'undated';
+
+/**
+ * A `Deadline` plus what this dataset knows about it.
+ *
+ * The rule engine's answer cannot carry the filing half — it never sees the filings — and every surface
+ * that wanted to say „Depusă” would otherwise re-derive it. One annotated row, produced once in
+ * `data/dashboard.ts`, is what keeps the card, the attention pipeline and the completeness check from
+ * disagreeing about whether a term is still open.
+ */
+export interface DeadlineView extends Deadline {
+  done: boolean;
+  /** The date recorded on the filing that discharged this term, when there is one. */
+  filedOn: string | null;
+  outcome: DeadlineOutcome;
+}
 
 const DAY_MS = 86400000;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -245,6 +277,53 @@ export function computeDeadlines(
     });
   }
   return results;
+}
+
+/**
+ * The filing that discharges a term, or `null` when the dataset holds none.
+ *
+ * Only `d212_filing` has a record that can discharge it: the annual return is the one obligation this
+ * app models as a filing, and `taxYear` on both sides is the year the return DECLARES, so the FY2026
+ * return matches the FY2026 term even though it is filed in 2027.
+ *
+ * `isFiledFiling` is the whole test. A monthly `Declaration` cannot reach this function — it is not an
+ * `AnnualFiling` — and that is deliberate: `status: 'inregistrata'` on a monthly row records that the
+ * row was registered here, not that anyone filed anything.
+ */
+export function filingForDeadline(
+  filings: readonly AnnualFiling[],
+  deadline: Deadline,
+): AnnualFiling | null {
+  if (deadline.eventType !== 'd212_filing') return null;
+  return (
+    filings.find(
+      (f) => f.form === 'D212' && f.taxYear === deadline.taxYear && isFiledFiling(f),
+    ) ?? null
+  );
+}
+
+/** True when a filed annual return for that tax year exists in the dataset. */
+export function isDeadlineDone(
+  filings: readonly AnnualFiling[],
+  deadline: Deadline,
+): boolean {
+  return filingForDeadline(filings, deadline) !== null;
+}
+
+/**
+ * Resolve a term to what the app may say about it. Done beats every temporal phase — a filed return is
+ * not overdue no matter what the calendar says — and a term with no resolved date is `undated`, never
+ * `overdue`.
+ */
+export function resolveDeadlineOutcome(
+  deadline: Deadline,
+  filings: readonly AnnualFiling[],
+  asOfDate: string,
+): DeadlineOutcome {
+  if (isDeadlineDone(filings, deadline)) return 'done';
+  const phase = classifyDeadline(deadline, asOfDate);
+  if (phase === null) return 'undated';
+  return phase === 'past' ? 'overdue' : phase;
 }
 
 /**

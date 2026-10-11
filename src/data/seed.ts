@@ -90,7 +90,8 @@ export function emptyData(): AppData {
     revenues: [],
     expenses: [],
     clients: [],
-    declarations: [],
+    filings: [],
+    legacyDeclarations: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],
@@ -225,7 +226,15 @@ export const seedData: AppData = {
   // and left for a later phase, not patched here. The deadline itself is untouched and correct — the
   // rule-driven engine emits `PFA_DEADLINE_2026` / `d212_filing` at 2027-05-25, and no seed record is
   // allowed to become a second source of a deadline.
-  declarations: [],
+  //
+  // PG-5 (B-34) closed that shape: the record type is now annual (`AnnualFiling`, keyed by the fiscal
+  // year it DECLARES), and the monthly rows a pre-v11 payload carries are preserved read-only as
+  // `legacyDeclarations`. What is still NOT here is an annual filing. This profile's first Declarația
+  // Unică is the FY2026 return, due 2027-05-25; at the demo's own date it has not been filed, so
+  // `filings` is empty and the deadline says so. Seeding a filing would be seeding a fact the demo
+  // cannot support — the same mistake TASK 9 removed, in a tidier shape.
+  filings: [],
+  legacyDeclarations: [],
   documents: [
     { id: 'doc1', nume: 'FCT-2026-001.pdf', data: '2026-02-02', categoria: 'Facturi' },
     { id: 'doc3', nume: 'Contract Presta Consulting.pdf', data: '2026-01-26', categoria: 'Contracte' },
@@ -251,9 +260,20 @@ export const seedData: AppData = {
     // records it. The deadline for it is emitted by the rule engine, not by a fixture.
     im: [],
     cs: [],
-    tva: [
-      { id: 'tva1', nume: 'Declarația 300 – August 2026.pdf', tip: 'factura', content: 'data:text/plain;base64,VERWQSBkZWNsYXJhdGlvbg==', marime: 39870, data: '2026-09-15', dataDepunere: '2026-09-15', depunere: 'ANAF', perioada: 'August 2026' },
-    ],
+    // PG-5 (B-35): the D300 document that used to sit here is gone, and it is the CLAIM that went with
+    // it. The row recorded a Declarația 300 for „August 2026”, filed 2026-09-15 — a MONTHLY period. CF
+    // art. 322 alin. (1)-(4) makes the VAT fiscal period the quarter for a taxpayer whose previous-year
+    // taxable supplies stayed under the 100.000 € equivalent and the month only otherwise, and which of
+    // those this profile is depends on its VAT registration date and prior-year taxable supplies — facts
+    // no field anywhere in this dataset records (`vatExempt: false` is not a registration fact, and
+    // `vatExceedanceDate` is absent). So the row was not a filing this demo could evidence; it was the
+    // cadence assertion wearing a document's clothes. Keeping it and editing only the period would have
+    // picked a quarter nobody recorded, which is the same invention in the other direction.
+    //
+    // What stops being represented, stated plainly: the demo no longer shows ANY filed VAT return, and
+    // the `tva` section of the company documents is empty. That is the honest state of a fixture whose
+    // input fact is missing — see the completeness row for the VAT filing period, which now says so.
+    tva: [],
     facturi: [
       { id: 'f1', nume: 'FCT-2026-001.pdf', tip: 'factura', content: 'data:text/plain;base64,GmFjdHVyYQ==', marime: 12480, data: '2026-02-02' },
       { id: 'f2', nume: 'NF-2026-003.pdf', tip: 'notafactura', content: 'data:text/plain;base64,Tm90YSBmYXJhIGZhY3R1cmE=', marime: 9210, data: '2026-06-18' },
@@ -266,17 +286,13 @@ export const seedData: AppData = {
     // neither is an obligation of this profile.
     //
     // Phase 11 (PG-3): the `212` row for the 2025 year is gone with the document that evidenced it — see
-    // the `im` note above. What remains is the one return this profile actually owes inside its own first
-    // fiscal year.
+    // the `im` note above.
     //
-    // The D300 row below is NOT touched by this task, and that is a deliberate non-fix: CF art. 322
-    // alin. (1)-(4) makes the fiscal period the QUARTER for a taxpayer whose previous-year taxable
-    // supplies stayed under the 100.000 € equivalent, and the month only otherwise. Which of those this
-    // profile is depends on its VAT registration date and prior-year turnover — facts the fixture does
-    // not record anywhere. Changing 'August 2026' to a quarter would invent one half of that choice;
-    // leaving it is the honest state of a demo whose input fact is missing. Recorded as a finding in
-    // docs/ai/phases/23_provenance_hygiene.md §5, and handed to PG-2/18B as date-shaped work.
-    { id: 's3', tip: '300', perioada: '2026-08', depunere: 'personală', dataDepunere: '2026-09-15' },
+    // PG-5 (B-35): the last row, tip '300' / perioada '2026-08', is gone for the reason given on the
+    // `tva` entry above — a monthly D300 period is a cadence this fixture cannot support, and the
+    // register is where that cadence was being asserted. The register is now empty, and the completeness
+    // check for tax statements says so instead of the fixture implying an answer to a question the app
+    // has never been given the facts to ask.
   ],
   snapshots: [],
   settings: {

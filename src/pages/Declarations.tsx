@@ -1,37 +1,72 @@
 import { useEffect, useMemo, useState } from 'react';
-import { formatBaniRON, leiInputValue, parseLeiInput } from '../domain/money';
 import { useStore } from '../data/store';
-import { fmtDate, declarationNet, statusBadge } from '../data/types';
-import type { Declaration, DeclStatus } from '../data/types';
+import { fmtDate, statusBadge, type AnnualFiling, type Declaration, type FilingStatus } from '../data/types';
+import { formatBaniRON } from '../domain/money';
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
 import { localDateISO } from '../domain/date';
-import { copy, declarations as declarationsCopy, empty, fields, recordStatus, validation } from '../ui/copy';
+import {
+  copy,
+  declarations as declarationsCopy,
+  empty,
+  fields,
+  recordStatus,
+} from '../ui/copy';
 
-const TABS = [
-  { key: 'inregistrata', label: recordStatus.tabs.inregistrata },
-  { key: 'in-asteptare', label: recordStatus.tabs['in-asteptare'] },
-  { key: 'transmisa', label: recordStatus.tabs.transmisa },
-  { key: 'respinsa', label: recordStatus.tabs.respinsa },
-] as const;
+/**
+ * PG-5 (B-34) — the annual return register.
+ *
+ * This page used to be monthly: `{an, luna, venituri, cheltuieli, status}`. That shape could not hold
+ * the one return this profile actually owes — a Declarația Unică 212 declares a WHOLE fiscal year and
+ * is filed in the year after it (CF art. 122 alin. (3)) — and it let a monthly row stand in for a
+ * filing. The record here is `AnnualFiling`: the year it DECLARES, the form, the status, and the date
+ * it was actually filed.
+ *
+ * Two things the page deliberately does not do:
+ *
+ * - It does not offer to create a monthly declaration. The store no longer exposes `addDeclaration`,
+ *   because the app has no evidence of a monthly obligation for this profile and no business creating
+ *   records it cannot stand behind.
+ * - It does not treat a legacy monthly row as a filing. Those rows are listed below the register,
+ *   read-only, under their own heading — kept because they are the only place some of those figures
+ *   exist, and labelled because keeping a record readable is not the same as endorsing what it seems
+ *   to prove.
+ */
 
-const LUNILE: readonly string[] = declarationsCopy.months;
 const PAGE_SIZE = 8;
 
-function DeclForm({ initial, onSave, onClose }: {
-  initial?: Declaration;
-  onSave: (d: Omit<Declaration, 'id'>) => void;
+const FILING_STATUSES: readonly FilingStatus[] = ['in_pregatire', 'depusa', 'respinsa'];
+
+const FILING_BADGE: Record<FilingStatus, 'badge-neutral' | 'badge-info' | 'badge-success' | 'badge-danger'> = {
+  in_pregatire: 'badge-info',
+  depusa: 'badge-success',
+  respinsa: 'badge-danger',
+};
+
+/** The years a return can declare: this view's fiscal year and the four before it. */
+function declareableYears(fiscalYear: number): number[] {
+  const years: number[] = [];
+  for (let y = fiscalYear; y > fiscalYear - 5; y--) years.push(y);
+  return years;
+}
+
+function FilingForm({
+  initial,
+  years,
+  onSave,
+  onClose,
+}: {
+  initial?: AnnualFiling;
+  years: number[];
+  onSave: (f: Omit<AnnualFiling, 'id'>) => void;
   onClose: () => void;
 }) {
   const [f, setF] = useState({
-    an: initial?.an ?? 2025,
-    luna: initial?.luna ?? 9,
-    // `leiInputValue`, not `String(...)`: stored money is integer bani; an input is a screen.
-    venituri: initial ? leiInputValue(initial.venituri) : '',
-    cheltuieli: initial ? leiInputValue(initial.cheltuieli) : '',
-    status: initial?.status ?? 'inregistrata',
-    // PG-2 (B-46): the third of the three UTC-seeded defaults. `new Date().toISOString().slice(0, 10)` is
-    // the UTC calendar day, so at 00:30 in Bucharest on 1 Jan 2027 this registered the day before.
-    dataInregistrare: initial?.dataInregistrare ?? localDateISO(),
+    taxYear: initial?.taxYear ?? years[0],
+    status: initial?.status ?? 'in_pregatire',
+    // Absence is the honest default. A filed date is only offered once the status says the return was
+    // filed; pre-filling today's date would mint a submission date nobody recorded.
+    filedOn: initial?.filedOn ?? '',
+    reference: initial?.reference ?? '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -39,24 +74,22 @@ function DeclForm({ initial, onSave, onClose }: {
 
   const submit = () => {
     const e: Record<string, string> = {};
-    if (!f.dataInregistrare) e.dataInregistrare = validation.dateRequired;
-    // Phase 10: form in lei, storage in bani; `parseLeiInput` refuses sub-ban precision rather than rounding.
-    const v = parseLeiInput(String(f.venituri));
-    const c = parseLeiInput(String(f.cheltuieli));
-    if (v === null || v < 0) e.venituri = validation.amountInvalid;
-    if (c === null || c < 0) e.cheltuieli = validation.amountInvalid;
+    if (!f.status) e.status = declarationsCopy.statusRequired;
+    if (f.status === 'depusa' && !f.filedOn) e.filedOn = declarationsCopy.filedOnRequired;
     setErrors(e);
     if (Object.keys(e).length) return;
-    if (v === null || c === null) return; // unreachable; narrows without a cast
     onSave({
-      an: f.an, luna: f.luna, venituri: v, cheltuieli: c,
-      status: f.status as DeclStatus, dataInregistrare: f.dataInregistrare,
+      taxYear: f.taxYear,
+      form: 'D212',
+      status: f.status as FilingStatus,
+      ...(f.filedOn ? { filedOn: f.filedOn } : {}),
+      ...(f.reference.trim() ? { reference: f.reference.trim() } : {}),
     });
   };
 
   return (
     <Modal
-      title={initial ? declarationsCopy.editTitle(`${initial.an}-${String(initial.luna).padStart(2, '0')}`) : declarationsCopy.addTitle}
+      title={initial ? declarationsCopy.editTitle(initial.taxYear) : declarationsCopy.addTitle}
       onClose={onClose}
       footer={<>
         <button className="btn btn-ghost" onClick={onClose}>{copy.ui.cancel}</button>
@@ -65,86 +98,120 @@ function DeclForm({ initial, onSave, onClose }: {
     >
       <div className="form-grid">
         <div className="field">
-          <label>{declarationsCopy.year} <span className="req">*</span></label>
-          <select value={f.an} onChange={e => set('an', Number(e.target.value))}>
-            {[2023, 2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+          <label>{declarationsCopy.taxYear} <span className="req">*</span></label>
+          <select value={f.taxYear} onChange={e => set('taxYear', Number(e.target.value))}>
+            {years.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
         <div className="field">
-          <label>{declarationsCopy.month} <span className="req">*</span></label>
-          <select value={f.luna} onChange={e => set('luna', Number(e.target.value))}>
-            {LUNILE.map((l, i) => <option key={i + 1} value={i + 1}>{l}</option>)}
-          </select>
+          <label>{declarationsCopy.form}</label>
+          {/* The form is not a free field: D212 is the return this profile files. A select with one
+              option would be a control that can only be answered one way. */}
+          <input value="D212" readOnly />
         </div>
         <div className="field">
-          <label>{declarationsCopy.revenue} <span className="req">*</span></label>
-          <input className={errors.venituri ? 'invalid' : ''} value={f.venituri} onChange={e => set('venituri', e.target.value)} placeholder={fields.amountPlaceholder} />
-          {errors.venituri && <span className="error">{errors.venituri}</span>}
-        </div>
-        <div className="field">
-          <label>{declarationsCopy.expenses} <span className="req">*</span></label>
-          <input className={errors.cheltuieli ? 'invalid' : ''} value={f.cheltuieli} onChange={e => set('cheltuieli', e.target.value)} placeholder={fields.amountPlaceholder} />
-          {errors.cheltuieli && <span className="error">{errors.cheltuieli}</span>}
-        </div>
-        <div className="field">
-          <label>{fields.status}</label>
+          <label>{fields.status} <span className="req">*</span></label>
           <select value={f.status} onChange={e => set('status', e.target.value)}>
-            <option value="inregistrata">{recordStatus.labels.inregistrata}</option>
-            <option value="in-asteptare">{recordStatus.labels['in-asteptare']}</option>
-            <option value="transmisa">{recordStatus.labels.transmisa}</option>
-            <option value="respinsa">{recordStatus.labels.respinsa}</option>
+            {FILING_STATUSES.map(s => (
+              <option key={s} value={s}>{recordStatus.filingLabels[s]}</option>
+            ))}
           </select>
         </div>
         <div className="field">
-          <label>{declarationsCopy.registrationDate} <span className="req">*</span></label>
-          <input type="date" className={errors.dataInregistrare ? 'invalid' : ''} value={f.dataInregistrare} onChange={e => set('dataInregistrare', e.target.value)} />
-          {errors.dataInregistrare && <span className="error">{errors.dataInregistrare}</span>}
+          <label>{declarationsCopy.filedOn}</label>
+          <input
+            type="date"
+            className={errors.filedOn ? 'invalid' : ''}
+            value={f.filedOn}
+            max={localDateISO()}
+            onChange={e => set('filedOn', e.target.value)}
+          />
+          {errors.filedOn
+            ? <span className="error">{errors.filedOn}</span>
+            : <span className="hint">{declarationsCopy.filedOnHint}</span>}
+        </div>
+        <div className="field">
+          <label>{declarationsCopy.reference}</label>
+          <input value={f.reference} onChange={e => set('reference', e.target.value)} />
+          <span className="hint">{declarationsCopy.referenceHint}</span>
         </div>
       </div>
     </Modal>
   );
 }
 
+/**
+ * The monthly rows a pre-v11 install carried. Read-only by construction: this component has no write
+ * path, and the store no longer offers one.
+ */
+function LegacyMonthly({ rows, focusRecord }: { rows: readonly Declaration[]; focusRecord?: string }) {
+  return (
+    <Card>
+      <div style={{ padding: '16px 18px 0' }}>
+        <h2 className="card-title">{declarationsCopy.legacyTitle}</h2>
+        <p className="hint">{declarationsCopy.legacyNote}</p>
+      </div>
+      {rows.length === 0 ? (
+        <p className="hint" style={{ padding: '12px 18px' }}>{declarationsCopy.legacyEmpty}</p>
+      ) : (
+        <table className="table">
+          <thead>
+            <tr>
+              <th>{declarationsCopy.legacyColumns.period}</th>
+              <th className="amount">{declarationsCopy.legacyColumns.revenue}</th>
+              <th className="amount">{declarationsCopy.legacyColumns.expenses}</th>
+              <th>{declarationsCopy.legacyColumns.status}</th>
+              <th>{declarationsCopy.legacyColumns.registeredOn}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(d => (
+              <tr key={d.id} data-record-id={d.id} className={d.id === focusRecord ? ' row-focus' : ''}>
+                <td>{d.an}-{String(d.luna).padStart(2, '0')}</td>
+                <td className="amount">{formatBaniRON(d.venituri)}</td>
+                <td className="amount">{formatBaniRON(d.cheltuieli)}</td>
+                <td>
+                  <Badge kind={statusBadge(d.status)}>{recordStatus.labels[d.status]}</Badge>
+                </td>
+                <td>{fmtDate(d.dataInregistrare)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Card>
+  );
+}
+
 interface DeclarationsProps {
-  initialTab?: (typeof TABS)[number]['key'];
-  onTabChange?: (tab: (typeof TABS)[number]['key']) => void;
   /** TASK 8 — the record an attention item pointed at; see `Revenues.tsx focusRecord`. */
   focusRecord?: string;
 }
 
-export default function Declarations({ initialTab, onTabChange, focusRecord }: DeclarationsProps) {
-  const { declarations, addDeclaration, updateDeclaration, sendDeclaration, toast } = useStore();
-  const [tab, setTab] = useState<(typeof TABS)[number]['key']>(
-    initialTab && TABS.some(t => t.key === initialTab) ? initialTab : 'inregistrata',
-  );
+export default function Declarations({ focusRecord }: DeclarationsProps) {
+  const { filings, legacyDeclarations, profile, addFiling, updateFiling, toast } = useStore();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [editing, setEditing] = useState<Declaration | 'new' | null>(null);
+  const [editing, setEditing] = useState<AnnualFiling | 'new' | null>(null);
 
-  // Sync tab when the URL changes (back/forward navigation), as the other registers do. The tab keys
-  // are the declaration's own status codes, which is what lets an attention target land on the tab
-  // that holds the declaration it names.
-  useEffect(() => {
-    if (initialTab && TABS.some(t => t.key === initialTab) && initialTab !== tab) {
-      setTab(initialTab);
-      setPage(1);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialTab]);
+  const years = useMemo(() => declareableYears(profile.fiscalYear), [profile.fiscalYear]);
 
   const rows = useMemo(() =>
-    declarations
-      .filter(d => d.status === tab)
-      .filter(d => !search || `${d.an}-${String(d.luna).padStart(2, '0')}`.includes(search))
-      .sort((a, b) => (b.an * 100 + b.luna) - (a.an * 100 + a.luna)),
-  [declarations, tab, search]);
+    filings
+      .filter(f => !search || String(f.taxYear).includes(search))
+      .sort((a, b) => b.taxYear - a.taxYear),
+  [filings, search]);
 
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const counts = (k: string) => declarations.filter(d => d.status === k).length;
+
+  const legacyRows = useMemo(
+    () => [...legacyDeclarations].sort((a, b) => (b.an * 100 + b.luna) - (a.an * 100 + a.luna)),
+    [legacyDeclarations],
+  );
 
   // TASK 8: land the focused record on screen, whatever page of the register it sits on.
-  const focusIndex = focusRecord ? rows.findIndex(d => d.id === focusRecord) : -1;
+  const focusIndex = focusRecord ? rows.findIndex(f => f.id === focusRecord) : -1;
   useEffect(() => {
     if (focusIndex >= 0) setPage(Math.floor(focusIndex / PAGE_SIZE) + 1);
   }, [focusIndex]);
@@ -168,15 +235,6 @@ export default function Declarations({ initialTab, onTabChange, focusRecord }: D
       </div>
 
       <Card>
-        <div style={{ padding: '0 18px' }}>
-          <div className="tabs">
-            {TABS.map(t => (
-              <button key={t.key} className={`tab ${tab === t.key ? 'active' : ''}`} onClick={() => { setTab(t.key); setPage(1); onTabChange?.(t.key); }}>
-                {t.label}<span className="count">{counts(t.key)}</span>
-              </button>
-            ))}
-          </div>
-        </div>
         {pageRows.length === 0 ? (
           <Empty
             icon="📋"
@@ -189,38 +247,47 @@ export default function Declarations({ initialTab, onTabChange, focusRecord }: D
             <table className="table">
               <thead>
                 <tr>
-                  <th>{declarationsCopy.columns.period}</th><th>{declarationsCopy.columns.year}</th><th>{declarationsCopy.columns.month}</th>
-                  <th className="amount">{declarationsCopy.columns.revenue}</th><th className="amount">{declarationsCopy.columns.expenses}</th>
-                  <th className="amount">{declarationsCopy.columns.taxableBase}</th>
-                  <th>{declarationsCopy.columns.status}</th><th />
+                  <th>{declarationsCopy.columns.taxYear}</th>
+                  <th>{declarationsCopy.columns.form}</th>
+                  <th>{declarationsCopy.columns.status}</th>
+                  <th>{declarationsCopy.columns.filedOn}</th>
+                  <th>{declarationsCopy.columns.reference}</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
-                {pageRows.map(d => (
+                {pageRows.map(f => (
                   <tr
-                    key={d.id}
-                    data-record-id={d.id}
-                    className={`clickable${d.id === focusRecord ? ' row-focus' : ''}`}
-                    onClick={() => setEditing(d)}
+                    key={f.id}
+                    data-record-id={f.id}
+                    className={`clickable${f.id === focusRecord ? ' row-focus' : ''}`}
+                    onClick={() => setEditing(f)}
                   >
-                    <td style={{ fontWeight: 500, color: 'var(--text)' }}>{d.an}-{String(d.luna).padStart(2, '0')}</td>
-                    <td>{d.an}</td>
-                    <td>{LUNILE[d.luna - 1]}</td>
-                    <td className="amount">{formatBaniRON(d.venituri)}</td>
-                    <td className="amount">{formatBaniRON(d.cheltuieli)}</td>
-                    <td className="amount">{formatBaniRON(declarationNet(d))}</td>
+                    <td style={{ fontWeight: 500, color: 'var(--text)' }}>{f.taxYear}</td>
+                    <td>{f.form}</td>
                     <td>
-                      <Badge kind={statusBadge(d.status)}>{recordStatus.labels[d.status]}</Badge>
-                      {d.dataTrimitere && <div className="text-sm muted" style={{ marginTop: 3 }}>{declarationsCopy.submittedOn} {fmtDate(d.dataTrimitere)}</div>}
+                      <Badge kind={FILING_BADGE[f.status]}>{recordStatus.filingLabels[f.status]}</Badge>
                     </td>
+                    <td>{f.filedOn ? fmtDate(f.filedOn) : '—'}</td>
+                    <td className="muted">{f.reference ?? '—'}</td>
                     <td>
                       <div className="row-actions">
-                        {d.status === 'inregistrata' || d.status === 'in-asteptare' ? (
-                          <button className="btn btn-sm btn-primary" onClick={e => { e.stopPropagation(); sendDeclaration(d.id); toast('success', declarationsCopy.submitted(`${d.an}-${String(d.luna).padStart(2, '0')}`)); }}>
-                            {declarationsCopy.submit}
+                        {f.status !== 'depusa' ? (
+                          <button
+                            className="btn btn-sm btn-primary"
+                            onClick={e => {
+                              e.stopPropagation();
+                              // The date is recorded here because this is the moment the app is told the
+                              // return was filed. It is not backdated, and it is not written for a status
+                              // that does not claim a filing.
+                              updateFiling({ ...f, status: 'depusa', filedOn: localDateISO() });
+                              toast('success', declarationsCopy.filed(f.taxYear));
+                            }}
+                          >
+                            {declarationsCopy.markFiled}
                           </button>
                         ) : (
-                          <button className="btn btn-sm btn-ghost" onClick={e => { e.stopPropagation(); setEditing(d); }}>{copy.ui.edit}</button>
+                          <button className="btn btn-sm btn-ghost" onClick={e => { e.stopPropagation(); setEditing(f); }}>{copy.ui.edit}</button>
                         )}
                       </div>
                     </td>
@@ -233,17 +300,20 @@ export default function Declarations({ initialTab, onTabChange, focusRecord }: D
         )}
       </Card>
 
+      <LegacyMonthly rows={legacyRows} focusRecord={focusRecord} />
+
       {editing && (
-        <DeclForm
+        <FilingForm
           initial={editing === 'new' ? undefined : editing}
+          years={years}
           onClose={() => setEditing(null)}
-          onSave={d => {
+          onSave={f => {
             if (editing !== 'new') {
-              updateDeclaration({ ...editing, ...d });
-              toast('success', declarationsCopy.updated(`${d.an}-${String(d.luna).padStart(2, '0')}`));
+              updateFiling({ ...editing, ...f });
+              toast('success', declarationsCopy.updated(f.taxYear));
             } else {
-              addDeclaration(d);
-              toast('success', declarationsCopy.added(`${d.an}-${String(d.luna).padStart(2, '0')}`));
+              addFiling(f);
+              toast('success', declarationsCopy.added(f.taxYear));
             }
             setEditing(null);
           }}

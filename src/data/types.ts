@@ -103,9 +103,15 @@ export type LegacyExpense = Omit<Expense, 'valoareFaraTva' | 'tva'> & { valoareF
  * at a `version` below 10, and assert what the chain produces — so the fixture must be typed as the shape
  * that arrives, not the shape that leaves.
  */
-export type LegacyAppData = Omit<AppData, 'revenues' | 'expenses'> & {
+export type LegacyAppData = Omit<AppData, 'revenues' | 'expenses' | 'filings' | 'legacyDeclarations'> & {
   revenues: LegacyRevenue[];
   expenses: LegacyExpense[];
+  /**
+   * The pre-v11 monthly rows. A legacy fixture carries them under this key precisely because that is
+   * what an old payload looks like; the `annual-filing` step is what moves them to
+   * `legacyDeclarations`. Optional, because most legacy fixtures never had any.
+   */
+  declarations?: Declaration[];
 };
 
 // ── Clienți ───────────────────────────────────────────────
@@ -118,7 +124,17 @@ export interface Client {
   oras?: string;
 }
 
-// ── Declarații ────────────────────────────────────────────
+// ── Declarații lunare moștenite (pre-v11) ──────────────────
+/**
+ * PG-5 (B-34): this is NOT a filing. It is a monthly row written by an older version of this app,
+ * kept readable because it is the only place some facts exist.
+ *
+ * A PFA în sistem real files ONE Declarația Unică 212 per fiscal year (CF art. 122 alin. (3)); there
+ * is no monthly return for it to be a record of. `status: 'inregistrata'` on one of these rows means
+ * only that the row itself was registered in this app — it is not evidence that anyone filed anything
+ * with ANAF, and nothing may treat it as such. The annual record that CAN carry that fact is
+ * `AnnualFiling` below.
+ */
 export type DeclStatus = 'inregistrata' | 'in-asteptare' | 'transmisa' | 'respinsa';
 
 export interface Declaration {
@@ -132,6 +148,40 @@ export interface Declaration {
   dataInregistrare: string;
   dataTrimitere?: string;
 }
+
+// ── Declarație unică anuală (PG-5) ────────────────────────
+/** The only annual return this application models. */
+export type FilingForm = 'D212';
+
+/**
+ * The state of the annual return, as the app is allowed to know it.
+ *
+ * `depusa` is the only status that says a filing happened, and it is the only one a deadline may be
+ * marked done from. `in_pregatire` says the return is being prepared — a fact about the app's own
+ * record, not about ANAF. `respinsa` says a submission was made and rejected: a rejected return is
+ * not a filed one, so it does not discharge the obligation either.
+ */
+export type FilingStatus = 'in_pregatire' | 'depusa' | 'respinsa';
+
+export interface AnnualFiling {
+  id: string;
+  /** The fiscal year the return DECLARES — not the year it was filed. FY2026 is filed in 2027. */
+  taxYear: number;
+  form: FilingForm;
+  status: FilingStatus;
+  /** The date the return was actually filed. Meaningful only with `depusa`; absent means not recorded. */
+  filedOn?: string;
+  /** The registration number or proof reference the tax office gave, when the user recorded one. */
+  reference?: string;
+}
+
+/**
+ * The ONE test that says "this record proves a filing happened".
+ *
+ * Landmine: a monthly `Declaration` with `status: 'inregistrata'` must never pass for this, which is
+ * why the function takes an `AnnualFiling` and nothing else — the monthly type cannot be handed to it.
+ */
+export const isFiledFiling = (f: Pick<AnnualFiling, 'status'>): boolean => f.status === 'depusa';
 
 // ── Documente (dashboard) ─────────────────────────────────
 export interface DocumentItem {
@@ -228,7 +278,22 @@ export interface AppData {
   revenues: Revenue[];
   expenses: Expense[];
   clients: Client[];
-  declarations: Declaration[];
+  /**
+   * PG-5 (B-34): the annual returns this profile has filed or is preparing.
+   *
+   * This is the record a deadline can be marked done from. It is empty until the user records a
+   * filing — the migration step never mints one, because minting one would assert a filing that
+   * nobody made.
+   */
+  filings: AnnualFiling[];
+  /**
+   * PG-5: the monthly rows a pre-v11 payload carried, preserved verbatim and read-only.
+   *
+   * Named `legacyDeclarations` rather than `declarations` so that no call site can read one as a
+   * filing by accident. Nothing in the app writes them any more; the Declarations page still lists
+   * them, because dropping them would destroy the only place some of those facts exist.
+   */
+  legacyDeclarations: Declaration[];
   documents: DocumentItem[];
   companyDocs: Record<DocTypeCode, CompanyDocument[]>;
   statements: TaxStatement[];

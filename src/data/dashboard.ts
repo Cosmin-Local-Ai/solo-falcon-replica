@@ -31,7 +31,7 @@ import {
   type MeasuredBasis,
   type ThresholdBases,
 } from '../domain/thresholds';
-import { computeDeadlines, filterUpcoming, type Deadline } from '../domain/deadlines';
+import { computeDeadlines, classifyDeadline, filingForDeadline, resolveDeadlineOutcome, type DeadlineView } from '../domain/deadlines';
 import {
   computeTaxReserve,
   createTaxReserveState,
@@ -74,7 +74,12 @@ export interface PendingCounts {
   revenuesInAsteptare: number;
   revenuesRespinsa: number;
   expensesRespinsa: number;
-  declarationsInAsteptare: number;
+  /**
+   * PG-5: annual returns recorded in the app but not yet filed. It replaces
+   * `declarationsInAsteptare`, which counted monthly rows whose own status said „în așteptare” — rows
+   * for a return this profile does not owe.
+   */
+  filingsInAsteptare: number;
 }
 
 /**
@@ -256,7 +261,12 @@ export interface DashboardData {
    */
   coverage: EstimateCoverageGap[];
   thresholds: FiscalThreshold[];
-  deadlines: Deadline[];
+  /**
+   * The dated terms still ahead, each carrying whether the dataset already discharges it.
+   * PG-5 widened the row from `Deadline` to `DeadlineView` so the card can say „Depusă” instead of
+   * showing a term as still open after the return was filed.
+   */
+  deadlines: DeadlineView[];
   completeness: CompletenessReport;
   /**
    * TASK 8: the action surface is a projection of the attention model, not a second pipeline. It used
@@ -306,8 +316,9 @@ export function getDataCompleteness(
   data: AppData,
   coverage: readonly EstimateCoverageGap[] = [],
   asOfDate?: string,
+  filingTerm: string | null = null,
 ): CompletenessReport {
-  return assessCompleteness(data, coverage, asOfDate);
+  return assessCompleteness(data, coverage, asOfDate, filingTerm);
 }
 
 export function getPendingCounts(data: AppData): PendingCounts {
@@ -315,7 +326,7 @@ export function getPendingCounts(data: AppData): PendingCounts {
     revenuesInAsteptare: data.revenues.filter((r) => r.status === 'in-asteptare').length,
     revenuesRespinsa: data.revenues.filter((r) => r.status === 'respinsa').length,
     expensesRespinsa: data.expenses.filter((e) => e.status === 'respinsa').length,
-    declarationsInAsteptare: data.declarations.filter((d) => d.status === 'in-asteptare').length,
+    filingsInAsteptare: data.filings.filter((f) => f.status === 'in_pregatire').length,
   };
 }
 
@@ -451,28 +462,69 @@ export function getThresholdStatuses(
   });
 }
 
-export function getUpcomingDeadlines(data: AppData, asOfDate: string): Deadline[] {
-  // Step 31: only applicable upcoming deadlines — past, due-today, and
-  // null-dated deadlines are excluded by the domain `filterUpcoming`.
-  return filterUpcoming(
-    computeDeadlines(selectionRules(data, asOfDate), {
-      taxYear: data.profile.fiscalYear,
-      asOfDate,
-      // Phase 9b: `pfaStartDate` is passed but read by NO deadline rule, and none may be — the only
-      // rule that ever consumed it implemented an obligation abrogated on 01-01-2025, and the CPF
-      // 30-day fiscal-registration term does not reach a PFA (OUG 44/2008 art. 13 alin. (3) is itself
-      // the act of fiscal taking-into-evidence). A PFA start date therefore resolves ZERO deadlines:
-      // silence is the correct outcome, asserted in src/domain/deadlines.test.ts.
-      // `vatExceedanceDate` is the input `VAT_REGISTRATION_DEADLINE_2026` had been missing since
-      // Phase 9b: the rule was correct, cited and rule-driven, but nothing recorded the date, so it
-      // could only ever resolve `date: null, status: 'not_applicable'`. It is still optional, and an
-      // absent value still produces NO deadline — the engine has no source for the exceedance date
-      // and must not invent one. Passing it is a data-model fix, not a rule change.
-      pfaStartDate: data.profile.pfaStartDate,
-      vatExceedanceDate: data.profile.vatExceedanceDate,
-    }),
+/**
+ * PG-5 — the annotated deadline row lives in the domain (`domain/deadlines.ts DeadlineView`) so the
+ * card can read it without importing the data layer. Re-exported here because this is the file every
+ * surface already reads from.
+ */
+export type { DeadlineView };
+
+/**
+ * Every deadline the rule set resolves for this profile, annotated once.
+ *
+ * One `computeDeadlines` call per dashboard build feeds the card, the snapshot and the completeness
+ * check. Before this, each of them called the engine separately; three calls that could disagree about
+ * whether a term exists is exactly the drift the rest of this file keeps closing off.
+ */
+export function getDeadlineRows(data: AppData, asOfDate: string): DeadlineView[] {
+  const filings = data.filings;
+  return computeDeadlines(selectionRules(data, asOfDate), {
+    taxYear: data.profile.fiscalYear,
     asOfDate,
-  );
+    // Phase 9b: `pfaStartDate` is passed but read by NO deadline rule, and none may be — the only
+    // rule that ever consumed it implemented an obligation abrogated on 01-01-2025, and the CPF
+    // 30-day fiscal-registration term does not reach a PFA (OUG 44/2008 art. 13 alin. (3) is itself
+    // the act of fiscal taking-into-evidence). A PFA start date therefore resolves ZERO deadlines:
+    // silence is the correct outcome, asserted in src/domain/deadlines.test.ts.
+    // `vatExceedanceDate` is the input `VAT_REGISTRATION_DEADLINE_2026` had been missing since
+    // Phase 9b: the rule was correct, cited and rule-driven, but nothing recorded the date, so it
+    // could only ever resolve `date: null, status: 'not_applicable'`. It is still optional, and an
+    // absent value still produces NO dated deadline — the engine has no source for the exceedance
+    // date and must not invent one. Passing it is a data-model fix, not a rule change.
+    pfaStartDate: data.profile.pfaStartDate,
+    vatExceedanceDate: data.profile.vatExceedanceDate,
+  }).map((d) => {
+    const filing = filingForDeadline(filings, d);
+    return {
+      ...d,
+      done: filing !== null,
+      filedOn: filing?.filedOn ?? null,
+      outcome: resolveDeadlineOutcome(d, filings, asOfDate),
+    };
+  });
+}
+
+/**
+ * The dated terms that still lie ahead. Unchanged in meaning since Step 31: past, due-today and
+ * null-dated terms are excluded by the domain `filterUpcoming`. A term already discharged still
+ * appears here while its date is ahead — with `done: true`, so the card can say so rather than
+ * silently dropping the one piece of good news it has.
+ */
+export function getUpcomingDeadlines(data: AppData, asOfDate: string): DeadlineView[] {
+  return getDeadlineRows(data, asOfDate).filter((d) => classifyDeadline(d, asOfDate) === 'upcoming');
+}
+
+/**
+ * PG-5 / B-35 — the terms the engine resolved but could not date.
+ *
+ * These are not absent obligations; they are obligations whose date the recorded facts cannot fix. The
+ * VAT filing period is the live case. They are NOT rendered as a second warning surface: the sentence
+ * goes through the one completeness channel (`domain/completeness.ts vatFilingPeriodCheck`), which is
+ * where the brief asks for it and where it reaches both the card and the action list. This function
+ * exists for the tests that pin the engine's silence is an undated term, not a missing one.
+ */
+export function getUndatedDeadlines(data: AppData, asOfDate: string): DeadlineView[] {
+  return getDeadlineRows(data, asOfDate).filter((d) => d.date === null);
 }
 
 /**
@@ -693,17 +745,17 @@ function buildSnapshot(
   asOfDate: string,
   tax: TaxEstimateResult | null,
   coverage: readonly EstimateCoverageGap[] = [],
+  deadlineRows: DeadlineView[] = [],
 ): DashboardSnapshotView {
   const taxYear = data.profile.fiscalYear;
-  const completeness = assessCompleteness(data, coverage, asOfDate);
-  const deadlines = computeDeadlines(selectionRules(data, asOfDate), {
-    taxYear,
-    asOfDate,
-    pfaStartDate: data.profile.pfaStartDate,
-    // Same query as `getUpcomingDeadlines`: the snapshot and the deadline section must not be able
-    // to disagree about whether a VAT registration deadline exists.
-    vatExceedanceDate: data.profile.vatExceedanceDate,
-  });
+  const filingTerm = deadlineRows.find((d) => d.eventType === 'd212_filing')?.date ?? null;
+  const completeness = assessCompleteness(data, coverage, asOfDate, filingTerm);
+  // PG-5: a term the dataset already discharges leaves this list. `insights.ts` builds the
+  // „Termen depășit” row out of exactly these rows, so before PG-5 a profile that filed the FY2026
+  // return on time still got a high-priority overdue item after 25 May 2027 — the record of the filing
+  // existed, and nothing consulted it. Dropping the discharged term here keeps ONE producer for the
+  // deadline family (insights) instead of adding a second one that knows about filings.
+  const deadlines = deadlineRows.filter((d) => !d.done);
   const ytd = selectYtd(ledgerOf(data).data, asOfDate);
   // Single source for both the snapshot rows and `DashboardData.thresholds` — the inline
   // duplicate that used to live here is what let the two paths drift.
@@ -793,7 +845,12 @@ export function buildDashboardData(
     ...selectEstimateCoverage(data, asOfDate, selectionRules(data, asOfDate)),
     ...coverageFromUnconverted(ledger.unconverted),
   ];
-  const snapshot = buildSnapshot(data, asOfDate, estimate, coverage);
+  // PG-5: the deadline engine runs ONCE per build. The card, the snapshot's attention rows and the
+  // completeness check's filing term all read this one list, so they cannot disagree about whether a
+  // term exists or whether it has been discharged.
+  const deadlineRows = getDeadlineRows(data, asOfDate);
+  const filingTerm = deadlineRows.find((d) => d.eventType === 'd212_filing')?.date ?? null;
+  const snapshot = buildSnapshot(data, asOfDate, estimate, coverage, deadlineRows);
   const attention = getAttentionItems(data, snapshot, estimate ?? undefined);
   return {
     taxYear: data.profile.fiscalYear,
@@ -803,8 +860,8 @@ export function buildDashboardData(
     year: fiscalYearView(data, asOfDate, instant),
     coverage,
     thresholds: getThresholdStatuses(data, asOfDate, estimate),
-    deadlines: getUpcomingDeadlines(data, asOfDate),
-    completeness: getDataCompleteness(data, coverage, asOfDate),
+    deadlines: deadlineRows.filter((d) => classifyDeadline(d, asOfDate) === 'upcoming'),
+    completeness: getDataCompleteness(data, coverage, asOfDate, filingTerm),
     actions: attention.actions,
     reserve: getTaxReserve(data, asOfDate, estimate),
     insights: attention.observations,
