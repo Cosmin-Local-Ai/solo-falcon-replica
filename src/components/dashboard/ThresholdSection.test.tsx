@@ -80,7 +80,7 @@ describe('ThresholdSection (Step 32 — Romanian, no raw enums)', () => {
     // PG-5C / D-PROJ-1: a threshold compared against a register read at a date is only meaningful with
     // that date, and a mid-year reader must not be left to infer that the year is already settled.
     const first = render(<ThresholdSection thresholds={[makeThreshold()]} asOfDate="2026-10-31" />);
-    expect(first.getByText('Valoare măsurată la data de 2026-10-31.')).toBeInTheDocument();
+    expect(first.getByText('Valoare măsurată la data de 31.10.2026.')).toBeInTheDocument();
     // No date passed, no line invented.
     first.unmount();
     render(<ThresholdSection thresholds={[makeThreshold()]} />);

@@ -264,11 +264,13 @@ test.describe('salaried PFA below the 6 SM floor — CF art. 174 alin. (6) + ali
     await page.goto('/dashboard');
 
     const card = page.locator('.stat-card').filter({ hasText: 'Impozit estimat' });
-    // Task 1: the engine receives the ANNUAL projection, so the fixture's 20.000 lei of net income
-    // (30.000 revenue − 10.000 expense, both February 2026) enters as 24.000 lei (x 12/10).
-    // CAS 0 (net < 12 SM) + CASS 2.400 (10% × 24.000, art. 174 alin. (1)) + 10% × 21.600 = 2.160.
-    // On the raw YTD operand this was 3.800 lei (2.000 + 1.800).
-    await expect(card.getByText(/4\.560/)).toBeVisible();
+    // PG-5C re-pin (replaced, not deleted): 4.560 lei → 3.800 lei. The old figure came from feeding the
+    // engine the fixture's 20.000 lei of net income annualised to 24.000 lei (× 12/10). The comment that
+    // used to sit here called 3.800 lei "the raw YTD operand"; after B-76 it is the annual amount —
+    // CF art. 118 alin. (3) makes the sum realised in part of a year the sum for the whole year.
+    // CAS 0 (net < 12 SM) + CASS 2.000 (10% × 20.000, art. 174 alin. (1); salary ≥ 6 SM so no alin. (6)
+    // difference) + 10% × (20.000 − 2.000) = 1.800 → 3.800 lei.
+    await expect(card.getByText(/3\.800/)).toBeVisible();
     await expect(card.locator('.value')).not.toHaveText('—');
   });
 
@@ -278,11 +280,13 @@ test.describe('salaried PFA below the 6 SM floor — CF art. 174 alin. (6) + ali
     await page.goto('/dashboard');
 
     const card = page.locator('.stat-card').filter({ hasText: 'Impozit estimat' });
-    // Projected net 24.000 lei (x 12/10): CASS owed 2.430 (10% × 6 SM floor), of which only 2.400
-    // (10% × VNA) is deductible (art. 118 alin. (2) lit. b)), so the base is unchanged at 21.600 and
-    // the total is exactly 30 lei higher — the non-deductible difference, not a re-based calculation.
-    // On the raw YTD operand this was 4.230 lei (2.430 + 1.800), 430 lei above 3.800.
-    await expect(card.getByText(/4\.590/)).toBeVisible();
+    // PG-5C re-pin (replaced, not deleted): 4.590 lei → 4.230 lei.
+    // Net income 20.000 lei recorded. Salary 20.000 < 6 SM (24.300), so art. 174 alin. (6) owes the
+    // difference to the floor: CASS 2.430, of which only 2.000 (10% × VNA) is deductible — the 430 lei
+    // difference is excluded by art. 118 alin. (2) lit. b), so the base stays at 18.000 and the total is
+    // exactly 430 lei above the 3.800 lei of the previous test. That 430-lei gap is the whole point of
+    // the pair, and it survives the re-pin; only the base it sits on changed.
+    await expect(card.getByText(/4\.230/)).toBeVisible();
     await expect(card.locator('.value')).not.toHaveText('—');
   });
 });

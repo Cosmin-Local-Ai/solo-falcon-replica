@@ -5,7 +5,7 @@ import { CURRENT_DATA_VERSION } from '../data/migration';
 import { seedData } from '../data/seed';
 import type { AppData, LegacyRevenue } from '../data/types';
 import Dashboard from './Dashboard';
-import { lei, ron, type Bani } from '../domain/money';
+import { type Bani } from '../domain/money';
 
 const STORAGE_KEY = 'pfa-app-data-v2';
 

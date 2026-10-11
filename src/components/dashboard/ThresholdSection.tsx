@@ -1,5 +1,6 @@
 import type { FiscalThreshold } from '../../domain/thresholds';
 import { formatBaniLei } from '../../domain/money';
+import { formatRoCalendarDate } from '../../domain/date';
 import { Card, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Disclosure } from '../ui/Disclosure';
 import { InterpretationNote } from '../ui/InterpretationNote';
@@ -76,7 +77,7 @@ export default function ThresholdSection({ thresholds, asOfDate }: ThresholdSect
         <>
           {asOfDate ? (
             <p className="hint threshold-measured-at" data-measured-at={asOfDate}>
-              {thresholdCopy.measuredAt(asOfDate)}
+              {thresholdCopy.measuredAt(formatRoCalendarDate(asOfDate))}
             </p>
           ) : null}
           {thresholds.map((t) => (

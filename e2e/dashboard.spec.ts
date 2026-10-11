@@ -102,44 +102,46 @@ test.describe('Dashboard — cockpit cards (seed data)', () => {
     // Tax estimate is COMPUTED for the seed data (B-14): the seed profile is on impozit_pe_venit, the
     // only regime a PFA can have in 2026, so the default user gets a number instead of an em dash.
     //
-    // Task 1 changed WHAT enters the engine: not the YTD totals but the projection model's annual
-    // figures. PG-4 (B-44) changed the DENOMINATOR: the model runs over the PFA's active period, and the
-    // seed PFA started on 2026-01-19, so at the fixed clock the elapsed measure is 9 13/31 months of an
-    // 11 13/31-month window — each operand is YTD × 354/292 ≈ YTD × 1,2123, not YTD × 1,2. The pair the
-    // engine selects for a non-`vatExempt` profile is still the VAT-exclusive one.
+    // PG-5C changed WHAT enters the engine: the recorded amounts themselves. The projection model still
+    // runs — over the PFA's active period, 9 13/31 elapsed of 11 13/31 months at this clock, because the
+    // seed PFA started on 2026-01-19 (PG-4, B-44) — but it now feeds the chart's forecast series and the
+    // forecast card, not the assessment. CF art. 118 alin. (3) makes the amount realized in a fraction of
+    // a year the annual amount, so no grossing-up stands between the register and the engine. The pair
+    // the engine selects for a non-`vatExempt` profile is still the VAT-exclusive one.
     //
     // TASK 2b changed WHICH expenses reach that operand: only the confirmed-deductible subset. Of the
     // two 'inregistrata' seed expenses, e1 (CloudHost, 120,00 lei, `postal_and_telecom`) is deductibilă
     // and e2 (Carrefour bon fiscal, 85,50 lei, `personal_or_family_use`) is nedeductibilă expres prin
     // CF art. 68 alin. (7) lit. a) — so the expense operand is 120,00 lei, not 205,50 lei:
-    //   venit brut (excl-VAT)    7.700,00 × 354/292 = 9.334,93 lei
-    //   cheltuieli deductibile     120,00 × 354/292 =   145,48 lei
-    //   VNA                                    =  9.189,45 lei
+    //   venit brut (excl-VAT)    7.700,00 lei înregistrat
+    //   cheltuieli deductibile     120,00 lei înregistrat
+    //   VNA                                    =  7.580,00 lei
     // still inside 0 < VNA < 6 SM, so B-13 still applies: CASS owed = 2.430 lei (art. 174 alin. (6)
-    // difference to the 6 SM floor), but only 10% × VNA = 918,945 lei (art. 174 alin. (1)) is
-    // deductible. CF art. 66 alin. (1) rounds each sum DUE to a whole leu, fracțiuni de până la 50
-    // de bani inclusiv neglijate:
-    //   deductibilă 918,945 → 94,5 bani > 50 → majorat la 919,00 lei
-    //   bază        9.189,45 − 919,00 = 8.270,45 lei (the base is never itself rounded)
-    //   impozit     10% × 8.270,45 = 827,045 → 45 bani < 50 → 827,00 lei
-    //   total       2.430 + 827 = 3.257,00 lei
-    // The same dataset read at 2026-12-31 has elapsed = active, so the projection is the identity and the
-    // figure is 3.112,00 lei — that case is pinned in src/data/dashboard.test.ts and, since PG-4, in
-    // e2e/year-rollover.spec.ts for the dates after the year closed.
+    // difference to the 6 SM floor), but only 10% × VNA = 758,00 lei (art. 174 alin. (1)) is deductible;
+    // the 1.672,00 lei difference is excluded by art. 118 alin. (2) lit. b). CAS: VNA is below 12 SM
+    // (48.600,00 lei), so art. 148 alin. (1) is not met and none is owed. CF art. 66 alin. (1) rounds
+    // each sum DUE to a whole leu, fracțiuni de până la 50 de bani inclusiv neglijate:
+    //   deductibilă 758,00 (already whole)
+    //   bază        7.580,00 − 758,00 = 6.822,00 lei (the base is never itself rounded)
+    //   impozit     10% × 6.822,00 = 682,20 → 20 bani ≤ 50 → 682,00 lei
+    //   total       2.430 + 682 = 3.112,00 lei
+    // Before PG-5C this assertion read 3.257,00 lei, derived from a VNA of 9.189,45 lei — the seed's own
+    // net income multiplied by 354/292. The 145,00 lei difference was the run rate's contribution to a
+    // tax assessment, and it is the reason this phase exists.
     const impozit = statCard(page, 'Impozit estimat');
     await expect(impozit).toBeVisible();
-    await expect(impozit.locator('.value')).toHaveText('3.257,00 RON');
+    await expect(impozit.locator('.value')).toHaveText('3.112,00 RON');
     await expect(impozit.locator('.hint')).toHaveText('de pus deoparte');
 
     // A computed tax → a recommended monthly reserve (total / 3 months) and a remaining amount.
     const rezerva = statCard(page, 'Rezervă lunară');
     await expect(rezerva).toBeVisible();
-    // 3.257,00 lei ÷ 3 months remaining (Oct–Dec) = 1.085,67 lei/month.
-    await expect(rezerva.locator('.value')).toHaveText('1.085,67 RON');
+    // 3.112,00 lei ÷ 3 months remaining (Oct–Dec) = 1.037,33 lei/month.
+    await expect(rezerva.locator('.value')).toHaveText('1.037,33 RON');
 
     const ramane = statCard(page, 'Rămâne de pus deoparte');
     await expect(ramane).toBeVisible();
-    await expect(ramane.locator('.value')).toHaveText('3.257,00 RON');
+    await expect(ramane.locator('.value')).toHaveText('3.112,00 RON');
 
     // Completeness: 7 of 9.
     // TASK 9 re-pin (replaced, not deleted): 8/9 → 7/9. The 'Declarații' check asked whether the app holds
@@ -193,7 +195,7 @@ test.describe('Dashboard — cockpit cards (seed data)', () => {
       .locator('section.card')
       .filter({ has: page.locator('h2.card-title', { hasText: 'Estimare impozit' }) })
       .first();
-    await expect(heroCard.locator('.tax-hero-value')).toHaveText('3.257,00 RON');
+    await expect(heroCard.locator('.tax-hero-value')).toHaveText('3.112,00 RON');
   });
 });
 
@@ -221,12 +223,12 @@ test.describe('Dashboard — section content (seed data)', () => {
 
     const reserve = sectionWith(page, 'Rezervă fiscală', 'h2');
     await expect(reserve).toBeVisible();
-    // 3.257,00 lei (the annual projection of the DEDUCTIBLE subset over the seed PFA's active period —
-    // TASK 2b removed e2's 85,50 lei from the base, PG-4 moved the denominator) over the 3 remaining
-    // months of the fiscal year → 1.085,67 lei/month.
-    await expect(reserve.getByText('1.085,67 RON').first()).toBeVisible();
+    // 3.112,00 lei — the tax computed from the DEDUCTIBLE subset of the recorded register (TASK 2b removed
+    // e2's 85,50 lei from the base; PG-5C removed the × 354/292 that used to sit in front of it) — over
+    // the 3 remaining months of the fiscal year → 1.037,33 lei/month.
+    await expect(reserve.getByText('1.037,33 RON').first()).toBeVisible();
     await expect(
-      reserve.getByText('Rămâne de pus deoparte 3.257,00 RON în următoarele 3 luni.'),
+      reserve.getByText('Rămâne de pus deoparte 3.112,00 RON în următoarele 3 luni.'),
     ).toBeVisible();
     // The no-estimate empty state is gone: the default regime computes (B-14).
     await expect(
@@ -269,15 +271,19 @@ test.describe('Dashboard — section content (seed data)', () => {
     // TASK 2b: the deductible subset, not every recorded expense),
     // per CF art. 148 alin. (1)-(2) / art. 170 alin. (1) / art. 174 alin. (6); the VAT row is
     // measured on VAT-exclusive turnover (4.500 + 3.200 = 7.700,00 lei), per art. 310 alin. (1).
-    // The four contribution rows measure the engine's `net-income` base, which since Task 1 is the
-    // ANNUAL projected VNA (9.189,45 lei since PG-4; 9.096,00 lei on the old calendar denominator), not
-    // the YTD one (7.580,00 lei). The VAT row below is
-    // deliberately still YTD — see docs/ai/phases/12_projection_annual_estimate.md §6.
-    await expect(thresholds.getByText(/Curent: 9\.189,45 lei/)).toHaveCount(4);
+    // PG-5C re-pin (replaced, not deleted): the four contribution rows used to read 9.189,45 lei — the
+    // ANNUAL PROJECTED VNA, i.e. the same 7.580,00 lei multiplied by 354/292 — while the VAT row read
+    // the realised 7.700,00 lei. A CAS floor of 48.600,00 lei was therefore compared against money the
+    // taxpayer had not received. Both families now read realised amounts; they remain different
+    // quantities, and the rows still say which. See docs/ai/phases/12_projection_annual_estimate.md §6
+    // as amended by PG-5C.
+    await expect(thresholds.getByText(/Curent: 7\.580,00 lei/)).toHaveCount(4);
     await expect(thresholds.getByText(/Curent: 7\.700,00 lei/)).toHaveCount(1);
     // The VAT-inclusive figure all the rows used to share is gone from this section. (It is
     // still correct — and still shown — as the "Venituri PFA (an)" cockpit card.)
     await expect(thresholds.getByText(/Curent: 9\.317,00 lei/)).toHaveCount(0);
+    // …and so is the projected one it was compared against.
+    await expect(thresholds.getByText(/Curent: 9\.189,45 lei/)).toHaveCount(0);
 
     // Status badges — TASK 4 re-pinned. Before: 2 × 'Depășit' (the two contribution FLOORS) and
     // 3 × 'În limite'. Nothing in the Cod fiscal attaches an adverse consequence to a net income
@@ -311,10 +317,20 @@ test.describe('Dashboard — section content (seed data)', () => {
     await expect(thresholds.getByText(/HG 1506\/2024/)).toHaveCount(4);
     await expect(thresholds.getByText(/HG 146\/2026/)).toHaveCount(4);
 
-    // TASK 4: each row says which quantity it measured — the annual projected VNA for the four
+    // TASK 4: each row says which quantity it measured — the realised annual net income for the four
     // contribution rows, year-to-date turnover for the VAT plafon. The asymmetry is deliberate.
-    await expect(thresholds.getByText(/Bază măsurată: venit net anual estimat pentru întreg anul/)).toHaveCount(4);
+    // PG-5C re-pin: the annual label used to read "venit net anual estimat pentru întreg anul", and that
+    // was not true — it was a projection. `'annual-projected'` no longer exists in `MeasuredBasis`, so
+    // the old wording cannot be rendered at all.
+    await expect(
+      thresholds.getByText(/Bază măsurată: venit net anual realizat — încasări încasate și plăți plătite, fără annualizare/),
+    ).toHaveCount(4);
     await expect(thresholds.getByText(/Bază măsurată: cifra de afaceri înregistrată de la începutul anului/)).toHaveCount(1);
+    await expect(thresholds.getByText(/Bază măsurată: venit net anual estimat pentru întreg anul/)).toHaveCount(0);
+
+    // PG-5C (D-PROJ-1): the section names the date the measured values were measured at, so a mid-year
+    // reader is not left to infer that the year is already settled.
+    await expect(thresholds.getByText('Valoare măsurată la data de 31.10.2026.')).toBeVisible();
 
     // TASK 4: the seed profile already applies VAT (`vatExempt: false`), so the art. 310 alin. (1)
     // registration test has been decided — the row renders as not applicable, not as a breach.
@@ -1068,15 +1084,18 @@ test.describe('Dashboard — computed tax state (PFA sistem real seed)', () => {
     );
   });
 
-  test('tax hero shows the computed estimate (51.510 lei)', async ({ page }) => {
+  test('tax hero shows the computed estimate (46.570 lei)', async ({ page }) => {
     await page.goto('/dashboard');
 
     const hero = sectionWith(page, 'Estimare impozit');
     // The computed value is rendered in the hero (not the em-dash empty state).
     // TASK 7 re-pin (replaced, not deleted): the section now also carries the breakdown disclosure
     // („Cum am ajuns la această sumă”), which repeats the same figure in a table row, so the bare
-    // getByText became ambiguous. Scoped to the hero element; the asserted figure is unchanged.
-    await expect(hero.locator('.tax-hero-value')).toHaveText(/51\.510/);
+    // getByText became ambiguous. Scoped to the hero element.
+    // PG-5C re-pin (replaced, not deleted): 51.510 lei → 46.570 lei. The dataset records 130.000 lei of
+    // revenue; the old figure annualised it to 157.602,74 lei and assessed the year on that. The figure
+    // below is the same engine on the recorded amount — CAS 24.300 + CASS 13.000 + impozit 9.270.
+    await expect(hero.locator('.tax-hero-value')).toHaveText(/46\.570/);
   });
 
   test('Rezervă fiscală section shows the computed estimate and monthly reserve', async ({ page }) => {
@@ -1084,14 +1103,16 @@ test.describe('Dashboard — computed tax state (PFA sistem real seed)', () => {
 
     const section = sectionWith(page, 'Rezervă fiscală');
     // The section renders the computed estimate (not the no-estimate empty state).
-    await expect(section.getByText(/51\.510/).first()).toBeVisible();
+    // PG-5C re-pin: 51.510 → 46.570 lei, and the monthly reserve with it (46.570 ÷ 3 = 15.523,33).
+    await expect(section.getByText(/46\.570/).first()).toBeVisible();
   });
 
   test('cockpit tax cell shows the computed estimate', async ({ page }) => {
     await page.goto('/dashboard');
 
     const cell = page.locator('.stat-card').filter({ hasText: 'Impozit estimat' });
-    await expect(cell.getByText(/51\.510/)).toBeVisible();
+    // PG-5C re-pin: 51.510 → 46.570 lei.
+    await expect(cell.getByText(/46\.570/)).toBeVisible();
   });
 });
 
