@@ -229,3 +229,18 @@ Brief 28 §PG-6b told the app to **refuse** accommodation income. The user overr
 **What is already answered:** the 30 % is a flat **expense** ratio (alin. 2), tax is 10 % of that net and **„impozitul fiind final"** (alin. 6) → effective 7 % of gross; the net **is cumulated for the CAS 12/24-SM band** — `research/07` §2 records that the 01.01.2026 amendment to art. 148 alin. (3) inserts art. 68^3 into the cumulation list, a cross-reference change only.
 **Now answered (`research/38`, 2026-10-11):** the 68^3 net **is** the CASS base — Legea 239/2025 art. XII pct. 19 amended art. 170 alin. (1) to name art. 68^3, two puncte after pct. 18 did the same for CAS — floored at 6 SM, capped at 72 SM, rate 10 %; and the occupancy-sheet order **was** published, as **OPANAF 381/2026, MO I 250/31.03.2026**, nine days late. „Impozitul fiind final" has **no** CASS effect.
 **Genuinely undetermined, and it must stay `review_required`:** the **alin. (3) platform-commission scope** — the words limit the exclusion to rooms in personal dwellings while the article's subject is a tourism operator's let space, and the choice moves gross, therefore tax, the CASS base and the CAS threshold; and the **alin. (1) eligibility gate**, a tourism-law classification outside the fiscal code. **The app asks; it does not decide.**
+
+### D-COM-1 — art. 68^3 platform commission: **ask, show both readings — and let a CAEN code trigger the question** — **user decision, 2026-10-11**
+The alin. (3) exclusion is limited by its words to rooms „situate în locuințe proprietate personală", while the article's subject is a tourism operator's let space. No primary source resolves it, and the choice moves gross, therefore tax, the CASS base and the CAS threshold.
+**Chosen:** the app **asks** which situation the user is in and applies the exclusion accordingly, **showing which reading it used and why**, with the alternative reading visible. It does not silently pick one, and it does not refuse to produce a figure.
+**And:** when Settings sees a **tourism CAEN code** on the profile, it **prompts that question**.
+**The boundary this must not cross.** 6b established that the activity family is **never inferred from a CAEN code**. That rule stands. A CAEN code may **trigger a question**; it may never **supply an answer**. The trigger is a convenience, the answer is the user's, and an unanswered question stays unanswered.
+
+### D-OCC-1 — the occupancy sheet: **reproduce the full OPANAF 381/2026 form, including guest names and CNPs** — **user decision, 2026-10-11**
+The orchestrator recommended recording occupancy counts only, because the obligation is retention rather than filing and the app would be holding personal data about people who are not its users. **The user chose to reproduce the form in full.**
+**Consequences accepted, and they are implementation requirements rather than commentary:**
+1. The app becomes a store of **third-party personal data** — guest name, CNP or ID series and number, stay dates, per room, per year.
+2. There is **no ANAF filing that requires the app to hold it**: OPANAF 381/2026 says „să completeze și să păstreze", one copy, kept by the taxpayer. So every byte of it is held for the user's convenience alone.
+3. Therefore: **local storage only, no network path for it** — nothing in the occupancy data may reach a fetcher, an export default, a log, or an analytics surface. If an export exists it must be an explicit user action producing the taxpayer's own sheet.
+4. **Deletion must be real** — deleting the data removes it, and the app must say plainly that it is the taxpayer's copy of a document they are legally required to keep.
+5. **No guest data in any fixture that leaves the machine**, and no real CNP in any test fixture.
