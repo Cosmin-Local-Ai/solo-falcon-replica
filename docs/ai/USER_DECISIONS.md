@@ -203,3 +203,13 @@ Full report and my in-tree verification of every claim: `docs/ai/notes/romanian_
 3. **Reverse D-NORMA-1 and refuse the regime explicitly.** `research/30` §7 already drafts what the refusal must say, including everything the user still owes. This is the option the project originally chose deliberately in Phase 6.
 
 **What is not in question:** whichever option is chosen, the app must not compute sistem real for a profile the law puts on normă de venit. That is a silent wrong number, not a refusal — and it is currently what the app does.
+
+### D-USER-1 — There are **no active users**: migrations need not preserve data nobody has — **user decision, 2026-10-10**
+Stated while reviewing PG-5's migration. PG-5 moved every monthly `declaration` row into a new `legacyDeclarations` bucket byte-for-byte purely to protect stored data. **There is no stored data to protect.** So the legacy bucket goes rather than becoming a permanent second vocabulary, and **B-75 exists only because it was kept**. This does not relax the migration chain itself — steps are still never renumbered and dev/test payloads still migrate — it removes the obligation to *preserve* shapes the product no longer supports.
+
+### D-VAT-1 — Form 300 setup: **ask the facts, derive when possible, confirm when not** — **user decision, 2026-10-10**
+Chosen for PG-6, after the user asked how someone who has just started a PFA would set this up. The answer drove the decision: **there is no field anywhere for a VAT registration date**, and a brand-new PFA has no previous year to measure, so nothing can be derived from history.
+1. Ask the two things the user actually knows: **are you VAT-registered, and since when?**
+2. Where the cadence follows from those facts plus recorded income, **derive it and show the reasoning.**
+3. Where it does not — a new PFA — **state the rule in plain words and ask the user to confirm monthly or quarterly**, labelled as *their* answer, never as the app's conclusion.
+**Never** a guessed cadence, and never the current dead end of "cannot be established" with no way forward.
