@@ -286,9 +286,11 @@ export function computeDeadlines(
  * app models as a filing, and `taxYear` on both sides is the year the return DECLARES, so the FY2026
  * return matches the FY2026 term even though it is filed in 2027.
  *
- * `isFiledFiling` is the whole test. A monthly `Declaration` cannot reach this function — it is not an
- * `AnnualFiling` — and that is deliberate: `status: 'inregistrata'` on a monthly row records that the
- * row was registered here, not that anyone filed anything.
+ * `isFiledFiling` is the whole test, and it is the only one the app can pass or fail on this question.
+ * The monthly record type that used to be worth warning about no longer exists — PG-5b deleted it and the
+ * v10→v11 step drops the rows it left behind — so `status: 'inregistrata'` is not a value any filing
+ * lookup can be handed. What PG-5 established survives unchanged: only an `AnnualFiling` whose own status
+ * says `depusa` discharges a term.
  */
 export function filingForDeadline(
   filings: readonly AnnualFiling[],

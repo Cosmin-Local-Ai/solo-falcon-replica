@@ -360,7 +360,9 @@ describe('loadInitial — optional collections are backfilled', () => {
     expect(storeRef!.expenses).toEqual([]);
     expect(storeRef!.clients).toEqual([]);
     expect(storeRef!.filings).toEqual([]);
-    expect(storeRef!.legacyDeclarations).toEqual([]);
+    // PG-5b: there is no monthly collection to backfill any more — the key is gone from the dataset, not
+    // merely empty inside it.
+    expect('legacyDeclarations' in storeRef!).toBe(false);
     expect(storeRef!.documents).toEqual([]);
     expect(storeRef!.companyDocs).toEqual({ im: [], cs: [], tva: [], facturi: [] });
     expect(storeRef!.statements).toEqual([]);

@@ -277,19 +277,16 @@ interface RecordSource {
     valoareFaraTva: Money;
   }[];
   /**
-   * PG-5: the pre-v11 monthly rows are deliberately NOT a source of attention items.
+   * PG-5 / PG-5b: there is no monthly family on this input at all — the key is gone, not merely unread.
    *
-   * An action row for one of them read „Declarație fără depunere înregistrată: 2026-06” — which asserts
-   * a submission this profile does not owe. A PFA în sistem real files one Declarația Unică per fiscal
-   * year; there is no monthly return for a monthly row to be missing. The rows are preserved and shown
-   * on the Declarations page, but they are inert: they generate no obligation, and the annual filing
-   * model (`AnnualFiling`, `domain/deadlines.ts`) is what carries the obligation that does exist.
-   *
-   * The field stays on the input type — optional and unread — so the inertness is stated where the rows
-   * arrive instead of being an absence a later edit can fill in by accident.
+   * An action row for a monthly record read „Declarație fără depunere înregistrată: 2026-06”, which
+   * asserts a submission this profile does not owe: a PFA în sistem real files one Declarația Unică per
+   * fiscal year, so there is no monthly return for a monthly row to be missing. PG-5 kept the rows on the
+   * input type, optional and unread, so the inertness was stated where they arrived. PG-5b deleted the
+   * record type, and with it the field — the obligation that does exist is carried by the annual filing
+   * model (`AnnualFiling`, `domain/deadlines.ts`), never here.
    */
-  legacyDeclarations?: readonly { id: string; status: string }[];
-} 
+}
 
 /**
  * Severity for a record, decided once. It is NOT read off `status`: a rejected income document and a

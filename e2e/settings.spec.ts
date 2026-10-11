@@ -449,15 +449,15 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // Re-pinned 2026-10-10 (PG-5): 10 → 11, because `annual-filing` (10→11) follows it. Same discipline
     // as the two re-pins above — one more step, so the bytes written back carry one more version. What
     // this test exists for is untouched: the notice is still one long, `original` is still the verbatim
-    // 674.504 and `converted` is still 67450 bani. The v11 step renames a collection and opens another;
-    // it converts no amount.
+    // 674.504 and `converted` is still 67450 bani. The v11 step opens a collection and converts no amount.
     expect(saved.version).toBe(11);
     // And the half of the v11 step that is a NON-write, asserted on the bytes: this payload carried no
-    // `declarations` collection, so nothing was moved and nothing was invented. The key is present in the
-    // written bytes because the store normalises AppData (an absent collection loads as empty), not
-    // because the step minted rows — the step's own no-empty-key rule is pinned in
-    // src/data/migration.annual.test.ts.
-    expect(saved.legacyDeclarations).toEqual([]);
+    // `declarations` collection, so nothing was moved and nothing was invented. PG-5b re-pin: the monthly
+    // key is now absent from the written bytes rather than present and empty — the record type is gone, so
+    // the store has no such collection to normalise. `filings` is still written empty, because an absent
+    // annual register is a fact the app still carries.
+    expect('legacyDeclarations' in saved).toBe(false);
+    expect('declarations' in saved).toBe(false);
     expect(saved.filings).toEqual([]);
     // TASK 5: the legacy profile entered this test with the pre-v8 `pensionStatus` key. The step folds it
     // into `pensionerStatus` and removes the old key — a rename of the status fact, never an inference

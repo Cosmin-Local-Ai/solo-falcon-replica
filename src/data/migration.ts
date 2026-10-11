@@ -26,7 +26,7 @@ import type { CaenCode, PfaIdentity, PfaProfile } from '../domain/models';
 import { computeInputsHashSync } from '../domain/snapshots/hashSync';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import { baniFromLei, lei, money, type Bani, type Money } from '../domain/money';
-import type { Declaration, Expense, Revenue } from './types';
+import type { Expense, Revenue } from './types';
 import { localYear, now, toInstantISO } from '../domain/date';
 import type { SettingsState } from './types';
 import type { PersistedAppData } from './schema';
@@ -159,20 +159,25 @@ export const DATA_VERSION_RULE_SET_DIGEST = 9;
  */
 export const DATA_VERSION_RECORD_CURRENCY = 10;
 /**
- * PG-5 (B-34): the dataset can now hold an annual return (`AnnualFiling`), and the monthly rows a
- * pre-v11 payload carried move to `legacyDeclarations`.
+ * PG-5 (B-34): the dataset can now hold an annual return (`AnnualFiling`).
  *
- * What this step does NOT do is the important half. It does not turn a monthly row into an annual
- * filing. A monthly `{an, luna, status: 'inregistrata'}` record is not evidence that a Declarația
- * Unică was filed for that year — it is a row this app registered in itself, for an obligation that
- * does not exist for this profile. Converting one would mint a filing the user never made, which is
- * the failure mode the whole phase exists to avoid. So the monthly rows are MOVED, verbatim, and
- * `filings` starts empty: absence stays representable, and the old rows stay readable on the
- * Declarations page under their own heading.
+ * PG-5b changed what this step DOES with the monthly rows a pre-v11 payload carried: it **drops** them.
+ * The step keeps its number, its position in the chain and its idempotency — a chain step is never
+ * renumbered, reordered or deleted, because a payload in the wild sits at whatever version it was written
+ * at and the chain has to be able to walk it from there. Only the behaviour moves.
  *
- * The rename is a real step, not a cosmetic one: `schema.ts` keeps BOTH keys declared, because zod
- * strips undeclared keys and a payload whose `declarations` key were stripped before the step ran
- * would lose those records outright.
+ * PG-5 preserved the rows byte for byte because they were the only place some facts existed for a real
+ * install. `docs/ai/USER_DECISIONS.md` D-USER-1 records that there are no active users and therefore no
+ * stored payload to protect, and a PFA în sistem real has no monthly return for the shape to be a record
+ * of. Keeping the vocabulary alive cost a second status vocabulary, a legacy bucket in the schema, the
+ * store and the types, and B-75 (bare integer `bani` with no currency record) existed only because those
+ * rows were kept.
+ *
+ * What this step still does NOT do is the half that matters: it does not turn a monthly row into an
+ * annual filing. A monthly `{an, luna, status: 'inregistrata'}` record is not evidence that a Declarația
+ * Unică was filed for that year, and minting one would assert a fact the user never established. So the
+ * rows are dropped and `filings` starts empty: absence stays representable, and nothing is invented on
+ * the way out.
  */
 export const DATA_VERSION_ANNUAL_FILING = 11;
 /** The version this build writes. */
@@ -572,7 +577,7 @@ export function convertMoneyToBani(input: PersistedAppData): {
       : {}),
     ...(input.declarations
       ? {
-          declarations: input.declarations.map((d: Declaration) => ({
+          declarations: input.declarations.map((d) => ({
             ...d,
             venituri: convert(d.venituri as number, 'declarations', d.id ?? '<no id>', 'venituri'),
             cheltuieli: convert(d.cheltuieli as number, 'declarations', d.id ?? '<no id>', 'cheltuieli'),
@@ -737,43 +742,41 @@ export function migrateRecordCurrencyV10(data: PersistedAppData): PersistedAppDa
 }
 
 /**
- * PG-5: the v10→v11 step. It moves the monthly rows to `legacyDeclarations` and opens `filings` empty.
+ * PG-5 / PG-5b: the v10→v11 step. It opens `filings` empty and drops the monthly rows.
  *
- * Idempotent-safe as the chain contract requires: if `legacyDeclarations` already exists it is left
- * exactly as it is, and an existing `filings` array is never replaced. Nothing is derived, converted
- * or summarised — the rows travel byte for byte, because they are the only place some of those facts
- * exist and this step has no authority to reinterpret them.
+ * Idempotent-safe as the chain contract requires: an existing `filings` array is never replaced, and a
+ * second run of the step produces the same payload. Nothing is derived, converted or summarised on the
+ * way out — the rows are dropped, so a step that first reinterpreted them would be inventing a fact in
+ * order to delete it.
  */
 export function migrateAnnualFilingV11(data: PersistedAppData): PersistedAppData {
-  // `version` and `declarations` are destructured OUT of the payload copy, so the stamp written last
-  // cannot be overwritten by the stale version the payload carried. An earlier revision of this step
-  // spread `{ ...stamped, ...rest }` and put `version: 10` back on the result, which made the chain
-  // abort with "did not set version 11" — loudly, which is the only reason it was caught.
-  const { version: staleVersion, declarations: monthly, ...rest } = data;
+  // `version`, `declarations` and `legacyDeclarations` are destructured OUT of the payload copy, so the
+  // stamp written last cannot be overwritten by the stale version the payload carried. An earlier
+  // revision of this step spread `{ ...stamped, ...rest }` and put `version: 10` back on the result,
+  // which made the chain abort with "did not set version 11" — loudly, which is the only reason it was
+  // caught. The same destructuring is now also the drop: `monthly` is read and discarded, and
+  // `legacyDeclarations` — the key PG-5 wrote for one release — is discarded with it, so an install that
+  // was upgraded under PG-5 loses nothing it can still read and gains no orphan bucket.
+  const {
+    version: staleVersion,
+    declarations: monthly,
+    // Not declared on `PersistedAppData` any more — zod strips it at the gate — but a payload handed to
+    // the chain directly can still carry it, and so can a PG-5-era install. It is discarded here too, so
+    // the bucket cannot survive a load by being undeclared rather than by being deleted.
+    legacyDeclarations: preserved,
+    ...rest
+  } = data as PersistedAppData & { legacyDeclarations?: unknown };
   void staleVersion;
+  void monthly;
+  void preserved;
 
-  const next: PersistedAppData = {
+  return {
     ...rest,
     // `filings` is opened empty only so the shape is explicit; the load path treats an absent key
     // identically. An existing array is never replaced.
     filings: rest.filings ?? [],
     version: DATA_VERSION_ANNUAL_FILING,
   };
-
-  if (rest.legacyDeclarations !== undefined) {
-    // Already renamed by a previous run of this step, or written by a v11 build. It is left exactly as
-    // it is; a stray `declarations` key alongside it is dropped, because the renamed key is the one the
-    // app reads and keeping both would let them disagree.
-    return next;
-  }
-
-  if (monthly !== undefined) {
-    // The move itself: byte for byte, no conversion, no summary, no derived annual row.
-    next.legacyDeclarations = monthly;
-  }
-  // A payload that never carried monthly rows gets no `legacyDeclarations` key at all — writing an
-  // empty one would claim a history it does not have.
-  return next;
 }
 
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
@@ -862,7 +865,7 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     to: DATA_VERSION_ANNUAL_FILING,
     name: 'annual-filing',
     summary:
-      'Aplicația poate înregistra acum declarația anuală (Declarația Unică 212) pe an fiscal declarat, nu pe lună. Înregistrările lunare vechi sunt mutate neschimbate în „legacyDeclarations” și rămân de citit — niciuna nu a fost transformată în depunere anuală: un rând lunar cu status „inregistrata” nu este dovada că cineva a depus ceva, iar o depunere inventată ar fi o faptă pe care utilizatorul nu a făcut-o. „filings” pornește gol.',
+      'Aplicația poate înregistra acum declarația anuală (Declarația Unică 212) pe an fiscal declarat, nu pe lună. Înregistrările lunare vechi au fost eliminate: un PFA în sistem real depune o singură Declarație Unică pe an fiscal (art. 122 alin. (3) din Codul fiscal), deci nu există nicio declarație lunară al cărei record ar fi fost. Niciuna nu a fost transformată în depunere anuală — un rând lunar cu status „inregistrata” nu este dovada că cineva a depus ceva, iar o depunere inventată ar fi o faptă pe care utilizatorul nu a făcut-o. „filings” pornește gol.',
     apply: migrateAnnualFilingV11,
   },
 ];

@@ -69,7 +69,7 @@ function basePayload(): Omit<AppData, 'fxRates'> {
     revenues: [],
     expenses: [],
     clients: [],
-    filings: [], legacyDeclarations: [],
+    filings: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],

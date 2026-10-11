@@ -185,7 +185,6 @@ function makeData(overrides: Partial<AppData> = {}): AppData {
     expenses: [makeExpense()],
     clients: [makeClient()],
     filings: [makeFiling()],
-    legacyDeclarations: [],
     documents: [makeDocument()],
     companyDocs: {
       im: [makeCompanyDocument()],
@@ -208,7 +207,7 @@ function makeEmptyData(): AppData {
     revenues: [],
     expenses: [],
     clients: [],
-    filings: [], legacyDeclarations: [],
+    filings: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],
@@ -294,15 +293,19 @@ describe('assessCompleteness', () => {
       expect(check.detail).toContain('pentru 2026');
     });
 
-    it('is not satisfied by a full register of legacy monthly rows', () => {
+    it('is not satisfied by a full register of monthly rows', () => {
       // This is B-34 in one assertion: the old predicate returned true here.
+      // PG-5b re-premise: the monthly record type is gone, so the register is handed over the way an
+      // un-migrated payload holds it — cast through `unknown`, under the key the old bytes used. The
+      // assertion is unchanged: rows that are not filings satisfy the annual check not at all, however
+      // complete the register looks, and the v10→v11 step drops them before the app ever sees them.
       const data = makeData({
         filings: [],
-        legacyDeclarations: [
+        declarations: [
           { id: 'd1', an: 2026, luna: 3, venituri: lei(1000), cheltuieli: lei(100), status: 'inregistrata', dataInregistrare: '2026-04-10' },
           { id: 'd2', an: 2026, luna: 6, venituri: lei(1000), cheltuieli: lei(100), status: 'transmisa', dataInregistrare: '2026-07-08', dataTrimitere: '2026-07-15' },
         ],
-      });
+      } as unknown as AppData);
       const check = byKey(assessCompleteness(data, [], '2027-06-01', '2027-05-25')).annualFiling;
       expect(check.satisfied).toBe(false);
       expect(check.detail).toBe('Declarația unică (D212) pentru 2026 nu este înregistrată; termenul a fost 25.05.2027');

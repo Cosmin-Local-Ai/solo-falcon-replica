@@ -13,7 +13,6 @@ import type {
   AnnualFiling,
   Client,
   CompanyDocument,
-  Declaration,
   DocTypeCode,
   DocumentItem,
   Expense,
@@ -141,6 +140,17 @@ export const clientSchema = z.object({
   oras: z.string().optional(),
 });
 
+/**
+ * PG-5b: the pre-v11 monthly row, as a STORED payload carries it. This is a storage shape, not an
+ * application record — nothing in the app reads one, no page renders one, and no domain function takes
+ * one. `Declaration` is gone from `data/types.ts` for that reason.
+ *
+ * The schema stays, and the key stays declared in `persistedAppDataSchema`, for one reason: **zod strips
+ * undeclared keys**. A payload whose `declarations` key were stripped at the load gate would lose its
+ * monthly rows before the migration chain ran, and then the `annual-filing` step would not be the thing
+ * that dropped them — the gate would. The step is the thing with a documented decision, so the rows have
+ * to reach it. They stop there: the v10→v11 step drops them.
+ */
 export const declarationSchema = z.object({
   id: nonEmptyString,
   an: z.number().int(),
@@ -151,6 +161,9 @@ export const declarationSchema = z.object({
   dataInregistrare: z.string(),
   dataTrimitere: z.string().optional(),
 });
+
+/** The row type is derived from the schema, so there is exactly one definition of a shape nothing uses. */
+export type LegacyMonthlyDeclaration = z.output<typeof declarationSchema>;
 
 /**
  * PG-5 (B-34): the annual return. `taxYear` is the year the return DECLARES, so the FY2026 return
@@ -335,16 +348,14 @@ export interface PersistedAppData {
   expenses?: Expense[];
   clients?: Client[];
   /**
-   * The pre-v11 monthly rows, kept declared AFTER the rename so zod cannot strip them before the
-   * `annual-filing` step has read them. Zod strips undeclared keys: dropping this line would erase a
-   * user's monthly records on load, before any migration code ever saw them. The v10→v11 step moves
-   * them to `legacyDeclarations`; this key is what carries them into that step.
+   * The pre-v11 monthly rows, declared so zod cannot strip them before the `annual-filing` step has read
+   * them. Zod strips undeclared keys: dropping this line would erase the rows on load, before any
+   * migration code saw them, and the step's own decision to drop them would be moot. The v10→v11 step
+   * reads this key and **drops** it (PG-5b); nothing downstream of the chain can carry it.
    */
-  declarations?: Declaration[];
+  declarations?: LegacyMonthlyDeclaration[];
   /** PG-5: the annual returns. Absent means none recorded — never backfilled. */
   filings?: AnnualFiling[];
-  /** PG-5: the monthly rows preserved by the v10→v11 step, read-only. */
-  legacyDeclarations?: Declaration[];
   documents?: DocumentItem[];
   companyDocs?: Record<DocTypeCode, CompanyDocument[]>;
   statements?: TaxStatement[];
@@ -390,11 +401,10 @@ export const persistedAppDataSchema = z.object({
   revenues: z.array(revenueSchema),
   expenses: z.array(expenseSchema).optional(),
   clients: z.array(clientSchema).optional(),
-  // PG-5: declared, not dropped — see `PersistedAppData.declarations`. The v10→v11 step reads this
-  // key and moves it to `legacyDeclarations`; both stay declared so neither is stripped on load.
+  // PG-5b: declared, not dropped — see `PersistedAppData.declarations`. The v10→v11 step reads this key
+  // and drops it; it stays declared so the step, not the load gate, is what decides.
   declarations: z.array(declarationSchema).optional(),
   filings: z.array(annualFilingSchema).optional(),
-  legacyDeclarations: z.array(declarationSchema).optional(),
   documents: z.array(documentItemSchema).optional(),
   companyDocs: z
     .record(z.enum(['im', 'cs', 'tva', 'facturi']), z.array(companyDocumentSchema))
@@ -482,7 +492,7 @@ export function parseAppData(raw: string): PersistedAppData | null {
 // `domain/aggregation.ts` → `auditFiscalDates` as `review_required`, never rewritten.
 // ---------------------------------------------------------------------------
 
-export type RecordKind = 'revenue' | 'expense' | 'declaration' | 'filing' | 'companyDocument' | 'statement';
+export type RecordKind = 'revenue' | 'expense' | 'filing' | 'companyDocument' | 'statement';
 
 interface DateFieldSpec {
   /** Property name on the record. */
@@ -518,10 +528,6 @@ const RECORD_DATE_FIELDS: Record<RecordKind, readonly DateFieldSpec[]> = {
     { field: 'date', label: 'data', required: true },
     { field: 'paid', label: 'data plății', required: false },
   ],
-  declaration: [
-    { field: 'dataInregistrare', label: 'data înregistrării', required: true },
-    { field: 'dataTrimitere', label: 'data trimiterii', required: false },
-  ],
   filing: [{ field: 'filedOn', label: 'data depunerii', required: false }],
   companyDocument: [
     { field: 'data', label: 'data', required: true },
@@ -540,8 +546,6 @@ export type DateBearingRecord =
   | Omit<Revenue, 'id'>
   | Expense
   | Omit<Expense, 'id'>
-  | Declaration
-  | Omit<Declaration, 'id'>
   | AnnualFiling
   | Omit<AnnualFiling, 'id'>
   | CompanyDocument
@@ -586,7 +590,7 @@ export type _checks = [
   Expect<Equal<z.output<typeof revenueSchema>, Revenue>>,
   Expect<Equal<z.output<typeof expenseSchema>, Expense>>,
   Expect<Equal<z.output<typeof clientSchema>, Client>>,
-  Expect<Equal<z.output<typeof declarationSchema>, Declaration>>,
+  Expect<Equal<z.output<typeof declarationSchema>, LegacyMonthlyDeclaration>>,
   Expect<Equal<z.output<typeof annualFilingSchema>, AnnualFiling>>,
   Expect<Equal<z.output<typeof documentItemSchema>, DocumentItem>>,
   Expect<Equal<z.output<typeof companyDocumentSchema>, CompanyDocument>>,

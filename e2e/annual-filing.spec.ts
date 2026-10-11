@@ -1,8 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
 import { seedBrowser, type SeedPayload } from './fixtures';
 import { seedData } from '../src/data/seed';
-import { CURRENT_DATA_VERSION } from '../src/data/migration';
-import type { AnnualFiling, Declaration } from '../src/data/types';
+import { CURRENT_DATA_VERSION, DATA_VERSION_RECORD_CURRENCY } from '../src/data/migration';
+import type { AnnualFiling } from '../src/data/types';
 import { lei } from '../src/domain/money';
 
 /**
@@ -20,6 +20,9 @@ import { lei } from '../src/domain/money';
  *
  *  3. a monthly record with `status: 'inregistrata'` does NOT discharge the term. A monthly row records
  *     that a row was registered in this app; it is not evidence that anyone filed an annual return.
+ *     PG-5b re-premises that case rather than dropping it: the monthly rows now arrive as a **pre-v11
+ *     payload**, the only shape that still holds them, and the chain drops them on the way in. The term
+ *     is still overdue, and the register shows nothing that could be mistaken for a filing.
  *
  * The clock is an explicit UTC instant and the profile carries a deliberate 2027 `updatedAt`, so the
  * year is pinned by a user choice rather than by the automatic advance (PG-4's rule: a choice made after
@@ -32,7 +35,7 @@ const ONE_WEEK_PAST_THE_TERM = new Date('2027-06-01T09:00:00Z');
 /** 1 April 2027 — before the term, so a filed return is still ahead of its date. */
 const BEFORE_THE_TERM = new Date('2027-04-01T09:00:00Z');
 
-function payload(over: { filings?: AnnualFiling[]; legacyDeclarations?: Declaration[] } = {}): SeedPayload {
+function payload(over: { filings?: AnnualFiling[] } = {}): SeedPayload {
   return {
     ...seedData,
     version: CURRENT_DATA_VERSION,
@@ -40,8 +43,24 @@ function payload(over: { filings?: AnnualFiling[]; legacyDeclarations?: Declarat
     // looking at the year whose term is under test.
     profile: { ...seedData.profile, fiscalYear: 2026, updatedAt: '2027-01-05T10:00:00.000Z' },
     filings: over.filings ?? [],
-    legacyDeclarations: over.legacyDeclarations ?? [],
   };
+}
+
+/**
+ * The same profile one version behind the chain's head, still carrying monthly rows under the key a
+ * pre-v11 build wrote them to. That is the only way these rows can reach the app now: the `annual-filing`
+ * step drops them, and nothing downstream of it can hold one.
+ */
+function preV11Payload(): SeedPayload {
+  return {
+    ...payload(),
+    version: DATA_VERSION_RECORD_CURRENCY,
+    declarations: [
+      { id: 'd-1', an: 2026, luna: 3, venituri: lei(12500), cheltuieli: lei(1800), status: 'inregistrata', dataInregistrare: '2026-04-10' },
+      { id: 'd-2', an: 2026, luna: 6, venituri: lei(14200), cheltuieli: lei(2100), status: 'transmisa', dataInregistrare: '2026-07-08', dataTrimitere: '2026-07-15' },
+      { id: 'd-3', an: 2026, luna: 12, venituri: lei(9680), cheltuieli: lei(546), status: 'inregistrata', dataInregistrare: '2027-01-05' },
+    ],
+  } as unknown as SeedPayload;
 }
 
 function actionsSection(page: Page) {
@@ -110,20 +129,13 @@ test.describe('PG-5 — the D212 term, resolved from the filing rather than the 
   });
 
   test('a monthly record with status „inregistrata” does not mark the term done', async ({ page }) => {
-    // Acceptance 2. This is the inference the old model invited: a monthly row marked registered, in the
-    // right year, reading like proof of a filing. It is not, and the app must not treat it as one — the
-    // row is preserved and shown, and it discharges nothing.
+    // Acceptance 2, re-premised by PG-5b and not deleted. This is the inference the old model invited: a
+    // monthly row marked registered, in the right year, reading like proof of a filing. It is not, and the
+    // app must not treat it as one. The rows now arrive in a pre-v11 payload and the chain drops them, so
+    // the case is stronger than it was: they discharge nothing, and there is no longer a register that
+    // could be read as if they did.
     await page.clock.setFixedTime(ONE_WEEK_PAST_THE_TERM);
-    await seedBrowser(
-      page,
-      payload({
-        legacyDeclarations: [
-          { id: 'd-1', an: 2026, luna: 3, venituri: lei(12500), cheltuieli: lei(1800), status: 'inregistrata', dataInregistrare: '2026-04-10' },
-          { id: 'd-2', an: 2026, luna: 6, venituri: lei(14200), cheltuieli: lei(2100), status: 'transmisa', dataInregistrare: '2026-07-08', dataTrimitere: '2026-07-15' },
-          { id: 'd-3', an: 2026, luna: 12, venituri: lei(9680), cheltuieli: lei(546), status: 'inregistrata', dataInregistrare: '2027-01-05' },
-        ],
-      }),
-    );
+    await seedBrowser(page, preV11Payload());
     await page.goto('/dashboard');
 
     const actions = actionsSection(page);
@@ -131,11 +143,15 @@ test.describe('PG-5 — the D212 term, resolved from the filing rather than the 
     await expect(overdue).toHaveCount(1);
     await expect(overdue.locator('.action-label')).toHaveText(OVERDUE_LABEL);
 
-    // The monthly rows are still readable — they are the only place those figures exist — but they carry
-    // no obligation and discharge none.
+    // The register is empty — the step minted nothing from the rows it dropped — and there is no second
+    // table where they used to be listed.
     await page.goto('/declarations');
-    await expect(page.getByText('2026-03')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Înregistrări lunare dintr-o versiune veche a aplicației' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Declarația unică (D212)' })).toBeVisible();
+    await expect(page.getByText('Nicio declarație anuală înregistrată')).toBeVisible();
+    await expect(page.locator('table')).toHaveCount(0);
+    await expect(page.getByText('2026-03')).toHaveCount(0);
+    await expect(page.getByText('2026-06')).toHaveCount(0);
+    await expect(page.getByText('2026-12')).toHaveCount(0);
   });
 
   test('a return filed before its term shows as depusă on the term card, not as an open item', async ({ page }) => {

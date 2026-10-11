@@ -94,23 +94,24 @@ async function scanDashboard(page: import('@playwright/test').Page): Promise<Axe
  * PG-5 — the route this phase rebuilt.
  *
  * `/declarations` was recorded in `docs/ai/phases/27_pg0_groundwork.md` as a route the gate had not
- * widened to. It is widened here because PG-5 replaced the page: a register table, a second read-only
- * table for the preserved monthly rows, and a modal form with a required-date rule. That is new markup
- * on a route the gate had never looked at, and a new surface should not enter the tree unscanned.
+ * widened to. It is widened here because PG-5 replaced the page: a register table and a modal form with
+ * a required-date rule. That is new markup on a route the gate had never looked at, and a new surface
+ * should not enter the tree unscanned.
+ *
+ * PG-5b: the second, read-only monthly table is gone, so the scan now covers the register with a filing
+ * in it and the modal is one click away. The route stays in the gate — the landmine is that a rebuilt
+ * route must not leave the tree unscanned, and deleting a table is a change to it like any other.
  */
 async function loadDeclarations(page: import('@playwright/test').Page): Promise<void> {
   await seedBrowser(page, {
     ...seedPayload(),
     filings: [{ id: 'f-2026', taxYear: 2026, form: 'D212', status: 'depusa', filedOn: '2027-05-12', reference: 'D212.2026.000042' }],
-    legacyDeclarations: [
-      { id: 'd-1', an: 2026, luna: 3, venituri: 1250000 as never, cheltuieli: 180000 as never, status: 'inregistrata', dataInregistrare: '2026-04-10' },
-    ],
   });
   await page.clock.setFixedTime(fixedInstant());
   await page.goto('/declarations');
   await expect(page.getByRole('heading', { name: 'Declarația unică (D212)' })).toBeVisible();
-  // Both tables, so the scan covers the legacy section too rather than only the register.
-  await expect(page.getByText('2026-03')).toBeVisible();
+  // A populated register, so the scan covers the table's rows and not only its shell.
+  await expect(page.getByText('D212.2026.000042')).toBeVisible();
 }
 
 test.describe('PG-0 — axe-core accessibility gate on /dashboard', () => {

@@ -25,7 +25,7 @@ function baseline(): AppData {
     ],
     expenses: [],
     clients: [],
-    filings: [], legacyDeclarations: [],
+    filings: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],
@@ -401,6 +401,11 @@ describe('parseAppData — corrupt payloads return null', () => {
   });
 
   it('returns null for an invalid declaration entry', () => {
+    // PG-5b: the monthly record type is gone from the application, but this key still parses. That is
+    // deliberate — zod strips undeclared keys, so a payload whose `declarations` were stripped at the gate
+    // would lose its rows before the migration chain ran, and it is the `annual-filing` step that is
+    // supposed to decide to drop them. A corrupt row still quarantines the payload rather than loading a
+    // quietly-shrunken one, exactly as before.
     // TASK 9: built from a local fixture instead of `seedData.declarations[0]`, which the seed no longer
     // carries. Spreading `undefined` would have left this test asserting that `{status: 'saptamanal'}`
     // fails to parse — true for the wrong reason (it is missing every required field), and it would have

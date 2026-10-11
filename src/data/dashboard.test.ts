@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { AppData, Declaration, Expense, Revenue } from './types';
+import type { AppData, Expense, Revenue } from './types';
+import type { LegacyMonthlyDeclaration } from './schema';
 import type { PfaIdentity, PfaProfile } from '../domain/models';
 import {
   getFinancialSummary,
@@ -78,7 +79,7 @@ function makeData(overrides: Partial<AppData> = {}): AppData {
     revenues: [],
     expenses: [],
     clients: [],
-    filings: [], legacyDeclarations: [],
+    filings: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],
@@ -124,7 +125,7 @@ function expense(overrides: Partial<Expense> = {}): Expense {
   };
 }
 
-function declaration(overrides: Partial<Declaration> = {}): Declaration {
+function declaration(overrides: Partial<LegacyMonthlyDeclaration> = {}): LegacyMonthlyDeclaration {
   return {
     id: 'decl-1',
     an: 2026,
@@ -223,11 +224,14 @@ describe('getPendingCounts (sync)', () => {
     expect(counts.filingsInAsteptare).toBe(0);
   });
 
-  it('legacy monthly rows are never counted as pending filings', () => {
+  it('monthly rows are never counted as pending filings', () => {
+    // PG-5b re-premise: the input cannot carry monthly rows at all any more — the key is gone from
+    // `AppData`. They are handed over the way an un-migrated payload would arrive, cast through `unknown`,
+    // so the assertion still runs: a monthly row is not a filing, and it is not counted as one.
     const counts = getPendingCounts(
       makeData({
-        legacyDeclarations: [declaration({ id: 'd2', an: 2026, luna: 6, status: 'in-asteptare', dataInregistrare: '2026-07-08' })],
-      }),
+        declarations: [declaration({ id: 'd2', an: 2026, luna: 6, status: 'in-asteptare', dataInregistrare: '2026-07-08' })],
+      } as unknown as Partial<AppData>),
     );
     expect(counts.filingsInAsteptare).toBe(0);
   });
@@ -430,8 +434,14 @@ describe('getActionItems (sync)', () => {
     // PG-5 re-pin (replaced, not deleted): a legacy monthly row produces no action item at all. The old
     // case asserted `not_submitted` for `d2`, which asserts a submission this profile does not owe — a
     // PFA în sistem real files one Declarația Unică per fiscal year, not a monthly return.
+    // PG-5 re-pin (replaced, not deleted): a monthly row produces no action item at all. The old case
+    // asserted `not_submitted` for `d2`, which asserts a submission this profile does not owe — a PFA în
+    // sistem real files one Declarația Unică per fiscal year, not a monthly return.
+    // PG-5b re-pin (again, not deleted): the monthly key is gone from the dataset, so the rows are handed
+    // over as an un-migrated payload would carry them. The assertion is the same one the test has always
+    // carried — adding monthly rows changes nothing at all about the action list.
     const withLegacy = getActionItems(
-      { ...seedData, legacyDeclarations: [declaration({ id: 'd2', an: 2026, luna: 6, status: 'in-asteptare', dataInregistrare: '2026-07-08' })] },
+      { ...seedData, declarations: [declaration({ id: 'd2', an: 2026, luna: 6, status: 'in-asteptare', dataInregistrare: '2026-07-08' })] } as unknown as AppData,
       AS_OF_INSTANT,
     );
     expect(withLegacy.find(i => i.id === 'record-declaration-d2')).toBeUndefined();

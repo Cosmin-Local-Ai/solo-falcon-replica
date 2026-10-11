@@ -6,7 +6,7 @@
  * modal captions, the same „Niciun rezultat pentru căutare." — and each copy used to keep its own
  * copy-paste of the sentence. One key now, shared.
  */
-import type { DeclStatus, ExpenseStatus, FilingStatus, RevenueStatus } from '../../data/types';
+import type { ExpenseStatus, FilingStatus, RevenueStatus, StoredStatusCode } from '../../data/types';
 import type { ExpenseCategory } from '../../domain/fiscal/deductibility';
 import type { FiscalDateField } from '../../domain/aggregation';
 import { validation } from './common';
@@ -265,27 +265,12 @@ export const declarations = {
     reference: 'Referință',
   },
   /**
-   * PG-5: the monthly rows a pre-v11 install carried, shown read-only.
-   *
-   * The wording does two things at once: it says the rows were kept (they are the only place some of
-   * those figures exist), and it refuses to let them mean more than they do. They are not filings, and
-   * the app will not treat one as proof that anything was submitted.
+   * PG-5b: the wording for the read-only monthly table is gone with the table. It said the rows were kept
+   * (they were the only place some of those figures existed) and refused to let them mean more than they
+   * do — they are not filings, and the app would not treat one as proof that anything was submitted. The
+   * rows are now dropped by the v10→v11 step rather than shown, and the page has one vocabulary: the
+   * annual return's.
    */
-  legacyTitle: 'Înregistrări lunare dintr-o versiune veche a aplicației',
-  legacyNote:
-    'Rândurile de mai jos vin dintr-o versiune veche, care înregistra declarații pe lună. Un PFA în sistem real depune o singură Declarație Unică pe an fiscal, deci rândurile nu sunt depuneri și nu dovedesc că ceva a fost transmis. Le păstrăm ca să nu pierzi informația, dar nu se mai pot adăuga sau modifica.',
-  legacyEmpty: 'Nicio înregistrare lunară moștenită.',
-  legacyColumns: {
-    period: 'Perioadă',
-    revenue: 'Venituri',
-    expenses: 'Cheltuieli',
-    status: 'Status',
-    registeredOn: 'Înregistrată la',
-  },
-  months: [
-    'Ianuarie', 'Februarie', 'Martie', 'Aprilie', 'Mai', 'Iunie',
-    'Iulie', 'August', 'Septembrie', 'Octombrie', 'Noiembrie', 'Decembrie',
-  ],
 } as const;
 
 /**
@@ -298,14 +283,14 @@ export const recordStatus = {
     'in-asteptare': 'În așteptare',
     transmisa: 'Transmise',
     respinsa: 'Respinse',
-  } satisfies Record<DeclStatus, string>,
+  } satisfies Record<StoredStatusCode, string>,
   /** The badge and select wording — the same states, agreed with the single record they describe. */
   labels: {
     inregistrata: 'Înregistrată',
     'in-asteptare': 'În așteptare',
     transmisa: 'Transmisa',
     respinsa: 'Respinsă',
-  } satisfies Record<DeclStatus, string>,
+  } satisfies Record<StoredStatusCode, string>,
   /**
    * PG-5: the annual return's own three states, kept separate from `labels` above on purpose. The
    * monthly words describe a record in this app; `depusa` is the only word in the app that says a

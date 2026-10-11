@@ -3,8 +3,9 @@ import type { ExpenseCategory } from '../domain/fiscal/deductibility';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import type { MoneyPrecisionNotice } from './migration';
 import { localDateISO, now } from '../domain/date';
-import { maxBani, subBani, sumMoney, type Bani, type CurrencyCode, type Money } from '../domain/money';
+import { sumMoney, type Bani, type CurrencyCode, type Money } from '../domain/money';
 import type { FxRateRecord } from '../domain/fx/rates';
+import type { LegacyMonthlyDeclaration } from './schema';
 
 // ── Venituri ──────────────────────────────────────────────
 export type RevenueStatus = 'inregistrata' | 'in-asteptare' | 'respinsa';
@@ -44,6 +45,19 @@ export interface Revenue {
 
 // ── Cheltuieli ────────────────────────────────────────────
 export type ExpenseStatus = 'inregistrata' | 'respinsa';
+
+/**
+ * The status codes the record registers share — the vocabulary the tab lists, the status selects and
+ * `statusBadge` are all keyed by.
+ *
+ * PG-5b removed `DeclStatus`, which used to own this union: the four words came from the monthly row.
+ * The registers still use them, so the union now says so directly instead of borrowing its shape from a
+ * record type that no longer exists. One word, `transmisa`, has no live producer any more — no revenue or
+ * expense schema accepts it, and the monthly row that did is dropped by the v10→v11 step. It stays
+ * because the status vocabulary is not this task's to redraw; it is recorded here so the next hygiene
+ * pass can find it.
+ */
+export type StoredStatusCode = RevenueStatus | ExpenseStatus | 'transmisa';
 
 export interface Expense {
   id: string;
@@ -103,15 +117,16 @@ export type LegacyExpense = Omit<Expense, 'valoareFaraTva' | 'tva'> & { valoareF
  * at a `version` below 10, and assert what the chain produces — so the fixture must be typed as the shape
  * that arrives, not the shape that leaves.
  */
-export type LegacyAppData = Omit<AppData, 'revenues' | 'expenses' | 'filings' | 'legacyDeclarations'> & {
+export type LegacyAppData = Omit<AppData, 'revenues' | 'expenses' | 'filings'> & {
   revenues: LegacyRevenue[];
   expenses: LegacyExpense[];
   /**
    * The pre-v11 monthly rows. A legacy fixture carries them under this key precisely because that is
-   * what an old payload looks like; the `annual-filing` step is what moves them to
-   * `legacyDeclarations`. Optional, because most legacy fixtures never had any.
+   * what an old payload looks like; the `annual-filing` step is what **drops** them (PG-5b). Optional,
+   * because most legacy fixtures never had any. Typed with the storage shape from `data/schema.ts`, not
+   * with an application record type — there is no longer such a thing.
    */
-  declarations?: Declaration[];
+  declarations?: LegacyMonthlyDeclaration[];
 };
 
 // ── Clienți ───────────────────────────────────────────────
@@ -124,32 +139,20 @@ export interface Client {
   oras?: string;
 }
 
-// ── Declarații lunare moștenite (pre-v11) ──────────────────
-/**
- * PG-5 (B-34): this is NOT a filing. It is a monthly row written by an older version of this app,
- * kept readable because it is the only place some facts exist.
- *
- * A PFA în sistem real files ONE Declarația Unică 212 per fiscal year (CF art. 122 alin. (3)); there
- * is no monthly return for it to be a record of. `status: 'inregistrata'` on one of these rows means
- * only that the row itself was registered in this app — it is not evidence that anyone filed anything
- * with ANAF, and nothing may treat it as such. The annual record that CAN carry that fact is
- * `AnnualFiling` below.
- */
-export type DeclStatus = 'inregistrata' | 'in-asteptare' | 'transmisa' | 'respinsa';
-
-export interface Declaration {
-  id: string;
-  an: number;
-  luna: number;
-  /** Integer **bani** (Phase 10). */
-  venituri: Bani;
-  cheltuieli: Bani;
-  status: DeclStatus;
-  dataInregistrare: string;
-  dataTrimitere?: string;
-}
-
 // ── Declarație unică anuală (PG-5) ────────────────────────
+/**
+ * PG-5b: the monthly `Declaration` record type is gone, and with it `DeclStatus` and `declarationNet`.
+ *
+ * It was never a filing — a monthly row recorded that a row had been registered in this app, and a PFA
+ * în sistem real owes ONE Declarația Unică 212 per fiscal year (CF art. 122 alin. (3)), so there was no
+ * monthly return for it to be a record of. PG-5 kept the rows readable for one release out of caution
+ * about stored data; D-USER-1 records that there is no stored data to protect, so the shape is deleted
+ * rather than preserved. What survives is the separation it enforced: `FilingStatus` below is the only
+ * vocabulary that can say a return exists, and `isFiledFiling` is the only test that says one was filed.
+ *
+ * The pre-v11 payload key still parses — see `declarationSchema` in `data/schema.ts` — because the
+ * migration chain has to be able to read it in order to drop it.
+ */
 /** The only annual return this application models. */
 export type FilingForm = 'D212';
 
@@ -178,8 +181,10 @@ export interface AnnualFiling {
 /**
  * The ONE test that says "this record proves a filing happened".
  *
- * Landmine: a monthly `Declaration` with `status: 'inregistrata'` must never pass for this, which is
- * why the function takes an `AnnualFiling` and nothing else — the monthly type cannot be handed to it.
+ * Landmine: a monthly row with `status: 'inregistrata'` must never pass for this, which is why the
+ * function takes an `AnnualFiling` and nothing else. PG-5b removed the monthly record type, so what used
+ * to be a comment is now enforced by the compiler: there is nothing left shaped like a monthly row to
+ * hand to it.
  */
 export const isFiledFiling = (f: Pick<AnnualFiling, 'status'>): boolean => f.status === 'depusa';
 
@@ -286,14 +291,6 @@ export interface AppData {
    * nobody made.
    */
   filings: AnnualFiling[];
-  /**
-   * PG-5: the monthly rows a pre-v11 payload carried, preserved verbatim and read-only.
-   *
-   * Named `legacyDeclarations` rather than `declarations` so that no call site can read one as a
-   * filing by accident. Nothing in the app writes them any more; the Declarations page still lists
-   * them, because dropping them would destroy the only place some of those facts exist.
-   */
-  legacyDeclarations: Declaration[];
   documents: DocumentItem[];
   companyDocs: Record<DocTypeCode, CompanyDocument[]>;
   statements: TaxStatement[];
@@ -384,13 +381,12 @@ export const sumTotalsByCurrency = (rows: readonly (Revenue | Expense)[]): Money
 };
 
 /**
- * Declared net for one month, floored at zero — the figure the declarations table shows.
+ * Declared net for one month, floored at zero — the figure the monthly declarations table used to show.
  *
- * A named function so the subtraction and the floor are domain arithmetic on `Bani` (`subBani`/`maxBani`
- * keep the brand; `Math.max(0, a - b)` in JSX would not).
+ * PG-5b removed it with the record type: there is no monthly row left to subtract, and an annual return
+ * carries no `venituri` / `cheltuieli` fields of its own — the figures it declares come from the
+ * registers, not from a number typed into the filing.
  */
-export const declarationNet = (d: Pick<Declaration, 'venituri' | 'cheltuieli'>): Bani =>
-  maxBani(subBani(d.venituri, d.cheltuieli), 0 as Bani);
 
 // ── Statusuri ─────────────────────────────────────────────
 // The Romanian words for these statuses used to be spelled three times here — `REV_STATUS_LABEL`,

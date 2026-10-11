@@ -38,7 +38,8 @@ import { canonicalize } from '../domain/snapshots/serialize';
 import { computeInputsHashSync } from '../domain/snapshots/hashSync';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import type { PfaProfile } from '../domain/models';
-import type { Client, Declaration, LegacyAppData, LegacyExpense, LegacyRevenue } from './types';
+import type { Client, LegacyAppData, LegacyExpense, LegacyRevenue } from './types';
+import type { LegacyMonthlyDeclaration } from './schema';
 import { lei, type Bani } from '../domain/money';
 
 let storeRef: ReturnType<typeof useStore> | null = null;
@@ -99,7 +100,9 @@ const expenses: LegacyExpense[] = [
 const clients: Client[] = [
   { id: 'c-legacy-1', denumire: 'Client Vechi', cui: 'RO11111111', email: 'vechi@example.test' },
 ];
-const declarations: Declaration[] = [
+// The pre-v11 monthly row. It stays in the legacy payload because that is what an old payload looks
+// like; the `annual-filing` step is what drops it (PG-5b), so the fixture is storage, not a record.
+const declarations: LegacyMonthlyDeclaration[] = [
   {
     id: 'd-legacy-1',
     an: 2025,
@@ -657,9 +660,10 @@ describe('load path runs the chain (acceptance criteria 2 and 3)', () => {
     expect(storeRef!.revenues.map((r) => r.id)).toEqual(['r-legacy-1', 'r-legacy-2']);
     expect(storeRef!.expenses.map((e) => e.id)).toEqual(['e-legacy-1']);
     expect(storeRef!.clients.map((c) => c.id)).toEqual(['c-legacy-1']);
-    // PG-5: the monthly row is preserved under `legacyDeclarations`, byte for byte, and no annual filing
-    // is minted from it.
-    expect(storeRef!.legacyDeclarations.map((d) => d.id)).toEqual(['d-legacy-1']);
+    // PG-5b: the monthly row does not survive the chain. It is dropped by `annual-filing`, and no annual
+    // filing is minted from it — dropping a record and inventing one are two things this step must not do,
+    // and it is only allowed the first.
+    expect('legacyDeclarations' in storeRef!).toBe(false);
     expect(storeRef!.filings).toEqual([]);
     expect(storeRef!.dataVersion).toBe(CURRENT_DATA_VERSION);
     expect(storeRef!.migration).toEqual({

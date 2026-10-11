@@ -9,17 +9,24 @@ import type { PersistedAppData } from './schema';
 import { lei } from '../domain/money';
 
 /**
- * PG-5 — the v10→v11 step, on its own.
+ * PG-5 — the v10→v11 step, on its own. PG-5b changed what it does, not what it is.
  *
- * The chain tests prove the step runs and that a legacy payload still loads. This file is about what
- * the step is ALLOWED to do to the data, which is the part that can destroy something: the monthly rows
- * are the only place some of these facts exist, and the app must not turn them into a filing it was
- * never told about.
+ * The chain tests prove the step runs and that a legacy payload still loads. This file is about what the
+ * step is ALLOWED to do to the data, which is the part that can destroy something. PG-5's rule was "the
+ * rows travel, nothing is derived". PG-5b keeps the second half of that sentence and changes the first:
+ * **the rows are dropped, nothing is derived.**
  *
- * The rule the whole file tests, in one sentence: **the rows travel, nothing is derived.** A monthly row
- * with `status: 'inregistrata'` is a record that something was registered — it is not evidence that
- * anyone filed an annual return, and an annual row minted from it would be a fact the user never
- * established. That is B-34, and a migration is exactly where it would be easiest to sneak in.
+ * Dropping is a decision with a name behind it — `docs/ai/USER_DECISIONS.md` D-USER-1 records that there
+ * are no active users, so there is no stored payload to preserve, and a PFA în sistem real has no monthly
+ * return for the shape to be a record of. What did NOT move is the half that makes this step dangerous:
+ * it still may not turn a monthly row into an annual filing. A monthly row with `status: 'inregistrata'`
+ * records that something was registered — it is not evidence that anyone filed an annual return, and an
+ * annual row minted from it would be a fact the user never established. That is B-34, and a migration is
+ * exactly where it would be easiest to sneak in. Deleting a record is no licence to invent one.
+ *
+ * The step keeps its number, its position and its idempotency. A payload in the wild sits at whatever
+ * version it was written at, and the chain has to be able to walk it from there; renumbering a step would
+ * break every payload that already ran through it.
  */
 
 const MONTHLY = [
@@ -54,18 +61,26 @@ function v10Payload(overrides: Record<string, unknown> = {}): PersistedAppData {
 }
 
 describe('the annual-filing step (v10 → v11)', () => {
-  it('moves every monthly row byte for byte, in order, under the new key', () => {
+  it('drops every monthly row the payload carried, under either key', () => {
+    // PG-5b replaced "moves every monthly row byte for byte, in order, under the new key". The assertion
+    // it carries is the same one the old test carried — the rows are accounted for, and they are not
+    // hidden somewhere the app cannot see — only the answer changed: there is no bucket for them any
+    // more, under the old name or the new one, and nothing about them is summarised into a count.
     const after = migrateAnnualFilingV11(v10Payload());
 
-    expect(after.legacyDeclarations).toEqual(MONTHLY);
-    expect(after.legacyDeclarations!.map(d => d.id)).toEqual(['d-1', 'd-2', 'd-3']);
-    // The fields that carry the facts survive untouched: the period, both amounts, the status, and both
-    // dates. A rename that loses `dataTrimitere` would quietly delete the only record of a submission.
-    expect(after.legacyDeclarations![0]).toEqual(MONTHLY[0]);
-    expect(after.legacyDeclarations![2].status).toBe('inregistrata');
+    expect('declarations' in after).toBe(false);
+    expect('legacyDeclarations' in after).toBe(false);
+    // No trace of the rows survives anywhere in the written shape: not the ids, not the period, not the
+    // amounts, not the dates.
+    const written = JSON.stringify(after);
+    for (const row of MONTHLY) {
+      expect(written).not.toContain(row.id);
+      expect(written).not.toContain(row.dataInregistrare);
+    }
   });
 
-  it('mints no annual filing from the rows it moved', () => {
+  it('mints no annual filing from the rows it dropped', () => {
+    // The half of the old rule that PG-5b did NOT relax.
     const after = migrateAnnualFilingV11(v10Payload());
 
     expect(after.filings).toEqual([]);
@@ -73,15 +88,11 @@ describe('the annual-filing step (v10 → v11)', () => {
 
   it('does not turn a registered monthly row into a filed annual return', () => {
     // Acceptance 2, at the migration layer. `inregistrata` is the record's own status on a monthly row;
-    // reading it as "the D212 for that year was filed" is the exact inference the phase forbids.
+    // reading it as "the D212 for that year was filed" is the exact inference the phase forbids — and it
+    // is now unrepresentable, because no monthly row survives the step to be misread.
     const after = migrateAnnualFilingV11(v10Payload());
     const filed = (after.filings ?? []).filter(f => f.status === 'depusa');
     expect(filed).toEqual([]);
-  });
-
-  it('drops the old key from the written shape', () => {
-    const after = migrateAnnualFilingV11(v10Payload());
-    expect('declarations' in after).toBe(false);
   });
 
   it('changes nothing else about the payload', () => {
@@ -89,26 +100,26 @@ describe('the annual-filing step (v10 → v11)', () => {
     const after = migrateAnnualFilingV11(before);
 
     const { version: _v, declarations: _d, ...restBefore } = before as unknown as Record<string, unknown>;
-    const { version: _v2, legacyDeclarations: _l, filings: _f, ...restAfter } = after as unknown as Record<string, unknown>;
+    const { version: _v2, filings: _f, ...restAfter } = after as unknown as Record<string, unknown>;
     expect(restAfter).toEqual(restBefore);
     expect(after.version).toBe(DATA_VERSION_ANNUAL_FILING);
   });
 
   it('touches no amount and no currency stamp', () => {
-    // The `record-currency` file guards the same property from the other side: a step that renames a
+    // The `record-currency` file guards the same property from the other side: a step that deletes a
     // collection must not re-wrap a money record on the way past it.
     const before = JSON.stringify((v10Payload().revenues as { valoareFaraTva: unknown }[]).map(r => r.valoareFaraTva));
     const after = migrateAnnualFilingV11(v10Payload());
     expect(JSON.stringify((after.revenues as { valoareFaraTva: unknown }[]).map(r => r.valoareFaraTva))).toBe(before);
   });
 
-  it('gives a payload that never carried monthly rows no `legacyDeclarations` key at all', () => {
-    // An empty array here would claim a monthly history this install does not have. The absence is the
-    // honest shape; the load path treats an absent key as empty anyway.
+  it('stamps the version whether or not the payload carried monthly rows', () => {
+    // The chain aborts on a step that fails to bump the version, and it should. A step that returns the
+    // payload unstamped leaves every later load re-running the chain.
     const after = migrateAnnualFilingV11(v10Payload({ declarations: undefined }));
-    expect('legacyDeclarations' in after).toBe(false);
-    expect(after.filings).toEqual([]);
     expect(after.version).toBe(DATA_VERSION_ANNUAL_FILING);
+    expect(after.filings).toEqual([]);
+    expect('legacyDeclarations' in after).toBe(false);
   });
 
   it('never replaces a `filings` array that is already there', () => {
@@ -123,19 +134,14 @@ describe('the annual-filing step (v10 → v11)', () => {
     expect(twice).toEqual(once);
   });
 
-  it('leaves an already-renamed collection alone when a stray `declarations` key sits beside it', () => {
-    // A payload can reach this state if a partial write left both keys. The renamed key is the one the
-    // app reads; keeping both and letting them disagree is how a row goes missing from every surface.
+  it('drops a `legacyDeclarations` bucket a PG-5-era payload still carries', () => {
+    // PG-5 wrote that key for one release. An install upgraded under PG-5 has it in its bytes; the same
+    // step that once created it now removes it, so the bucket cannot survive a load merely because
+    // nothing reads it any more.
     const kept = [{ id: 'd-keep', an: 2026, luna: 1, venituri: lei(1), cheltuieli: lei(0), status: 'inregistrata', dataInregistrare: '2026-02-01' }];
     const after = migrateAnnualFilingV11(v10Payload({ legacyDeclarations: kept }));
-    expect(after.legacyDeclarations).toEqual(kept);
+    expect('legacyDeclarations' in after).toBe(false);
     expect('declarations' in after).toBe(false);
-  });
-
-  it('stamps the version even when there is nothing to move', () => {
-    // The chain aborts on a step that fails to bump the version, and it should. A step that returns the
-    // payload unstamped leaves every later load re-running the chain.
-    const after = migrateAnnualFilingV11(v10Payload({ declarations: undefined }));
-    expect(after.version).toBe(DATA_VERSION_ANNUAL_FILING);
+    expect(after.filings).toEqual([]);
   });
 });

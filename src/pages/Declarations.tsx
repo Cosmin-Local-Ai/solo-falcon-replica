@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../data/store';
-import { fmtDate, statusBadge, type AnnualFiling, type Declaration, type FilingStatus } from '../data/types';
-import { formatBaniRON } from '../domain/money';
+import { fmtDate, type AnnualFiling, type FilingStatus } from '../data/types';
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
 import { localDateISO } from '../domain/date';
 import {
@@ -26,10 +25,10 @@ import {
  * - It does not offer to create a monthly declaration. The store no longer exposes `addDeclaration`,
  *   because the app has no evidence of a monthly obligation for this profile and no business creating
  *   records it cannot stand behind.
- * - It does not treat a legacy monthly row as a filing. Those rows are listed below the register,
- *   read-only, under their own heading — kept because they are the only place some of those figures
- *   exist, and labelled because keeping a record readable is not the same as endorsing what it seems
- *   to prove.
+ * - It does not show monthly rows from an older version. PG-5 kept them read-only for one release out of
+ *   caution about stored data; PG-5b removed the record type and the v10→v11 step now drops those rows,
+ *   because D-USER-1 records that no stored payload exists to protect and a PFA în sistem real has no
+ *   monthly return for the shape to be a record of. The page has one register and one vocabulary.
  */
 
 const PAGE_SIZE = 8;
@@ -140,56 +139,13 @@ function FilingForm({
   );
 }
 
-/**
- * The monthly rows a pre-v11 install carried. Read-only by construction: this component has no write
- * path, and the store no longer offers one.
- */
-function LegacyMonthly({ rows, focusRecord }: { rows: readonly Declaration[]; focusRecord?: string }) {
-  return (
-    <Card>
-      <div style={{ padding: '16px 18px 0' }}>
-        <h2 className="card-title">{declarationsCopy.legacyTitle}</h2>
-        <p className="hint">{declarationsCopy.legacyNote}</p>
-      </div>
-      {rows.length === 0 ? (
-        <p className="hint" style={{ padding: '12px 18px' }}>{declarationsCopy.legacyEmpty}</p>
-      ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>{declarationsCopy.legacyColumns.period}</th>
-              <th className="amount">{declarationsCopy.legacyColumns.revenue}</th>
-              <th className="amount">{declarationsCopy.legacyColumns.expenses}</th>
-              <th>{declarationsCopy.legacyColumns.status}</th>
-              <th>{declarationsCopy.legacyColumns.registeredOn}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(d => (
-              <tr key={d.id} data-record-id={d.id} className={d.id === focusRecord ? ' row-focus' : ''}>
-                <td>{d.an}-{String(d.luna).padStart(2, '0')}</td>
-                <td className="amount">{formatBaniRON(d.venituri)}</td>
-                <td className="amount">{formatBaniRON(d.cheltuieli)}</td>
-                <td>
-                  <Badge kind={statusBadge(d.status)}>{recordStatus.labels[d.status]}</Badge>
-                </td>
-                <td>{fmtDate(d.dataInregistrare)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </Card>
-  );
-}
-
 interface DeclarationsProps {
   /** TASK 8 — the record an attention item pointed at; see `Revenues.tsx focusRecord`. */
   focusRecord?: string;
 }
 
 export default function Declarations({ focusRecord }: DeclarationsProps) {
-  const { filings, legacyDeclarations, profile, addFiling, updateFiling, toast } = useStore();
+  const { filings, profile, addFiling, updateFiling, toast } = useStore();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<AnnualFiling | 'new' | null>(null);
@@ -204,11 +160,6 @@ export default function Declarations({ focusRecord }: DeclarationsProps) {
 
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  const legacyRows = useMemo(
-    () => [...legacyDeclarations].sort((a, b) => (b.an * 100 + b.luna) - (a.an * 100 + a.luna)),
-    [legacyDeclarations],
-  );
 
   // TASK 8: land the focused record on screen, whatever page of the register it sits on.
   const focusIndex = focusRecord ? rows.findIndex(f => f.id === focusRecord) : -1;
@@ -299,8 +250,6 @@ export default function Declarations({ focusRecord }: DeclarationsProps) {
           </>
         )}
       </Card>
-
-      <LegacyMonthly rows={legacyRows} focusRecord={focusRecord} />
 
       {editing && (
         <FilingForm

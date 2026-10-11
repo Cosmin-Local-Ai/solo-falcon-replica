@@ -23,7 +23,6 @@ import {
 } from './attention';
 import { lei, ron } from './money';
 import { seedData } from '../data/seed';
-import type { Declaration } from '../data/types';
 
 function item(overrides: Partial<AttentionItem> = {}): AttentionItem {
   return {
@@ -197,17 +196,23 @@ describe('the record family: what the seed actually holds', () => {
   // TASK 9: the seed no longer carries declaration records, because the three it used to carry recorded
   // monthly filings that do not exist for this profile (see the note in `data/seed.ts`).
   //
-  // PG-5 re-pin (replaced, not deleted): these rows are now `legacyDeclarations` — the monthly rows a
+  // PG-5 re-pin (replaced, not deleted): these rows became `legacyDeclarations` — the monthly rows a
   // pre-v11 payload carries, preserved read-only — and they produce NO action item. An item for one of
   // them read „Declarație fără depunere înregistrată: 2026-06”, which asserts a submission this profile
   // does not owe: a PFA în sistem real files one Declarația Unică per fiscal year. The obligation that
   // does exist is carried by the annual filing model, not here.
-  const declarationFixture: Declaration[] = [
+  //
+  // PG-5b re-pin (replaced, not deleted again): the monthly family is no longer a field on this input at
+  // all — `RecordSource` has no key for it, and the record type behind it is deleted. The rows are handed
+  // over anyway, cast through `unknown` the way an older caller's payload would arrive, because what is
+  // under test is what the pipeline DOES with monthly rows (nothing), not what the type happens to allow.
+  // If a later edit re-connects a monthly family, this still fails the moment it starts producing items.
+  const declarationFixture = [
     { id: 'd1', an: 2026, luna: 3, venituri: lei(12500), cheltuieli: lei(1800), status: 'transmisa', dataInregistrare: '2026-04-10', dataTrimitere: '2026-04-15' },
     { id: 'd2', an: 2026, luna: 6, venituri: lei(14200), cheltuieli: lei(2100), status: 'in-asteptare', dataInregistrare: '2026-07-08' },
     { id: 'd3', an: 2026, luna: 9, venituri: lei(9680), cheltuieli: lei(546), status: 'inregistrata', dataInregistrare: '2026-09-28' },
   ];
-  const seedWithLegacy = { ...seedData, legacyDeclarations: declarationFixture };
+  const seedWithLegacy = { ...seedData, declarations: declarationFixture } as unknown as Parameters<typeof unresolvedRecords>[0];
 
   const records = unresolvedRecords(seedData);
   const byId = new Map(records.map(r => [r.id, r]));
@@ -242,11 +247,11 @@ describe('the record family: what the seed actually holds', () => {
     expect(e3.reference).toBe('FCT-PRO-121');
   });
 
-  it('a legacy monthly row produces no action item, whatever its status', () => {
-    // PG-5. `in-asteptare` and `respinsa` are the record's own not-settled markers, and they used to
-    // make `d2` an item. They no longer do: an action row for a monthly return asserts an obligation
-    // this profile does not have, which is the defect B-34 names. The rows stay readable on the
-    // Declarations page; they generate no obligation.
+  it('a monthly row produces no action item, whatever its status', () => {
+    // PG-5, re-premised by PG-5b. `in-asteptare` and `respinsa` are the record's own not-settled markers,
+    // and they used to make `d2` an item. They no longer do: an action row for a monthly return asserts
+    // an obligation this profile does not have, which is the defect B-34 names. The rows are no longer
+    // shown anywhere — the v10→v11 step drops them — and they still generate nothing here.
     for (const legacy of ['d1', 'd2', 'd3']) {
       expect(withLegacy.has(legacy)).toBe(false);
     }
@@ -316,7 +321,7 @@ describe('the record facts carry what a target needs', () => {
 
   it('an empty register produces no items', () => {
     expect(
-      unresolvedRecords({ revenues: [], expenses: [], legacyDeclarations: [] }),
+      unresolvedRecords({ revenues: [], expenses: [] }),
     ).toEqual([]);
   });
 
@@ -324,7 +329,6 @@ describe('the record facts carry what a target needs', () => {
     const [only] = unresolvedRecords({
       revenues: [],
       expenses: [{ ...seedData.expenses[2], statusDetail: undefined }],
-      legacyDeclarations: [],
     });
     expect(only.reason).toBeNull();
   });
@@ -333,7 +337,6 @@ describe('the record facts carry what a target needs', () => {
     const [r3] = unresolvedRecords({
       revenues: [seedData.revenues[2]],
       expenses: [],
-      legacyDeclarations: [],
     });
     expect(r3.amountNet).toEqual(ron(800));
   });

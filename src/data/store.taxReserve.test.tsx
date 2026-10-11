@@ -43,7 +43,7 @@ function basePayload(): AppData {
     revenues: [validRevenue],
     expenses: [],
     clients: [],
-    filings: [], legacyDeclarations: [],
+    filings: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],

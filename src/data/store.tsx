@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type {
-  AnnualFiling, AppData, Client, CompanyDocument, Declaration, DocTypeCode, DocumentItem,
+  AnnualFiling, AppData, Client, CompanyDocument, DocTypeCode, DocumentItem,
   Expense, Revenue, SettingsState, TaxStatement, Toast, ToastKind,
 } from './types';
 import type { PfaProfile } from '../domain/models';
@@ -105,7 +105,7 @@ interface StoreValue extends AppData {
    * PG-5: record an annual return. `addDeclaration` / `updateDeclaration` / `sendDeclaration` are gone
    * with them — the app no longer offers to mint monthly declaration rows, because it has no evidence
    * that a monthly return exists for this profile and no right to create records it cannot stand behind.
-   * The monthly rows that already exist are preserved read-only as `legacyDeclarations`.
+   * PG-5b removed the monthly record type itself: the store has no monthly collection to read.
    */
   addFiling: (f: Omit<AnnualFiling, 'id'>) => boolean;
   updateFiling: (f: AnnualFiling) => boolean;
@@ -168,11 +168,11 @@ function toAppData(parsed: PersistedAppData): AppData {
     revenues: parsed.revenues,
     expenses: parsed.expenses ?? [],
     clients: parsed.clients ?? [],
-    // PG-5: the annual returns, and the monthly rows the v10→v11 step preserved. Both default to empty
-    // rather than to anything derived — an absent `filings` key means nobody recorded a filing, which is
-    // a fact about the data, not a filing that did not happen.
+    // PG-5: the annual returns. Absent defaults to empty rather than to anything derived — an absent
+    // `filings` key means nobody recorded a filing, which is a fact about the data, not a filing that
+    // did not happen. PG-5b: the monthly rows a pre-v11 payload carried do not reach here at all; the
+    // v10→v11 step drops them.
     filings: parsed.filings ?? [],
-    legacyDeclarations: parsed.legacyDeclarations ?? [],
     documents: parsed.documents ?? [],
     companyDocs: parsed.companyDocs ?? { im: [], cs: [], tva: [], facturi: [] },
     statements: parsed.statements ?? [],

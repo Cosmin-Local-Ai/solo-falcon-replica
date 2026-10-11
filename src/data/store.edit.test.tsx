@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, render } from '@testing-library/react';
 import { StoreProvider, useStore } from './store';
-import { CURRENT_DATA_VERSION } from './migration';
+import { CURRENT_DATA_VERSION, DATA_VERSION_RECORD_CURRENCY } from './migration';
 import { seedData } from './seed';
-import type { AnnualFiling, Client, Declaration } from './types';
+import type { LegacyMonthlyDeclaration } from './schema';
+import type { AnnualFiling, Client } from './types';
 import { lei } from '../domain/money';
 
 // Must match STORAGE_KEY in src/data/store.tsx (module-private, not exported).
@@ -44,20 +45,21 @@ function persistedData() {
   return JSON.parse(raw!) as {
     clients: Client[];
     filings: AnnualFiling[];
-    legacyDeclarations: Declaration[];
-  };
+  } & Record<string, unknown>;
 }
 
 /**
  * PG-5: the store no longer writes monthly declaration rows — `addDeclaration`, `updateDeclaration` and
  * `sendDeclaration` are gone, because a monthly row asserts a return this profile does not owe. What is
- * tested here is the annual return (`AnnualFiling`) and the preservation half: the monthly rows a pre-v11
- * payload carried survive every write untouched.
+ * tested here is the annual return (`AnnualFiling`) and the boundary around it: writing one must not
+ * rewrite, reorder or reinterpret anything else in the dataset.
  *
- * The monthly fixtures are the same three rows the seed used to carry (see the note in `data/seed.ts`),
- * kept here as legacy input so preservation is tested against real-shaped data rather than an empty list.
+ * PG-5b: the three rows below are the same TASK 9 rows the seed used to carry, kept as **legacy input** —
+ * the bytes a pre-v11 payload holds under `declarations`. They are typed with the storage shape from
+ * `data/schema.ts`, not with a record type, because there is no longer such a thing. The step that reads
+ * them drops them, and the store must never write them back.
  */
-const LEGACY_DECLARATION_FIXTURES: Declaration[] = [
+const LEGACY_MONTHLY_ROWS: LegacyMonthlyDeclaration[] = [
   { id: 'd1', an: 2026, luna: 3, venituri: lei(12500), cheltuieli: lei(1800), status: 'transmisa', dataInregistrare: '2026-04-10', dataTrimitere: '2026-04-15' },
   { id: 'd2', an: 2026, luna: 6, venituri: lei(14200), cheltuieli: lei(2100), status: 'in-asteptare', dataInregistrare: '2026-07-08' },
   { id: 'd3', an: 2026, luna: 9, venituri: lei(9680), cheltuieli: lei(546), status: 'inregistrata', dataInregistrare: '2026-09-28' },
@@ -73,7 +75,20 @@ function renderStoreWithFilings() {
     ...seedData,
     version: CURRENT_DATA_VERSION,
     filings: FILING_FIXTURES,
-    legacyDeclarations: LEGACY_DECLARATION_FIXTURES,
+  });
+}
+
+/**
+ * The same register, loaded from a payload one version behind the chain's head and still carrying its
+ * monthly rows. This is the shape PG-5b is about: the load runs `annual-filing`, which drops those rows,
+ * and every write after it must not put them back.
+ */
+function renderStoreFromPreV11Payload() {
+  renderStore({
+    ...seedData,
+    version: DATA_VERSION_RECORD_CURRENCY,
+    filings: FILING_FIXTURES,
+    declarations: LEGACY_MONTHLY_ROWS,
   });
 }
 
@@ -190,15 +205,39 @@ describe('updateFiling', () => {
     expect(storeRef!.filings).toHaveLength(FILING_FIXTURES.length);
   });
 
-  it('leaves the legacy monthly rows exactly where they were', () => {
-    // The preservation half of the migration: writing an annual filing must not rewrite, reorder or
-    // reinterpret the monthly rows a pre-v11 payload carried.
-    renderStoreWithFilings();
+  it('leaves every other collection exactly where it was, and writes no monthly rows back', () => {
+    // PG-5b re-premises "leaves the legacy monthly rows exactly where they were". The assertion it carries
+    // has not changed in substance — writing an annual filing must not rewrite, reorder or reinterpret
+    // anything outside `filings` — only what "the monthly rows" are has changed: they arrive in a pre-v11
+    // payload, the `annual-filing` step drops them on load, and no write may resurrect them. The fixture
+    // is still the three TASK 9 rows, so the coverage is against real-shaped data, not an empty list.
+    renderStoreFromPreV11Payload();
+
+    // The step ran: the payload's monthly rows did not survive into the store, and nothing was minted.
+    expect(storeRef!.filings).toHaveLength(FILING_FIXTURES.length);
+
+    const revenues = storeRef!.revenues;
+    const expenses = storeRef!.expenses;
+    const clients = storeRef!.clients;
+
     act(() => {
       storeRef!.updateFiling({ ...storeRef!.filings.find(f => f.id === 'f26')!, status: 'depusa', filedOn: '2027-05-12' });
     });
 
-    expect(storeRef!.legacyDeclarations).toEqual(LEGACY_DECLARATION_FIXTURES);
-    expect(persistedData().legacyDeclarations).toEqual(LEGACY_DECLARATION_FIXTURES);
+    // Byte for byte, in state and in storage.
+    expect(storeRef!.revenues).toEqual(revenues);
+    expect(storeRef!.expenses).toEqual(expenses);
+    expect(storeRef!.clients).toEqual(clients);
+    const persisted = persistedData();
+    expect(persisted.revenues).toEqual(revenues);
+    expect(persisted.expenses).toEqual(expenses);
+    expect(persisted.clients).toEqual(clients);
+
+    // And the monthly family is gone from the written shape — under the key the payload carried it under,
+    // and under the key PG-5 used to write it to.
+    expect('declarations' in persisted).toBe(false);
+    expect('legacyDeclarations' in persisted).toBe(false);
+    const written = JSON.stringify(persisted);
+    for (const row of LEGACY_MONTHLY_ROWS) expect(written).not.toContain(row.id);
   });
 });

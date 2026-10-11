@@ -84,10 +84,10 @@ describe('save effect — serialization contract', () => {
       'companyDocs',
       'documents',
       'expenses',
-      // PG-5: the annual returns, and the monthly rows the v10→v11 step preserved. `declarations` is
-      // gone from the written shape — the key list is the migration's evidence, in a test.
+      // PG-5: the annual returns. PG-5b: no monthly key at all — `declarations` is dropped by the
+      // `annual-filing` step and `legacyDeclarations` is gone with the record type. The key list is the
+      // migration's evidence, written as a test.
       'filings',
-      'legacyDeclarations',
       'profile',
       // TASK 3: the recorded tax reserve is part of AppData, so it is serialized like the rest of the
       // dataset. It is written as `null` when nothing was recorded — the key is present and its value
@@ -132,7 +132,6 @@ describe('save effect — multiple save cycles', () => {
       revenues: Revenue[];
       clients: { id: string; denumire: string }[];
       filings: { id: string; status: string }[];
-      legacyDeclarations: { id: string; status: string }[];
     };
 
     // Cycle 1 — add a revenue.
@@ -184,7 +183,10 @@ describe('save effect — multiple save cycles', () => {
     expect(persisted.revenues).toEqual(storeRef!.revenues);
     expect(persisted.clients).toEqual(storeRef!.clients);
     expect(persisted.filings).toEqual(storeRef!.filings);
-    expect(persisted.legacyDeclarations).toEqual(storeRef!.legacyDeclarations);
+    // PG-5b: the monthly family is absent from the bytes, not merely empty in them — no write in the
+    // cycle above could have put it back.
+    expect('legacyDeclarations' in persisted).toBe(false);
+    expect('declarations' in persisted).toBe(false);
   });
 });
 

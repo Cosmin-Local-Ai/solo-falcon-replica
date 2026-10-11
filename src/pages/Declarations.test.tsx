@@ -1,20 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { StoreProvider, STORAGE_KEY } from '../data/store';
-import { CURRENT_DATA_VERSION } from '../data/migration';
+import { CURRENT_DATA_VERSION, DATA_VERSION_RECORD_CURRENCY } from '../data/migration';
 import { seedData } from '../data/seed';
-import type { AnnualFiling, Declaration } from '../data/types';
+import type { AnnualFiling } from '../data/types';
+import type { LegacyMonthlyDeclaration } from '../data/schema';
 import { lei } from '../domain/money';
 import Declarations from './Declarations';
 
 /**
  * PG-5 re-pin (replaced, not deleted): this regression used to edit a monthly declaration row. The
- * record is annual now — `AnnualFiling` — and the monthly family is read-only, so the edit flow it
- * guards runs through the annual register. What the test protects has not changed: editing a record
- * updates it in place and does not quietly reset a field the user did not touch.
+ * record is annual now — `AnnualFiling` — and the edit flow it guards runs through the annual register.
+ * What the test protects has not changed: editing a record updates it in place and does not quietly
+ * reset a field the user did not touch.
  *
- * The legacy row below is here because the page shows both families at once, and the row-count
- * assertions are only meaningful if the second table is present while they run.
+ * PG-5b: the monthly row below is no longer a record the page can show. It is loaded as legacy input —
+ * a pre-v11 payload's `declarations` key — so the page is exercised against the bytes an old install
+ * really holds, and the assertion is that nothing from that key reaches the screen.
  */
 const FILING: AnnualFiling = {
   id: 'f26',
@@ -24,7 +26,7 @@ const FILING: AnnualFiling = {
   reference: 'REF-2026-001',
 };
 
-const LEGACY: Declaration = {
+const LEGACY_ROW: LegacyMonthlyDeclaration = {
   id: 'd3',
   an: 2026,
   luna: 9,
@@ -41,7 +43,6 @@ function renderWithFiling() {
       ...seedData,
       version: CURRENT_DATA_VERSION,
       filings: [FILING],
-      legacyDeclarations: [LEGACY],
     }),
   );
   return render(
@@ -51,7 +52,25 @@ function renderWithFiling() {
   );
 }
 
-/** Rows of the annual register — the legacy table is a separate `<table>`. */
+/** The same register, loaded from bytes one version behind the chain's head and still carrying a row. */
+function renderFromPreV11Payload() {
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      ...seedData,
+      version: DATA_VERSION_RECORD_CURRENCY,
+      filings: [FILING],
+      declarations: [LEGACY_ROW],
+    }),
+  );
+  return render(
+    <StoreProvider>
+      <Declarations />
+    </StoreProvider>,
+  );
+}
+
+/** Rows of the annual register — the only table the page renders. */
 function filingRows() {
   return document.querySelectorAll('table')[0]!.querySelectorAll('tbody tr');
 }
@@ -121,14 +140,20 @@ describe('Declarations edit flow (regression)', () => {
     expect(filedCell).toMatch(/^\d{2}\.\d{2}\.\d{4}$/);
   });
 
-  it('shows the legacy monthly rows read-only, with no write control', () => {
-    renderWithFiling();
+  it('shows no monthly register at all, even when the stored payload carries one', () => {
+    // PG-5b re-premise of "shows the legacy monthly rows read-only, with no write control". What the test
+    // has always guarded is that the monthly family gets no affordance and no standing as a filing. The
+    // answer is now stronger: there is no second table, no monthly row and no monthly heading, because the
+    // `annual-filing` step drops those rows before the page can read them.
+    renderFromPreV11Payload();
 
-    // The monthly row is still readable — it is the only place those figures exist.
-    expect(screen.getByText('2026-09')).toBeInTheDocument();
-    expect(screen.getByText('9.680,00 RON')).toBeInTheDocument();
-    // And it carries no affordance: the store has no monthly write path any more.
-    expect(document.querySelectorAll('table')[1]!.querySelectorAll('button')).toHaveLength(0);
-    expect(document.querySelectorAll('table')[1]!.querySelectorAll('tr.clickable')).toHaveLength(0);
+    // One table — the annual register — and the annual row is in it.
+    expect(document.querySelectorAll('table')).toHaveLength(1);
+    expect(filingRows()).toHaveLength(1);
+
+    // Nothing from the legacy key reached the screen: not the period, not the amounts, not the row id.
+    expect(screen.queryByText('2026-09')).toBeNull();
+    expect(screen.queryByText('9.680,00 RON')).toBeNull();
+    expect(document.querySelector('[data-record-id="d3"]')).toBeNull();
   });
 });

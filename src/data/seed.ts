@@ -91,7 +91,6 @@ export function emptyData(): AppData {
     expenses: [],
     clients: [],
     filings: [],
-    legacyDeclarations: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],
@@ -228,13 +227,13 @@ export const seedData: AppData = {
   // allowed to become a second source of a deadline.
   //
   // PG-5 (B-34) closed that shape: the record type is now annual (`AnnualFiling`, keyed by the fiscal
-  // year it DECLARES), and the monthly rows a pre-v11 payload carries are preserved read-only as
-  // `legacyDeclarations`. What is still NOT here is an annual filing. This profile's first Declarația
-  // Unică is the FY2026 return, due 2027-05-25; at the demo's own date it has not been filed, so
-  // `filings` is empty and the deadline says so. Seeding a filing would be seeding a fact the demo
+  // year it DECLARES). PG-5b removed the monthly shape from the application altogether — the v10→v11 step
+  // now drops a pre-v11 payload's monthly rows instead of preserving them, because D-USER-1 records that
+  // no stored payload exists to protect. What is still NOT here is an annual filing. This profile's first
+  // Declarația Unică is the FY2026 return, due 2027-05-25; at the demo's own date it has not been filed,
+  // so `filings` is empty and the deadline says so. Seeding a filing would be seeding a fact the demo
   // cannot support — the same mistake TASK 9 removed, in a tidier shape.
   filings: [],
-  legacyDeclarations: [],
   documents: [
     { id: 'doc1', nume: 'FCT-2026-001.pdf', data: '2026-02-02', categoria: 'Facturi' },
     { id: 'doc3', nume: 'Contract Presta Consulting.pdf', data: '2026-01-26', categoria: 'Contracte' },

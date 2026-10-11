@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import { StoreProvider, useStore } from './store';
 import { seedData } from './seed';
-import type { Client, Declaration, LegacyAppData, LegacyExpense, LegacyRevenue } from './types';
+import type { Client, LegacyAppData, LegacyExpense, LegacyRevenue } from './types';
+import type { LegacyMonthlyDeclaration } from './schema';
 import { lei } from '../domain/money';
 
 /**
@@ -68,7 +69,8 @@ const expenses: LegacyExpense[] = [
 
 const clients: Client[] = [{ id: 'c-legacy-1', denumire: 'Presta Consulting SRL', cui: 'RO12345678' }];
 
-const declarations: Declaration[] = [
+// A pre-v11 monthly row: storage, not a record. The `annual-filing` step drops it (PG-5b).
+const declarations: LegacyMonthlyDeclaration[] = [
   {
     id: 'd-legacy-1',
     an: 2026,
@@ -141,13 +143,15 @@ describe('pre-Phase-6 profile payload still loads (data-loss trap)', () => {
     expect(storeRef!.revenues).toHaveLength(2);
     expect(storeRef!.expenses).toHaveLength(1);
     expect(storeRef!.clients).toHaveLength(1);
-    expect(storeRef!.legacyDeclarations).toHaveLength(1);
     expect(storeRef!.revenues.map(r => r.id)).toEqual(['r-legacy-1', 'r-legacy-2']);
     expect(storeRef!.expenses[0].id).toBe('e-legacy-1');
     expect(storeRef!.clients[0].id).toBe('c-legacy-1');
-    // PG-5: the monthly row survives the chain under its new key. It is not converted into an annual
-    // filing — that would mint a filing the user never made — and it is not dropped.
-    expect(storeRef!.legacyDeclarations[0].id).toBe('d-legacy-1');
+    // PG-5b re-pin (replaced, not deleted): this asserted that the monthly row survives the chain under
+    // its renamed key. It no longer survives — `annual-filing` drops it — and it is still not converted
+    // into an annual filing, which is the half of the assertion that ever mattered for correctness. The
+    // data-loss trap this test exists for is untouched: every collection the app can still read is the
+    // one that was stored, not the seed's.
+    expect('legacyDeclarations' in storeRef!).toBe(false);
     expect(storeRef!.filings).toEqual([]);
     // The seed fallback would have replaced all of the above — prove it did not.
     expect(storeRef!.revenues).not.toEqual(seedData.revenues);
