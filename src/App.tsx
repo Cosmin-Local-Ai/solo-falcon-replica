@@ -69,9 +69,11 @@ interface Route {
 // Exact URL forms required:
 //   /revenues#!/registered  /revenues#!/pending  /revenues#!/rejected
 //   /expenses#!/registered  /expenses#!/rejected
-//   /declarations#!/inregistrata  /declarations#!/in-asteptare  /declarations#!/transmisa
 //   /documents#!/company    /settings#!/company
 // Pages may also generate their own extra tabs (e.g. /documents#!/toate).
+// PG-5: `/declarations` has no tab family any more. The monthly status tabs it used to expose
+// (`inregistrata` / `in-asteptare` / `transmisa` / `respinsa`) were tabs over a monthly register, and
+// the register is annual now; an attention row for a filing points at the page, not at a status tab.
 const VALID_TABS: Partial<Record<Page, string[]>> = {
   revenues: ['registered', 'pending', 'rejected'],
   expenses: ['registered', 'rejected'],
