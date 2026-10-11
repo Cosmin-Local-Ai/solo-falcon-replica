@@ -169,9 +169,19 @@ test.describe('PG-2 — the money date end to end', () => {
     await expect(modalDateInputs(page).first()).toHaveValue('2027-01-01');
     await page.getByRole('button', { name: 'Anulează' }).click();
 
+    // PG-5 re-pin (replaced, not deleted): the declarations form no longer defaults a date at all. The
+    // monthly row always had a registration date, so the form pre-filled one and B-46 was about WHICH
+    // clock it read. The annual return treats an absent filing date as a real state — a return being
+    // prepared has none — so pre-filling would mint a submission nobody recorded. The clock-sensitive
+    // write is now the one that stamps the day the app is told the return was filed, and that is what is
+    // asserted below: at 00:30 local on 1 Jan 2027 it must read 2027-01-01, not the UTC day.
     await page.goto('/declarations');
-    await page.getByRole('button', { name: /Adaugă declarație/ }).first().click();
-    await expect(modalDateInputs(page).first()).toHaveValue('2027-01-01');
+    await page.getByRole('button', { name: /Adaugă declarație anuală/ }).first().click();
+    await expect(modalDateInputs(page).first()).toHaveValue('');
+    await page.getByRole('button', { name: 'Adaugă', exact: true }).click();
+
+    await page.getByRole('button', { name: 'Marchează ca depusă' }).click();
+    await expect(page.locator('tr[data-record-id]').first()).toContainText('01.01.2027');
   });
 
   test('the RJIP register posts a 10 Jan 2027 collection in the 2027 register, under that date (B-66)', async ({ page }) => {

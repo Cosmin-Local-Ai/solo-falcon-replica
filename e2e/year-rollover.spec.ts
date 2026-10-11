@@ -104,6 +104,33 @@ test.describe('PG-4 — the fiscal year rolls over, and the app says what it doe
     await expect(estimateHero(page)).toHaveText('3.112,00 RON');
   });
 
+  test('B-73: opening Revenues on 2 January advances the year too — the trigger is not mounted on the dashboard', async ({ page }) => {
+    // PG-5 (B-73). PG-4 put the automatic advance inside the dashboard component, so the year moved on
+    // the first DASHBOARD open of the new year. A person who opened Revenues on 2 January got last
+    // year's register, and "last year" was no longer what the clock said. The writer now lives in the app
+    // shell, where every route starts, and this test starts the app on a page that has no banner, no
+    // hero and no dashboard at all.
+    await page.clock.setFixedTime(new Date('2027-01-02T08:00:00Z'));
+    await seedBrowserOnce(page);
+
+    await page.goto('/revenues');
+    await expect.poll(() => storedFiscalYear(page)).toBe(2027);
+
+    // The dashboard, opened afterwards, is looking at the year the clock is in — and says what it does
+    // not know about it, instead of quietly showing the 2026 register.
+    await page.goto('/dashboard');
+    await expect(page.getByText(copy.year.rulesMissing(2027))).toBeVisible();
+    await expect(estimateHero(page)).toHaveText('—');
+
+    // The toggle back still works, and the deliberate choice still survives a reload — the PG-4 guard,
+    // re-proven from a shell-mounted writer.
+    await page.getByRole('button', { name: copy.year.switchTo(2026) }).click();
+    await expect(estimateHero(page)).toHaveText('3.112,00 RON');
+    await page.reload();
+    await expect(estimateHero(page)).toHaveText('3.112,00 RON');
+    expect(await storedFiscalYear(page)).toBe(2026);
+  });
+
   test('the closed-year figure does not drift with the calendar', async ({ page }) => {
     // The drift table in brief 34: 15 Jan and 26 May used to annualise a finished year over again and
     // move the number. The same data, the same fiscal year, three as-of dates — one figure.
