@@ -102,6 +102,21 @@ export const dashboard = {
     finalCalculation: (year: number): string => `Calcul final pentru ${year}`,
     finalCalculationNote: (asOf: string): string =>
       `Anul fiscal s-a încheiat. Cifrele de mai jos sunt calculate din înregistrările reale, la data de ${asOf}. Nu sunt o rată de desfășurare și nu se mai modifică odată cu trecerea zilelor.`,
+    /**
+     * PG-5C — the hero figure is a register read at a date, so the date belongs beside it. D-PROJ-1 asks
+     * for exactly this label; without it a figure that is true „până azi” reads as one that is true for
+     * the whole year.
+     */
+    measuredAsOf: (asOf: string): string => `Măsurat la ${asOf}`,
+    /**
+     * PG-5C — the run-rate forecast, shown beside the fiscal figure and never instead of it. The title
+     * denies fiscal status in its own words, because the two numbers differ and only one of them is a
+     * quantity the app computed under a rule.
+     */
+    forecast: {
+      title: 'Previziune — nu este o cifră fiscală',
+      netLead: 'Venit net prezis pentru restul perioadei de activitate:',
+    },
   },
   /**
    * PG-4 (D-YEAR-1) — the year lifecycle banner.

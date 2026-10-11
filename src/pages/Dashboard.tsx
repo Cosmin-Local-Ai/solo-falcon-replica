@@ -5,7 +5,7 @@ import { isGapReason } from '../domain/estimateBasis';
 import { identityGreeting } from '../domain/profile';
 import { fmtDate } from '../data/types';
 import { formatBaniRON } from '../domain/money';
-import { estimateBasisExplanation, estimateBasisLabel } from '../domain/estimateBasis';
+import { estimateBasisExplanation, estimateBasisLabel, estimateForecastExplanation, estimateForecastLabel } from '../domain/estimateBasis';
 import { copy, dashboard as dashboardCopy, estimateState as estimateStateCopy, provenance as provenanceCopy } from '../ui/copy';
 import { Disclosure } from '../components/ui/Disclosure';
 import { RuleProvenance } from '../components/ui/RuleProvenance';
@@ -89,6 +89,14 @@ export default function DashboardPage() {
   const taxTotal =
     data.tax !== null && data.tax.status === 'computed' ? data.tax.output.total : null;
   const estimateState = data.estimateState;
+  // PG-5C — the run-rate forecast, if the model has months left to project into. It is read here for one
+  // reason: to be shown beside the hero, labelled, and visibly not the hero. Nothing on this page feeds
+  // it to a figure; `basis.actual` is the only quantity the estimate and the thresholds were built from,
+  // and `estimateBasis.actualsBasis.test.ts` proves the operand type cannot accept anything else.
+  const forecast =
+    data.tax !== null && data.tax.basis.kind === 'recorded-actuals'
+      ? data.tax.basis.forecast
+      : undefined;
 
   return (
     <div className="dashboard">
@@ -166,6 +174,8 @@ export default function DashboardPage() {
                       ? estimateBasisLabel(data.tax.basis)
                       : estimateStateCopy.badges[estimateState]}{' '}
                   · {dashboardCopy.fiscalYearPrefix} {snapshot.taxYear}
+                  {' · '}
+                  {dashboardCopy.estimate.measuredAsOf(fmtDate(snapshot.asOf))}
                 </span>
                 <span className="row">
                   <span className="muted">
@@ -228,6 +238,24 @@ export default function DashboardPage() {
                   <p className="hint">{estimateBasisExplanation(data.tax.basis)}</p>
                 ) : null}
               </Disclosure>
+              {/* PG-5C — the forecast, beside the figure and not inside it. It is a separate block with
+                  its own label rather than a clause in the explanation, because the two numbers differ
+                  and a reader has to be able to tell which one the app calculated under a rule. No tax,
+                  contribution or threshold figure is ever derived from it — the block shows the projected
+                  net only, and the sentence says what it is not. */}
+              {forecast ? (
+                <div className="forecast-aside" data-forecast-method={forecast.method}>
+                  <p className="hint forecast-title">{dashboardCopy.estimate.forecast.title}</p>
+                  <p className="hint">
+                    {dashboardCopy.estimate.forecast.netLead}{' '}
+                    <strong className="mono">
+                      {formatBaniRON(forecast.amounts.net)}
+                    </strong>
+                  </p>
+                  <p className="hint">{estimateForecastLabel(forecast)}</p>
+                  <p className="hint">{estimateForecastExplanation(forecast)}</p>
+                </div>
+              ) : null}
               {/* TASK 9: the figure is attributed. Which rule package produced it, and whether the digest
                   that calculation recorded still matches the registered rules, is its own disclosure —
                   separate from the arithmetic above because it answers a different question. When there
@@ -254,7 +282,7 @@ export default function DashboardPage() {
 
         <div className="grid grid-2">
           <TaxReserve reserve={data.reserve} onRecord={appData.setReservedAmount} />
-          <ThresholdSection thresholds={data.thresholds} />
+          <ThresholdSection thresholds={data.thresholds} asOfDate={data.snapshot.asOf} />
           <DeadlineSection deadlines={data.deadlines} asOfDate={data.snapshot.asOf} />
           <CompletenessSection completeness={data.completeness} />
           <ActionSection actions={data.actions} />

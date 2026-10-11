@@ -100,13 +100,19 @@ export type Applicability = 'applicable' | 'not_applicable' | 'unknown';
 
 /**
  * TASK 4 — which quantity the row actually measured. TASK 1 left a deliberate asymmetry: the four
- * contribution rows are measured against an ANNUAL figure (projected, or actuals when the projection
- * model could not run) while `VAT_REGISTRATION` is measured against YEAR-TO-DATE turnover. That split
- * is correct — CF art. 148 / art. 170 measure an annual value, art. 310 alin. (1) measures the
- * turnover realised in the year so far — so it is labelled here instead of being quietly unified.
+ * contribution rows are measured against an ANNUAL figure while `VAT_REGISTRATION` is measured against
+ * YEAR-TO-DATE turnover. That split is correct — CF art. 148 / art. 170 measure an annual value, art.
+ * 310 alin. (1) measures the turnover realised in the year so far — so it is labelled here instead of
+ * being quietly unified.
+ *
+ * PG-5C deleted `'annual-projected'` from this union. It is not a member that happens to be unused now;
+ * it is a claim that a legal figure was measured on a grossing-up, and after B-76 nothing in this app
+ * may make that claim. Because `measuredBasisLabels` in `src/ui/copy/thresholds.ts` is a
+ * `Record<MeasuredBasis, string>`, re-adding the member is a compile error until someone also writes
+ * the sentence that would put it on screen — which is why the union is kept honest rather than a wording
+ * kept around for it.
  */
 export type MeasuredBasis =
-  | 'annual-projected'
   | 'annual-actual'
   | 'ytd-turnover'
   | 'unattributed'

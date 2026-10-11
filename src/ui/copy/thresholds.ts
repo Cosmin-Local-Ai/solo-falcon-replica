@@ -39,10 +39,16 @@ export const thresholdStatusLabels: Record<ThresholdStatus, string> = {
  * Which quantity the row measured. The contribution rows and the VAT row are measured on different
  * bases on purpose (CF art. 148 / 170 / 174 measure an annual value, art. 310 alin. (1) measures the
  * turnover realised so far), so the two labels must never be merged into one.
+ *
+ * `'annual-projected'` is gone from the union it keys, and its wording went with it. A label kept for a
+ * member nothing can emit is a sentence waiting to be attached to a number that no longer exists.
+ *
+ * `annual-actual` has to carry its own denial. D-PROJ-1's unresolved half is that a mid-year reader can
+ * take a threshold result as settled for the whole year; naming the quantity as realised money, with no
+ * annualisation, is what keeps the row from implying an answer it does not have.
  */
 export const measuredBasisLabels: Record<MeasuredBasis, string> = {
-  'annual-projected': 'venit net anual estimat pentru întreg anul',
-  'annual-actual': 'venit net anual înregistrat până acum (fără proiecție disponibilă)',
+  'annual-actual': 'venit net anual realizat — încasări încasate și plăți plătite, fără annualizare',
   'ytd-turnover': 'cifra de afaceri înregistrată de la începutul anului',
   unattributed: 'bază măsurată, dar fără origine declarată',
   unmeasured: 'bază nemăsurată',
@@ -77,6 +83,12 @@ export const thresholds = {
   threshold: 'Prag:',
   distance: 'Distanță:',
   measuredBasis: 'Bază măsurată:',
+  /**
+   * PG-5C — the date the measured value was measured at. A threshold compared against a register read
+   * at a date is only meaningful together with that date, and D-PROJ-1 asks for the figure to be
+   * labelled with it. It states no conclusion about the rest of the year.
+   */
+  measuredAt: (asOf: string): string => `Valoare măsurată la data de ${asOf}.`,
   notApplicable: 'Nu se aplică:',
   applicabilityUnknown: 'Aplicabilitate nesigură:',
   /**

@@ -51,9 +51,16 @@ function labelFor(t: FiscalThreshold): string {
 
 export interface ThresholdSectionProps {
   thresholds: FiscalThreshold[];
+  /**
+   * PG-5C — the date every `currentValue` in this card was measured at. The rows state which quantity
+   * they measured; this states when it was measured, which is the other half of what makes a threshold
+   * row readable rather than suggestive. It is passed in rather than re-derived here because the card
+   * must not own a clock.
+   */
+  asOfDate?: string;
 }
 
-export default function ThresholdSection({ thresholds }: ThresholdSectionProps) {
+export default function ThresholdSection({ thresholds, asOfDate }: ThresholdSectionProps) {
   return (
     <Card
       header={
@@ -66,9 +73,16 @@ export default function ThresholdSection({ thresholds }: ThresholdSectionProps) 
       {thresholds.length === 0 ? (
         <p className="hint">{thresholdCopy.empty}</p>
       ) : (
-        thresholds.map((t) => (
-          <ThresholdRow key={t.thresholdId} threshold={t} />
-        ))
+        <>
+          {asOfDate ? (
+            <p className="hint threshold-measured-at" data-measured-at={asOfDate}>
+              {thresholdCopy.measuredAt(asOfDate)}
+            </p>
+          ) : null}
+          {thresholds.map((t) => (
+            <ThresholdRow key={t.thresholdId} threshold={t} />
+          ))}
+        </>
       )}
     </Card>
   );

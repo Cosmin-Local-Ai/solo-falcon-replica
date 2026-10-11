@@ -1,24 +1,32 @@
 /**
- * Task 1 (pre-Phase-11) — which quantity enters the tax engine, and what a consumer can tell
- * about it.
+ * Which quantity enters the tax engine, and what a consumer can tell about it.
  *
- * Before this module the annual tax estimate was fed raw `selectYtd` totals, so a current-year
- * dashboard put an actuals-to-date number behind a label that reads as a year. The annualisation
- * rule already exists in `src/domain/projection.ts` (run rate = YTD / elapsed months, annual =
- * run rate × 12). This module does NOT re-derive that rule — it decides which of the model’s
- * outputs may enter the engine, and records that decision in the data so `actual` and `projected`
- * are distinguishable without parsing a label.
+ * PG-5C (B-76) is the reason this module now says what it says. Task 1 had it feed the engine the
+ * run-rate annualisation from `src/domain/projection.ts` whenever a run rate existed, and record
+ * that choice on the result. That was a decision about labelling, and the label was honest — but the
+ * number behind the label was one the law does not produce. CF art. 68 alin. (2) lit. a) measures
+ * „sumele încasate”, alin. (4) lit. b) measures what was paid in the year, and art. 118 alin. (3)
+ * deems income realised in a fraction of a year to **be** the annual income. Nothing grosses up.
+ * So an October-2026 PFA with 25.000 lei of realised net income had an engine input of 50.000 lei at
+ * mid-November, crossed the 12-SM floor that 50.000 lei had manufactured, and was shown a CAS of
+ * 12.150 lei that art. 148 alin. (1) does not produce. D-PROJ-1 forbids that, and `research/26` §9
+ * is the authority for forbidding it.
  *
- * Two rules this module exists to enforce:
+ * The rule this module exists to enforce now:
  *
- * 1. Never annualise what cannot be annualised. `selectProjectionV1` has no refusal channel: for
- *    an `asOfDate` before the fiscal year start it returns a zero denominator and all-zero
- *    totals. That is not a projection, it is the absence of one, and feeding those zeros to the
- *    engine would print a plausible `0,00 RON` annual estimate. Here that case becomes an explicit
- *    `actuals-only` basis instead - the honest output the brief requires, not a number.
- * 2. The basis travels with the result. `attachEstimateBasis` puts the basis on the engine’s
+ * 1. **The engine is fed recorded actuals, always.** Receipts actually collected, expenses actually
+ *    paid, measured as of a stated date. No multiplying, no dividing by months elapsed — not for a
+ *    mid-year starter, not for a closed year, not at any point in an open one. A closed year is the
+ *    same rule, not a special case: its actuals happen to be the whole year's.
+ * 2. **A run-rate forecast may exist beside the estimate, and cannot reach it.** `selectProjectionV1`
+ *    is still called, and its output still rides on the basis as `forecast`, because the chart and a
+ *    labelled forecast are legitimate (D-PROJ-1 protects both). What is gone is the path from it to
+ *    an operand. That is enforced by types, not by care: `EstimateAmounts` carries the date it was
+ *    measured as of, and a forecast has no such date because it is not a measurement — so a forecast
+ *    is not assignable to an operand and `amountsForEstimate` cannot return one.
+ * 3. **The basis travels with the result.** `attachEstimateBasis` puts the basis on the engine’s
  *    `TaxEstimateResult` without the engine knowing this module exists, so every existing consumer
- *    keeps reading the same fields while a new one can ask what the numbers mean.
+ *    keeps reading the same fields while a new one can ask what the numbers were measured on.
  *
  * No fiscal value, rate, parameter or rule lives here.
  */
@@ -48,21 +56,70 @@ import { selectProjectionV1, type ProjectionV1 } from './projection';
 import type { TaxEstimateResult } from './tax';
 import Decimal from 'decimal.js-light';
 
-/** The four money operands `computeTaxEstimate` takes (`tax.ts` `TaxCalculationInput`). */
+/**
+ * The four money operands `computeTaxEstimate` takes (`tax.ts` `TaxCalculationInput`), plus the date
+ * they were measured as of.
+ *
+ * `asOfDate` is not decoration and it is not a display field bolted on afterwards. It is what makes
+ * the type refuse a forecast. A measured quantity has a measurement date; a run-rate projection has
+ * none, because nothing was measured — the rest of the year was assumed. So `ForecastAmounts` below
+ * deliberately lacks this property, and TypeScript then makes "feed the engine a projected operand"
+ * a compile error rather than a code-review finding. `amountsForEstimate` is the only exported path
+ * from a basis to an operand, and the only thing it can return is `basis.actual`.
+ *
+ * D-PROJ-1 asks for the hero to be "labelled with the date it is measured as of". Carrying the date
+ * in the operand is what stops that promise from being a caption that can drift away from the figure.
+ */
 export interface EstimateAmounts {
   revenues: Bani;
   expenses: Bani;
   revenuesNet: Bani;
   expensesNet: Bani;
+  readonly asOfDate: string;
+}
+
+/**
+ * The same four quantities produced by a run rate instead of by a register.
+ *
+ * Structurally identical to `EstimateAmounts` except for the missing `asOfDate`, and that single
+ * omission is the whole enforcement: this type is not assignable to an engine operand, so no call
+ * site can hand a projection to `computeTaxEstimate` or to a threshold base without a cast.
+ */
+export interface ForecastAmounts {
+  revenues: Bani;
+  expenses: Bani;
+  revenuesNet: Bani;
+  expensesNet: Bani;
+  /**
+   * The model's own net (`annualProjected.net`), carried rather than re-subtracted at the surface: a
+   * page doing `Bani` arithmetic is how a second, slightly different net reaches the screen.
+   */
+  net: Bani;
+}
+
+/**
+ * The run-rate forecast that may sit beside an estimate.
+ *
+ * It is a real output of a real model and nothing here hides it: the chart draws its monthly series
+ * and the dashboard may show it, labelled as a forecast. What it is not allowed to be is a fiscal
+ * figure. `method` is carried so a surface can never present a forecast without naming how it was
+ * made, and `elapsedMonths` / `activeMonths` are carried so the sentence beside it names the same
+ * window the arithmetic used (the B-72 lesson).
+ */
+export interface RunRateForecast {
+  method: 'run-rate-v1';
+  elapsedMonths: number;
+  activeMonths: number;
+  amounts: ForecastAmounts;
 }
 
 /**
  * What fed the engine, in the data rather than in the wording.
  *
- * - `annual-projected` — the engine ran on the projection model’s annual figures. `actual` keeps
- *   the actuals-to-date they were derived from, so a consumer can show or audit both.
- * - `actuals-only` — the model could not project, so the engine ran on actuals-to-date. This is
- *   not a weaker annual estimate; it is a different, honestly-labelled quantity.
+ * - `recorded-actuals` — the engine ran on what was actually collected and actually paid, as of
+ *   `asOfDate`. This is the only kind a computed estimate can have. It replaced the two kinds PG-5C
+ *   removed (`annual-projected` and `actuals-only`): once the engine is fed actuals in both cases,
+ *   the distinction between them was a distinction about a forecast, not about the figure.
  * - `refused` — the engine was never reached: the law supplies no expense engine for this activity
  *   (art. 68^3). No amounts are recorded because none were computed.
  * - `unknown` - an estimate that arrived without a recorded basis (a hand-built result, the
@@ -70,33 +127,33 @@ export interface EstimateAmounts {
  */
 export type TaxEstimateBasis =
   | {
-      kind: 'annual-projected';
-      method: 'run-rate-v1';
-      /** The denominator the projection model actually used, after its own lower bound. */
-      elapsedMonths: number;
+      kind: 'recorded-actuals';
+      method: null;
+      /** The date the amounts were measured as of — the same date the hero names. */
+      asOfDate: string;
       /**
-       * B-72 — the length of the period the PFA was actually open for, read straight off the model
-       * (`projection.activeMonths`). It changes no arithmetic; it exists so the sentence beside the
-       * figure can name the same period the figure was computed over. PG-4 clamped `elapsedMonths` so
-       * it can never exceed 12, but for a PFA that started in October the „din 12” half still described
-       * the calendar year while the number beside it came from three months.
+       * True when `asOfDate` is past 31 Dec of the fiscal year, so these actuals are the whole
+       * year's and the figure is final. Read off the projection model, not re-derived here.
+       */
+      closed: boolean;
+      /**
+       * The length of the period the PFA was actually open for inside this fiscal year, read straight
+       * off the model (`projection.activeMonths`). It changes no arithmetic — the figure is the same
+       * with or without it. It exists so a surface can say over what window the register runs, and so
+       * the forecast beside the figure can name the window that forecast assumed (the B-72 lesson:
+       * a sentence describing the calendar year next to a number computed over three months).
        *
-       * Optional because a basis can arrive from elsewhere (a hand-built fixture, an older result) and a
-       * wording layer may not invent an active period it was never given: with no `activeMonths` the
-       * label states the elapsed measure and stops there.
+       * Optional because a basis can arrive from elsewhere (a hand-built fixture, an older result)
+       * and a wording layer may not invent an active period it was never given.
        */
       activeMonths?: number;
       actual: EstimateAmounts;
-      projected: EstimateAmounts;
-    }
-  | {
-      kind: 'actuals-only';
-      method: null;
-      elapsedMonths: number;
-      /** B-72 — see the note on the `annual-projected` kind above. */
-      activeMonths?: number;
-      actual: EstimateAmounts;
-      reason: string;
+      /**
+       * The run-rate forecast, present only when the model has months left to project into. It is
+       * output for display, never an input: `ForecastAmounts` is not assignable to `EstimateAmounts`,
+       * so nothing downstream of this field can reach the engine or a threshold base.
+       */
+      forecast?: RunRateForecast;
     }
   | {
       /**
@@ -131,66 +188,91 @@ export type AttributedEstimateBasis = Exclude<
 /** The basis a refused estimate carries: a reason, and nothing else. */
 export type RefusedEstimateBasis = Extract<TaxEstimateBasis, { kind: 'refused' }>;
 
-/** The actuals-to-date operands, read off `YtdTotals` in one place. */
-export function actualEstimateAmounts(ytd: YtdTotals): EstimateAmounts {
+/**
+ * The operands, read off `YtdTotals` in one place and stamped with the date they were read at.
+ *
+ * This is the only way an `EstimateAmounts` gets made. That is deliberate: the `asOfDate` requirement
+ * is what makes "a projection, used as if it were a measurement" unrepresentable, and a constructor
+ * that cannot be called without a measurement date is what enforces it.
+ */
+export function actualEstimateAmounts(ytd: YtdTotals, asOfDate: string): EstimateAmounts {
   return {
     revenues: ytd.revenue,
     expenses: ytd.expenses,
     revenuesNet: ytd.revenueNet,
     expensesNet: ytd.expenseNet,
+    asOfDate,
   };
 }
 
 /**
- * Decide the basis from the projection model’s own output.
+ * Build the basis the engine will run on.
  *
- * The only condition tested is the model’s own degenerate signal: `elapsedMonths` is its
- * denominator after its own lower bound, and `0` means "no run rate exists". Nothing is invented
- * here — in particular a partial year is NOT a refusal, because the model does not treat it as
- * one: it normalises by the fractional denominator and multiplies by 12.
+ * There is no decision left to make here about *which* quantity enters the engine — that is the
+ * PG-5C finding, and it is why this function no longer branches. The engine is fed `actual`. The
+ * projection is still read, for two things it is genuinely good at: telling us whether the fiscal
+ * year is closed, and producing the forecast that may sit beside the figure.
+ *
+ * The forecast is attached only when it would actually be a forecast. Once the as-of date reaches the
+ * end of the active period the model's own elapsed measure equals its horizon, the "projection" is
+ * arithmetically the actuals again, and presenting it as a forecast would be presenting the same
+ * number twice under two labels.
  */
 export function selectTaxEstimateBasis(
   projection: ProjectionV1,
   ytd: YtdTotals,
+  asOfDate: string,
 ): AttributedEstimateBasis {
-  const actual = actualEstimateAmounts(ytd);
+  const actual = actualEstimateAmounts(ytd, asOfDate);
   const elapsedMonths = projection.elapsedMonths;
   // B-72: read, never recomputed. The wording layer is allowed to say how long the active period was
   // because the model already measured it; duplicating that measure here is how a label and a figure
   // start disagreeing.
   const activeMonths = projection.activeMonths;
 
-  if (!(elapsedMonths > 0) || !Number.isFinite(elapsedMonths)) {
-    return {
-      kind: 'actuals-only',
-      method: null,
-      elapsedMonths: Number.isFinite(elapsedMonths) ? elapsedMonths : 0,
-      activeMonths,
-      actual,
-      reason:
-        'Nu există o rată de desfășurare pentru această dată (0 luni scurse din perioada de activitate); ' +
-        'valorile sunt cele înregistrate până acum, neannualizate.',
-    };
-  }
+  const canForecast =
+    !projection.closed &&
+    Number.isFinite(elapsedMonths) &&
+    elapsedMonths > 0 &&
+    Number.isFinite(activeMonths) &&
+    activeMonths > elapsedMonths;
 
-  return {
-    kind: 'annual-projected',
-    method: projection.method,
-    elapsedMonths,
+  const basis: AttributedEstimateBasis = {
+    kind: 'recorded-actuals',
+    method: null,
+    asOfDate,
+    closed: projection.closed,
     activeMonths,
     actual,
-    projected: {
-      revenues: projection.annualProjected.revenue,
-      expenses: projection.annualProjected.expenses,
-      revenuesNet: projection.annualProjectedExclVat.revenueNet,
-      expensesNet: projection.annualProjectedExclVat.expenseNet,
+  };
+  if (!canForecast) return basis;
+  return {
+    ...basis,
+    forecast: {
+      method: projection.method,
+      elapsedMonths,
+      activeMonths,
+      amounts: {
+        revenues: projection.annualProjected.revenue,
+        expenses: projection.annualProjected.expenses,
+        revenuesNet: projection.annualProjectedExclVat.revenueNet,
+        expensesNet: projection.annualProjectedExclVat.expenseNet,
+        net: projection.annualProjected.net,
+      },
     },
   };
 }
 
-/** The four operands that must be handed to `computeTaxEstimate` for this basis. */
+/**
+ * The operands to hand to `computeTaxEstimate` for this basis.
+ *
+ * One branch, and it is not a choice: `basis.actual`. The return type is what carries the guarantee —
+ * a basis's `forecast.amounts` is a `ForecastAmounts`, which has no `asOfDate` and therefore is not
+ * an `EstimateAmounts`, so the expression that used to live here
+ * (`basis.kind === 'annual-projected' ? basis.projected : basis.actual`) no longer type-checks.
+ */
 export function amountsForEstimate(basis: AttributedEstimateBasis): EstimateAmounts {
-  return basis.kind === 'annual-projected' ? basis.projected : basis.actual;
+  return basis.actual;
 }
 
 // ── TASK 2b: the deductible subset, assembled here and nowhere else ───────────
@@ -994,13 +1076,12 @@ export function selectDeductibleExpenses(
  *
  * WHICH BASIS THE CEILING IS STRUCK ON — the decision, and it is load-bearing. The ceiling is an
  * ANNUAL one: art. 65 alin. (1) makes the fiscal year the calendar year, and art. 68 alin. (4) lit. b)
- * attributes an expense to the year it was paid. So the ceiling is struck on the annual quantity the
- * estimate runs on — the run-rate projection when one exists, the actuals when the model has none — and
- * that SAME annual ceiling also bounds the actuals-to-date figure, because a payment already made cannot
- * deduct more than the whole year is allowed to. Capping the YTD amount against a YTD base and letting
- * the projection scale the result would silently turn an annual statutory limit into a per-elapsed-months
- * limit; it happens to give the same projected number under a uniform run rate, but it reports a wrong
- * `basis.actual`, and it stops being the same as soon as the two measures stop scaling alike.
+ * attributes an expense to the year it was paid. Since PG-5C the annual quantity IS the realised one —
+ * art. 118 alin. (3) deems what was realised in a fraction of the year to be the annual income — so the
+ * ceiling is struck on the recorded amounts, which is also exactly the quantity the engine runs on.
+ * Before PG-5C this struck the ceiling on the run-rate projection, which made a statutory annual limit
+ * move with the calendar: the same October payment was capped against a different ceiling on 15 November
+ * than on 31 December, and no provision says it should.
  */
 /** One capped category together with the annual amount it claims — the two inputs of the second pass. */
 interface CapClaim {
@@ -1015,11 +1096,10 @@ function applyAnnualDeductibilityCaps(
 ): { basis: AttributedEstimateBasis; adjustments: AnnualCapAdjustment[] } {
   if (claims.length === 0) return { basis, adjustments: [] };
 
-  // Both operand sets are adjusted. `annual` is what the engine runs on; `actual` is what the basis
-  // reports as the actuals it was derived from, and an annual ceiling bounds that too.
-  let annual: EstimateAmounts =
-    basis.kind === 'annual-projected' ? { ...basis.projected } : { ...basis.actual };
-  let actual: EstimateAmounts = { ...basis.actual };
+  // One operand set. Before PG-5C this function carried two — a projected `annual` the engine ran on
+  // and a recorded `actual` it merely reported — and the two could sit at different points of the same
+  // ceiling. There is now one quantity, it is the recorded one, and the ceiling bounds it once.
+  let operands: EstimateAmounts = { ...basis.actual };
 
   const adjustments: AnnualCapAdjustment[] = [];
   // The alin. (5) categories that are HELD OUT of the record set but still belong to the alin. (6) base —
@@ -1038,10 +1118,9 @@ function applyAnnualDeductibilityCaps(
     const ceiling = zeroPair();
     const allowed = zeroPair();
     for (const m of MEASURES) {
-      ceiling[m] = capBaniCeiling(nonNegativeBani(grossOf(annual, m)), percent);
+      ceiling[m] = capBaniCeiling(nonNegativeBani(grossOf(operands, m)), percent);
       allowed[m] = minBani(claimed[m], ceiling[m]);
-      annual = withDeductible(annual, m, addBani(deductibleOf(annual, m), allowed[m]));
-      actual = withDeductible(actual, m, addBani(deductibleOf(actual, m), minBani(line[m], ceiling[m])));
+      operands = withDeductible(operands, m, addBani(deductibleOf(operands, m), allowed[m]));
       cappedAllowed[m] = addBani(cappedAllowed[m], allowed[m]);
       cappedClaimed[m] = addBani(cappedClaimed[m], line[m]);
     }
@@ -1079,8 +1158,7 @@ function applyAnnualDeductibilityCaps(
       ceiling[m] = strike.ceiling;
       if (alternative.ok) ceilingAlt[m] = alternative.ceiling;
       allowed[m] = minBani(claimed[m], ceiling[m]);
-      annual = withDeductible(annual, m, addBani(deductibleOf(annual, m), allowed[m]));
-      actual = withDeductible(actual, m, addBani(deductibleOf(actual, m), minBani(line[m], ceiling[m])));
+      operands = withDeductible(operands, m, addBani(deductibleOf(operands, m), allowed[m]));
       cappedAllowed[m] = addBani(cappedAllowed[m], allowed[m]);
       cappedClaimed[m] = addBani(cappedClaimed[m], line[m]);
     }
@@ -1121,7 +1199,7 @@ function applyAnnualDeductibilityCaps(
   const baseAlt = zeroPair(); // alternative — POST-cap: the same categories subtracted as ALLOWED
   const ceilingAlt = zeroPair();
   for (const m of MEASURES) {
-    const postCap = nonNegativeBani(subBani(grossOf(annual, m), deductibleOf(annual, m)));
+    const postCap = nonNegativeBani(subBani(grossOf(operands, m), deductibleOf(operands, m)));
     baseAlt[m] = postCap;
     // Subtract the excess Pass A / Pass A2 disallowed, i.e. subtract those categories as RECORDED. Burse
     // private and protocol are absent from the base entirely — alin. (6) removes them by name — so they
@@ -1138,8 +1216,7 @@ function applyAnnualDeductibilityCaps(
       ceiling[m] = capBaniCeiling(base[m], percent);
       ceilingAlt[m] = capBaniCeiling(baseAlt[m], percent);
       allowed[m] = minBani(claimed[m], ceiling[m]);
-      annual = withDeductible(annual, m, addBani(deductibleOf(annual, m), allowed[m]));
-      actual = withDeductible(actual, m, addBani(deductibleOf(actual, m), minBani(line[m], ceiling[m])));
+      operands = withDeductible(operands, m, addBani(deductibleOf(operands, m), allowed[m]));
     }
     adjustments.push({
       category: line.category,
@@ -1156,28 +1233,29 @@ function applyAnnualDeductibilityCaps(
     });
   }
 
-  const rebuilt: AttributedEstimateBasis =
-    basis.kind === 'annual-projected'
-      ? { ...basis, actual, projected: annual }
-      : { ...basis, actual };
+  // The forecast is carried through untouched. Striking a statutory ceiling changes the legal figure;
+  // it does not change what a run rate would have said, and rewriting the forecast to match the capped
+  // operands would quietly turn a forecast into a calculation it never performed.
+  const rebuilt: AttributedEstimateBasis = { ...basis, actual: operands };
   return { basis: rebuilt, adjustments };
 }
 
 /**
- * The annual quantity a capped category claims, projected by the projection model's OWN rule rather
- * than re-derived here (the TASK 1 lesson: the run-rate rule lives in `projection.ts` and nowhere
- * else). Projecting the category's own records through `selectProjectionV1` gives exactly the model's
- * annual figure for that category, in both measures.
+ * The annual quantity a capped category claims.
+ *
+ * It is the recorded amount, and PG-5C is why. This function used to re-enter `selectProjectionV1` on
+ * the category's own records so the ceiling would be struck against the category's *projected* annual
+ * figure. That made a statutory annual limit a function of the date the app happened to be read on:
+ * protocol paid in October was measured against one ceiling on 15 November and another on 31 December,
+ * and art. 68 alin. (5) states no such moving limit. Art. 68 alin. (4) lit. b) attributes an expense to
+ * the year it was PAID, and art. 118 alin. (3) makes the fraction-of-year amount the annual amount, so
+ * the annual claim is simply what was paid in the year.
+ *
+ * `line` is the only input it needs: the records behind the line are already period-scoped by the
+ * caller that built them, and nothing here re-filters them by date.
  */
-function claimAnnualMeasure(
-  data: AppData,
-  asOfDate: string,
-  line: AnnualCapLine,
-  canProject: boolean,
-): MeasurePair {
-  if (!canProject) return { inclVat: line.inclVat, exclVat: line.exclVat };
-  const p = selectProjectionV1({ ...data, expenses: line.records }, asOfDate);
-  return { inclVat: p.annualProjected.expenses, exclVat: p.annualProjectedExclVat.expenseNet };
+function claimAnnualMeasure(line: AnnualCapLine): MeasurePair {
+  return { inclVat: line.inclVat, exclVat: line.exclVat };
 }
 
 /** The sentence a refused estimate says out loud, naming the rule and the article behind it. */
@@ -1255,7 +1333,7 @@ export function selectEstimateOperands(
   const scoped: AppData = { ...ledger.data, expenses: deductible.records };
   const ytd = selectYtd(scoped, asOfDate);
   const projection = selectProjectionV1(scoped, asOfDate);
-  const basisBeforeCaps = selectTaxEstimateBasis(projection, ytd);
+  const basisBeforeCaps = selectTaxEstimateBasis(projection, ytd, asOfDate);
 
   if (deductible.annualCapped.length === 0) {
     return {
@@ -1268,12 +1346,12 @@ export function selectEstimateOperands(
     };
   }
 
-  // Pass 2. The ceiling is struck on the annual quantity, and the annual quantity is the one the
-  // estimate runs on — see `applyAnnualDeductibilityCaps` for why, and for what this decision pins.
-  const canProject = basisBeforeCaps.kind === 'annual-projected';
+  // Pass 2. The ceiling is struck on the annual quantity, and since PG-5C the annual quantity is the
+  // recorded one — see `applyAnnualDeductibilityCaps` and `claimAnnualMeasure` for why, and for what
+  // those two decisions pin.
   const claims: CapClaim[] = deductible.annualCapped.map((line) => ({
     line,
-    claimed: claimAnnualMeasure(data, asOfDate, line, canProject),
+    claimed: claimAnnualMeasure(line),
   }));
   const { basis, adjustments } = applyAnnualDeductibilityCaps(basisBeforeCaps, claims);
   return {
@@ -1330,16 +1408,20 @@ export function formatElapsedMonths(months: number): string {
 }
 
 /**
- * The months phrase of the basis wording (B-72).
+ * The months phrase, now attached only to a forecast.
  *
- * With an active period known, the sentence names it: the figure beside it is a run rate over the
- * months the PFA was open, not over the calendar year, and „din 12” said the calendar year. With none
- * known, the phrase states the elapsed measure and stops — a wording layer that has not been given the
- * active period must not borrow 12 from the calendar to fill the gap.
+ * It used to sit beside the fiscal figure, which is how B-72 arose: a sentence about months next to a
+ * number that was not computed over months. Since PG-5C the fiscal figure is a register read at a date
+ * and says nothing about months, so this phrase belongs to the run-rate forecast alone — where the
+ * months ARE the arithmetic.
+ *
+ * With an active period known, the sentence names it. With none known, it states the elapsed measure
+ * and stops: a wording layer that has not been given the active period must not borrow 12 from the
+ * calendar to fill the gap.
  */
-function monthsPhrase(basis: { elapsedMonths: number | null; activeMonths?: number }): string {
-  const elapsed = formatElapsedMonths(basis.elapsedMonths ?? 0);
-  const active = basis.activeMonths;
+function monthsPhrase(forecast: { elapsedMonths: number | null; activeMonths?: number }): string {
+  const elapsed = formatElapsedMonths(forecast.elapsedMonths ?? 0);
+  const active = forecast.activeMonths;
   if (typeof active === 'number' && Number.isFinite(active) && active > 0) {
     return `${elapsed} din ${formatElapsedMonths(active)} luni de activitate`;
   }
@@ -1347,50 +1429,91 @@ function monthsPhrase(basis: { elapsedMonths: number | null; activeMonths?: numb
 }
 
 /**
- * The wording rule. A run-rate projection is an assumption about the rest of the year, not a
- * forecast of fact, so the label names the assumption and states how many months it rests on.
- * `YTD` is only ever said when the numbers really are actuals-to-date.
+ * The label over the fiscal figure.
+ *
+ * It names the quantity the number actually is: money that was collected and paid, read out of the
+ * register at a date. It must not say „anuală pe rată de desfășurare”, because that described a
+ * grossing-up the law does not perform and the app no longer does either. A closed year gets its own
+ * words because its register happens to cover the whole year — the figure is final, not merely current.
  */
 export function estimateBasisLabel(basis: TaxEstimateBasis | null | undefined): string {
   if (!basis || basis.kind === 'unknown') return 'Estimare impozit';
   if (basis.kind === 'refused') return 'Estimare blocată — revizuire necesară';
-  if (basis.kind === 'actuals-only') return 'Înregistrat până acum (neannualizat)';
-  return `Estimare anuală pe rată de desfășurare (${monthsPhrase(basis)})`;
+  if (basis.closed) return 'Calcul final pe înregistrările anului';
+  return 'Calculat din încasări și plăți înregistrate';
 }
 
 /**
- * The short label for one figure. `YTD` is said only when the figure really is actuals-to-date, so
- * an annual run-rate figure can never be read as money already collected or paid.
+ * The short label for one figure.
  *
- * These three wording functions accept `undefined` as well as `null`: a result that never had a basis
+ * These wording functions accept `undefined` as well as `null`: a result that never had a basis
  * attached (a hand-built fixture, the loading sentinel) is a real case, and the honest answer for it
- * is the neutral label — never a crash, and never a guess about actual vs projected.
+ * is the neutral label — never a crash, and never a guess about what was measured.
  */
 export function estimateFigureLabel(basis: TaxEstimateBasis | null | undefined): string {
   if (!basis || basis.kind === 'unknown') return 'Estimare impozit';
   if (basis.kind === 'refused') return 'Estimare impozit (calculată nu s-a făcut)';
-  if (basis.kind === 'actuals-only') return 'Estimare impozit YTD';
-  return 'Estimare impozit anuală (rată de desfășurare)';
+  if (basis.closed) return 'Impozit final pe înregistrările anului';
+  return 'Impozit calculat din încasări și plăți înregistrate';
 }
 
 /**
- * One sentence that states what the displayed amounts are. It must not imply more certainty than a
- * run-rate assumption carries: the projection is the rest of the year assumed to repeat the months
- * already recorded, and it moves as the year advances.
+ * One sentence that states what the displayed amounts are, and — just as important after PG-5C — what
+ * they are not. The citation is art. 118 alin. (3), the deeming rule that makes a fraction-of-year
+ * amount the annual amount; alin. (2) is the pre-2024 numbering of the same sentence and must not be
+ * cited here.
+ *
+ * The claim is scoped to the code and to the calculation: it says what this app measured. It does not
+ * assert that proration no longer appears in the Norme metodologice — `research/26` §5 records that the
+ * norms reproduced in ANAF's current edition still contain prorating language, and their status after
+ * HG 602/2025 is unverified.
  */
 export function estimateBasisExplanation(basis: TaxEstimateBasis | null | undefined): string {
   if (!basis || basis.kind === 'unknown') {
     return 'Baza acestei estimări nu este înregistrată, deci valorile nu pot fi prezentate nici ca realizate, nici ca proiectate.';
   }
-  if (basis.kind === 'actuals-only') {
-    return 'Valorile de mai jos sunt cele înregistrate până acum, neannualizate. ' + basis.reason;
-  }
   if (basis.kind === 'refused') {
     return 'Calculul nu s-a făcut, deci nu există valori de afișat. ' + basis.reason;
   }
+  if (basis.closed) {
+    return (
+      `Anul fiscal ${basis.asOfDate.slice(0, 4)} s-a încheiat. Valorile de mai jos sunt încasările încasate și `
+      + 'plățile plătite în acel an, fără nicio annualizare.'
+    );
+  }
   return (
-    'Valorile anuale sunt extrapolate din rata de desfășurare a lunilor înregistrate până acum ' +
-    `(${monthsPhrase(basis)}). Nu sunt o previziune a cifrelor reale: ` +
-    'se ajustează pe măsură ce anul fiscal avansează.'
+    `Valorile de mai jos sunt calculate din încasările efectiv încasate și cheltuielile efectiv plătite până la `
+    + `data de ${basis.asOfDate}. Nu sunt o rată de desfășurare dusă la an: art. 118 alin. (3) din Codul fiscal `
+    + 'consideră venit anual și venitul realizat într-o fracțiune de an.'
+  );
+}
+
+/**
+ * The label over a run-rate forecast shown beside the fiscal figure.
+ *
+ * It has to read as a forecast in its own words, not as a second estimate, because the two numbers
+ * differ and only one of them is a legal quantity. `null` renders as an empty string rather than a
+ * hedge: a surface that has no forecast has nothing to label, and inventing a label for nothing is how
+ * a caption starts describing a figure that is not there.
+ */
+export function estimateForecastLabel(forecast: RunRateForecast | null | undefined): string {
+  if (!forecast) return '';
+  return `Previziune pe rată de desfășurare (${monthsPhrase(forecast)})`;
+}
+
+/**
+ * What a forecast is, in one sentence, next to the forecast.
+ *
+ * The sentence has to carry the denial itself — that this number feeds neither the tax, nor the
+ * contributions, nor the thresholds — because a number in a box looks like a figure the app believes,
+ * and D-PROJ-1's unresolved half is precisely that a mid-year reader could otherwise take a threshold
+ * result as settled for the whole year.
+ */
+export function estimateForecastExplanation(forecast: RunRateForecast | null | undefined): string {
+  if (!forecast) return '';
+  return (
+    'Aceasta este o previziune, nu o cifră fiscală. Ea presupune că lunile rămase din perioada de activitate '
+    + `vor repeta rata lunilor înregistrate până acum (${monthsPhrase(forecast)}). Nu alimentează calculul `
+    + 'impozitului, al contribuțiilor sau a pragurilor — acestea sunt măsurate doar pe înregistrările reale.'
   );
 }

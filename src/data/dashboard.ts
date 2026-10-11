@@ -412,23 +412,28 @@ export function buildThresholdBases(ytd: YtdTotals, tax: TaxEstimateResult | nul
  * basis it measured instead of the reader having to guess.
  *
  * The asymmetry is deliberate and must stay: CF art. 148 / art. 170 / art. 174 measure an ANNUAL
- * value, so the four contribution rows are measured against the engine's annual figure — the
- * projection when the projection model ran, the actuals when it could not (TASK 1). CF art. 310
- * alin. (1) measures the turnover realised in the year so far, so `VAT_REGISTRATION` stays YTD.
- * Unifying them would make one of the two rows state a quantity the law does not measure.
+ * value, and since PG-5C the annual value the app holds IS the realised one — the receipts collected
+ * and the payments paid, which art. 118 alin. (3) deems to be the annual income even for a fraction of
+ * a year. CF art. 310 alin. (1) measures the turnover realised in the year so far, so `VAT_REGISTRATION`
+ * stays YTD. Unifying them would make one of the two rows state a quantity the law does not measure.
+ *
+ * PG-5C also removed `'annual-projected'` from `MeasuredBasis` rather than leaving it unproduced. A
+ * label that can no longer be emitted is a dead enum member; a label that cannot be emitted is a guard.
+ * With the member gone, `measuredBasisLabels` no longer compiles if anything ever tries to attribute a
+ * contribution row to a forecast again.
  */
 export function buildThresholdBasisProvenance(
   tax: TaxEstimateWithBasis | null,
 ): Partial<Record<FiscalBase, MeasuredBasis>> {
   if (tax === null) {
     // Nothing was computed, so nothing can be attributed. An empty provenance map makes the rows say
-    // they are unmeasured; labelling them `annual-projected` would name a basis that does not exist.
+    // they are unmeasured; labelling them `annual-actual` would name a basis that does not exist.
     return {};
   }
   const turnover: MeasuredBasis = 'ytd-turnover';
-  let annual: MeasuredBasis = 'unattributed';
-  if (tax.basis.kind === 'annual-projected') annual = 'annual-projected';
-  else if (tax.basis.kind === 'actuals-only') annual = 'annual-actual';
+  // `unattributed` is only reachable for a `refused` or `unknown` basis — a result that never had
+  // amounts to attribute. A computed one always says which realised quantity it measured on.
+  const annual: MeasuredBasis = tax.basis.kind === 'recorded-actuals' ? 'annual-actual' : 'unattributed';
   return {
     'revenue-incl-vat': turnover,
     'revenue-excl-vat': turnover,
