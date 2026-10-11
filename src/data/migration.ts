@@ -197,8 +197,30 @@ export const DATA_VERSION_ANNUAL_FILING = 11;
  * field added without a version stamp would let a stored payload look identical to one that answered.
  */
 export const DATA_VERSION_ACTIVITY_FAMILY = 12;
+/**
+ * PG-6h-2 (B-82, B-84): the profile can now record the accommodation facts the accommodation *title*
+ * turns on — how many short-term-let rooms in which fiscal year, the person's own answer to the CF
+ * art. 68^3 alin. (1) tourism-operator gate, and which reading of alin. (3) they choose for their gross.
+ *
+ * Like v12, this step backfills nothing, and that is its entire content. No pre-v13 field holds any of
+ * these facts, and a default would not be a convenience — it would be a legal assertion:
+ *
+ * - a room count of 1–7 puts the receipts in *cedarea folosinței bunurilor* (art. 83 alin. (2), art. 85);
+ *   more than 7 puts them in a activitate independentă under art. 68^3 (art. 83 alin. (4)). **The count is
+ *   a category switch, not a threshold**, so a migrated payload that was given a number was given a tax
+ *   title it never claimed;
+ * - a default commission reading would settle B-80, which two live readings and no primary source leave
+ *   open, and the choice moves gross, therefore tax, the CASS base and the CAS threshold;
+ * - a default eligibility answer would decide a tourism-law classification the Codul fiscal does not
+ *   decide and this app cannot verify.
+ *
+ * So every payload keeps its silence, and the silence is reported: `scenarios.ts
+ * accommodation-gross-undetermined` and `accommodation-title-cedarea-folosintei` read the absence and
+ * refuse, rather than picking a title and producing a figure under rules that may not be this person's.
+ */
+export const DATA_VERSION_ACCOMMODATION_FACTS = 13;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_ACTIVITY_FAMILY;
+export const CURRENT_DATA_VERSION = DATA_VERSION_ACCOMMODATION_FACTS;
 
 export interface MigrationStep {
   readonly from: number;
@@ -809,6 +831,20 @@ export function migrateActivityFamilyV12(data: PersistedAppData): PersistedAppDa
   return { ...data, version: DATA_VERSION_ACTIVITY_FAMILY };
 }
 
+/**
+ * PG-6h-2 (B-82, B-84) — the accommodation facts open as absent, and nothing else happens.
+ *
+ * The forbidden version of this function is `{ ...data, profile: { ...profile, accommodationRoomCounts:
+ * [{ fiscalYear: profile.fiscalYear, rooms: 1 }] } }` or `accommodationCommissionReading: 'reading_a'`.
+ * Either one mints a legal fact for every stored profile: the room count decides the *title* the income
+ * falls under (art. 83 alin. (2) / art. 85 versus art. 83 alin. (4) / art. 68^3), and the commission
+ * reading decides what the gross contains. Idempotent-safe for the same reason v12 is: it writes a
+ * version and touches no value.
+ */
+export function migrateAccommodationFactsV13(data: PersistedAppData): PersistedAppData {
+  return { ...data, version: DATA_VERSION_ACCOMMODATION_FACTS };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -905,6 +941,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Profilul poate înregistra acum familia de activități declarată de persoana fizică: „altă activitate” sau „prestare de servicii de cazare”. Nimic nu a fost completat în acest pas: niciun câmp vechi conține acest fapt, iar o valoare implicită „altă activitate” ar afirma că regulile obișnuite se aplică unei persoane care nu a fost niciodată întrebată. Codul CAEN nu este un răspuns — OMFP 925/2017 art. 2 alin. (4) leagă metoda de impunere de descrierea activității „independent de codurile CAEN menționate cu titlu exemplificativ”. Un profil fără răspuns rămâne fără răspuns și este raportat ca faptă de profil care lipsește, nu ca profil complet.',
     apply: migrateActivityFamilyV12,
+  },
+  {
+    from: DATA_VERSION_ACTIVITY_FAMILY,
+    to: DATA_VERSION_ACCOMMODATION_FACTS,
+    name: 'accommodation-facts',
+    summary:
+      'Profilul poate înregistra acum faptele pe care se decide TITLUL sub care intră veniturile din cazare: câte camere se închiriază pe termen scurt în fiecare an fiscal, răspunsul persoanei la condiția din art. 68^3 alin. (1) (operator economic potrivit legislației turismului) și ce citire a art. 68^3 alin. (3) alege pentru venitul brut. Nimic nu a fost completat în acest pas, și acesta este tot conținutul lui. Numărul de camere nu este o sumă care intră într-o formulă, ci un comutator de categorie: 1–7 camere înseamnă cedarea folosinței bunurilor (art. 83 alin. (2), art. 85), peste 7 camere înseamnă activitate independentă potrivit art. 68^3 (art. 83 alin. (4)). Un număr inventat la migrare ar inventa și un titlu fiscal pe care persoana nu l-a revendicat niciodată. La fel pentru celelalte două: o citire implicită a alin. (3) ar închide o întrebare pe care două lecturi vii și nicio sursă primară nu o hotărăsc, iar un răspuns implicit la alin. (1) ar decide o clasificare din legea turismului pe care Codul fiscal nu o decide. Un profil fără răspuns rămâne fără răspuns, iar aplicația refuză cifra în loc să ghicească titlul.',
+    apply: migrateAccommodationFactsV13,
   },
 ];
 

@@ -124,6 +124,17 @@ export const pfaProfileSchema: z.ZodType<PfaProfile> = z.object({
   // `fiscal/deductibility.ts ACTIVITY_FAMILY_VALUES` — the same pair the classifier matches on — so the
   // persisted shape and the rule condition cannot drift into two vocabularies.
   activityFamily: z.enum(ACTIVITY_FAMILY_VALUES).optional(),
+  // PG-6h-2 (B-82, B-84) — the accommodation facts. All three OPTIONAL and none with `.default()`, for
+  // the reason every addition above gives: this is the persisted gate, and a required field here resets
+  // every existing payload to seed. Absence is also the honest state — a room count invented by a schema
+  // default would invent a tax category (art. 83 alin. (2) vs art. 83 alin. (4)), and a commission
+  // default would choose between the two readings of art. 68^3 alin. (3) that no primary source settles.
+  // Year-attributed like the pension facts above, because art. 83 alin. (4) speaks per fiscal year.
+  accommodationRoomCounts: z
+    .array(z.object({ fiscalYear: z.number().int().min(1990).max(2100), rooms: z.number().int().min(0) }))
+    .optional(),
+  accommodationCommissionReading: z.enum(['reading_a', 'reading_b']).optional(),
+  accommodationTourismEligibility: z.enum(['da', 'nu']).optional(),
   socialInsuranceStatus: z.enum(['obligatoriu', 'exempt', 'neplata']),
   vatExempt: z.boolean(),
   // The one input `VAT_REGISTRATION_DEADLINE_2026` was still missing (P-PROFILE-VAT-DATE).

@@ -28,6 +28,7 @@ import {
   DATA_VERSION_RECORD_CURRENCY,
   DATA_VERSION_ANNUAL_FILING,
   DATA_VERSION_ACTIVITY_FAMILY,
+  DATA_VERSION_ACCOMMODATION_FACTS,
   DATA_VERSION_IDENTITY,
   DATA_VERSION_PROFILE,
   MIGRATION_CHAIN,
@@ -215,8 +216,9 @@ describe('migration chain (pure)', () => {
       // PG-6b: the profile may now record a declared activity family. Appended, never renumbered — and
       // the step backfills nothing, which is the property the test below this one guards.
       [DATA_VERSION_ANNUAL_FILING, DATA_VERSION_ACTIVITY_FAMILY],
+      [DATA_VERSION_ACTIVITY_FAMILY, DATA_VERSION_ACCOMMODATION_FACTS],
     ]);
-    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_ACTIVITY_FAMILY);
+    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_ACCOMMODATION_FACTS);
   });
 
   // Phase 9 acceptance criterion 4: a payload written by a newer build is refused loudly rather
@@ -235,7 +237,7 @@ describe('migration chain (pure)', () => {
     const outcome = migratePersistedData(payload as never);
     // The chain runs to the current version, so the money-scale step follows; it converts
     // amounts and invents no fields, which is what the assertions below check.
-    expect(outcome.stepsApplied).toEqual(['payment-dates', 'vat-exceedance-date', 'money-bani', 'expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family']);
+    expect(outcome.stepsApplied).toEqual(['payment-dates', 'vat-exceedance-date', 'money-bani', 'expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family', 'accommodation-facts']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     for (const r of outcome.data.revenues) {
       expect('collected' in r).toBe(false);
@@ -256,7 +258,7 @@ describe('migration chain (pure)', () => {
     const payload = prePhase7Payload({ version: DATA_VERSION_DATES });
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_DATES);
-    expect(outcome.stepsApplied).toEqual(['vat-exceedance-date', 'money-bani', 'expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family']);
+    expect(outcome.stepsApplied).toEqual(['vat-exceedance-date', 'money-bani', 'expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family', 'accommodation-facts']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     expect('vatExceedanceDate' in outcome.data.profile!).toBe(false);
     // And nothing else about the profile moved.
@@ -278,7 +280,7 @@ describe('migration chain (pure)', () => {
     const payload = prePhase7Payload({ version: DATA_VERSION_ANNUAL_FILING, profile: unanswered });
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_ANNUAL_FILING);
-    expect(outcome.stepsApplied).toEqual(['activity-family']);
+    expect(outcome.stepsApplied).toEqual(['activity-family', 'accommodation-facts']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     // Absence survives. This is the whole content of the step, and the half that a `?? 'other'` would
     // have destroyed silently: the payload would have come out looking like one that answered.
@@ -288,6 +290,38 @@ describe('migration chain (pure)', () => {
       prePhase7Payload({ version: DATA_VERSION_ANNUAL_FILING, profile: { ...seedData.profile, activityFamily: 'cazare' } }) as never,
     );
     expect(declared.data.profile!.activityFamily).toBe('cazare');
+  });
+
+  // PG-6h-2 (B-82, B-84) — the v12→v13 step, and the acceptance criterion that makes this task exist:
+  // **a migration that invents a room count invents a tax category.** 1–7 rooms is *cedarea folosinței
+  // bunurilor* (art. 83 alin. (2), art. 85); peste 7 camere is a activitate independentă under art. 68^3
+  // (art. 83 alin. (4)). The step therefore writes no count, no commission reading and no eligibility
+  // answer, and a payload that never answered comes out still unanswered — which is what lets
+  // `scenarios.ts` refuse instead of asserting a title.
+  it('the accommodation-facts step backfills nothing: no room count, no commission reading, no eligibility', () => {
+    const payload = prePhase7Payload({ version: DATA_VERSION_ACTIVITY_FAMILY });
+    const outcome = migratePersistedData(payload as never);
+    expect(outcome.fromVersion).toBe(DATA_VERSION_ACTIVITY_FAMILY);
+    expect(outcome.stepsApplied).toEqual(['accommodation-facts']);
+    expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
+    const profile = outcome.data.profile!;
+    // Absence, asserted three ways — each of these would be a legal fact the person never stated.
+    expect('accommodationRoomCounts' in profile).toBe(false);
+    expect('accommodationCommissionReading' in profile).toBe(false);
+    expect('accommodationTourismEligibility' in profile).toBe(false);
+    // Idempotent-safe under the chain contract: the step writes a version and touches no value, so a
+    // payload already at 13 is returned byte-equal by the runner (no step matches `from`).
+    const again = migratePersistedData(outcome.data);
+    expect(again.stepsApplied).toEqual([]);
+    expect(again.data).toEqual(outcome.data);
+    // A declared count passes through untouched — the step neither overwrites nor re-reads it.
+    const declared = migratePersistedData(
+      prePhase7Payload({
+        version: DATA_VERSION_ACTIVITY_FAMILY,
+        profile: { ...seedData.profile, accommodationRoomCounts: [{ fiscalYear: 2027, rooms: 9 }] },
+      }) as never,
+    );
+    expect(declared.data.profile!.accommodationRoomCounts).toEqual([{ fiscalYear: 2027, rooms: 9 }]);
   });
 
   it('treats a payload with no version key as the base of the chain', () => {
@@ -309,6 +343,7 @@ describe('migration chain (pure)', () => {
       'record-currency',
       'annual-filing',
       'activity-family',
+      'accommodation-facts',
     ]);
     expect(outcome.data.version).toBe(CURRENT_DATA_VERSION);
   });
@@ -321,7 +356,7 @@ describe('migration chain (pure)', () => {
     const payload = prePhase7Payload({ version: DATA_VERSION_MONEY_BANI });
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_MONEY_BANI);
-    expect(outcome.stepsApplied).toEqual(['expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family']);
+    expect(outcome.stepsApplied).toEqual(['expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family', 'accommodation-facts']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     const migrated = outcome.data.expenses ?? [];
     expect(migrated.map((e) => e.id)).toEqual(['e-legacy-1']);
@@ -338,7 +373,7 @@ describe('migration chain (pure)', () => {
       expenses: [{ ...expenses[0], category: 'rent_business_space' }],
     });
     const outcome = migratePersistedData(payload as never);
-    expect(outcome.stepsApplied).toEqual(['expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family']);
+    expect(outcome.stepsApplied).toEqual(['expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family', 'accommodation-facts']);
     expect(outcome.data.expenses?.[0].category).toBe('rent_business_space');
   });
 
@@ -352,7 +387,7 @@ describe('migration chain (pure)', () => {
     delete payload.reservedAmount;
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_EXPENSE_CATEGORY);
-    expect(outcome.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family']);
+    expect(outcome.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family', 'accommodation-facts']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     // Absence carried forward verbatim — not `null`, not `0`, not an empty string.
     expect('reservedAmount' in outcome.data).toBe(false);
@@ -369,7 +404,7 @@ describe('migration chain (pure)', () => {
     const withAmount = migratePersistedData(
       prePhase7Payload({ version: DATA_VERSION_EXPENSE_CATEGORY, reservedAmount: lei(25000) }) as never,
     );
-    expect(withAmount.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family']);
+    expect(withAmount.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family', 'accommodation-facts']);
     expect(withAmount.data.reservedAmount).toBe(lei(25000));
 
     const explicitZero = migratePersistedData(
@@ -388,7 +423,7 @@ describe('migration chain (pure)', () => {
     payload.profile = { ...prePhase7Profile(), pensionStatus: 'da' };
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_TAX_RESERVE);
-    expect(outcome.stepsApplied).toEqual(['pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family']);
+    expect(outcome.stepsApplied).toEqual(['pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family', 'accommodation-facts']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     // The status fact travels, under the name that says what it is.
     expect(outcome.data.profile!.pensionerStatus).toBe('da');
@@ -542,7 +577,7 @@ describe('stored snapshots survive the migration (F-1, acceptance criterion 3)',
     });
     delete payload.reservedAmount;
     const outcome = migratePersistedData(payload as never);
-    expect(outcome.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family']);
+    expect(outcome.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family', 'accommodation-facts']);
     const [after] = outcome.data.snapshots!;
     expect(after.inputSnapshot).toEqual(stored.inputSnapshot);
     expect(after.inputsHash).toBe(stored.inputsHash);
@@ -568,7 +603,7 @@ describe('stored snapshots survive the migration (F-1, acceptance criterion 3)',
       snapshots: [stored],
     });
     const outcome = migratePersistedData(payload as never);
-    expect(outcome.stepsApplied).toEqual(['rule-set-digest', 'record-currency', 'annual-filing', 'activity-family']);
+    expect(outcome.stepsApplied).toEqual(['rule-set-digest', 'record-currency', 'annual-filing', 'activity-family', 'accommodation-facts']);
     const [after] = outcome.data.snapshots!;
     // The record now says out loud that its rules cannot be reconstructed…
     expect(after.ruleSetHash).toBeNull();
@@ -714,6 +749,7 @@ describe('load path runs the chain (acceptance criteria 2 and 3)', () => {
         'record-currency',
         'annual-filing',
         'activity-family',
+      'accommodation-facts',
       ],
     });
     // Not the seed: the seed's ids are different.

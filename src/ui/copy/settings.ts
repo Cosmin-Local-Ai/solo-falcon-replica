@@ -123,6 +123,69 @@ export const settings = {
       other: 'Altă activitate — cheltuieli efective (sistem real)',
       cazare: 'Prestare de servicii de cazare',
     },
+    /**
+     * PG-6h-2 (B-82, B-83, B-84) — the accommodation facts, and the title they decide.
+     *
+     * Three rules these strings obey:
+     *
+     * - **The count is a category switch, never a quantity.** The hint says the count decides *under which
+     *   title* the income falls, because that is what art. 83 alin. (2) and art. 83 alin. (4) actually do.
+     *   No sentence here may imply the number feeds a calculation.
+     * - **The 7 in the fiscal rule is not the 7 in the tourism norms.** Ordin 65/2013 alin. (12) caps a
+     *   natural person's right to *request tourism classification* at „7 camere/14 locuri”; art. 83 alin.
+     *   (4) sets the fiscal boundary at „peste 7 camere”. `research/39` §3 keeps them apart, and so does
+     *   this copy — the eligibility question never quotes the classification ceiling as a tax rule.
+     * - **A CAEN code may prompt, never answer.** The prompt note says out loud that the list is this app's
+     *   own choice, citing HG 656/1997 art. 4 alin. (1)-(2), because `research/39` §3 found no official
+     *   CAEN ↔ tourism-structure mapping in any source. A form that asks a question because of a code, and
+     *   says the code is not the answer, is the difference between a prompt and an inference.
+     */
+    accommodationSection: 'Cazare: câte camere și sub ce titlu intră venitul',
+    accommodationRooms: 'Numărul de camere închiriate pe termen scurt, pentru anul fiscal de mai sus',
+    accommodationRoomsHint:
+      'Numărul hotărăște sub ce titlu intră venitul, nu cât de mare este o cifră: 1–7 camere înseamnă cedarea folosinței bunurilor (art. 83 alin. (2), art. 85 din Codul fiscal), peste 7 camere înseamnă activitate independentă (art. 83 alin. (4), art. 68^3). Se înregistrează pe an fiscal, pentru că art. 83 alin. (4) vorbește „începând cu anul fiscal în care”. Nu este numărul de camere din normele de turism — cele două reguli de 7 au autori și efecte diferite.',
+    accommodationRoomsUnanswered:
+      'Fără răspuns. Aplicația nu alege un titlu în locul tău și nu completează numărul din codul CAEN, din sumele din registru sau dintr-o valoare implicită; cât timp lipsește, calculul pentru cazare rămâne oprit.',
+    accommodationEligibility: 'Ești operator economic definit potrivit legislației turismului?',
+    accommodationEligibilityHint:
+      'art. 68^3 alin. (1) se adresează „operatorilor economici definiți potrivit legislației specifice domeniului turismului”. Cine este unul se hotărăște în legea turismului și în autorizația de la registrul comerțului, nu în Codul fiscal: aplicația înregistrează răspunsul tău, nu îl verifică și nu îl decide.',
+    accommodationEligibilityOptions: {
+      da: 'Da — structura mea este clasificată ca structură de primire turistică',
+      nu: 'Nu — închiriez camere dintr-o locuință proprietate personală',
+    },
+    accommodationCommission: 'Ce citire a art. 68^3 alin. (3) se aplică la venitul tău brut?',
+    accommodationCommissionHint:
+      'alin. (3) scoate din venitul brut comisionul reținut de entitățile care facilitează închirierea pe termen scurt a camerelor situate în locuințe proprietate personală, dar textul stă într-un articol al cărui subiect la alin. (1) este spațiul unui operator economic din turism. Nicio sursă primară nu împacă cele două lecturi, iar alegerea schimbă brutul, deci impozitul, baza de CASS și pragul de CAS. Aceasta este alegerea ta, consemnată ca atare — nu o concluzie la care a ajuns aplicația.',
+    accommodationCommissionOptions: {
+      reading_a: 'Citește A — exclusarea operează doar prin alin. (12) / art. 83 alin. (4)',
+      reading_b: 'Citește B — exclusarea este o regulă generală de stabilire a brutului',
+    },
+    /**
+     * Which reading the app applied, and the alternative kept visible. D-COM-1 asks for both halves: a
+     * choice shown without its alternative reads like a finding, and a choice shown with it reads like a
+     * choice.
+     */
+    accommodationCommissionApplied: {
+      reading_a:
+        'Aplicația folosește citirea A, pentru că așa ai ales tu: comisionul nu este scos din brut decât acolo unde alin. (12) și art. 83 alin. (4) îl scot. Cealaltă citire posibilă, B, ar scoate comisionul din brut pentru tot venitul din art. 68^3 — și ar schimba brutul, impozitul, baza de CASS și pragul de CAS.',
+      reading_b:
+        'Aplicația folosește citirea B, pentru că așa ai ales tu: comisionul este scos din brut pentru tot venitul din art. 68^3. Cealaltă citire posibilă, A, ar lăsa brutul integral acolo unde alin. (12) și art. 83 alin. (4) nu îl reduc — și ar schimba brutul, impozitul, baza de CASS și pragul de CAS.',
+    },
+    accommodationCommissionUnanswered:
+      'Fără răspuns. Aplicația nu alege nicio citire: niciuna nu este stabilită de Codul fiscal, iar a alege una ar mișca venitul brut, impozitul, baza de CASS și pragul de CAS.',
+    /**
+     * The title the recorded count puts this year's income under. One sentence per state, including the
+     * state where nothing is recorded — the third one is the one acceptance 1 asks for, and a form that
+     * leaves it blank teaches the person that an unanswered question still has a title.
+     */
+    accommodationTitleCedarea: (year: number): string =>
+      `Pentru ${year} venitul înregistrat este sub titlul „cedarea folosinței bunurilor”: art. 83 alin. (2) și art. 85 din Codul fiscal. Nu este activitate independentă, iar metoda forfetară din art. 68^3 nu i se aplică.`,
+    accommodationTitleIndependent: (year: number): string =>
+      `Pentru ${year} venitul înregistrat este sub titlul „activitate independentă”: art. 83 alin. (4) și art. 68^3 din Codul fiscal, pentru că numărul de camere este peste 7.`,
+    accommodationTitleUnknown: (year: number): string =>
+      `Pentru ${year} numărul de camere nu este înregistrat, deci aplicația nu știe sub ce titlu intră venitul. Nu alege niciunul: 1–7 camere și peste 7 camere sunt titluri diferite, nu două valori ale aceluiași calcul.`,
+    accommodationCaenPromptHint:
+      'Întrebările despre cazare apar aici și pentru că profilul are un cod CAEN din Divizia 55. Codul nu este un răspuns la niciuna dintre ele: HG 656/1997 art. 4 alin. (1) spune că încadrarea într-o entitate CAEN „nu presupune crearea de drepturi sau obligații”, iar alin. (2) lasă responsabilitatea folosirii lui la autoritatea care o folosește. Lista de coduri după care se afișează aceste întrebări este o alegere a acestei aplicații, nu o lege — nicio listă oficială de corespondență între tipul de structură turistică și codurile CAEN nu a fost găsită.',
     startYear: 'Anul începerii activității',
     fiscalYear: 'An fiscal de referință',
     establishmentDate: 'Data înființării (fracțiune de an)',

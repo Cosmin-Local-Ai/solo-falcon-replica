@@ -103,6 +103,9 @@ export const validation = {
   yearInvalid: 'An invalid (2000–2100).',
   leiInvalid: 'Valoare invalidă (lei, ≥ 0).',
   monthsInvalid: 'Luni invalide: numere întregi 1-12, separate prin virgulă (ex: 3,4).',
+  // PG-6h-2 — the room count is a count, not an amount. A fraction or a negative is not a number of rooms,
+  // and letting a non-number through would silently read as "unanswered" instead of an error on screen.
+  roomsInvalid: 'Număr invalid de camere: număr întreg, ≥ 0.',
   nameNotEmpty: 'Numele nu poate fi gol',
   bankNameRequired: 'Introdu denumirea băncii',
   salaryAmountNeededForSixSm:

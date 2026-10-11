@@ -139,6 +139,203 @@ export interface ForeignSicknessInsurance {
   proved?: PfaYesNo;
 }
 
+/**
+ * PG-6h-2 (B-82, B-84) — the number of short-term-let rooms the person **declared** for ONE fiscal year.
+ *
+ * It is year-attributed for the reason the statute itself gives: CF art. 83 alin. (4) moves the taxpayer
+ * into independent activity **„începând cu anul fiscal în care numărul camerelor … este de peste 7”**, so
+ * the count is not a permanent attribute and the consequence follows the year. It is stored the way
+ * `PensionReceiptYear` and `ForeignSicknessInsurance` are — one record per `fiscalYear`, optional, never
+ * defaulted — because a single scalar on the profile would assert one count across every year the app
+ * can be asked about.
+ *
+ * **This is a category switch, not a quantity.** The count decides *which title the income belongs to*
+ * (see `AccommodationIncomeTitle`); it never feeds an arithmetic expression anywhere in this app, and no
+ * calculator reads it.
+ */
+export interface AccommodationRoomCountYear {
+  /** The fiscal year the count is declared for. art. 83 alin. (4) speaks per fiscal year. */
+  fiscalYear: number;
+  /** Rooms let pe termen scurt in that year. A count, not an amount, and not a rate. */
+  rooms: number;
+}
+
+/**
+ * The income title the room count places the accommodation receipts in.
+ *
+ * Two different titles, not two tax rates:
+ *
+ * - `cedarea_folosintei` — 1–7 rooms inclusive: CF art. 83 alin. (2) puts a „proprietar, uzufructuar sau
+ *   alt deținător legal” who lets 1–7 rooms in a personal dwelling under *cedarea folosinței bunurilor*,
+ *   and art. 85 alin. (1) confirms that taxpayer as a category of its own.
+ * - `activitate_independenta_68x3` — more than 7 rooms: art. 83 alin. (4) turns the same receipts into
+ *   a activitate independentă from the fiscal year the count crosses 7, and art. 68^3 alin. (12) is the
+ *   route by which that activity is measured on the flat ratio.
+ *
+ * Getting this wrong does not shift a figure — it moves the income into a different title, under rules
+ * that belong to somebody else. `null` (absence of a recorded count) is therefore a real third state and
+ * is reported as one; it is never resolved by guessing.
+ */
+export type AccommodationIncomeTitle = 'cedarea_folosintei' | 'activitate_independenta_68x3';
+
+/**
+ * The statutory fiscal boundary in art. 83 alin. (4): „peste 7 camere”.
+ *
+ * **Do not confuse this number with the 7 in the tourism norms.** Ordin ANT 65/2013 alin. (12), as
+ * amended, caps a natural person's right to *request tourism classification* at „7 camere/14 locuri”.
+ * That is a classification ceiling in tourism law. This constant is the fiscal boundary in the Codul
+ * fiscal, and the two rules have different authors, different purposes and different consequences.
+ * `docs/ai/research/39_caen_tourism_and_detection.md` §3 is the source for the distinction.
+ *
+ * It lives here rather than in the rule store because PG-6h-2 is forbidden from touching anything under
+ * `domain/fiscal/`, and because this number is not an arithmetic input: it selects a title.
+ */
+export const ACCOMMODATION_ROOM_COUNT_BOUNDARY = 7;
+
+/**
+ * Which reading of CF art. 68^3 alin. (3) the person chose for their own gross (D-COM-1, B-80).
+ *
+ * alin. (3) excludes from gross „comisionul reținut de către entitățile care facilitează închirierea pe
+ * termen scurt a camerelor situate în locuințe proprietate personală”, but the words are limited to
+ * personal dwellings while alin. (1) puts the article's subject with a tourism-sector operator. No
+ * primary source reconciles them (`docs/ai/research/38_art68x3_cass_and_occupancy_order.md` §3), and the
+ * choice moves gross, therefore tax, the CASS base and the CAS threshold.
+ *
+ * **This is a choice the person makes, recorded as their choice — not a finding the app reached.** The
+ * two ids are the labels the rule itself uses in `ACCOMMODATION_68X3_2026.gross_scope_open_question`
+ * („Citește A”, „Citește B”), so the stored answer, the rule text and the screen all name the same
+ * reading. There is no default anywhere: absence means the question has not been answered, and the
+ * gross stays undetermined.
+ */
+export type AccommodationCommissionReading = 'reading_a' | 'reading_b';
+
+/**
+ * The person's own answer to the CF art. 68^3 alin. (1) gate: whether they are „operatorii economici
+ * definiți potrivit legislației specifice domeniului turismului”.
+ *
+ * That classification is made in tourism law (OG 58/1998 as amended, Ordin 65/2013 as amended, the ONRC
+ * authorisation), not in the Codul fiscal, and `docs/ai/research/39_caen_tourism_and_detection.md` §3
+ * records that no official mapping from a tourism structure type to a CAEN code exists. **The app asks;
+ * it does not decide, and it cannot verify.** The value is the person's statement, and absence is the
+ * honest third state.
+ */
+export type AccommodationTourismEligibility = PfaYesNo;
+
+/** The room count declared for one fiscal year, or `undefined` when that year was never answered. */
+export function accommodationRoomCountForYear(
+  years: readonly AccommodationRoomCountYear[] | undefined,
+  fiscalYear: number,
+): number | undefined {
+  return years?.find((y) => y.fiscalYear === fiscalYear)?.rooms;
+}
+
+/**
+ * The title the recorded room count puts this year's accommodation receipts in.
+ *
+ * `null` means the count is not recorded for that year, and the app therefore does not know which title
+ * applies. It is not a default in either direction: a caller that receives `null` must not read it as
+ * `cedarea_folosintei` (that would apply art. 85 to a taxpayer art. 83 alin. (4) has already moved) nor
+ * as `activitate_independenta_68x3` (that would apply art. 68^3 to a taxpayer art. 83 alin. (2) puts
+ * somewhere else). This is the only place the boundary is compared; nothing else may re-derive it.
+ */
+export function accommodationIncomeTitleForYear(
+  years: readonly AccommodationRoomCountYear[] | undefined,
+  fiscalYear: number,
+): AccommodationIncomeTitle | null {
+  const rooms = accommodationRoomCountForYear(years, fiscalYear);
+  // Absence is the only "no title" answer. A stored count is an integer by the time it reaches here —
+  // `domain/schema.ts` requires `z.number().int()` — so there is no third shape to defend against, and
+  // a numeric guard here would imply the schema lets one through.
+  if (rooms === undefined) return null;
+  return rooms > ACCOMMODATION_ROOM_COUNT_BOUNDARY
+    ? 'activitate_independenta_68x3'
+    : 'cedarea_folosintei';
+}
+
+/**
+ * Replace or remove ONE year's room count without disturbing the other years.
+ *
+ * The Settings form edits the year it is showing; a plain `[{ fiscalYear, rooms }]` would silently drop
+ * every other year the profile holds, and `undefined` for the edited year must remove that entry rather
+ * than leave a stale count behind. `rooms === undefined` is therefore "this year is unanswered again".
+ */
+export function withAccommodationRoomCount(
+  years: readonly AccommodationRoomCountYear[] | undefined,
+  fiscalYear: number,
+  rooms: number | undefined,
+): AccommodationRoomCountYear[] | undefined {
+  const others = (years ?? []).filter((y) => y.fiscalYear !== fiscalYear);
+  if (rooms === undefined) return others.length > 0 ? others : undefined;
+  return [...others, { fiscalYear, rooms }];
+}
+
+/**
+ * One CAEN class this app treats as "accommodation-shaped enough to be worth asking about".
+ *
+ * **This list is the app's own normative choice, not a rule of Romanian law.** HG 656/1997 art. 4 alin.
+ * (1) says classification into a CAEN entity „nu presupune crearea de drepturi sau obligații”, and alin.
+ * (2) puts the responsibility for using CAEN in public administration squarely on the institution doing
+ * it, „care emit norme specifice de încadrare”. `docs/ai/research/39_caen_tourism_and_detection.md` §3
+ * records the finding behind this comment: **no official mapping from „tip de structură de primire
+ * turistică” to CAEN codes exists in any source retrieved.** So any such list is ours, and it is written
+ * down here rather than implied by a `startsWith('55')` somewhere.
+ *
+ * It is CAEN **Rev. 3** (Ordinul președintelui INS nr. 377/2024, MO I 385/25.04.2024, in force
+ * 01.01.2025), whose Division 55 has **five** classes. A list copied from a Rev. 2 source has four and is
+ * silently wrong. Two of the five are annotated because each is a false positive if read naively:
+ *
+ * - **5540 is intermediation, not accommodation** — it is the new booking-platform class, a Division 55
+ *   code with no bed.
+ * - **5590 is not necessarily tourism** — it covers lets shorter than a year (student and worker
+ *   accommodation), i.e. a residential let that can sit next to long-term rental.
+ *
+ * **What this list may and may not do.** It may *prompt a question*. It may never *answer* one, and it may
+ * never be the only trigger: the primary trigger is the declared `activityFamily`, because a natural
+ * person letting 1–7 rooms has no registered business activity and therefore no CAEN code at all
+ * (D-COM-2, B-83; `research/39` §1). No code in this repository may derive `activityFamily`, a room
+ * count, an eligibility answer or a commission reading from these codes.
+ */
+export interface TourismCaenClass {
+  cod: string;
+  /** The Rev. 3 official title, as recorded in `research/39` §2. */
+  title: string;
+  /** Why this class is not a straightforward accommodation signal, when it is not. */
+  caveat: string | null;
+}
+
+export const TOURISM_CAEN_CLASSES: readonly TourismCaenClass[] = [
+  { cod: '5510', title: 'Hoteluri și alte facilități de cazare similare', caveat: null },
+  {
+    cod: '5520',
+    title: 'Facilități de cazare pentru vacanțe și perioade de scurtă durată',
+    caveat: 'Definită prin ABSENȚA serviciilor de tip hotel; este clasa pensiunii, B&B și a camerei gazduite de o familie.',
+  },
+  { cod: '5530', title: 'Parcuri pentru rulote, campinguri și tabere', caveat: null },
+  {
+    cod: '5540',
+    title: 'Intermedieri pentru servicii de cazare',
+    caveat: 'NU este cazare: este intermediere (clasă nouă în Rev. 3). Un cod din Divizia 55 fără pat.',
+  },
+  {
+    cod: '5590',
+    title: 'Alte servicii de cazare',
+    caveat: 'Nu este neapărat turism: acoperă închirieri sub un an (cazare pentru studieri și lucrători).',
+  },
+];
+
+/**
+ * Whether the profile carries a CAEN class from `TOURISM_CAEN_CLASSES`.
+ *
+ * Read as a prompt only. An empty or absent CAEN list is the normal case for the likeliest affected user
+ * — the private landlord with 1–7 rooms, who is not in the trade-registry chain at all — and returns
+ * `false` without implying anything about what that person does.
+ */
+export function profileHasTourismCaen(identity: PfaIdentity | undefined): boolean {
+  const codes = identity?.caen ?? [];
+  const listed = new Set(TOURISM_CAEN_CLASSES.map((c) => c.cod));
+  return codes.some((c) => listed.has(c.cod));
+}
+
 /** Flags for other relevant income sources (plural — a profile can have several). */
 export type PfaOtherIncomeFlag =
   | 'imobiliare'    // rental income
@@ -339,6 +536,33 @@ export interface PfaProfile {
    *   family means for a calculation; this field only records what the person said.
    */
   activityFamily?: ActivityFamily;
+  /**
+   * PG-6h-2 (B-82, B-84) — the number of short-term-let rooms declared, **one record per fiscal year**.
+   *
+   * Three properties, each copied from the `activityFamily` rail directly above it:
+   *
+   * - **Asked, never inferred.** Nothing may derive it from `identity.caen`, from a revenue amount, from
+   *   the expense categories or from a seed value. `research/39` §1 is the reason the question has to be
+   *   asked rather than detected: the likeliest affected taxpayer — a natural person letting 1–7 rooms —
+   *   has no registered business activity and so no CAEN code to be found.
+   * - **Absence is the third state.** No `.default()`, no backfill, and migration step v12→v13 writes
+   *   nothing. A migration that invents a room count invents a tax category, because the count decides
+   *   the title (see `AccommodationIncomeTitle`), not a figure.
+   * - **Per year, deliberately.** art. 83 alin. (4) speaks „începând cu anul fiscal în care…”, so two
+   *   years may carry two different counts and two different titles.
+   */
+  accommodationRoomCounts?: AccommodationRoomCountYear[];
+  /**
+   * PG-6h-2 (D-COM-1, B-80) — which reading of art. 68^3 alin. (3) **the person chose** for their gross.
+   * Optional with no default on purpose: an unanswered commission question leaves the gross undetermined,
+   * and either default would move gross, tax, the CASS base and the CAS threshold.
+   */
+  accommodationCommissionReading?: AccommodationCommissionReading;
+  /**
+   * PG-6h-2 — the person's own answer to the art. 68^3 alin. (1) tourism-operator gate. The app records
+   * the statement; the classification itself belongs to tourism law and the ONRC authorisation, not here.
+   */
+  accommodationTourismEligibility?: AccommodationTourismEligibility;
   /** CASS status. */
   socialInsuranceStatus: PfaSocialInsuranceStatus;
   /** VAT-exempt (scutire de TVA). */

@@ -458,12 +458,21 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // discipline a fourth time: one more step, so the bytes written back carry one more version. What this
     // test exists for is untouched: the notice is still one long, `original` is still the verbatim 674.504
     // and `converted` is still 67450 bani. The v12 step writes a version and touches no value.
-    expect(saved.version).toBe(12);
+    // Re-pinned again 2026-10-11 (PG-6h-2): 12 → 13, because `accommodation-facts` (12→13) follows it — the
+    // fifth time for the same reason. What this test exists for is still untouched, and the v13 step is the
+    // same kind of step as v12: it writes a version and touches no value, so no money figure moves.
+    expect(saved.version).toBe(13);
     // The v12 step's own half, asserted on the store's bytes: this legacy profile carried no activity
     // family, and the step did not give it one. `'other'` here would have been exactly the default the
     // brief forbids — it reads as "the ordinary rules apply", asserted by the migration rather than chosen
     // by anybody who was asked. Absence is what comes back out.
     expect('activityFamily' in saved.profile).toBe(false);
+    // The v13 step's own half, on the same bytes: no room count, no commission reading, no eligibility
+    // answer was minted for a profile that never gave one. A room count written here would have written an
+    // income title with it — art. 83 alin. (2) / art. 85 versus art. 83 alin. (4) / art. 68^3.
+    expect('accommodationRoomCounts' in saved.profile).toBe(false);
+    expect('accommodationCommissionReading' in saved.profile).toBe(false);
+    expect('accommodationTourismEligibility' in saved.profile).toBe(false);
     // And the half of the v11 step that is a NON-write, asserted on the bytes: this payload carried no
     // `declarations` collection, so nothing was moved and nothing was invented. PG-5b re-pin: the monthly
     // key is now absent from the written bytes rather than present and empty — the record type is gone, so

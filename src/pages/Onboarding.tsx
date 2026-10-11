@@ -35,6 +35,7 @@ import { PFA_REGIME_DESCRIPTORS, PFA_REGIME_VALUES, isComputableRegime } from '.
 // PG-6b (B-29) — the declared activity family, typed from the classifier that reads it.
 import type { ActivityFamily } from '../domain/fiscal/deductibility';
 import type {
+  AccommodationCommissionReading,
   PfaOtherIncomeFlag,
   PfaPensionStatus,
   PfaRegime,
@@ -65,6 +66,9 @@ interface FormErrors {
   nume?: string;
   startDate?: string;
   salaryAmount?: string;
+  // PG-6h-2 — the room count is optional, but an answer that is not a whole number ≥ 0 is an error, not a
+  // silent absence: 7 and 8 rooms are two different income titles.
+  accommodationRooms?: string;
 }
 
 export default function OnboardingPage() {
@@ -79,6 +83,13 @@ export default function OnboardingPage() {
   // It is NOT collapsed into `'other'`: answering nothing leaves the estimate `incomplete` and reported,
   // while answering `other` is a claim the person made.
   const [activityFamily, setActivityFamily] = useState<ActivityFamily | ''>('');
+  // PG-6h-2 (B-82, B-84) — the three accommodation facts, each with the same third state as the question
+  // above it. All start empty and stay empty unless the person answers: a pre-filled room count would
+  // assert an income title (art. 83 alin. (2) / art. 85 versus art. 83 alin. (4) / art. 68^3), and a
+  // pre-selected commission reading would settle B-80 on somebody's behalf.
+  const [accommodationRooms, setAccommodationRooms] = useState('');
+  const [accommodationEligibility, setAccommodationEligibility] = useState<TriState>('');
+  const [accommodationCommission, setAccommodationCommission] = useState<AccommodationCommissionReading | ''>('');
   const [startDate, setStartDate] = useState('');
   const [vatRegistered, setVatRegistered] = useState<TriState>('');
   const [vatDate, setVatDate] = useState('');
@@ -108,6 +119,13 @@ export default function OnboardingPage() {
     } else {
       const problem = isoCalendarDateProblem(startDate.trim());
       if (problem) next.startDate = isoCalendarDateProblemText(problem);
+    }
+    // PG-6h-2 — the room count is a count, not an amount, and the difference between 7 and 8 is the
+    // difference between two income titles. A value that is not a whole number ≥ 0 is an error on screen,
+    // never a silently dropped answer that would leave the profile looking unanswered.
+    if (accommodationRooms.trim() !== '') {
+      const typed = Number(accommodationRooms.trim());
+      if (!Number.isInteger(typed) || typed < 0) next.accommodationRooms = validation.roomsInvalid;
     }
 
     let salaryBani: ReturnType<typeof parseLeiInput> = null;
@@ -161,6 +179,21 @@ export default function OnboardingPage() {
       // token would turn "nobody asked" into "the ordinary rules apply", which is the defect this field
       // exists to remove.
       ...(activityFamily === '' ? {} : { activityFamily }),
+      // PG-6h-2 — same rule as the family above: an unanswered question writes nothing at all, so the
+      // profile keeps the third state and the scenario registry reports the gap instead of asserting a
+      // title. The count is stored under the fiscal year this form is being filled for, which is the year
+      // art. 83 alin. (4) speaks about. And the whole group is written only under a declared `cazare`:
+      // accommodation facts on a profile that says its activity is something else would be a fact about an
+      // activity this person has just said they do not have.
+      ...(activityFamily !== 'cazare' || accommodationRooms.trim() === ''
+        ? {}
+        : { accommodationRoomCounts: [{ fiscalYear, rooms: Number(accommodationRooms.trim()) }] }),
+      ...(activityFamily !== 'cazare' || accommodationEligibility === ''
+        ? {}
+        : { accommodationTourismEligibility: accommodationEligibility }),
+      ...(activityFamily !== 'cazare' || accommodationCommission === ''
+        ? {}
+        : { accommodationCommissionReading: accommodationCommission }),
       otherIncome,
     });
 
@@ -300,6 +333,85 @@ export default function OnboardingPage() {
           ))}
         </div>
       </Card>
+
+      {activityFamily === 'cazare' && (
+      <Card title={copy_.sections.accommodation}>
+        <div className="stack">
+          {/*
+            PG-6h-2 (B-82, B-83, B-84). Shown when the family question above is answered `cazare` — the
+            declared fact is the trigger, never a CAEN code, because at onboarding the profile has no CAEN
+            list at all and `research/39` §1 shows the likeliest accommodation taxpayer never gets one.
+            Every control starts empty and writes nothing when left empty: a pre-filled count would assert
+            an income title, and a pre-selected reading would settle B-80 for the person.
+          */}
+          <div className="field">
+            <label htmlFor="ob-accommodation-rooms">{copy_.fields.accommodationRooms}</label>
+            <input
+              id="ob-accommodation-rooms"
+              className="input"
+              type="number"
+              min={0}
+              step={1}
+              data-accommodation-rooms
+              value={accommodationRooms}
+              onChange={e => setAccommodationRooms(e.target.value)}
+            />
+            <span className="hint">{copy_.fields.accommodationRoomsHint}</span>
+            {errors.accommodationRooms && <span className="error">{errors.accommodationRooms}</span>}
+          </div>
+
+          <span className="hint">{copy_.fields.accommodationEligibility}</span>
+          <label className="row" data-accommodation-eligibility="">
+            <input
+              type="radio"
+              name="accommodation-eligibility"
+              value=""
+              checked={accommodationEligibility === ''}
+              onChange={() => setAccommodationEligibility('')}
+            />
+            {copy_.notRecorded}
+          </label>
+          {(['da', 'nu'] as const).map(value => (
+            <label key={value} className="row" data-accommodation-eligibility={value}>
+              <input
+                type="radio"
+                name="accommodation-eligibility"
+                value={value}
+                checked={accommodationEligibility === value}
+                onChange={() => setAccommodationEligibility(value)}
+              />
+              {copy_.fields.accommodationEligibilityOptions[value]}
+            </label>
+          ))}
+          <span className="hint">{copy_.fields.accommodationEligibilityHint}</span>
+
+          <span className="hint">{copy_.fields.accommodationCommission}</span>
+          <label className="row" data-accommodation-commission="">
+            <input
+              type="radio"
+              name="accommodation-commission"
+              value=""
+              checked={accommodationCommission === ''}
+              onChange={() => setAccommodationCommission('')}
+            />
+            {copy_.notRecorded}
+          </label>
+          {(['reading_a', 'reading_b'] as const).map(value => (
+            <label key={value} className="row" data-accommodation-commission={value}>
+              <input
+                type="radio"
+                name="accommodation-commission"
+                value={value}
+                checked={accommodationCommission === value}
+                onChange={() => setAccommodationCommission(value)}
+              />
+              {copy_.fields.accommodationCommissionOptions[value]}
+            </label>
+          ))}
+          <span className="hint">{copy_.fields.accommodationCommissionHint}</span>
+        </div>
+      </Card>
+      )}
 
       <Card title={copy_.sections.start}>
         <div className="field">

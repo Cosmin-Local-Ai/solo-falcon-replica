@@ -54,12 +54,16 @@ import {
   type UnconvertedLedgerRecord,
 } from './fx/ledger';
 import { addBani, applyRateDecimal, isRon, lei, money, requireRon, subBani, type Bani, type CurrencyCode } from './money';
+// PG-6h-2 — the accommodation title is resolved in `domain/models.ts`, the one place the art. 83 alin. (4)
+// boundary is read. This module threads the answer; it does not compare the count.
+import { accommodationIncomeTitleForYear } from './models';
 import { selectProjectionV1, type ProjectionV1 } from './projection';
 import {
   evaluateScenarios,
   scenarioFixHref,
   scenarioGaps,
   scenarioRefusal,
+  type AccommodationOpenQuestions,
   type ScenarioOutcome,
 } from './scenarios';
 import type { TaxEstimateResult } from './tax';
@@ -384,23 +388,30 @@ function flatRatioGrossFromYtd(ytd: YtdTotals, data: AppData): Bani {
  * alin. (3) and the alin. (1) eligibility gate exist in exactly one place — `ACCOMMODATION_68X3_2026` —
  * and a refusal that paraphrases them creates a second text that can drift from the rule while still
  * quoting the same article.
+ *
+ * PG-6h-2 keyed the result by the rule's own parameter ids rather than returning them in positional order.
+ * The registry now shows only the questions the person has not answered, and "drop the second element of
+ * the array" is not the same instruction as "drop the gross-scope question" — the rule's parameter order
+ * is not a contract anyone declared, and a silent swap would retire the wrong question.
  */
 export function accommodationOpenQuestions(
   rules: readonly FiscalRule[],
   taxYear: number,
   asOfDate: string,
-): string[] {
+): AccommodationOpenQuestions {
+  const empty: AccommodationOpenQuestions = { grossScope: null, eligibility: null };
   const rule = selectApplicableRules([...rules], { taxYear, asOfDate }).find(
     (r) => r.taxRegime === 'accommodation-flat-ratio',
   );
-  if (!rule) return [];
-  const ids = ['gross_scope_open_question', 'eligibility_open_question'];
-  const found: string[] = [];
-  for (const id of ids) {
+  if (!rule) return empty;
+  const readParam = (id: string): string | null => {
     const value = rule.parameters.find((p) => p.id === id)?.value;
-    if (typeof value === 'string' && value.length > 0) found.push(value);
-  }
-  return found;
+    return typeof value === 'string' && value.length > 0 ? value : null;
+  };
+  return {
+    grossScope: readParam('gross_scope_open_question'),
+    eligibility: readParam('eligibility_open_question'),
+  };
 }
 
 /**
@@ -1533,6 +1544,18 @@ export function selectEstimateOperands(
     // The resolved family, so the registry and the classifier answer about the same activity even when a
     // caller supplied the fact per-call instead of storing it.
     activityFamily: context.activityFamily ?? ledger.data.profile?.activityFamily,
+    // PG-6h-2 (B-82, B-84) — the three accommodation facts, read from the profile and resolved once here.
+    // Threading only: no comparison, no default and no inference anywhere in this block. The title is
+    // resolved by `domain/models.ts accommodationIncomeTitleForYear`, the single place the art. 83 alin.
+    // (4) boundary is read, so the refusal and the Settings screen cannot disagree about which title a
+    // payload is in. `null` is an answer — "the count is not recorded for this year" — not a gap in the
+    // threading, and the registry treats it as the reason no title may be asserted.
+    accommodationIncomeTitle: accommodationIncomeTitleForYear(
+      ledger.data.profile.accommodationRoomCounts,
+      ledger.data.profile.fiscalYear,
+    ),
+    accommodationCommissionReading: ledger.data.profile.accommodationCommissionReading,
+    accommodationTourismEligibility: ledger.data.profile.accommodationTourismEligibility,
   });
   const refusal = scenarioRefusal(scenarios);
   if (refusal !== null) {

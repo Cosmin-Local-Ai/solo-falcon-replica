@@ -3,6 +3,7 @@ import {
   CURRENT_DATA_VERSION,
   DATA_VERSION_RECORD_CURRENCY,
   DATA_VERSION_ACTIVITY_FAMILY,
+  DATA_VERSION_ACCOMMODATION_FACTS,
   DATA_VERSION_RULE_SET_DIGEST,
   MIGRATION_CHAIN,
   migratePersistedData,
@@ -121,9 +122,9 @@ describe('record-currency is a no-op in value', () => {
   it('stamps the version and nothing else about the payload shape', () => {
     const after = migrateRecordCurrencyV10(v9Payload());
     expect(after.version).toBe(DATA_VERSION_RECORD_CURRENCY);
-    // PG-5 re-pin (replaced, not deleted): this step is no longer the head of the chain — v11 and v12
-    // follow it. Unchanged is that the step itself stamps exactly 10 and nothing else.
-    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_ACTIVITY_FAMILY);
+    // PG-5 re-pin (replaced, not deleted): this step is no longer the head of the chain — v11, v12 and now
+    // v13 follow it. Unchanged is that the step itself stamps exactly 10 and nothing else.
+    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_ACCOMMODATION_FACTS);
   });
 
   it('is idempotent: running it again on a v10 payload changes nothing', () => {
@@ -223,7 +224,7 @@ describe('the chain', () => {
     const step = MIGRATION_CHAIN.find((s) => s.name === 'record-currency')!;
     expect(step.from).toBe(DATA_VERSION_RULE_SET_DIGEST);
     expect(step.to).toBe(DATA_VERSION_RECORD_CURRENCY);
-    expect(MIGRATION_CHAIN.indexOf(step)).toBe(MIGRATION_CHAIN.length - 3);
+    expect(MIGRATION_CHAIN.indexOf(step)).toBe(MIGRATION_CHAIN.length - 4);
   });
 
   it('a v9 payload needs one step per version above it', () => {
@@ -232,7 +233,12 @@ describe('the chain', () => {
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     // PG-5 re-pin: `annual-filing` follows. It renames a collection and opens another; it touches no
     // amount, which is what this file guards.
-    expect(outcome.stepsApplied).toEqual(['record-currency', 'annual-filing', 'activity-family']);
+    expect(outcome.stepsApplied).toEqual([
+      'record-currency',
+      'annual-filing',
+      'activity-family',
+      'accommodation-facts',
+    ]);
   });
 
   it('a v9 payload keeps its stored digest through the whole chain', () => {
@@ -250,7 +256,7 @@ describe('the chain', () => {
     const amountsBefore = JSON.stringify(atV10.revenues.map(r => [r.valoareFaraTva, r.tva]));
     const outcome = migratePersistedData(atV10);
     expect(outcome.migrated).toBe(true);
-    expect(outcome.stepsApplied).toEqual(['annual-filing', 'activity-family']);
+    expect(outcome.stepsApplied).toEqual(['annual-filing', 'activity-family', 'accommodation-facts']);
     expect(JSON.stringify(outcome.data.revenues.map(r => [r.valoareFaraTva, r.tva]))).toBe(amountsBefore);
     expect(outcome.data.version).toBe(CURRENT_DATA_VERSION);
   });

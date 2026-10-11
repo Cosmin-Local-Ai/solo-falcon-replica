@@ -17,9 +17,19 @@ import { epochMs, isoCalendarDateProblem, isoCalendarDateProblemText } from '../
 // the option list on this form and the rule condition cannot drift into two vocabularies.
 import type { ActivityFamily } from '../domain/fiscal/deductibility';
 import type {
+  AccommodationCommissionReading,
   PfaRegime,
   PfaSalaryStatus,
   PfaSocialInsuranceStatus,
+} from '../domain/models';
+// PG-6h-2 — the title shown under the accommodation fields is resolved by the same function the scenario
+// registry reads, so the screen and the refusal cannot disagree about which title a profile is in. The
+// CAEN prompt is read through `profileHasTourismCaen`, whose list is this app's own choice (HG 656/1997
+// art. 4 alin. (1)-(2)) and which answers nothing.
+import {
+  accommodationIncomeTitleForYear,
+  profileHasTourismCaen,
+  withAccommodationRoomCount,
 } from '../domain/models';
 
 // Canonical route hash keys (must match VALID_TABS.settings in App.tsx).
@@ -154,6 +164,19 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     // the CAEN field above — `research/30` §3 records that the CAEN columns of the nomenclator are
     // „menționate cu titlu exemplificativ”, so a code is not a statement about the taxation method.
     activityFamily: (profile.activityFamily ?? '') as ActivityFamily | '',
+    // PG-6h-2 (B-82, B-84) — the three accommodation facts, each read back for the fiscal year the profile
+    // declares, each with the same third state the pension facts above use. `''` for the room count means
+    // "never recorded", which is NOT 1 room and NOT 7 rooms: the count decides the TITLE the income falls
+    // under (art. 83 alin. (2) / art. 85 versus art. 83 alin. (4) / art. 68^3), so a form that showed a
+    // number by default would mint a tax category. The commission reading and the eligibility answer are
+    // the person's own statements; nothing here is filled in from `fiscal.caen`, and the block below the
+    // CAEN field says so out loud (D-COM-2, B-83).
+    accommodationRooms:
+      profile.accommodationRoomCounts?.find((r) => r.fiscalYear === profile.fiscalYear)?.rooms.toString() ?? '',
+    accommodationCommission: (profile.accommodationCommissionReading ?? '') as
+      | AccommodationCommissionReading
+      | '',
+    accommodationEligibility: (profile.accommodationTourismEligibility ?? '') as TriState,
     pfaStartYear: String(profile.pfaStartYear),
     fiscalYear: String(profile.fiscalYear),
     pfaStartDate: profile.pfaStartDate ?? '',
@@ -199,6 +222,34 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const regimeOptions = selectableRegimes();
+
+  // PG-6h-2 (B-82) — which income TITLE the accommodation block currently describes.
+  //
+  // It follows the form rather than only the stored profile, so the person sees which title a number would
+  // put them under *before* saving; the initial value is read from the profile, so on load the two are the
+  // same. The comparison itself is not written here — `accommodationIncomeTitleForYear` is the single place
+  // the art. 83 alin. (4) boundary is read, and it is the same resolver `scenarios.ts` reads, so the form
+  // and the refusal cannot state different titles for one profile. An unparseable or empty field resolves
+  // to `null`, which renders the "the app does not know the title" line rather than a default.
+  const accommodationRoomsTyped = fiscal.accommodationRooms.trim();
+  const accommodationRoomsParsed =
+    accommodationRoomsTyped === '' ? Number.NaN : Number(accommodationRoomsTyped);
+  const accommodationTitle = Number.isInteger(accommodationRoomsParsed) && accommodationRoomsParsed >= 0
+    ? accommodationIncomeTitleForYear(
+        [{ fiscalYear: profile.fiscalYear, rooms: accommodationRoomsParsed }],
+        profile.fiscalYear,
+      )
+    : null;
+  const accommodationTitleText =
+    accommodationTitle === 'cedarea_folosintei'
+      ? settingsCopy.fiscal.accommodationTitleCedarea(profile.fiscalYear)
+      : accommodationTitle === 'activitate_independenta_68x3'
+        ? settingsCopy.fiscal.accommodationTitleIndependent(profile.fiscalYear)
+        : settingsCopy.fiscal.accommodationTitleUnknown(profile.fiscalYear);
+  // PG-6h-2 (D-COM-2, B-83) — whether a CAEN class on the profile additionally prompts the accommodation
+  // questions. This is the whole authority the list has: it opens a question, it never fills one in, and it
+  // is never the only way the block appears (the declared family above it is).
+  const tourismCaenPresent = profileHasTourismCaen(identity);
 
   // --- Modals ---
   const [tvaOpen, setTvaOpen] = useState(false);
@@ -281,6 +332,18 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     if (!isSelectableRegime(fiscal.regime)) {
       e.regime = validation.regimeNotComputable;
     }
+    // PG-6h-2 — the room count is a count, not an amount: an integer ≥ 0, or no value at all. A non-number
+    // must not fall through as "unanswered", because the difference between 7 and 8 rooms is the
+    // difference between two income titles and a silently dropped input would leave the wrong one standing.
+    let rooms: number | undefined;
+    if (fiscal.accommodationRooms.trim() !== '') {
+      const typed = Number(fiscal.accommodationRooms.trim());
+      if (!Number.isInteger(typed) || typed < 0) {
+        e.accommodationRooms = validation.roomsInvalid;
+      } else {
+        rooms = typed;
+      }
+    }
     setErrors(e);
     if (Object.keys(e).length > 0) {
       toast('error', validation.checkForm);
@@ -299,6 +362,17 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       // PG-6b — `''` writes absence, never `'other'`. A stored empty string would be a third value the
       // type cannot hold, and defaulting it here would mint the fact whose absence the estimate reports.
       activityFamily: fiscal.activityFamily || undefined,
+      // PG-6h-2 — each fact writes absence when the field is empty, never a stand-in value. The room count
+      // is merged per year rather than replaced wholesale, so editing 2026 does not erase a count the
+      // profile already holds for 2027; clearing the field makes that one year unanswered again.
+      accommodationRoomCounts: withAccommodationRoomCount(
+        profile.accommodationRoomCounts,
+        fy,
+        rooms,
+      ),
+      accommodationCommissionReading: fiscal.accommodationCommission || undefined,
+      accommodationTourismEligibility:
+        fiscal.accommodationEligibility === '' ? undefined : fiscal.accommodationEligibility,
       salaryStatus: fiscal.salaryStatus,
       // No salary ⇒ no art. 174 alin. (7) lit. a) relief, and no stale amount left behind.
       salaryIncomeLei: fiscal.salaryStatus === 'da' ? salary : undefined,
@@ -768,6 +842,98 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                     : settingsCopy.fiscal.activityFamilyHint}
                 </span>
               </div>
+
+              {/*
+                PG-6h-2 (B-82, B-83, B-84) — the accommodation facts.
+
+                The block is shown when the declared family is `cazare` **or** the profile carries a CAEN
+                class from `TOURISM_CAEN_CLASSES`. The declared family is the primary trigger and the code
+                is only ever an additional one (D-COM-2): `research/39` §1 establishes that the likeliest
+                affected taxpayer — a natural person letting 1–7 rooms — has no registered business activity
+                and therefore no CAEN code at all, so a code-only trigger would never reach them. And a code
+                never fills anything in: every control below starts empty, including when the block is open
+                because of a code, and the note under the CAEN field says the list is this app's own choice
+                under HG 656/1997 art. 4 alin. (1)-(2), not a mapping in law.
+
+                The title line is rendered from `accommodationIncomeTitleForYear` — the same resolver the
+                scenario registry reads — so the form and the refusal cannot state different titles for one
+                profile. It has a third branch, and that branch is the point: an unrecorded count means the
+                app does not know the title, and the screen says so instead of leaving the reader to infer
+                one from a number that is not there.
+              */}
+              {(fiscal.activityFamily === 'cazare' || tourismCaenPresent) && (
+                <div className="field" data-accommodation-block>
+                  <label htmlFor="set-accommodation-rooms">{settingsCopy.fiscal.accommodationRooms}</label>
+                  <input
+                    id="set-accommodation-rooms"
+                    className="input"
+                    type="number"
+                    min={0}
+                    step={1}
+                    data-accommodation-rooms
+                    value={fiscal.accommodationRooms}
+                    onChange={e => setFiscal({ ...fiscal, accommodationRooms: e.target.value })}
+                  />
+                  <span className="hint" data-accommodation-rooms-hint>
+                    {fiscal.accommodationRooms === ''
+                      ? settingsCopy.fiscal.accommodationRoomsUnanswered
+                      : settingsCopy.fiscal.accommodationRoomsHint}
+                  </span>
+                  {errors.accommodationRooms && <span className="error">{errors.accommodationRooms}</span>}
+
+                  <label htmlFor="set-accommodation-eligibility">{settingsCopy.fiscal.accommodationEligibility}</label>
+                  <select
+                    id="set-accommodation-eligibility"
+                    className="input"
+                    data-accommodation-eligibility
+                    value={fiscal.accommodationEligibility}
+                    onChange={e =>
+                      setFiscal({ ...fiscal, accommodationEligibility: e.target.value as TriState })
+                    }
+                  >
+                    <option value="">{copy.ui.answerUnrecorded}</option>
+                    <option value="da">{settingsCopy.fiscal.accommodationEligibilityOptions.da}</option>
+                    <option value="nu">{settingsCopy.fiscal.accommodationEligibilityOptions.nu}</option>
+                  </select>
+                  <span className="hint">{settingsCopy.fiscal.accommodationEligibilityHint}</span>
+
+                  <label htmlFor="set-accommodation-commission">{settingsCopy.fiscal.accommodationCommission}</label>
+                  <select
+                    id="set-accommodation-commission"
+                    className="input"
+                    data-accommodation-commission
+                    value={fiscal.accommodationCommission}
+                    onChange={e =>
+                      setFiscal({
+                        ...fiscal,
+                        accommodationCommission: e.target.value as AccommodationCommissionReading | '',
+                      })
+                    }
+                  >
+                    <option value="">{copy.ui.answerUnrecorded}</option>
+                    <option value="reading_a">{settingsCopy.fiscal.accommodationCommissionOptions.reading_a}</option>
+                    <option value="reading_b">{settingsCopy.fiscal.accommodationCommissionOptions.reading_b}</option>
+                  </select>
+                  <span className="hint">{settingsCopy.fiscal.accommodationCommissionHint}</span>
+                  {/* Which reading the app applied, with the alternative kept visible beside it (D-COM-1).
+                      A choice shown without its alternative reads like a finding. */}
+                  <span className="hint" data-accommodation-commission-applied>
+                    {fiscal.accommodationCommission === ''
+                      ? settingsCopy.fiscal.accommodationCommissionUnanswered
+                      : settingsCopy.fiscal.accommodationCommissionApplied[fiscal.accommodationCommission]}
+                  </span>
+
+                  <span className="hint" data-accommodation-title>
+                    {accommodationTitleText}
+                  </span>
+
+                  {tourismCaenPresent && (
+                    <span className="hint" data-accommodation-caen-prompt>
+                      {settingsCopy.fiscal.accommodationCaenPromptHint}
+                    </span>
+                  )}
+                </div>
+              )}
 
               <div className="field">
                 <label>{settingsCopy.fiscal.startYear} <span className="req">*</span></label>

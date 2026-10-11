@@ -29,6 +29,7 @@ export const onboarding = {
     identity: 'Cine ești',
     regime: 'Ce regim fiscal ai',
     activityFamily: 'Cum îți este impozitată activitatea',
+    accommodation: 'Cazare: câte camere, și sub ce titlu intră venitul',
     start: 'Când ai început activitatea',
     vat: 'TVA',
     salary: 'Venit din salarii',
@@ -68,6 +69,34 @@ export const onboarding = {
     activityFamilyOptions: {
       other: 'Nu — cheltuieli efective (sistem real)',
       cazare: 'Da — prestare de servicii de cazare',
+    },
+
+    /**
+     * PG-6h-2 (B-82, B-83, B-84) — the three accommodation questions, asked here and stored per year.
+     *
+     * These are shorter than the Settings versions on purpose: the copy guard fails a sentence spelled
+     * twice, and the full legal framing lives once in `ui/copy/settings.ts`. What must stay in both places
+     * is the shape of the answer — three questions, each starting unanswered, none of them filled in from a
+     * CAEN code — because the onboarding form is where the likeliest accommodation taxpayer meets them
+     * first, and `research/39` §1 is why they have to be asked rather than detected: a natural person
+     * letting 1–7 rooms has no registered business activity and so no CAEN code to be read.
+     */
+    accommodationRooms: 'Câte camere închiriezi pe termen scurt în acest an fiscal?',
+    accommodationRoomsHint:
+      'Întrebarea nu pregătește o cifră: numărul alege titlul. Până la 7 camere inclusiv venitul intră în cedarea folosinței bunurilor (art. 83 alin. (2), art. 85), iar de la 8 camere în sus devine activitate independentă (art. 83 alin. (4), art. 68^3). Se răspunde pe an fiscal, pentru că art. 83 alin. (4) vorbește „începând cu anul fiscal în care”. Fără răspuns, aplicația nu alege niciun titlu.',
+    accommodationEligibility: 'Structura ta este clasificată ca structură de primire turistică?',
+    accommodationEligibilityHint:
+      'art. 68^3 alin. (1) se adresează operatorilor economici definiti potrivit legislației turismului, iar acea clasificare nu se face în Codul fiscal. Aplicația înregistrează ce spui tu; nu o verifică și nu o decide ea.',
+    accommodationEligibilityOptions: {
+      da: 'Da',
+      nu: 'Nu — închiriez camere din locuință proprietate personală',
+    },
+    accommodationCommission: 'Ce citire a art. 68^3 alin. (3) alegi pentru venitul tău brut?',
+    accommodationCommissionHint:
+      'Cele două lecturi ale aceluiași alineat nu se împacă prin nicio sursă primară, iar alegerea mișcă brutul, impozitul, baza de CASS și pragul de CAS. Aici nu există răspuns corect dat de aplicație: există răspunsul tău, consemnat ca atare, și celălalt rămâne vizibil în Setări.',
+    accommodationCommissionOptions: {
+      reading_a: 'Citește A — exclusarea merge doar prin alin. (12) / art. 83 alin. (4)',
+      reading_b: 'Citește B — exclusarea se aplică la tot venitul din art. 68^3',
     },
 
     startDate: 'Data începerii activității',

@@ -35,6 +35,11 @@
  */
 import type { AppData } from '../data/types';
 import type { ActivityFamily, RefusedExpense } from './fiscal/deductibility';
+import type {
+  AccommodationCommissionReading,
+  AccommodationIncomeTitle,
+  AccommodationTourismEligibility,
+} from './models';
 import { regimeRefusalReason } from './regimes';
 
 /**
@@ -88,7 +93,8 @@ export type ScenarioMessageKey =
   | 'noExpenseEngine'
   | 'regimeNotComputable'
   | 'activityFamilyUndeclared'
-  | 'accommodationGrossUndetermined';
+  | 'accommodationGrossUndetermined'
+  | 'accommodationTitleCedareaFolosintei';
 
 /**
  * Everything a detector is allowed to look at.
@@ -121,7 +127,7 @@ export interface ScenarioFacts {
    * The registry never composes a legal sentence of its own, so the two readings of art. 68^3 alin. (3) and
    * the alin. (1) eligibility gate reach the screen as the rule's words, not as a paraphrase written here.
    */
-  flatRatioOpenQuestions?: readonly string[] | null;
+  flatRatioOpenQuestions?: AccommodationOpenQuestions | null;
   /**
    * PG-6h-1 — the activity family the estimate is actually being run under.
    *
@@ -132,11 +138,49 @@ export interface ScenarioFacts {
    * which is what every caller that has not gone through the assembler gets.
    */
   activityFamily?: ActivityFamily;
+  /**
+   * PG-6h-2 (B-82, B-84) — the income TITLE the recorded room count puts this year's accommodation
+   * receipts in, resolved once by the assembler from `profile.accommodationRoomCounts` and the profile's
+   * fiscal year.
+   *
+   * Three states, and the difference between the last two is the whole point:
+   * - `undefined` — the assembler supplied no answer (a hand-built fixture that never went through it);
+   * - `null` — the assembler answered, and the answer is **the room count is not recorded for this year**,
+   *   so the app does not know which title applies and must not pick one;
+   * - a title — the person declared a count, and the title follows from it.
+   *
+   * The registry never compares the count itself. `domain/models.ts accommodationIncomeTitleForYear` is
+   * the only place the art. 83 alin. (4) boundary is read, so the refusal, the Settings screen and any
+   * later calculation cannot disagree about which title a payload is in.
+   */
+  accommodationIncomeTitle?: AccommodationIncomeTitle | null;
+  /**
+   * PG-6h-2 (D-COM-1, B-80) — the reading of art. 68^3 alin. (3) the person chose, or `undefined` when the
+   * question is unanswered. Absence is not `reading_a`: choosing either side is the person's act, and the
+   * app picking one for them is the defect B-80 records.
+   */
+  accommodationCommissionReading?: AccommodationCommissionReading;
+  /** PG-6h-2 — the person's own answer to the art. 68^3 alin. (1) gate, or `undefined` when unanswered. */
+  accommodationTourismEligibility?: AccommodationTourismEligibility;
 }
 
 /** The family this register is being evaluated under — resolved once, read by every detector that needs it. */
 function effectiveActivityFamily(facts: ScenarioFacts): ActivityFamily | undefined {
   return facts.activityFamily ?? facts.data?.profile?.activityFamily;
+}
+
+/**
+ * The two questions the art. 68^3 rule records as open, keyed by the rule's own parameter ids.
+ *
+ * Keyed rather than a list, because PG-6h-2 makes the registry show only the questions the person has
+ * *not* answered yet. A positional array would make "drop the second question" mean "drop whatever sits
+ * at index 1", and the rule's parameter order is not a contract anyone declared.
+ */
+export interface AccommodationOpenQuestions {
+  /** `gross_scope_open_question` — the two readings of alin. (3), verbatim from the rule. */
+  grossScope: string | null;
+  /** `eligibility_open_question` — the alin. (1) tourism gate, verbatim from the rule. */
+  eligibility: string | null;
 }
 
 /** What a detector hands back when the scenario applies. `null` means it does not. */
@@ -208,6 +252,34 @@ export function accommodationOpenQuestionDetail(questions: readonly string[]): s
 }
 
 /**
+ * Which of the rule's two open questions are still open, given what the person has answered.
+ *
+ * This is what "apply the answer" means for a question the app is not entitled to settle. A recorded
+ * commission reading retires the gross-scope question from the refusal; a recorded eligibility answer
+ * retires the alin. (1) question. Neither makes a figure appear — see the entry below for why the
+ * register still cannot be run — but a person who has answered must not be shown a question they have
+ * already answered, and a person who has not must not be shown the other one.
+ *
+ * While the room count is unrecorded the title itself is undecided, and the title is what decides
+ * whether alin. (3) reaches this income at all, so both questions stay open: retiring one on the strength
+ * of a fact that has not been established would present a half-settled gross as a settled one.
+ */
+function openAccommodationQuestions(
+  questions: AccommodationOpenQuestions,
+  facts: ScenarioFacts,
+): string[] {
+  const titleResolved = facts.accommodationIncomeTitle !== null && facts.accommodationIncomeTitle !== undefined;
+  const open: string[] = [];
+  if (!titleResolved || facts.accommodationCommissionReading === undefined) {
+    if (questions.grossScope !== null) open.push(questions.grossScope);
+  }
+  if (!titleResolved || facts.accommodationTourismEligibility === undefined) {
+    if (questions.eligibility !== null) open.push(questions.eligibility);
+  }
+  return open;
+}
+
+/**
  * The activity has no expense engine **in this build** (CF art. 68^3, defect B-29).
  *
  * This is the one scenario that already refused before this module existed — it is here so the framework
@@ -269,10 +341,19 @@ const noExpenseEngineScenario: ScenarioSupport = {
  *   turismului”. Whether a given person is one is decided in tourism law and the ONRC authorisation, not
  *   in the fiscal code. The app can ask; it cannot decide.
  *
- * Both are questions for the person, and 6h-2 asks them (D-COM-1). Until they are answered this is a
- * `refuse`, not an `incomplete`: unlike a missing profile fact, no number exists beside the gap that would
- * still be this taxpayer's number. Applying either reading to produce one would be a default, and a
- * default here is the defect.
+ * Both are questions for the person, and 6h-2 asks them (D-COM-1, D-COM-2): the room count for the year,
+ * the alin. (1) answer, and the reading of alin. (3). Answering them retires the corresponding question
+ * from this refusal — that is what applying an answer means here — and it does not produce a figure, for
+ * a reason this build should say out loud rather than hide: the only register-level calculation the app
+ * runs today is the effective-expense one, and for a `cazare` register the classifier returns an empty
+ * expense set plus a refusal (`estimateBasis.ts selectDeductibleExpenses`), so running the flat ratio
+ * alongside it would measure the same receipts twice — once as sistem real net with no deductions, once
+ * as 70 % of the same gross. Making the refusal stop firing would be a confident wrong number, which is
+ * the defect class this whole series exists to remove. Wiring the two legs apart belongs to a task that
+ * may touch `domain/tax.ts`; this one may not.
+ *
+ * Until then this stays a `refuse`, not an `incomplete`: unlike a missing profile fact, no number exists
+ * beside the gap that would still be this taxpayer's number.
  */
 const accommodationGrossScenario: ScenarioSupport = {
   id: 'accommodation-gross-undetermined',
@@ -288,7 +369,46 @@ const accommodationGrossScenario: ScenarioSupport = {
     if (facts.flatRatioMethodAvailable !== true) return null;
     const questions = facts.flatRatioOpenQuestions ?? null;
     if (questions === null) return null;
-    return { detail: accommodationOpenQuestionDetail(questions) };
+    // 1–7 rooms is not a gross this entry cannot settle — it is a different title altogether, and the
+    // entry below owns it. Leaving both firing would put two refusals on one register and make the reader
+    // guess which one the app means.
+    if (facts.accommodationIncomeTitle === 'cedarea_folosintei') return null;
+    const open = openAccommodationQuestions(questions, facts);
+    return { detail: accommodationOpenQuestionDetail(open) };
+  },
+};
+
+/**
+ * The room count says this income is *cedarea folosinței bunurilor*, not art. 68^3 (PG-6h-2, B-82).
+ *
+ * This is the category switch the room count exists to make, and it is the reason the count must never be
+ * modelled as a number feeding a formula. CF art. 83 alin. (2) places a „proprietar, uzufructuar sau alt
+ * deținător legal” who lets **1–7 camere** in a personal dwelling under Titlul *cedarea folosinței
+ * bunurilor*, and art. 85 alin. (1) treats that taxpayer as a category of its own; art. 83 alin. (4)
+ * moves the same person into a activitate independentă only **„începând cu anul fiscal în care numărul
+ * camerelor … este de peste 7”**, and art. 68^3 alin. (12) is the route by which that activity is measured
+ * on the flat ratio.
+ *
+ * So a 3-room register and a 9-room register are not two magnitudes of one calculation: they are two
+ * titles, and the flat-ratio arithmetic PG-6h-1 built belongs to the second one only. Applying it to the
+ * first would produce a figure under rules that are not this taxpayer's — the B-29 defect in a new
+ * costume. D-CAZ-1 path (c) — that the 1–7 room case is *also* on a 30 % flat expense basis from 2026,
+ * under art. 85 alin. (1)-(2) rather than art. 68^3 — is a separate rule with a separate citation, and no
+ * art. 85 rule exists in this package. Refusing, and naming the title, is the honest answer.
+ *
+ * The detector reads the resolved title and compares nothing. It does not read the count, the CAEN list,
+ * the revenue amounts or the room boundary, and it is total: no profile, no outcome.
+ */
+const accommodationTitleScenario: ScenarioSupport = {
+  id: 'accommodation-title-cedarea-folosintei',
+  effect: 'refuse',
+  message: 'accommodationTitleCedareaFolosintei',
+  fixTarget: { page: 'settings', tab: 'fiscal' },
+  detect(facts) {
+    if (!facts.data?.profile) return null;
+    if (effectiveActivityFamily(facts) !== 'cazare') return null;
+    if (facts.accommodationIncomeTitle !== 'cedarea_folosintei') return null;
+    return {};
   },
 };
 
@@ -362,6 +482,7 @@ const activityFamilyScenario: ScenarioSupport = {
 export const SCENARIO_SUPPORT: readonly ScenarioSupport[] = [
   noExpenseEngineScenario,
   accommodationGrossScenario,
+  accommodationTitleScenario,
   regimeScenario,
   activityFamilyScenario,
 ];

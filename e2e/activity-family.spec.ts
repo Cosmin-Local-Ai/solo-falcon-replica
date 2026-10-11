@@ -79,7 +79,12 @@ test.describe('PG-6b — a declared cazare activity is refused, from stored data
     // the only place the 30 % / 10 % arithmetic is stated in this block. The detail below it carries the
     // rule's two readings verbatim and does not repeat it.
     await expect(block.locator('.hint').first()).toContainText('cheltuieli forfetare de 30 %');
-    await expect(block.locator('.hint').first()).toContainText('nu alege în locul tău');
+    // Re-pinned for PG-6h-2 (replaced, not deleted): the sentence now names the room count as one of the
+    // three answers that decide the gross, and says the strongest version of the same guarantee — none of
+    // them is filled in from a CAEN code, and none by default. The old phrase ('nu alege în locul tău')
+    // asserted one refusal not to choose; this one names where a choice would otherwise have come from.
+    await expect(block.locator('.hint').first()).toContainText('Niciunul nu se completează din codul CAEN');
+    await expect(block.locator('.hint').first()).toContainText('câte camere închiriezi pe termen scurt');
     // Rendered once. The chart points at this block instead of quoting the paragraph a second time.
     await expect(page.locator('[data-scenario-detail="accommodation-gross-undetermined"]')).toHaveCount(1);
 
