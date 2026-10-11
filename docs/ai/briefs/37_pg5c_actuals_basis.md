@@ -472,7 +472,7 @@ Dispatch one, then **stop and end the turn.** If one returns nothing, re-dispatc
 6. **`Bani` is integer lei**; keep Decimal until the final rounding, as the projection already does.
 
 ## BASELINE
-Take it from the **PG-5b handoff** immediately preceding this task — do not assume PG-5's numbers, because PG-5b removes fixtures and moves the counts. Record the baseline you actually measured before you change anything.
+**From PG-5b at `de44a3a`:** `tsc` 0 · **99 files / 1547 unit tests** · `build` 0 · **e2e 68** (64 functional + 4 axe) · copy-guard `ALLOW_LIST` empty · wall-clock guard passes. PG-5b removed the legacy monthly declarations and moved the counts twice (1549 → 1547), so **re-measure before you change anything** rather than trusting either figure above.
 
 ## COMPLETE PROJECT PLAN — DO NOT INVENT PHASE BOUNDARIES
 Roadmap 1–10 DONE · 10a/10b/10c DONE · **PG-0** `def8a3c` · **Phase 11 + PG-3** `05ab925` · **PG-1** `a871a68` · **PG-2** `700bd2a` · **PG-4** `c44efb0` · **PG-5** `ab7461d` · **PG-5b** legacy monthly removal (brief 36).
