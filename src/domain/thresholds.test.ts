@@ -16,7 +16,9 @@ import {
   type RatioRuleStatus,
   type ThresholdKind,
   type ThresholdQuery,
+  type MeasuredBasis,
 } from './thresholds';
+import { measuredBasisLabels } from '../ui/copy';
 import type { PfaProfile } from './models';
 import { lei, type Bani } from './money'
 
@@ -867,6 +869,21 @@ describe('TASK 4 — severity, applicability and the measured basis', () => {
       expect(byId(rows, id).measuredBasis, id).toBe('annual-actual');
     }
     expect(byId(rows, 'VAT_REGISTRATION').measuredBasis).toBe('ytd-turnover');
+  });
+
+  it('no basis label a row can carry claims a projection (PG-5C)', () => {
+    // The guarantee is structural, not behavioural. A threshold row states the quantity it measured by
+    // naming a `MeasuredBasis` member, and the union has no member that means "measured on a
+    // grossing-up" — `'annual-projected'` was deleted with PG-5C. Because `measuredBasisLabels` is a
+    // `Record<MeasuredBasis, string>`, re-adding the member is a compile error until someone also
+    // writes the sentence that would put it on screen.
+    const members: MeasuredBasis[] = ['annual-actual', 'ytd-turnover', 'unattributed', 'unmeasured'];
+    for (const m of members) {
+      expect(measuredBasisLabels[m], m).not.toMatch(/estimat|proiect|prognoz|rată de desfășurare|run rate/i);
+    }
+    // @ts-expect-error 'annual-projected' is not a MeasuredBasis: no row can be labelled with it.
+    const forbidden: MeasuredBasis = 'annual-projected';
+    expect(forbidden).toBeDefined();
   });
 
   it('an unmeasured row says it was unmeasured, and claims no legal consequence', () => {

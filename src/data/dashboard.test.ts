@@ -709,6 +709,28 @@ describe('snapshot.thresholds[].breached (B-20, re-typed by TASK 4)', () => {
     expect(instant.getMonth()).toBe(9);
   });
 
+  it('a refused estimate leaves no row able to claim an annual basis', async () => {
+    // PG-5C, the wiring half of the guarantee. The label is derived from the basis the engine actually
+    // ran on — it is not written next to the row — so when nothing ran there is nothing to attribute,
+    // and `annual-actual` would name a measurement that never happened. Together with the type-level
+    // test in src/domain/thresholds.test.ts this is what makes "the thresholds cannot be handed a
+    // projection" a property rather than a habit: there is no member of `MeasuredBasis` that means it,
+    // and no path from a forecast to a row's value.
+    const data: AppData = { ...seedData, profile: { ...seedData.profile, regime: 'impozit_pe_cit' } };
+    const tax = await getTaxEstimate(data, '2026-10-31');
+    if (tax.status !== 'review_required') throw new Error('expected the estimate to refuse the regime');
+    const rows = getThresholdStatuses(data, '2026-10-31', tax);
+    const contribution = rows.filter((t) => t.fiscalBase === 'net-income');
+    expect(contribution.length).toBeGreaterThan(0);
+    for (const row of contribution) {
+      // A refused estimate supplies no base at all, so the rows fall to `unmeasured` — one step further
+      // from an annual label than `unattributed`, which is what a computed-but-unlabelled basis gives.
+      // Either way the row cannot read as measured on an annual figure it never measured.
+      expect(row.measuredBasis, row.thresholdId).toBe('unmeasured');
+      expect(row.currentValue, row.thresholdId).toBeNull();
+    }
+  });
+
   it('a pensioner profile removes the CAS rows from applicability, with the art. 150 alin. (1) reason', async () => {
     // The seed records are kept: with no records the VNA would be zero and art. 174 alin. (2) would
     // switch CASS off for a different reason, hiding the asymmetry this test is about.
