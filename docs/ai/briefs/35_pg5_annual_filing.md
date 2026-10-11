@@ -315,6 +315,7 @@ Keep each short and single-purpose. If one returns nothing, re-dispatch it once,
 
 ## BOUNDARIES
 - **May touch:** `data/schema.ts`, `data/migration.ts`, `domain/deadlines.ts`, `domain/completeness.ts`, `domain/estimateBasis.ts` (**wording only**), `pages/Declarations.tsx`, `data/dashboard.ts`, `ui/copy/*`, `components/dashboard/*`, the app shell for B-73, new tests, `e2e/*`.
+- **Added mid-task, orchestrator authorization 2026-10-10:** `domain/insights.ts` — its `DEADLINE_LABELS` map turns the rule's `applies_to` key into 'PFA' and `deadlineLabel()` falls back to 'Termen fiscal' for unknown keys, so acceptance 1's label cannot be produced from `data/dashboard.ts` alone. The wording moves to `ui/copy/dashboard.ts` with **one producer** for the deadline family; `applies_to: 'pfa'` stays untouched as a rule value. Rejected alternative: having `data/dashboard.ts` drop the `d212_filing` rows and emit its own item, which would leave two producers for one family — the B-70 defect class. `data/seed.ts` is also in scope for the monthly D300 rows, with the fact-versus-cadence distinction stated in the phase doc.
 - **Must not touch:** any rule value, threshold value, statutory citation or registry entry; `domain/aggregation.ts`, `domain/date.ts`, `domain/fx/*`, `domain/tax.ts`, `domain/projection.ts`, the clock helpers, `docs/ai/steps/`.
 - **Never touch `docs/ai/steps/`.**
 
