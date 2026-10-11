@@ -8,7 +8,7 @@
 
 **Read in this order:**
 
-1. **This file** — §1 baseline, §2 what must not be rewritten, §3 audit claims already verified, §4 defects **B-36 … B-81**, §4b the open-questions register, §5 order, §6 phase detail, §9 what is blocked on a user decision, §11 PG mapping, **§12 standing operating rules**.
+1. **This file** — §1 baseline, §2 what must not be rewritten, §3 audit claims already verified, §4 defects **B-36 … B-84**, §4b the open-questions register, §5 order, §6 phase detail, §9 what is blocked on a user decision, §11 PG mapping, **§12 standing operating rules**.
 2. **`docs/ai/briefs/28_pg_production_gate.md`** — the execution order PG-0 … PG-13, each with mission, evidence, files it may touch, acceptance. Plus the scout list and the owner decisions.
 3. **`docs/ai/USER_DECISIONS.md`** — every decision with its reasoning. This is the file that stops the Orchestrator re-asking the user for things already settled.
 4. **`docs/ai/STATE.md`** — baseline, phase status, defects **B-1 … B-35**, and the open-questions register. **Check the register before briefing any research gap**: a Researcher's UNVERIFIED label is not a new open question if the register already closed it. That lesson has cost time twice.
