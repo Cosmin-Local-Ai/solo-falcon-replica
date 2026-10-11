@@ -108,6 +108,16 @@ PFA authorised October 2026, net income (încasări − cheltuieli plătite) Oct
 
 ## 9. What this changes for the app
 
+> **Status 2026-10-11 (PG-5C, `docs/ai/phases/34_pg5c_actuals_basis.md`):** items 1–4 are implemented.
+> The annualisation is out of every fiscal figure — the engine's operand type carries the date it was
+> measured as of and the forecast's deliberately does not, so a projection cannot be assigned to an
+> engine operand or a threshold base at all. The SM multiples are not prorated and a test pins all four
+> against a three-month taxpayer. The wording cites art. 118 alin. (3) and is scoped to what this app
+> measured; nothing in the UI claims the Norme metodologice no longer contain proration. Item 5 is
+> untouched — it belongs to the start-of-activity screen, not to this phase. The measured October
+> before/after: VNA 30.000,00 → 10.000,00 lei and total 5.700,00 → 3.330,00 lei at 31.10.2026; and in
+> the case §9 warned about, CAS went from **12.150,00 lei owed to 0,00 lei not owed**.
+
 1. **The ×12 annualisation must go from anything presented as a fiscal figure.** No provision supports grossing up, and art. 118 alin. (3) deems partial-year income to *be* the annual income. A run-rate may exist as a **forecast for planning**, clearly labelled, but it is not the legal base and must not be what the engine and the thresholds are measured on.
 2. **Do not prorate the 12-SM, 24-SM, 6-SM or 72-SM figures** for a mid-year starter. Cite art. 151 alin. (2) for the starter case and keep art. 151 alin. (3) — the newly-exempt case — visibly separate.
 3. **Cite art. 118 alin. (3), not alin. (2).** The pre-2024 numbering is a live trap.

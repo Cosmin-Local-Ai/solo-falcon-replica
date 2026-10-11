@@ -166,6 +166,64 @@ describe('PG-5C acceptance fixture — an October-2026 PFA with 10.000,00 lei ne
     expect(contribution.filter((t) => t.status === 'breached')).toHaveLength(0);
   });
 
+  it('the annualisation was manufacturing a CAS liability the law does not produce', async () => {
+    // This is the finding to read loudly. The same October starter, one month further in, with a real
+    // expense base: 40.000,00 lei of revenue and 15.000,00 lei of deductible rent.
+    //
+    //   recorded      venit brut 40.000,00 − deductibile 15.000,00 → VNA 25.000,00 lei
+    //     CAS    25.000,00 < 12 SM (48.600,00 lei) → 0,00 lei. Art. 148 alin. (1) is not met.
+    //     CASS   25.000,00 ≥ 6 SM (24.300,00 lei), so no art. 174 alin. (6) difference:
+    //            10% × 25.000,00 = 2.500,00 lei, wholly deductible (art. 118 alin. (2) lit. b)).
+    //     impozit 10% × (25.000,00 − 2.500,00) = 2.250,00 lei.
+    //     total  4.750,00 lei.
+    //
+    //   before PG-5C, at 15.11.2026 the run rate doubled the three-month period: 80.000,00 / 30.000,00
+    //     VNA 50.000,00 lei — now inside [12 SM, 24 SM), so CAS became 25% × 48.600,00 = 12.150,00 lei,
+    //     CASS 5.000,00 lei, impozit 10% × (50.000,00 − 17.150,00) = 3.285,00 lei, total 20.435,00 lei.
+    //
+    // The 12.150,00 lei of CAS was not a rate the law applies to this taxpayer. It was the arithmetic
+    // consequence of pretending three months of activity was six, and it crossed the 12 SM level that
+    // decides whether CAS is owed at all. The line does not shrink here — it goes from owed to not owed.
+    const data: AppData = {
+      ...octoberRegister(),
+      revenues: [octoberRevenue({ valoareFaraTva: ron(40_000) })],
+      expenses: [
+        {
+          id: 'exp-oct-1',
+          tip: 'factura',
+          nr: 'CH-OCT-1',
+          date: '2026-10-05',
+          furnizor: 'Chirie Oct SRL',
+          cui: 'RO00000000',
+          valoareFaraTva: ron(15_000),
+          tva: ron(0),
+          status: 'inregistrata',
+          category: 'rent_business_space',
+        },
+      ],
+    };
+    const est = await getTaxEstimate(data, '2026-11-15');
+    if (est.status !== 'computed') throw new Error('expected a computed estimate');
+
+    expect(est.bases.venitulNetDinActivitate).toBe(lei(25_000));
+    expect(lineValue(est, 'CAS (25%)')).toBe(lei(0));
+    expect(lineValue(est, 'CASS (10%)')).toBe(lei(2500));
+    expect(lineValue(est, 'Impozit pe venit (rată de bază 10%)')).toBe(lei(2250));
+    expect(est.output.total).toBe(lei(4750));
+    // The figure the app used to show, and the CAS line that used to be in it.
+    expect(est.output.total).not.toBe(lei(20_435));
+    // The forecast still doubles the period — it is allowed to, and it is labelled — but nothing is
+    // assessed on it.
+    if (est.basis.kind !== 'recorded-actuals') throw new Error('expected a recorded-actuals basis');
+    expect(est.basis.forecast?.amounts.revenuesNet).toBe(lei(80_000));
+
+    // And the threshold row agrees: the 12 SM floor is not crossed, so no CAS is owed for the year.
+    const rows = getThresholdStatuses(data, '2026-11-15', est);
+    const casFloor = rows.find((t) => t.thresholdId === 'CAS_MIN_BASE')!;
+    expect(casFloor.currentValue).toBe(lei(25_000));
+    expect(casFloor.currentValue! < casFloor.thresholdValue).toBe(true);
+  });
+
   it('the fixture is not secretly prorated anywhere: the SM multiples stay whole', async () => {
     // The refusals in the brief. art. 151 alin. (2) keeps the annual thresholds whole for a partial
     // year, so a three-month taxpayer is tested against the same 12 SM / 6 SM / 24 SM / 72 SM figures

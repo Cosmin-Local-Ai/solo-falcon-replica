@@ -186,6 +186,11 @@ Full report and my in-tree verification of every claim: `docs/ai/notes/romanian_
 **Why this is now a legal requirement and not a preference:** `research/26_midyear_start_partial_year_2026.md` established that CF art. 118 alin. (3) deems fraction-of-year income to *be* the annual income, that art. 68 alin. (2) lit. a) and alin. (4) lit. b) measure actual receipts and payments with no annualisation, and that the statutory proration for mid-year starters was deleted by OUG 115/2023 art. I pct. 101 from 1 January 2024. The October example: the app's ~40.000 lei annual figure makes CAS look due; on the law's 10.000 lei, none is due.
 **What it does not resolve:** mid-year, whether a threshold will be crossed by December is still unknowable. The app must say **which basis each threshold was tested on** rather than imply the answer is settled. That stays part of PG-1 and PG-4.
 
+**RESOLVED 2026-10-11 (PG-5C, `docs/ai/phases/34_pg5c_actuals_basis.md`).** Both halves now hold, and the second one is enforced by the type system rather than by wording:
+- The hero is computed from recorded amounts only. `EstimateAmounts` — the engine's operand type — carries the `asOfDate` it was measured as of; `ForecastAmounts` deliberately does not, because a grossing-up was never measured as of anything. A forecast is therefore **not assignable** to an engine operand, and no call site can feed one to `computeTaxEstimate` or to a threshold base without a cast. Two tests hold the door with `@ts-expect-error`, so the guard failing is itself a test failure.
+- Every threshold row names its basis, and the only annual basis the row type can carry is a realised one — the projected member was deleted from `MeasuredBasis`, and `measuredBasisLabels` is a `Record` over that union, so restoring it is a compile error until someone also writes the sentence that would put it on screen. The card additionally states the date the values were measured at.
+The October case is pinned end to end in `src/data/partialYear2026.test.ts` and `e2e/partial-year-2026.spec.ts`. The unresolved question the decision recorded — whether a threshold will be crossed by December — is still unresolved, and is now answered honestly rather than implied: the app names the basis and the date instead of predicting the outcome.
+
 ---
 
 ## Still open — to be put to the user
