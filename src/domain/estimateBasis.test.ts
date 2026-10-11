@@ -13,9 +13,13 @@ import {
   estimateBasisLabel,
   estimateBasisOf,
   estimateFigureLabel,
+  estimateForecastExplanation,
+  estimateForecastLabel,
   formatElapsedMonths,
   selectTaxEstimateBasis,
   withEstimateBasis,
+  type EstimateAmounts,
+  type TaxEstimateBasis,
 } from './estimateBasis';
 
 /**
@@ -83,92 +87,128 @@ function midYearData(extra: Revenue[] = []): AppData {
   });
 }
 
-describe('selectTaxEstimateBasis — what enters the engine', () => {
-  it('records the projected operands AND the actuals they were derived from', () => {
+describe('selectTaxEstimateBasis — what enters the engine (PG-5C)', () => {
+  it('feeds the engine the recorded actuals and keeps the run rate beside them', () => {
     const data = midYearData();
-    // 2026-10-31: 9 full months + 31/31 = 10 elapsed months, so every operand is YTD x 12/10 = x 1,2.
-    const basis = selectTaxEstimateBasis(selectProjectionV1(data, '2026-10-31'), selectYtd(data, '2026-10-31'));
+    // 2026-10-31: 10 elapsed months of a 12-month active period, so the model would gross these up by
+    // 1,2. PG-5C removed that step between the model and the engine: the operands are the register.
+    const basis = selectTaxEstimateBasis(
+      selectProjectionV1(data, '2026-10-31'), selectYtd(data, '2026-10-31'), '2026-10-31',
+    );
 
-    if (basis.kind !== 'annual-projected') throw new Error('expected an annual-projected basis');
-    expect(basis.method).toBe('run-rate-v1');
-    expect(basis.elapsedMonths).toBe(10);
-    expect(basis.projected).toEqual({
-      revenues: lei(1285.2), // 1.071,00 x 1,2
-      expenses: lei(108), //    90,00 x 1,2
-      revenuesNet: lei(1080), //  900,00 x 1,2  <- the operand a non-vatExempt profile actually uses
-      expensesNet: lei(85.2), //   71,00 x 1,2
-    });
+    if (basis.kind !== 'recorded-actuals') throw new Error('expected a recorded-actuals basis');
+    expect(basis.method).toBeNull();
+    expect(basis.asOfDate).toBe('2026-10-31');
+    expect(basis.closed).toBe(false);
     expect(basis.actual).toEqual({
       revenues: lei(1071), expenses: lei(90), revenuesNet: lei(900), expensesNet: lei(71),
+      asOfDate: '2026-10-31',
     });
+    // The forecast is still produced, because it is a legitimate planning figure and D-PROJ-1 protects
+    // it. What it is not is an operand: `amountsForEstimate` returns the actuals beside it.
+    expect(basis.forecast?.method).toBe('run-rate-v1');
+    expect(basis.forecast?.amounts).toEqual({
+      revenues: lei(1285.2), // 1.071,00 x 1,2
+      expenses: lei(108),    //    90,00 x 1,2
+      revenuesNet: lei(1080),//  900,00 x 1,2
+      expensesNet: lei(85.2),//   71,00 x 1,2
+      net: lei(1177.2),
+    });
+    expect(amountsForEstimate(basis)).toEqual(basis.actual);
   });
 
-  it('hands over exactly the model output, with no re-derivation of its own', () => {
+  it('hands the forecast over as the model output, with no re-derivation of its own', () => {
     const data = midYearData();
     const asOf = '2026-09-15'; // 8,5 elapsed months — a fractional denominator, not a whole month
     const projection = selectProjectionV1(data, asOf);
-    const basis = selectTaxEstimateBasis(projection, selectYtd(data, asOf));
+    const basis = selectTaxEstimateBasis(projection, selectYtd(data, asOf), asOf);
 
     // 900,00 x 12 / 8,5 = 127.058,82 bani -> toBaniNearest -> 127.059; 71,00 x 12 / 8,5 -> 10.024.
-    expect(basis.kind).toBe('annual-projected');
-    if (basis.kind !== 'annual-projected') return;
-    expect(basis.projected.revenuesNet).toBe(projection.annualProjectedExclVat.revenueNet);
-    expect(basis.projected.expensesNet).toBe(projection.annualProjectedExclVat.expenseNet);
-    expect(basis.projected.revenuesNet).toBe(lei(1270.59));
-    expect(basis.projected.expensesNet).toBe(lei(100.24));
+    if (basis.kind !== 'recorded-actuals') throw new Error('expected a recorded-actuals basis');
+    expect(basis.forecast?.amounts.revenuesNet).toBe(projection.annualProjectedExclVat.revenueNet);
+    expect(basis.forecast?.amounts.expensesNet).toBe(projection.annualProjectedExclVat.expenseNet);
+    expect(basis.forecast?.amounts.revenuesNet).toBe(lei(1270.59));
+    expect(basis.forecast?.amounts.expensesNet).toBe(lei(100.24));
+    // …and none of those four numbers reaches the engine.
+    expect(amountsForEstimate(basis).revenuesNet).toBe(lei(900));
   });
 
-  it('at 12 elapsed months the projection is the identity, so the operands are the actuals', () => {
+  it('at the end of the active period there is no forecast, because the projection is the actuals', () => {
     const data = midYearData();
-    const basis = selectTaxEstimateBasis(selectProjectionV1(data, '2026-12-31'), selectYtd(data, '2026-12-31'));
-    expect(basis.elapsedMonths).toBe(12);
-    expect(amountsForEstimate(basis)).toEqual(actualEstimateAmounts(selectYtd(data, '2026-12-31')));
+    const basis = selectTaxEstimateBasis(
+      selectProjectionV1(data, '2026-12-31'), selectYtd(data, '2026-12-31'), '2026-12-31',
+    );
+    // Showing "forecast 900,00" next to "actual 900,00" would present one number twice under two
+    // labels, so the model's own horizon test is what removes the forecast here.
+    expect(basis.forecast).toBeUndefined();
+    expect(amountsForEstimate(basis)).toEqual(actualEstimateAmounts(selectYtd(data, '2026-12-31'), '2026-12-31'));
   });
 
-  it('with no run rate it answers actuals-only, never an annualised zero', () => {
+  it('with no run rate it still answers with the actuals, never with an annualised zero', () => {
     // asOf before the fiscal year start: the model's own denominator is 0 and every total is 0.
-    // Annualising that would print a plausible 0,00 RON ANNUAL estimate. It is refused instead.
+    // Annualising that would print a plausible 0,00 RON ANNUAL estimate. PG-5C never annualises at all,
+    // so the case that used to need its own basis kind needs no special handling any more.
     const data = midYearData();
     const asOf = '2025-12-31';
     const ytd = selectYtd(data, asOf);
-    const basis = selectTaxEstimateBasis(selectProjectionV1(data, asOf), ytd);
+    const basis = selectTaxEstimateBasis(selectProjectionV1(data, asOf), ytd, asOf);
 
-    expect(basis.elapsedMonths).toBe(0);
-    if (basis.kind !== 'actuals-only') throw new Error('expected an actuals-only basis');
-    expect(basis.method).toBeNull();
-    expect(basis.reason).toContain('neannualizate');
-    // The operands are the actuals-to-date themselves — the module did not invent a year.
-    expect(amountsForEstimate(basis)).toEqual(actualEstimateAmounts(ytd));
+    if (basis.kind !== 'recorded-actuals') throw new Error('expected a recorded-actuals basis');
+    expect(basis.forecast).toBeUndefined();
+    expect(amountsForEstimate(basis)).toEqual(actualEstimateAmounts(ytd, asOf));
   });
 
-  it('amountsForEstimate follows the basis, in both directions', () => {
+  it('the operands do not move with the calendar — only the forecast does', () => {
+    // This is the defect. Before PG-5C these two reads of the SAME register produced different engine
+    // inputs (lei(1080) on 31 Oct, lei(1270.59) on 15 Sep), because a shorter elapsed period meant a
+    // higher run rate and the run rate was the legal figure. A taxpayer's FY2026 income cannot depend
+    // on the date the app was opened.
     const data = midYearData();
-    const projected = selectTaxEstimateBasis(selectProjectionV1(data, '2026-10-31'), selectYtd(data, '2026-10-31'));
-    expect(amountsForEstimate(projected)).toEqual(projected.kind === 'annual-projected' ? projected.projected : projected.actual);
-    expect(amountsForEstimate(projected).revenuesNet).toBe(lei(1080));
-
-    const actuals = selectTaxEstimateBasis(selectProjectionV1(data, '2025-12-31'), selectYtd(data, '2025-12-31'));
-    expect(amountsForEstimate(actuals)).toEqual(actuals.actual);
+    const oct = amountsForEstimate(selectTaxEstimateBasis(
+      selectProjectionV1(data, '2026-10-31'), selectYtd(data, '2026-10-31'), '2026-10-31'));
+    const sep = amountsForEstimate(selectTaxEstimateBasis(
+      selectProjectionV1(data, '2026-09-15'), selectYtd(data, '2026-09-15'), '2026-09-15'));
+    expect(oct.revenuesNet).toBe(lei(900));
+    expect(sep.revenuesNet).toBe(lei(900));
   });
 
-  it('a different asOf changes the operands that enter the engine', () => {
-    const data = midYearData();
-    const oct = amountsForEstimate(selectTaxEstimateBasis(selectProjectionV1(data, '2026-10-31'), selectYtd(data, '2026-10-31')));
-    const sep = amountsForEstimate(selectTaxEstimateBasis(selectProjectionV1(data, '2026-09-15'), selectYtd(data, '2026-09-15')));
-    // Same data, same actuals; a shorter year means a higher run rate.
-    expect(oct.revenuesNet).toBe(lei(1080));
-    expect(sep.revenuesNet).toBe(lei(1270.59));
-  });
-
-  it('a different run-rate changes the operands, and the actuals stay the real ones', () => {
+  it('a different record changes the operands; a different as-of date does not', () => {
     const base = midYearData();
     const more = midYearData([revenue('2026-08-05', lei(100), lei(19))]);
     const asOf = '2026-10-31';
-    const a = selectTaxEstimateBasis(selectProjectionV1(base, asOf), selectYtd(base, asOf));
-    const b = selectTaxEstimateBasis(selectProjectionV1(more, asOf), selectYtd(more, asOf));
-    expect(amountsForEstimate(b).revenuesNet).toBe(lei(1200)); // (900 + 100) x 1,2
+    const a = selectTaxEstimateBasis(selectProjectionV1(base, asOf), selectYtd(base, asOf), asOf);
+    const b = selectTaxEstimateBasis(selectProjectionV1(more, asOf), selectYtd(more, asOf), asOf);
+    // Money the taxpayer actually collected changes the figure. That is the only thing that may.
+    expect(amountsForEstimate(b).revenuesNet).toBe(lei(1000));
     expect(a.actual.revenuesNet).toBe(lei(900));
     expect(b.actual.revenuesNet).toBe(lei(1000));
+  });
+});
+
+describe('PG-5C — the engine cannot be handed a projected operand', () => {
+  it('a forecast amount is not assignable to an engine operand', () => {
+    // The guarantee is structural, not behavioural. `EstimateAmounts` carries the date it was measured
+    // as of; a run-rate projection has no measurement date, because nothing was measured. So the
+    // assignment below is a compile error, and `@ts-expect-error` fails this test if the guard ever
+    // stops working — which is the point: the assertion is not "we happen not to do this".
+    const basis = selectTaxEstimateBasis(
+      selectProjectionV1(midYearData(), '2026-10-31'), selectYtd(midYearData(), '2026-10-31'), '2026-10-31',
+    );
+    if (basis.kind !== 'recorded-actuals' || basis.forecast === undefined) {
+      throw new Error('expected a basis carrying a forecast');
+    }
+    // @ts-expect-error ForecastAmounts lacks `asOfDate`, so it is not an EstimateAmounts.
+    const operand: EstimateAmounts = basis.forecast.amounts;
+    expect(operand).toBeDefined();
+  });
+
+  it('amountsForEstimate has no branch to choose a forecast with', () => {
+    // Read off the source, not off behaviour: the function that used to read
+    // `basis.kind === 'annual-projected' ? basis.projected : basis.actual` must not grow one back.
+    const src = amountsForEstimate.toString();
+    expect(src).not.toContain('forecast');
+    expect(src).not.toContain('projected');
+    expect(src).toContain('basis.actual');
   });
 });
 
@@ -177,7 +217,8 @@ describe('the basis travels with the engine result', () => {
   const bare = { status: 'review_required', reason: 'test', lines: [] } as unknown as Refused;
 
   it('attachEstimateBasis keeps every existing field readable', () => {
-    const basis = selectTaxEstimateBasis(selectProjectionV1(midYearData(), '2026-10-31'), selectYtd(midYearData(), '2026-10-31'));
+    const basis = selectTaxEstimateBasis(
+      selectProjectionV1(midYearData(), '2026-10-31'), selectYtd(midYearData(), '2026-10-31'), '2026-10-31');
     const withBasis = attachEstimateBasis(bare, basis);
     if (withBasis.status !== 'review_required') throw new Error('the refusal must survive the intersection');
     expect(withBasis.reason).toBe('test');
@@ -187,16 +228,20 @@ describe('the basis travels with the engine result', () => {
   it('an unattributed result is labelled unknown, not guessed', () => {
     expect(estimateBasisOf(bare)).toBeNull();
     const normalised = withEstimateBasis(bare);
-    expect(normalised.basis.kind).toBe('unknown');
-    expect(normalised.basis.elapsedMonths).toBeNull();
+    const unknownBasis = normalised.basis as Extract<TaxEstimateBasis, { kind: 'unknown' }>;
+    expect(unknownBasis.kind).toBe('unknown');
+    expect(unknownBasis.elapsedMonths).toBeNull();
     // Already-attributed results are passed through untouched.
     expect(withEstimateBasis(normalised)).toBe(normalised);
   });
 });
 
-describe('wording never claims more than a run-rate assumption carries', () => {
-  const projected = selectTaxEstimateBasis(selectProjectionV1(midYearData(), '2026-09-15'), selectYtd(midYearData(), '2026-09-15'));
-  const actuals = selectTaxEstimateBasis(selectProjectionV1(midYearData(), '2025-12-31'), selectYtd(midYearData(), '2025-12-31'));
+describe('wording never claims more than the register carries (PG-5C)', () => {
+  const open = selectTaxEstimateBasis(
+    selectProjectionV1(midYearData(), '2026-09-15'), selectYtd(midYearData(), '2026-09-15'), '2026-09-15');
+  const closed = selectTaxEstimateBasis(
+    selectProjectionV1(midYearData(), '2027-06-30'), selectYtd(midYearData(), '2027-06-30'), '2027-06-30');
+  const openForecast = open.kind === 'recorded-actuals' ? open.forecast : undefined;
 
   it('formats a fractional month count in Romanian typography', () => {
     expect(formatElapsedMonths(10)).toBe('10');
@@ -204,43 +249,62 @@ describe('wording never claims more than a run-rate assumption carries', () => {
     expect(formatElapsedMonths(9.2580645)).toBe('9,3');
   });
 
-  it('says YTD only for actuals', () => {
-    expect(estimateFigureLabel(projected)).toBe('Estimare impozit anuală (rată de desfășurare)');
-    expect(estimateFigureLabel(actuals)).toBe('Estimare impozit YTD');
+  it('names the figure as realised money, never as an annualised rate', () => {
+    expect(estimateFigureLabel(open)).toBe('Impozit calculat din încasări și plăți înregistrate');
+    expect(estimateFigureLabel(closed)).toBe('Impozit final pe înregistrările anului');
     expect(estimateFigureLabel(null)).toBe('Estimare impozit');
     expect(estimateFigureLabel(undefined)).toBe('Estimare impozit');
   });
 
-  it('names the assumption and how many months it rests on', () => {
-    // B-72 re-pin (replaced, not deleted): „8,5 din 12 luni scurse” named the CALENDAR year while the
-    // figure beside it is multiplied by the ACTIVE period. The sentence now names the same window the
-    // arithmetic used. For this fixture the two coincide — the profile records no start date, so the
-    // active period is the calendar year — and the next test is the case where they do not.
-    expect(estimateBasisLabel(projected)).toBe('Estimare anuală pe rată de desfășurare (8,5 din 12 luni de activitate)');
-    expect(estimateBasisLabel(actuals)).toBe('Înregistrat până acum (neannualizat)');
+  it('the fiscal label says nothing about months, because the figure says nothing about months', () => {
+    // B-72 re-premised rather than deleted. PG-4 fixed that defect by making the sentence name the
+    // active period; PG-5C removes the sentence from the fiscal figure altogether, because the figure
+    // is now a register read at a date and no arithmetic over months produced it. The months wording
+    // survives where the months ARE the arithmetic — on the forecast, below.
+    expect(estimateBasisLabel(open)).toBe('Calculat din încasări și plăți înregistrate');
+    expect(estimateBasisLabel(closed)).toBe('Calcul final pe înregistrările anului');
     expect(estimateBasisLabel(undefined)).toBe('Estimare impozit');
+    expect(estimateBasisLabel(open)).not.toContain('luni');
+    expect(estimateBasisLabel(open)).not.toContain('12');
   });
 
-  it('B-72: for a mid-year starter the sentence names the active period, not twelve calendar months', () => {
+  it('the explanation names the date the register was read at and the article that makes it annual', () => {
+    const text = estimateBasisExplanation(open);
+    expect(text).toContain('2026-09-15');
+    expect(text).toContain('art. 118 alin. (3)');
+    // The pre-2024 numbering of the same sentence is a live trap in this area; it must not appear.
+    expect(text).not.toContain('art. 118 alin. (2)');
+    expect(estimateBasisExplanation(closed)).toContain('s-a încheiat');
+    expect(estimateBasisExplanation(null)).toContain('nu este înregistrată');
+  });
+
+  it('the forecast keeps the months wording, and labels itself as not a fiscal figure', () => {
+    expect(estimateForecastLabel(openForecast)).toBe('Previziune pe rată de desfășurare (8,5 din 12 luni de activitate)');
+    const text = estimateForecastExplanation(openForecast);
+    expect(text).toContain('8,5 din 12');
+    expect(text).toContain('nu o cifră fiscală');
+    expect(text).toContain('Nu alimentează calculul');
+    // No forecast, no label: a surface that has nothing to show must not grow a caption for it.
+    expect(estimateForecastLabel(undefined)).toBe('');
+    expect(estimateForecastExplanation(undefined)).toBe('');
+  });
+
+  it('B-72: for a mid-year starter the forecast names the active period, not twelve calendar months', () => {
     // The profile starts 1 Jul 2026. At 15 Sep 2026 the run rate is measured over 2,5 months and the
-    // annual figure multiplies it by a 6-month active period. The old wording said „din 12 luni scurse”
-    // for those same numbers, which described a window the figure was never computed over.
+    // forecast multiplies it by a 6-month active period. The old wording said „din 12 luni scurse” for
+    // those same numbers, which described a window the figure was never computed over.
     const data = makeData({
       profile: { ...profile(), pfaStartDate: '2026-07-01' },
       revenues: [revenue('2026-07-10', lei(300), lei(57))],
     });
-    const basis = selectTaxEstimateBasis(selectProjectionV1(data, '2026-09-15'), selectYtd(data, '2026-09-15'));
-    expect(estimateBasisLabel(basis)).toBe('Estimare anuală pe rată de desfășurare (2,5 din 6 luni de activitate)');
+    const basis = selectTaxEstimateBasis(
+      selectProjectionV1(data, '2026-09-15'), selectYtd(data, '2026-09-15'), '2026-09-15');
+    const forecast = basis.kind === 'recorded-actuals' ? basis.forecast : undefined;
+    expect(estimateForecastLabel(forecast)).toBe('Previziune pe rată de desfășurare (2,5 din 6 luni de activitate)');
     // And the sentence never says „12” for a profile whose active period is shorter than that.
-    expect(estimateBasisLabel(basis)).not.toContain('12');
-    expect(estimateBasisExplanation(basis)).toContain('2,5 din 6');
-  });
-
-  it('states that a projected figure is not a forecast of fact', () => {
-    const text = estimateBasisExplanation(projected);
-    expect(text).toContain('8,5 din 12');
-    expect(text).toContain('Nu sunt o previziune a cifrelor reale');
-    expect(estimateBasisExplanation(actuals)).toContain('neannualizate');
-    expect(estimateBasisExplanation(null)).toContain('nu este înregistrată');
+    expect(estimateForecastLabel(forecast)).not.toContain('12');
+    expect(estimateForecastExplanation(forecast)).toContain('2,5 din 6');
+    // The fiscal figure beside it names no window at all — it is what was collected.
+    expect(estimateBasisLabel(basis)).not.toContain('6');
   });
 });

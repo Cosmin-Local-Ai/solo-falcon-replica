@@ -225,9 +225,14 @@ describe('selectDeductibleExpenses — the law decides, the record only states',
 });
 
 describe('selectEstimateOperands — one assembler, feeding both selectors the same subset', () => {
-  it('the projection annualises the DEDUCTIBLE subset, not the recorded total', () => {
-    // 2026-06-30 -> 5 13/31 elapsed ACTIVE months of an 11 13/31 active period (the seed PFA started
-    // 2026-01-19, PG-4/B-44) -> x 354/168.
+  it('the engine is fed the DEDUCTIBLE subset, not the recorded total', () => {
+    // PG-5C re-premise of a TASK 2b assertion. The test's point was never the multiplier — it was that
+    // the assembler applies the art. 68 subset to the records BEFORE aggregation, so the quantity the
+    // engine sees and the quantity the basis reports come from one set. With the grossing-up removed the
+    // assertion is sharper, not weaker: 1.000,00 lei deductible goes in, 6.000,00 lei recorded does not.
+    //
+    // Before: amounts.expensesNet was lei(2107.14) — the deductible 1.000,00 lei multiplied by 354/168,
+    // the run rate over an 11 13/31-month active period. That figure was not money anyone paid.
     const operands = selectEstimateOperands(
       dataWith([
         expense({ id: 'deduct', category: 'postal_and_telecom', valoareFaraTva: ron(1000), tva: ron(190) }),
@@ -237,12 +242,13 @@ describe('selectEstimateOperands — one assembler, feeding both selectors the s
       PFA_2026_SYSTEM_REAL_PACKAGE,
     );
     if (operands.kind !== 'run') throw new Error('expected the estimate to run');
-    // If the subset were applied only to the YTD argument, `expensesNet` here would be
-    // (1.000 + 5.000) x 354/168 = 12.642,86 lei while `actual.expensesNet` said 1.000 — the drift this
-    // assembler exists to make impossible.
+    // If the subset were applied only to the YTD argument, `amounts.expensesNet` would be the recorded
+    // 6.000,00 lei while `actual.expensesNet` said 1.000,00 — the drift this assembler exists to make
+    // impossible. Both are now the same number, which is the whole guarantee.
     expect(operands.basis.actual.expensesNet).toBe(lei(1000));
-    expect(operands.amounts.expensesNet).toBe(lei(2107.14)); // 1.000,00 x 354/168
-    expect(operands.amounts.expenses).toBe(lei(2507.5)); // (1.000 + 190) x 354/168
+    expect(operands.amounts.expensesNet).toBe(lei(1000));
+    expect(operands.amounts.expenses).toBe(lei(1190)); // 1.000 + 190 TVA — the VAT-inclusive measure
+    expect(operands.amounts.expensesNet).not.toBe(lei(6000));
     expect(operands.deductible.records).toHaveLength(1);
   });
 

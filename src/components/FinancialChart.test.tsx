@@ -80,19 +80,18 @@ beforeEach(() => {
       status: 'computed',
       output: { total: lei(1234.56) },
       // Task 1: the note's wording is driven by the RECORDED BASIS, not by a literal in the component.
-      // This fixture is an actuals-to-date estimate, so the 'YTD' wording asserted below is the honest
-      // wording for it. The projected case is asserted separately.
+      // PG-5C: this is the only computed shape the note can receive — the engine runs on recorded
+      // actuals, and the wording below is the honest wording for it.
       basis: {
-        kind: 'actuals-only',
-        method: null,
-        elapsedMonths: 0,
+        kind: 'recorded-actuals',
+        asOfDate: AS_OF,
+        closed: false,
         actual: {
           revenues: lei(20000),
           expenses: lei(8000),
           revenuesNet: lei(18000),
           expensesNet: lei(7000),
         },
-        reason: 'fixture: această dată nu are rată de desfășurare',
       },
     },
     // Phase 10c: the chart reads the ledger disclosure the dashboard computed, because a foreign record left
@@ -191,39 +190,53 @@ describe('FinancialChart', () => {
 
   it('shows the tax estimate when computed', () => {
     renderChart();
-    expect(screen.getByText(/Estimare impozit YTD/)).toBeInTheDocument();
+    // PG-5C: the note names the quantity rather than the period. "YTD" was accurate only against a
+    // projected alternative; the figure beside it is now money that was received and paid.
+    expect(screen.getByText(/Impozit calculat din încasări și plăți înregistrate/)).toBeInTheDocument();
     expect(screen.getByText(/1.234,56 RON/)).toBeInTheDocument();
   });
 
-  it('names the run-rate basis on the tax note when the estimate was projected', () => {
+  it('the tax note never claims a run-rate figure, even when a forecast travels with the estimate', () => {
+    // PG-5C re-premise of "names the run-rate basis on the tax note when the estimate was projected".
+    // That test asserted the opposite of this one: it required the note to read
+    // "Estimare impozit anuală (rată de desfășurare)". The wording rule it defended — an annual run-rate
+    // figure must not be labelled YTD — was correct; the figure it was labelling should never have been
+    // a run rate in the first place. The note now carries the recorded basis whatever the forecast says.
     mockUseDashboardData.mockReturnValue({
       snapshot: { asOf: AS_OF },
       tax: {
         status: 'computed',
         output: { total: lei(1234.56) },
         basis: {
-          kind: 'annual-projected',
-          method: 'run-rate-v1',
-          elapsedMonths: 5.5,
+          kind: 'recorded-actuals',
+          asOfDate: AS_OF,
+          closed: false,
           actual: {
             revenues: lei(20000),
             expenses: lei(8000),
             revenuesNet: lei(18000),
             expensesNet: lei(7000),
           },
-          projected: {
-            revenues: lei(43636),
-            expenses: lei(17454),
-            revenuesNet: lei(39272),
-            expensesNet: lei(15272),
+          forecast: {
+            method: 'run-rate-v1',
+            elapsedMonths: 5.5,
+            activeMonths: 12,
+            runRate: { revenuePerMonth: lei(3272), expensesPerMonth: lei(1272), netPerMonth: lei(2000) },
+            amounts: {
+              revenues: lei(43636),
+              expenses: lei(17454),
+              revenuesNet: lei(39272),
+              expensesNet: lei(15272),
+            },
           },
         },
       },
       ledger: { conversions: [], unconverted: [] },
     });
     renderChart();
-    expect(screen.getByText(/Estimare impozit anuală \(rată de desfășurare\)/)).toBeInTheDocument();
-    // The wording rule under test: an annual run-rate figure must never be labelled YTD.
+    expect(screen.getByText(/Impozit calculat din încasări și plăți înregistrate/)).toBeInTheDocument();
+    // The wording rule survives, generalised: no run-rate label on a tax figure, and no YTD label either.
+    expect(screen.queryByText(/rată de desfășurare/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Estimare impozit YTD/)).not.toBeInTheDocument();
   });
 
@@ -343,11 +356,10 @@ describe('FinancialChart — a closed fiscal year (PG-4)', () => {
         status: 'computed',
         output: { total: lei(3112) },
         basis: {
-          kind: 'annual-projected',
-          method: 'run-rate-v1',
-          elapsedMonths: 354 / 31,
+          kind: 'recorded-actuals',
+          asOfDate: CLOSED_AS_OF,
+          closed: true,
           actual: { revenues: lei(9317), expenses: lei(205.5), revenuesNet: lei(7700), expensesNet: lei(120) },
-          projected: { revenues: lei(9317), expenses: lei(205.5), revenuesNet: lei(7700), expensesNet: lei(120) },
         },
       },
       ledger: { conversions: [], unconverted: [] },

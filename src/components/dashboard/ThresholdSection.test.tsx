@@ -25,7 +25,7 @@ function makeThreshold(overrides: Partial<FiscalThreshold> = {}): FiscalThreshol
     engaged: false,
     severity: 'none',
     applicability: 'applicable',
-    measuredBasis: 'annual-projected',
+    measuredBasis: 'annual-actual',
     consequence:
       'Venitul net anual este cel puțin egal cu 12 salarii minime brute; se datorează contribuția de asigurări sociale (art. 148 alin. (1) din Codul fiscal).',
     ...overrides,
@@ -51,8 +51,9 @@ describe('ThresholdSection (Step 32 — Romanian, no raw enums)', () => {
   });
 
   it('states which basis the row measured', () => {
-    // TASK 4: the contribution rows measure an annual figure and the VAT row measures YTD turnover.
-    // That asymmetry is deliberate, so each row says which one it measured.
+    // TASK 4's asymmetry, re-premised by PG-5C. The contribution rows and the VAT row still measure two
+    // different quantities and still say which; the annual one is now named as realised money rather
+    // than as a projection, because after B-76 nothing in this app may claim the latter.
     render(
       <ThresholdSection
         thresholds={[
@@ -68,8 +69,22 @@ describe('ThresholdSection (Step 32 — Romanian, no raw enums)', () => {
         ]}
       />,
     );
-    expect(screen.getByText(/Bază măsurată: venit net anual estimat pentru întreg anul/)).toBeInTheDocument();
+    expect(screen.getByText(/Bază măsurată: venit net anual realizat — încasări încasate și plăți plătite, fără annualizare/)).toBeInTheDocument();
     expect(screen.getByText(/Bază măsurată: cifra de afaceri înregistrată de la începutul anului/)).toBeInTheDocument();
+    // No row anywhere may now read as measured on a projection — the label was deleted with the union
+    // member, and this is the surface where its return would show up first.
+    expect(screen.queryByText(/venit net anual estimat pentru întreg anul/)).not.toBeInTheDocument();
+  });
+
+  it('names the date the measured values were measured at', () => {
+    // PG-5C / D-PROJ-1: a threshold compared against a register read at a date is only meaningful with
+    // that date, and a mid-year reader must not be left to infer that the year is already settled.
+    const first = render(<ThresholdSection thresholds={[makeThreshold()]} asOfDate="2026-10-31" />);
+    expect(first.getByText('Valoare măsurată la data de 2026-10-31.')).toBeInTheDocument();
+    // No date passed, no line invented.
+    first.unmount();
+    render(<ThresholdSection thresholds={[makeThreshold()]} />);
+    expect(screen.queryByText(/Valoare măsurată la data/)).not.toBeInTheDocument();
   });
 
   it('shows the honest Romanian empty state when there are no thresholds', () => {

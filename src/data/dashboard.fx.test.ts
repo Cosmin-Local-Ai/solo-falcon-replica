@@ -73,12 +73,11 @@ function dataWith(revenues: Revenue[], fxRates?: FxRateRecord[]): AppData {
 
 const EUR_LEI = lei(5347); // 1.000,00 EUR × 5,3470
 
-/** The gross the engine actually ran on, whichever basis it was built from. */
+/** The gross the engine actually ran on. Since PG-5C there is only one answer to that question. */
 function estimateGross(tax: TaxEstimateWithBasis): Bani {
   const basis = tax.basis;
-  if (basis.kind === 'annual-projected') return basis.projected.revenues;
-  if (basis.kind === 'actuals-only') return basis.actual.revenues;
-  throw new Error(`estimate refused: ${basis.reason}`);
+  if (basis.kind === 'recorded-actuals') return basis.actual.revenues;
+  throw new Error(`estimate refused: ${'reason' in basis ? basis.reason : 'no basis recorded'}`);
 }
 
 describe('Phase 10c — one normalised ledger behind every lei figure (B-37)', () => {

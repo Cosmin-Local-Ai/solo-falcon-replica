@@ -107,17 +107,22 @@ describe('a closed year stops drifting (the drift table in brief 34)', () => {
     const data = profileWith();
     const est = await getTaxEstimate(data, '2027-05-26');
     if (est.status !== 'computed') throw new Error('expected a computed estimate');
-    // The projection's horizon equals its elapsed measure, so the annual operands ARE the YTD pair.
-    if (est.basis.kind !== 'annual-projected') {
-      throw new Error(`expected an annual-projected basis, got ${est.basis.kind}`);
+    // PG-5C re-premise. PG-4 could only say that in a closed year the projection's horizon happens to
+    // equal its elapsed measure, so the annual operands collapse onto the YTD pair. That made the closed
+    // year a special case in which the engine coincidentally ran on actuals. It is now the ordinary case:
+    // the engine always runs on actuals, and `closed` records the additional fact that the register
+    // covers the whole year. With the horizon reached there is no forecast left to attach.
+    if (est.basis.kind !== 'recorded-actuals') {
+      throw new Error(`expected a recorded-actuals basis, got ${est.basis.kind}`);
     }
-    expect(est.basis.projected.revenuesNet).toBe(est.basis.actual.revenuesNet);
-    expect(est.basis.projected.expensesNet).toBe(est.basis.actual.expensesNet);
+    expect(est.basis.closed).toBe(true);
+    expect(est.basis.forecast).toBeUndefined();
     const view = buildDashboardData(data, est, new Date('2027-05-26T12:00:00'));
     const contribution = view.thresholds.filter((t) => t.affectedTax !== 'vat');
     for (const row of contribution) {
       if (row.currentValue === null) continue;
       expect(row.currentValue, row.thresholdId).toBe(est.bases.venitulNetDinActivitate);
+      expect(row.measuredBasis, row.thresholdId).toBe('annual-actual');
     }
   });
 });

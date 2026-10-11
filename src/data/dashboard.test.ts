@@ -677,10 +677,12 @@ describe('snapshot.thresholds[].breached (B-20, re-typed by TASK 4)', () => {
     expect(dashboard.insights.filter((i) => i.id === 'threshold-VAT_REGISTRATION')).toHaveLength(0);
   });
 
-  it('each row states the basis it measured: annual for contributions, YTD for the VAT plafon', async () => {
-    // TASK 4 labels the asymmetry TASK 1 left in place instead of unifying it. Mid-year the engine runs
-    // on the projection, so the contribution rows measure an annual projected figure while the VAT row
-    // measures turnover realised so far — two different numbers, and the rows say which is which.
+  it('each row states the basis it measured: realised annual for contributions, YTD for the VAT plafon', async () => {
+    // TASK 4's asymmetry, re-premised by PG-5C. The contribution rows and the VAT row still measure two
+    // different quantities and the rows still say which is which. What changed is the annual one: it is
+    // no longer a grossed-up projection but the realised net income, which art. 118 alin. (3) makes the
+    // annual amount even for a fraction of a year. `'annual-projected'` is gone from `MeasuredBasis`, so
+    // the label this test pins is the only annual label the row type can carry.
     const asOf = '2026-10-31';
     const instant = new Date(2026, 9, 31, 12);
     const tax = await getTaxEstimate(seedData, asOf);
@@ -693,15 +695,16 @@ describe('snapshot.thresholds[].breached (B-20, re-typed by TASK 4)', () => {
       'CAS_TIER2_FLOOR',
     ]);
     for (const row of contribution) {
-      expect(row.measuredBasis, row.thresholdId).toBe('annual-projected');
+      expect(row.measuredBasis, row.thresholdId).toBe('annual-actual');
     }
     const vat = rows.find((t) => t.thresholdId === 'VAT_REGISTRATION')!;
     expect(vat.measuredBasis).toBe('ytd-turnover');
-    // The two bases really are different quantities on the seed at this date: 9.189,45 lei annual
-    // projected VNA against 7.700,00 lei YTD turnover. PG-4 (B-44) moved the projected figure: the seed
-    // PFA started on 19 Jan 2026, so its active period is 11 13/31 months, not 12, and the run rate is
-    // measured from 19 Jan, not from 1 Jan.
-    expect(contribution[0].currentValue).toBe(lei(9189.45));
+    // The two bases are still different quantities on the seed at this date — 7.580,00 lei of realised
+    // net income against 7.700,00 lei of YTD VAT-exclusive turnover — but they now differ by the 120,00
+    // lei of deductible expense rather than by a run rate. Before PG-5C this row read 9.189,45 lei, the
+    // seed's VNA grossed up by 354/292; a CAS floor compared against that figure was compared against
+    // money the taxpayer had not received.
+    expect(contribution[0].currentValue).toBe(lei(7580));
     expect(vat.currentValue).toBe(lei(7700));
     expect(instant.getMonth()).toBe(9);
   });
@@ -916,50 +919,70 @@ describe('the VAT exceedance date reaches the deadline engine (P-PROFILE-VAT-DAT
  * getTaxEstimate is the test-facing twin of the live path (derived.ts useLatestTaxEstimate); both go
  * through estimateBasis.ts, so pinning the operands here pins the quantity the dashboard renders.
  */
-describe('getTaxEstimate - the projected basis enters the engine and the snapshot records it', () => {
-  it('feeds the run-rate operands and reports both the actuals and the projection', async () => {
+describe('getTaxEstimate — the engine is fed the recorded actuals, and the forecast travels beside them', () => {
+  it('feeds the actuals to the engine and reports the forecast separately, never as an operand', async () => {
+    // PG-5C re-premise of the TASK 1 contract. Every assertion below survived; what changed is which
+    // side of the contract each one sits on. The 9.334,93 / 145,48 / 9.189,45 / 3.257,00 lei figures are
+    // still computed and still reported — as a forecast. They are no longer what the engine ran on, and
+    // the total the taxpayer would have been shown drops from 3.257,00 lei to 3.112,00 lei.
     const est = await getTaxEstimate(seedData, '2026-10-31');
     if (est.status !== 'computed') throw new Error('expected a computed estimate');
-    if (est.basis.kind !== 'annual-projected') throw new Error('expected an annual-projected basis');
+    if (est.basis.kind !== 'recorded-actuals') throw new Error('expected a recorded-actuals basis');
 
     // Seed YTD (every record is September 2026, only 'inregistrata' counts). TASK 2b: the operand is the
     // CONFIRMED-DEDUCTIBLE subset, so expenseNet is e1's 120,00 lei — e2 (85,50 lei,
     // `personal_or_family_use`, art. 68 alin. (7) lit. a)) is classified out before aggregation.
-    // 2026-10-31 -> 9 13/31 elapsed ACTIVE months (the seed PFA started 2026-01-19) -> x 11 13/31 / 9 13/31.
-    // PG-4 (B-44): the denominator and the horizon are the PFA's active period, not the calendar year.
-    expect(est.basis.elapsedMonths).toBe(292 / 31);
+    expect(est.basis.asOfDate).toBe('2026-10-31');
+    expect(est.basis.closed).toBe(false);
     expect(est.basis.actual.revenuesNet).toBe(lei(7700));
     expect(est.basis.actual.expensesNet).toBe(lei(120));
-    expect(est.basis.projected.revenuesNet).toBe(lei(9334.93));
-    expect(est.basis.projected.expensesNet).toBe(lei(145.48)); // 120,00 x 354/292
-    // The engine ran on the projected pair and says so in its own bases:
-    expect(est.bases.venitulBrut).toBe(lei(9334.93));
-    expect(est.bases.cheltuieliDeductibile).toBe(lei(145.48));
-    expect(est.bases.venitulNetDinActivitate).toBe(lei(9189.45)); // 9.334,93 - 145,48
-    // CASS owed 2.430 (art. 174 alin. (6) difference to the 6 SM floor; only 10% x VNA = 918,945 ->
-    // art. 66, 94,5 bani > 50 -> 919,00 is deductible) + bază 8.270,45, impozit 10% = 827,045 ->
-    // art. 66, 45 bani < 50 -> 827,00. Total 2.430 + 827 = 3.257,00 lei.
-    expect(est.output.total).toBe(lei(3257));
+    // The forecast is still produced, over the PFA's active period (PG-4/B-44: 11 13/31 months from
+    // 19 Jan, 9 13/31 elapsed at 31 Oct, so x 354/292). It is a forecast, and it is not an operand.
+    expect(est.basis.forecast?.amounts.revenuesNet).toBe(lei(9334.93));
+    expect(est.basis.forecast?.amounts.expensesNet).toBe(lei(145.48)); // 120,00 x 354/292
+    // The engine ran on the recorded pair and says so in its own bases:
+    expect(est.bases.venitulBrut).toBe(lei(7700));
+    expect(est.bases.cheltuieliDeductibile).toBe(lei(120));
+    expect(est.bases.venitulNetDinActivitate).toBe(lei(7580)); // 7.700,00 - 120,00
+    // CASS owed 2.430 (art. 174 alin. (6) difference to the 6 SM floor; only 10% x VNA = 758,00 is
+    // deductible, the 1.672,00 difference being excluded by art. 118 alin. (2) lit. b)) + bază
+    // 7.580,00 - 758,00 = 6.822,00, impozit 10% = 682,20 -> art. 66 -> 682,00. CAS: 7.580,00 < 12 SM
+    // (48.600,00), so art. 148 alin. (1) is not met and none is owed. Total 2.430 + 682 = 3.112,00 lei.
+    expect(est.output.total).toBe(lei(3112));
   });
 
-  it('the estimate tracks the basis: another date is another run rate and another record', async () => {
+  it('the estimate no longer tracks the date: another as-of date is the same figure', async () => {
+    // PG-5C re-premise, and the sharpest single statement of the defect. This test used to be called
+    // "another date is another run rate and another record", and it pinned 3.355,00 lei at 30 Sep
+    // against 3.257,00 lei at 31 Oct — the same September register, read two months apart, producing two
+    // different tax figures, with the earlier date giving the HIGHER one because a shorter elapsed
+    // period implied a faster run rate. Nothing in Titlul IV or Titlul V does that.
     const oct = await getTaxEstimate(seedData, '2026-10-31');
     const sep = await getTaxEstimate(seedData, '2026-09-30');
     if (oct.status !== 'computed' || sep.status !== 'computed') throw new Error('expected both to compute');
-    if (sep.basis.kind !== 'annual-projected') throw new Error('expected an annual-projected basis');
+    if (sep.basis.kind !== 'recorded-actuals') throw new Error('expected a recorded-actuals basis');
 
-    expect(sep.basis.elapsedMonths).toBe(261 / 31);
-    // 2026-09-30 -> 8 13/31 elapsed active months -> x 354/261. Derived by hand:
-    //   revenueNet 7.700,00 x 354/261 = 10.443,68 lei; expenseNet (the deductible subset) 120,00 x 354/261
-    //     = 162,76 lei
-    //   VNA 10.280,92; CASS deductibilă 10% x 10.280,92 = 1.028,092 -> art. 66 -> 1.028,00
-    //   bază 10.280,92 - 1.028,00 = 9.252,92; impozit 925,292 -> art. 66 -> 925,00
-    //   total 2.430 + 925 = 3.355,00 lei
-    expect(sep.output.total).toBe(lei(3355)); // shorter elapsed period -> higher run rate -> higher annual figure
-    expect(oct.output.total).toBe(lei(3257));
-    // The snapshot digests the operands that entered the engine, so the two runs are distinguishable in
-    // the persisted record, not only on screen.
-    expect(sep.snapshot.inputsHash).not.toBe(oct.snapshot.inputsHash);
+    expect(sep.output.total).toBe(lei(3112));
+    expect(oct.output.total).toBe(lei(3112));
+    expect(sep.bases.venitulNetDinActivitate).toBe(oct.bases.venitulNetDinActivitate);
+    // The forecast DOES move with the date — that is what a forecast is for, and it is why the model is
+    // kept rather than deleted.
+    if (oct.basis.kind !== 'recorded-actuals' || sep.basis.kind !== 'recorded-actuals') {
+      throw new Error('expected both to carry a recorded-actuals basis');
+    }
+    expect(oct.basis.forecast?.amounts.revenuesNet).toBe(lei(9334.93));
+    expect(sep.basis.forecast?.amounts.revenuesNet).toBe(lei(10443.68)); // 7.700,00 x 354/261
+
+    // The snapshot digests the operands that entered the engine. Since the operands no longer move with
+    // the date, two reads of one register now hash identically — the old assertion that they differed
+    // was a fingerprint of the defect. What must still separate two runs is a change in the register.
+    expect(sep.snapshot.inputsHash).toBe(oct.snapshot.inputsHash);
+    const withMore = await getTaxEstimate(
+      { ...seedData, revenues: [...seedData.revenues, seedData.revenues[0]] },
+      '2026-10-31',
+    );
+    if (withMore.status !== 'computed') throw new Error('expected a computed estimate');
+    expect(withMore.snapshot.inputsHash).not.toBe(oct.snapshot.inputsHash);
     // And each record is self-verifying: the digest matches the operands it stores.
     expect(computeInputsHashSync(oct.snapshot.inputSnapshot)).toBe(oct.snapshot.inputsHash);
     expect(computeInputsHashSync(sep.snapshot.inputSnapshot)).toBe(sep.snapshot.inputsHash);
@@ -1049,19 +1072,21 @@ describe('TASK 3 — the persisted reserve feeds both read sites', () => {
     const data = withReserve(null);
     const est = await getTaxEstimate(data, AS_OF);
     if (est.status !== 'computed') throw new Error('expected a computed estimate');
-    expect(est.output.total).toBe(lei(3257));
+    expect(est.output.total).toBe(lei(3112));
 
     const rec = getTaxReserve(data, AS_OF, est);
-    expect(rec.estimatedTaxLiability).toBe(lei(3257));
+    expect(rec.estimatedTaxLiability).toBe(lei(3112));
     // null, not 0: the user recorded nothing, and the card must say so rather than show 0,00 lei.
     expect(rec.reservedAmount).toBeNull();
-    expect(rec.remainingTarget).toBe(lei(3257));
+    expect(rec.remainingTarget).toBe(lei(3112));
     expect(rec.monthsRemaining).toBe(3);
-    expect(rec.recommendedMonthlyReserve).toBe(lei(1085.67));
+    // PG-5C moved the liability from 3.257,00 to 3.112,00 lei, and the reserve with it. The reserve
+    // arithmetic is untouched — 3.112,00 / 3 months = 1.037,33 lei/month.
+    expect(rec.recommendedMonthlyReserve).toBe(lei(1037.33));
 
     const view = buildDashboardData(data, est, INSTANT);
     expect(view.reserve.reservedAmount).toBeNull();
-    expect(view.snapshot.taxReserve.gapBani).toBe(lei(3257));
+    expect(view.snapshot.taxReserve.gapBani).toBe(lei(3112));
   });
 
   it('an explicit 0 lei reserve is a different fact from null', async () => {
@@ -1072,7 +1097,7 @@ describe('TASK 3 — the persisted reserve feeds both read sites', () => {
     // a reader must be able to tell „recorded nothing” from „never recorded anything”.
     expect(rec.reservedAmount).toBe(lei(0));
     expect(rec.reservedAmount).not.toBeNull();
-    expect(rec.remainingTarget).toBe(lei(3257));
+    expect(rec.remainingTarget).toBe(lei(3112));
     expect(buildDashboardData(data, est, INSTANT).reserve.reservedAmount).toBe(lei(0));
   });
 
@@ -1082,17 +1107,18 @@ describe('TASK 3 — the persisted reserve feeds both read sites', () => {
     if (est.status !== 'computed') throw new Error('expected a computed estimate');
 
     const rec = getTaxReserve(data, AS_OF, est);
-    // 3.257,00 − 1.050,00 = 2.207,00 lei over 3 months = 735,67 lei/month (PG-4/B-44 moved the
-    // liability from 3.249,00; the reserve arithmetic itself is untouched).
+    // 3.112,00 − 1.050,00 = 2.062,00 lei over 3 months = 687,33 lei/month. PG-5C moved the liability
+    // from 3.257,00 (the run-rate figure) to 3.112,00 (the realised one); the reserve arithmetic itself
+    // is untouched.
     expect(rec.reservedAmount).toBe(lei(1050));
-    expect(rec.remainingTarget).toBe(lei(2207));
-    expect(rec.recommendedMonthlyReserve).toBe(lei(735.67));
+    expect(rec.remainingTarget).toBe(lei(2062));
+    expect(rec.recommendedMonthlyReserve).toBe(lei(687.33));
 
     // Site #2 — the snapshot that feeds the „Rezervă fiscală sub țintă” insight. It used to report 0
     // reserved no matter what, which is why the warning was unclearable.
     const view = buildDashboardData(data, est, INSTANT);
     expect(view.snapshot.taxReserve.currentReserveBani).toBe(lei(1050));
-    expect(view.snapshot.taxReserve.gapBani).toBe(lei(2207));
+    expect(view.snapshot.taxReserve.gapBani).toBe(lei(2062));
     // The two sites cannot disagree: same persisted value, same handed-in estimate.
     expect(view.snapshot.taxReserve.gapBani).toBe(view.reserve.remainingTarget);
     expect(view.snapshot.taxReserve.currentReserveBani).toBe(view.reserve.reservedAmount);

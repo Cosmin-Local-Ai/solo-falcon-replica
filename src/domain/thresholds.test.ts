@@ -855,13 +855,16 @@ describe('TASK 4 — severity, applicability and the measured basis', () => {
     }
   });
 
-  it('each row states which basis it measured: annual for contributions, YTD for the VAT plafon', () => {
+  it('each row states which basis it measured: realised annual for contributions, YTD for the VAT plafon', () => {
+    // PG-5C: `'annual-projected'` is gone from `MeasuredBasis`, so this is the only annual label a row
+    // can be given. The test still proves the two families are labelled differently and that the label
+    // travels from the query to the row untouched.
     const rows = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, {
       ...QUERY,
-      measuredBasis: { 'net-income': 'annual-projected', 'revenue-excl-vat': 'ytd-turnover' },
+      measuredBasis: { 'net-income': 'annual-actual', 'revenue-excl-vat': 'ytd-turnover' },
     });
     for (const id of ['CAS_MIN_BASE', 'CAS_TIER2_FLOOR', 'CASS_MIN_BASE', 'CASS_MAX_BASE']) {
-      expect(byId(rows, id).measuredBasis, id).toBe('annual-projected');
+      expect(byId(rows, id).measuredBasis, id).toBe('annual-actual');
     }
     expect(byId(rows, 'VAT_REGISTRATION').measuredBasis).toBe('ytd-turnover');
   });
