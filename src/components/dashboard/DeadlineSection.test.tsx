@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import DeadlineSection from './DeadlineSection';
-import type { Deadline } from '../../domain/deadlines';
+import type { DeadlineView } from '../../domain/deadlines';
 
 const AS_OF = '2026-03-01';
 
-function makeDeadline(overrides: Partial<Deadline> = {}): Deadline {
+/**
+ * PG-5: the card reads `DeadlineView`, not `Deadline` — the row now carries whether the dataset already
+ * discharges the term. The defaults here are the not-yet-filed case, which is what every pre-PG-5
+ * assertion in this file describes.
+ */
+function makeDeadline(overrides: Partial<DeadlineView> = {}): DeadlineView {
   return {
     deadlineId: 'PFA_DEADLINE_2026',
     taxYear: 2026,
@@ -17,6 +22,9 @@ function makeDeadline(overrides: Partial<Deadline> = {}): Deadline {
     effectiveFrom: '2026-01-01',
     effectiveTo: null,
     status: 'active',
+    done: false,
+    filedOn: null,
+    outcome: 'upcoming',
     ...overrides,
   };
 }
@@ -39,6 +47,26 @@ describe('DeadlineSection (Step 32 — Romanian, no raw enums)', () => {
       />,
     );
     expect(screen.getByText(/02\.03\.2026 \(1 zi rămasă\)/)).toBeInTheDocument();
+  });
+
+  it('marks a term the record already discharges as depusă, with the date on the filing', () => {
+    // PG-5. Before this, a filed return and an unfiled one rendered identically: the row came from the
+    // rule engine, which has never seen a filing.
+    render(
+      <DeadlineSection
+        deadlines={[makeDeadline({ done: true, filedOn: '2027-04-03', outcome: 'done' })]}
+        asOfDate={AS_OF}
+      />,
+    );
+    expect(screen.getByText('Depusă')).toBeInTheDocument();
+    expect(screen.getByText('Depusă pe 03.04.2027')).toBeInTheDocument();
+    expect(screen.queryByText('Activ')).not.toBeInTheDocument();
+  });
+
+  it('leaves an unfilled term on its rule status, not on the filing badge', () => {
+    render(<DeadlineSection deadlines={[makeDeadline()]} asOfDate={AS_OF} />);
+    expect(screen.getByText('Activ')).toBeInTheDocument();
+    expect(screen.queryByText('Depusă')).not.toBeInTheDocument();
   });
 
   it('shows the honest Romanian empty state when there are no upcoming deadlines', () => {

@@ -284,7 +284,11 @@ interface RecordSource {
    * year; there is no monthly return for a monthly row to be missing. The rows are preserved and shown
    * on the Declarations page, but they are inert: they generate no obligation, and the annual filing
    * model (`AnnualFiling`, `domain/deadlines.ts`) is what carries the obligation that does exist.
+   *
+   * The field stays on the input type — optional and unread — so the inertness is stated where the rows
+   * arrive instead of being an absence a later edit can fill in by accident.
    */
+  legacyDeclarations?: readonly { id: string; status: string }[];
 } 
 
 /**
@@ -300,10 +304,6 @@ function recordSeverity(
   if (state === 'rejected') return kind === 'revenue' ? 'high' : 'medium';
   if (state === 'awaiting_acceptance') return 'medium';
   return 'medium';
-}
-
-function periodLabel(an: number, luna: number): string {
-  return `${an}-${String(luna).padStart(2, '0')}`;
 }
 
 /**

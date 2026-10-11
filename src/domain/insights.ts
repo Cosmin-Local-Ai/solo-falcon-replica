@@ -13,7 +13,7 @@ import { fiscalDateSource } from '../ui/copy/records';
 // the fiscal-date words — this file had its own `DEADLINE_LABELS`, a third spelling of the same seven
 // keys, and its D212 row read "PFA". A term that names only an audience is not actionable: the row now
 // names the return and the year it declares.
-import { deadlineLabelFor } from '../ui/copy/dashboard';
+import { checkLabel, deadlineLabelFor } from '../ui/copy/dashboard';
 import {
   deadlineSeverity,
   sortAttention,
@@ -77,24 +77,22 @@ const THRESHOLD_LABELS: Record<string, string> = {
   'pfa-revenue': 'Venit PFA',
 };
 
-/** Romanian labels for the 9 known completeness check keys (must match completeness.ts). */
-const COMPLETENESS_LABELS: Record<string, string> = {
-  profile: 'Profil',
-  income: 'Venituri înregistrate',
-  expenses: 'Cheltuieli înregistrate',
-  clients: 'Clienți',
-  documents: 'Documente',
-  companyDocuments: 'Documente de firmă',
-  declarations: 'Declarații',
-  statements: 'Declarații fiscale',
-  taxEstimate: 'Estimare impozit',
-};
+/**
+ * PG-5: `COMPLETENESS_LABELS` is deleted. It was a second spelling of the completeness family — the
+ * copy layer already owns `CHECK_LABELS` — and it had drifted: it still carried `declarations` and
+ * `taxEstimate`, two keys `completeness.ts` no longer emits, while the keys it DOES emit after PG-5
+ * (`annualFiling`, `vatFilingPeriod`) were missing and would have rendered as the fallback word „date”.
+ * One producer per family is the B-70 rule; the domain now reads the words from the language layer.
+ */
 
 /**
  * TASK 8 — an unsatisfied completeness check is now an item with somewhere to go, not a line of text.
  * The route is data (this app's own router), not language; the words on the link come from the
- * language layer at the render site. `taxEstimate` has no route: the snapshot that satisfies it is
- * written by the engine, and pointing the user at a page that cannot produce it would be a dead link.
+ * language layer at the render site.
+ *
+ * PG-5: `declarations` and `taxEstimate` are gone — no producer emits those keys any more, so their
+ * routes were dead data. `annualFiling` points at the annual register; `vatFilingPeriod` points at the
+ * fiscal profile, which is where the fact that would fix the period (the VAT registration date) belongs.
  */
 const COMPLETENESS_TARGETS: Record<string, AttentionTarget | null> = {
   profile: { href: '/settings#!/fiscal' },
@@ -103,9 +101,9 @@ const COMPLETENESS_TARGETS: Record<string, AttentionTarget | null> = {
   clients: { href: '/clients' },
   documents: { href: '/documents' },
   companyDocuments: { href: '/documents#!/company' },
-  declarations: { href: '/declarations' },
+  annualFiling: { href: '/declarations' },
+  vatFilingPeriod: { href: '/settings#!/fiscal' },
   statements: { href: '/documents#!/statements' },
-  taxEstimate: null,
 };
 
 function thresholdLabel(label: string): string {
@@ -113,7 +111,10 @@ function thresholdLabel(label: string): string {
 }
 
 function completenessLabel(key: string): string {
-  return COMPLETENESS_LABELS[key] ?? 'date';
+  // The copy layer's fallback is the RAW key, on purpose. The old fallback here was the word „date”,
+  // which made an unlabelled check read as a plausible sentence — „Date lipsă: date” — and let a new
+  // key ship without anyone noticing it had no name. `src/ui/copy/labels.test.ts` pins this.
+  return checkLabel(key);
 }
 
 // ── Threshold alerts ──────────────────────────────────────

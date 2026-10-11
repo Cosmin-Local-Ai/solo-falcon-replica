@@ -257,7 +257,7 @@ export const deadlineLabels: Record<string, (taxYear: number) => string> = {
  *
  * An unknown key renders its RAW key. It used to render 'Termen fiscal', a plausible generic that
  * made a brand-new obligation look handled; a raw key on screen is ugly in a way the reader notices,
- * and `src/domain/insights.labels.test.ts` fails on it before it can ship.
+ * and `src/ui/copy/labels.test.ts` fails on it before it can ship.
  */
 export function deadlineLabelFor(appliesTo: string, taxYear: number): string {
   const phrase = deadlineLabels[appliesTo];

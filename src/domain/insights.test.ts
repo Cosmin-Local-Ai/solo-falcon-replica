@@ -602,18 +602,27 @@ describe('completeness', () => {
     expect(insights[1].description).toContain('Venituri înregistrate');
   });
 
-  it('falls back to "date" for unknown keys', () => {
+  it('renders an unknown completeness key RAW rather than the old generic', () => {
+    // PG-5 re-pin (replaced, not deleted). The old fallback was the word „date”, so an unlabelled check
+    // read as „Date lipsă: date” — a sentence that looks finished and means nothing. That generic was
+    // the same defect as the deadline family's 'Termen fiscal': it made a missing label invisible.
+    // The raw key is ugly on purpose, and `src/ui/copy/labels.test.ts` fails when a key the producer
+    // emits has no label, so the ugliness never reaches a user.
     const insights = getInsights(input({ snapshot: snapshot({ missing: ['totally_unknown_key'] }) }));
 
     expect(insights).toHaveLength(1);
-    expect(insights[0].description).toContain('date');
+    expect(insights[0].description).toContain('totally_unknown_key');
+    expect(insights[0].description).not.toContain(': date');
   });
 
   it('emits nothing when missing is empty', () => {
     expect(getInsights(input({ snapshot: snapshot({ missing: [] }) }))).toEqual([]);
   });
 
-  it('renders the Romanian label for every one of the 9 completeness keys', () => {
+  it('renders the Romanian label for every completeness key the producer emits', () => {
+    // PG-5 re-pin (replaced, not deleted): `declarations` left with the check it labelled, and
+    // `taxEstimate` had already left in PG-1 — this map kept both, which is what a second producer
+    // does. The list is now the keys `completeness.ts` actually emits.
     const labels: Record<string, string> = {
       profile: 'Profil',
       income: 'Venituri înregistrate',
@@ -621,9 +630,9 @@ describe('completeness', () => {
       clients: 'Clienți',
       documents: 'Documente',
       companyDocuments: 'Documente de firmă',
-      declarations: 'Declarații',
+      annualFiling: 'Declarația unică (D212)',
+      vatFilingPeriod: 'Perioada de depunere TVA',
       statements: 'Declarații fiscale',
-      taxEstimate: 'Estimare impozit',
     };
 
     for (const [key, label] of Object.entries(labels)) {
@@ -641,7 +650,7 @@ describe('completeness', () => {
       revenues: [],
       expenses: [],
       clients: [],
-      declarations: [],
+      filings: [], legacyDeclarations: [],
       documents: [],
       companyDocs: { im: [], cs: [], tva: [], facturi: [] },
       statements: [],
@@ -651,12 +660,12 @@ describe('completeness', () => {
 
     const report = assessCompleteness(emptyData);
     const missing = report.checks.filter((c) => !c.satisfied).map((c) => c.key);
-    // PG-1: nine checks became eight — `taxEstimate` asked whether a calculation had run, which is not
-    // a fact about the data's completeness.
-    expect(missing).toHaveLength(8); // every check fails on empty data
+    // PG-5 re-pin: eight became nine — `declarations` split into `annualFiling` (the return this fiscal
+    // year owes) and `vatFilingPeriod` (B-35, the period the recorded facts cannot fix).
+    expect(missing).toHaveLength(9); // every check fails on empty data
 
     const insights = getInsights(input({ snapshot: snapshot({ missing }) }));
-    expect(insights).toHaveLength(8);
+    expect(insights).toHaveLength(9);
     for (const item of insights) {
       expect(item.severity).toBe('medium');
       expect(item.state).toBe('data_missing');
@@ -710,14 +719,17 @@ describe('tax', () => {
 // Invariants
 
 describe('invariants', () => {
-  it('never exposes raw key strings in user-facing text', () => {
-    const rawKeys = ['profile_field_raw', 'unknown_key_xyz', 'cass-max-raw', 'some-raw-label'];
+  it('never exposes raw key strings for the families that have labels', () => {
+    // PG-5 re-pin (replaced, not deleted): this test used to sweep every raw key into one
+    // must-not-appear list, which only held because two fallbacks papered unknown keys with plausible
+    // generics ('Termen fiscal', 'date'). Those fallbacks are gone, so the invariant is now stated for
+    // what it actually protects: a key that HAS a label must never render its identifier. A key with no
+    // label renders itself, loudly — pinned in the next test and guarded in `ui/copy/labels.test.ts`.
+    const rawKeys = ['cass-max-raw'];
     const insights = getInsights(
       input({
         snapshot: snapshot({
-          missing: ['profile_field_raw', 'unknown_key_xyz'],
           thresholds: [threshold({ id: 't1', label: 'cass-max-raw', affectedTax: 'cass', ratio: 0.9 })],
-          deadlines: [deadline({ id: 'd1', label: 'some-raw-label', daysUntil: 5 })],
         }),
       }),
     );
@@ -727,6 +739,23 @@ describe('invariants', () => {
     for (const raw of rawKeys) {
       expect(text).not.toContain(raw);
     }
+  });
+
+  it('PG-5: an unknown deadline key surfaces RAW instead of a plausible generic', () => {
+    // Re-pin of the old `some-raw-label` assertion, which relied on `deadlineLabelFor` answering every
+    // unknown key with 'Termen fiscal'. That fallback was the defect: a rule added next quarter would
+    // have rendered as a sentence nobody wrote, and the suite would have stayed green. The raw key is
+    // the honest failure, and this test is what makes it visible before it ships.
+    const insights = getInsights(
+      input({ snapshot: snapshot({ deadlines: [deadline({ id: 'd1', label: 'some-raw-label', daysUntil: 5 })] }) }),
+    );
+    const text = texts(insights);
+    expect(text).toContain('some-raw-label');
+    expect(text).not.toContain('Termen fiscal');
+
+    // And a known key renders the sentence acceptance 1 asks for.
+    const known = getInsights(input({ snapshot: snapshot({ deadlines: [deadline({ id: 'd1', label: 'pfa', daysUntil: -1 })] }) }));
+    expect(texts(known)).toContain('Declarația unică (D212) pentru 2026');
   });
 
   it('contains no English leak patterns in user-facing text', () => {

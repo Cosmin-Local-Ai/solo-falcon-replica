@@ -78,7 +78,7 @@ function makeData(overrides: Partial<AppData> = {}): AppData {
     revenues: [],
     expenses: [],
     clients: [],
-    declarations: [],
+    filings: [], legacyDeclarations: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],
@@ -194,7 +194,7 @@ describe('getPendingCounts (sync)', () => {
       revenuesInAsteptare: 0,
       revenuesRespinsa: 0,
       expensesRespinsa: 0,
-      declarationsInAsteptare: 0,
+      filingsInAsteptare: 0,
     });
   });
 
@@ -203,13 +203,33 @@ describe('getPendingCounts (sync)', () => {
       makeData({
         revenues: [revenue({ id: 'r1', status: 'in-asteptare' }), revenue({ id: 'r2', status: 'respinsa' })],
         expenses: [expense({ status: 'respinsa' })],
-        declarations: [declaration({ status: 'in-asteptare' })],
+        // PG-5: `filingsInAsteptare` counts annual returns recorded but not yet filed. It replaces
+        // `declarationsInAsteptare`, which counted monthly rows for a return this profile does not owe.
+        filings: [{ id: 'f26', taxYear: 2026, form: 'D212', status: 'in_pregatire' }],
       }),
     );
     expect(counts.revenuesInAsteptare).toBe(1);
     expect(counts.revenuesRespinsa).toBe(1);
     expect(counts.expensesRespinsa).toBe(1);
-    expect(counts.declarationsInAsteptare).toBe(1);
+    expect(counts.filingsInAsteptare).toBe(1);
+  });
+
+  it('a filed annual return is not pending', () => {
+    const counts = getPendingCounts(
+      makeData({
+        filings: [{ id: 'f26', taxYear: 2026, form: 'D212', status: 'depusa', filedOn: '2027-05-12' }],
+      }),
+    );
+    expect(counts.filingsInAsteptare).toBe(0);
+  });
+
+  it('legacy monthly rows are never counted as pending filings', () => {
+    const counts = getPendingCounts(
+      makeData({
+        legacyDeclarations: [declaration({ id: 'd2', an: 2026, luna: 6, status: 'in-asteptare', dataInregistrare: '2026-07-08' })],
+      }),
+    );
+    expect(counts.filingsInAsteptare).toBe(0);
   });
 });
 
@@ -407,15 +427,16 @@ describe('getActionItems (sync)', () => {
     // No declaration row is produced from the seed, because the seed holds no declaration record.
     expect(byId.has('record-declaration-d2')).toBe(false);
 
-    const withDeclaration = getActionItems(
-      { ...seedData, declarations: [declaration({ id: 'd2', an: 2026, luna: 6, status: 'in-asteptare', dataInregistrare: '2026-07-08' })] },
+    // PG-5 re-pin (replaced, not deleted): a legacy monthly row produces no action item at all. The old
+    // case asserted `not_submitted` for `d2`, which asserts a submission this profile does not owe — a
+    // PFA în sistem real files one Declarația Unică per fiscal year, not a monthly return.
+    const withLegacy = getActionItems(
+      { ...seedData, legacyDeclarations: [declaration({ id: 'd2', an: 2026, luna: 6, status: 'in-asteptare', dataInregistrare: '2026-07-08' })] },
       AS_OF_INSTANT,
     );
-    const d2 = withDeclaration.find(i => i.id === 'record-declaration-d2')!;
-    expect(d2.state).toBe('not_submitted');
-    expect(d2.description).toContain('08.07.2026');
-    expect(d2.description).not.toContain('nu a fost depusă');
-    expect(d2.target?.href).toBe('/declarations#!/in-asteptare?f=d2');
+    expect(withLegacy.find(i => i.id === 'record-declaration-d2')).toBeUndefined();
+    // Adding the legacy rows changes nothing at all about the action list.
+    expect(withLegacy.map(i => i.id).sort()).toEqual(items.map(i => i.id).sort());
   });
 
   it('no issue appears on both surfaces, and the two together cover the whole list', async () => {
@@ -434,7 +455,15 @@ describe('getActionItems (sync)', () => {
     // which does have a computed estimate — satisfied it while records sat outside the figure. A real
     // missing register still surfaces.
     expect(actIds).not.toContain('completeness-taxEstimate');
-    expect(actIds).toContain('completeness-declarations');
+    // PG-5: `completeness-declarations` is gone with the predicate behind it. Two completeness rows take
+    // its place on the seed — the empty tax-statement register (the seed's D300 row went with the
+    // cadence it asserted) and the VAT filing period the recorded facts cannot fix. The annual filing is
+    // NOT a row: at the pinned date the FY2026 return is not yet due, and "not owed yet" is not missing
+    // data.
+    expect(actIds).not.toContain('completeness-declarations');
+    expect(actIds).not.toContain('completeness-annualFiling');
+    expect(actIds).toContain('completeness-statements');
+    expect(actIds).toContain('completeness-vatFilingPeriod');
     expect(obsIds).not.toContain('completeness');
     expect(obsIds).not.toContain('tax-review');
     expect(obsIds).not.toContain('deadline-PFA_DEADLINE_2026');

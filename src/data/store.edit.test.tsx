@@ -3,7 +3,7 @@ import { act, render } from '@testing-library/react';
 import { StoreProvider, useStore } from './store';
 import { CURRENT_DATA_VERSION } from './migration';
 import { seedData } from './seed';
-import type { Client, Declaration } from './types';
+import type { AnnualFiling, Client, Declaration } from './types';
 import { lei } from '../domain/money';
 
 // Must match STORAGE_KEY in src/data/store.tsx (module-private, not exported).
@@ -41,24 +41,40 @@ function renderStore(payload: unknown = { ...seedData, version: CURRENT_DATA_VER
 function persistedData() {
   const raw = localStorage.getItem(STORAGE_KEY);
   expect(raw).not.toBeNull();
-  return JSON.parse(raw!) as { clients: Client[]; declarations: Declaration[] };
+  return JSON.parse(raw!) as {
+    clients: Client[];
+    filings: AnnualFiling[];
+    legacyDeclarations: Declaration[];
+  };
 }
 
 /**
- * TASK 9: the seed no longer carries declaration records — the three it used to carry (2026-03
- * „transmisa”, 2026-06 „in-asteptare”, 2026-09 „inregistrata”) recorded monthly filings that do not
- * exist for this profile; see the note in `data/seed.ts`. `updateDeclaration` is store behaviour, not a
- * seed fact, so these tests now bring their own records. Written at the current data version so the load
- * path runs no migration and the money fields stay in bani.
+ * PG-5: the store no longer writes monthly declaration rows — `addDeclaration`, `updateDeclaration` and
+ * `sendDeclaration` are gone, because a monthly row asserts a return this profile does not owe. What is
+ * tested here is the annual return (`AnnualFiling`) and the preservation half: the monthly rows a pre-v11
+ * payload carried survive every write untouched.
+ *
+ * The monthly fixtures are the same three rows the seed used to carry (see the note in `data/seed.ts`),
+ * kept here as legacy input so preservation is tested against real-shaped data rather than an empty list.
  */
-const DECLARATION_FIXTURES: Declaration[] = [
+const LEGACY_DECLARATION_FIXTURES: Declaration[] = [
   { id: 'd1', an: 2026, luna: 3, venituri: lei(12500), cheltuieli: lei(1800), status: 'transmisa', dataInregistrare: '2026-04-10', dataTrimitere: '2026-04-15' },
   { id: 'd2', an: 2026, luna: 6, venituri: lei(14200), cheltuieli: lei(2100), status: 'in-asteptare', dataInregistrare: '2026-07-08' },
   { id: 'd3', an: 2026, luna: 9, venituri: lei(9680), cheltuieli: lei(546), status: 'inregistrata', dataInregistrare: '2026-09-28' },
 ];
 
-function renderStoreWithDeclarations() {
-  renderStore({ ...seedData, version: CURRENT_DATA_VERSION, declarations: DECLARATION_FIXTURES });
+const FILING_FIXTURES: AnnualFiling[] = [
+  { id: 'f25', taxYear: 2025, form: 'D212', status: 'depusa', filedOn: '2026-05-20', reference: 'D212.2025.000123' },
+  { id: 'f26', taxYear: 2026, form: 'D212', status: 'in_pregatire' },
+];
+
+function renderStoreWithFilings() {
+  renderStore({
+    ...seedData,
+    version: CURRENT_DATA_VERSION,
+    filings: FILING_FIXTURES,
+    legacyDeclarations: LEGACY_DECLARATION_FIXTURES,
+  });
 }
 
 describe('updateClient', () => {
@@ -122,68 +138,67 @@ describe('updateClient', () => {
   });
 });
 
-describe('updateDeclaration', () => {
-  it('updates the matching declaration in place, preserving its id', () => {
-    renderStoreWithDeclarations();
-    const original = storeRef!.declarations.find(d => d.id === 'd2')!;
+describe('updateFiling', () => {
+  it('updates the matching annual filing in place, preserving its id', () => {
+    renderStoreWithFilings();
+    const original = storeRef!.filings.find(f => f.id === 'f26')!;
 
     act(() => {
-      storeRef!.updateDeclaration({ ...original, status: 'transmisa', dataTrimitere: '2026-07-15' });
+      storeRef!.updateFiling({ ...original, status: 'depusa', filedOn: '2027-05-12' });
     });
 
-    const updated = storeRef!.declarations.find(d => d.id === 'd2')!;
-    expect(updated.status).toBe('transmisa');
-    expect(updated.dataTrimitere).toBe('2026-07-15');
-    // Untouched fields survive the update.
-    expect(updated.venituri).toBe(original.venituri);
-    expect(updated.cheltuieli).toBe(original.cheltuieli);
-    expect(updated.dataInregistrare).toBe(original.dataInregistrare);
-    expect(storeRef!.declarations).toHaveLength(DECLARATION_FIXTURES.length);
+    const updated = storeRef!.filings.find(f => f.id === 'f26')!;
+    expect(updated.status).toBe('depusa');
+    expect(updated.filedOn).toBe('2027-05-12');
+    // The year the return DECLARES is not the year it was filed; an edit must not blur them.
+    expect(updated.taxYear).toBe(original.taxYear);
+    expect(updated.form).toBe('D212');
+    expect(storeRef!.filings).toHaveLength(FILING_FIXTURES.length);
   });
 
-  it('leaves other declarations untouched', () => {
-    renderStoreWithDeclarations();
-    const d1 = storeRef!.declarations.find(d => d.id === 'd1')!;
-    const d3 = storeRef!.declarations.find(d => d.id === 'd3')!;
+  it('leaves other filings untouched', () => {
+    renderStoreWithFilings();
+    const f25 = storeRef!.filings.find(f => f.id === 'f25')!;
 
     act(() => {
-      storeRef!.updateDeclaration({ ...d1, venituri: lei(99999) });
+      storeRef!.updateFiling({ ...storeRef!.filings.find(f => f.id === 'f26')!, status: 'depusa', filedOn: '2027-05-12' });
     });
 
-    const d3After = storeRef!.declarations.find(d => d.id === 'd3')!;
-    expect(d3After).toEqual(d3);
+    expect(storeRef!.filings.find(f => f.id === 'f25')).toEqual(f25);
   });
 
-  it('persists the updated declaration to localStorage', () => {
-    renderStoreWithDeclarations();
-    const d2 = storeRef!.declarations.find(d => d.id === 'd2')!;
-
+  it('persists the updated filing to localStorage', () => {
+    renderStoreWithFilings();
     act(() => {
-      storeRef!.updateDeclaration({ ...d2, status: 'transmisa' });
+      storeRef!.updateFiling({ ...storeRef!.filings.find(f => f.id === 'f26')!, status: 'depusa', filedOn: '2027-05-12' });
     });
 
     const persisted = persistedData();
-    expect(persisted.declarations.find(d => d.id === 'd2')!.status).toBe('transmisa');
-    expect(persisted.declarations).toHaveLength(DECLARATION_FIXTURES.length);
+    expect(persisted.filings.find(f => f.id === 'f26')!.status).toBe('depusa');
+    expect(persisted.filings).toHaveLength(FILING_FIXTURES.length);
   });
 
   it('is a safe no-op for an unknown id (no crash, no new entry)', () => {
-    renderStoreWithDeclarations();
-    const before = storeRef!.declarations;
+    renderStoreWithFilings();
+    const before = storeRef!.filings;
 
     act(() => {
-      storeRef!.updateDeclaration({
-        id: 'does-not-exist',
-        an: 2026,
-        luna: 1,
-        venituri: lei(0),
-        cheltuieli: lei(0),
-        status: 'inregistrata',
-        dataInregistrare: '2026-01-01',
-      });
+      storeRef!.updateFiling({ id: 'does-not-exist', taxYear: 2024, form: 'D212', status: 'in_pregatire' });
     });
 
-    expect(storeRef!.declarations).toEqual(before);
-    expect(storeRef!.declarations).toHaveLength(DECLARATION_FIXTURES.length);
+    expect(storeRef!.filings).toEqual(before);
+    expect(storeRef!.filings).toHaveLength(FILING_FIXTURES.length);
+  });
+
+  it('leaves the legacy monthly rows exactly where they were', () => {
+    // The preservation half of the migration: writing an annual filing must not rewrite, reorder or
+    // reinterpret the monthly rows a pre-v11 payload carried.
+    renderStoreWithFilings();
+    act(() => {
+      storeRef!.updateFiling({ ...storeRef!.filings.find(f => f.id === 'f26')!, status: 'depusa', filedOn: '2027-05-12' });
+    });
+
+    expect(storeRef!.legacyDeclarations).toEqual(LEGACY_DECLARATION_FIXTURES);
+    expect(persistedData().legacyDeclarations).toEqual(LEGACY_DECLARATION_FIXTURES);
   });
 });

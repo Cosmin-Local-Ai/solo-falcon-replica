@@ -359,7 +359,8 @@ describe('loadInitial — optional collections are backfilled', () => {
     );
     expect(storeRef!.expenses).toEqual([]);
     expect(storeRef!.clients).toEqual([]);
-    expect(storeRef!.declarations).toEqual([]);
+    expect(storeRef!.filings).toEqual([]);
+    expect(storeRef!.legacyDeclarations).toEqual([]);
     expect(storeRef!.documents).toEqual([]);
     expect(storeRef!.companyDocs).toEqual({ im: [], cs: [], tva: [], facturi: [] });
     expect(storeRef!.statements).toEqual([]);

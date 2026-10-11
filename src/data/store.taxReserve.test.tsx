@@ -43,7 +43,7 @@ function basePayload(): AppData {
     revenues: [validRevenue],
     expenses: [],
     clients: [],
-    declarations: [],
+    filings: [], legacyDeclarations: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],
@@ -148,7 +148,8 @@ describe('a payload with no reserve field loads as null, not 0', () => {
 
     load();
     expect(storeRef!.dataOrigin).toBe('persisted');
-    expect(storeRef!.migration!.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency']);
+    // PG-5 re-pin: the chain grew by the `annual-filing` step; the reserve contract is untouched.
+    expect(storeRef!.migration!.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing']);
     expect(storeRef!.reservedAmount).toBeNull();
     // And the next write stamps the current version — the upgrade is one-way and additive.
     expect(persisted().version).toBe(CURRENT_DATA_VERSION);

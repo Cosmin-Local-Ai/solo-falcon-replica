@@ -55,7 +55,7 @@ const emptySettings: SettingsState = {
 function makeData(overrides: Partial<AppData> = {}): AppData {
   return {
     reservedAmount: null,
-    profile: profile(), revenues: [], expenses: [], clients: [], declarations: [], documents: [],
+    profile: profile(), revenues: [], expenses: [], clients: [], filings: [], legacyDeclarations: [], documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] }, statements: [], snapshots: [],
     settings: emptySettings, ...overrides,
   };
@@ -212,9 +212,28 @@ describe('wording never claims more than a run-rate assumption carries', () => {
   });
 
   it('names the assumption and how many months it rests on', () => {
-    expect(estimateBasisLabel(projected)).toBe('Estimare anuală pe rată de desfășurare (8,5 din 12 luni scurse)');
+    // B-72 re-pin (replaced, not deleted): „8,5 din 12 luni scurse” named the CALENDAR year while the
+    // figure beside it is multiplied by the ACTIVE period. The sentence now names the same window the
+    // arithmetic used. For this fixture the two coincide — the profile records no start date, so the
+    // active period is the calendar year — and the next test is the case where they do not.
+    expect(estimateBasisLabel(projected)).toBe('Estimare anuală pe rată de desfășurare (8,5 din 12 luni de activitate)');
     expect(estimateBasisLabel(actuals)).toBe('Înregistrat până acum (neannualizat)');
     expect(estimateBasisLabel(undefined)).toBe('Estimare impozit');
+  });
+
+  it('B-72: for a mid-year starter the sentence names the active period, not twelve calendar months', () => {
+    // The profile starts 1 Jul 2026. At 15 Sep 2026 the run rate is measured over 2,5 months and the
+    // annual figure multiplies it by a 6-month active period. The old wording said „din 12 luni scurse”
+    // for those same numbers, which described a window the figure was never computed over.
+    const data = makeData({
+      profile: { ...profile(), pfaStartDate: '2026-07-01' },
+      revenues: [revenue('2026-07-10', lei(300), lei(57))],
+    });
+    const basis = selectTaxEstimateBasis(selectProjectionV1(data, '2026-09-15'), selectYtd(data, '2026-09-15'));
+    expect(estimateBasisLabel(basis)).toBe('Estimare anuală pe rată de desfășurare (2,5 din 6 luni de activitate)');
+    // And the sentence never says „12” for a profile whose active period is shorter than that.
+    expect(estimateBasisLabel(basis)).not.toContain('12');
+    expect(estimateBasisExplanation(basis)).toContain('2,5 din 6');
   });
 
   it('states that a projected figure is not a forecast of fact', () => {

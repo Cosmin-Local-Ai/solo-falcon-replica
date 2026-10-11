@@ -222,23 +222,36 @@ describe('expense date validation (B-21)', () => {
 });
 
 describe('other record kinds (B-21)', () => {
-  it('refuses a declaration with no registration date', () => {
+  it('refuses an annual filing with a malformed filing date', () => {
+    // PG-5: the monthly declaration write path is gone, so the date guard is shown on the record that
+    // replaced it. `filedOn` is optional, but a value that is not a real calendar date is refused rather
+    // than stored — a date the app cannot read is a date that will silently misreport a deadline.
     renderStore();
-    const before = storeRef!.declarations.length;
+    const before = storeRef!.filings.length;
     let accepted: boolean | undefined;
     act(() => {
-      accepted = storeRef!.addDeclaration({
-        an: 2026,
-        luna: 6,
-        venituri: lei(1000),
-        cheltuieli: lei(100),
-        status: 'in-asteptare',
-        dataInregistrare: '',
+      accepted = storeRef!.addFiling({
+        taxYear: 2026,
+        form: 'D212',
+        status: 'depusa',
+        filedOn: '2026-13-45',
       });
     });
     expect(accepted).toBe(false);
-    expect(storeRef!.declarations).toHaveLength(before);
-    expect(lastError()!.text).toContain('data înregistrării');
+    expect(storeRef!.filings).toHaveLength(before);
+    expect(lastError()!.text).toContain('data depunerii');
+  });
+
+  it('accepts an annual filing with no filing date at all', () => {
+    // Absence is the honest third state: a return that is being prepared has no filing date, and the
+    // write path must not force one into existence.
+    renderStore();
+    let accepted: boolean | undefined;
+    act(() => {
+      accepted = storeRef!.addFiling({ taxYear: 2026, form: 'D212', status: 'in_pregatire' });
+    });
+    expect(accepted).toBe(true);
+    expect(storeRef!.filings[storeRef!.filings.length - 1]?.filedOn).toBeUndefined();
   });
 
   it('refuses a company document with a malformed date', () => {

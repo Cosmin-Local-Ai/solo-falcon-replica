@@ -195,19 +195,23 @@ describe('deadline severity is a distance decision made once, in the domain', ()
 
 describe('the record family: what the seed actually holds', () => {
   // TASK 9: the seed no longer carries declaration records, because the three it used to carry recorded
-  // monthly filings that do not exist for this profile (see the note in `data/seed.ts`). The declaration
-  // case is domain behaviour, not a seed fact, so it is now tested against a fixture the test owns — the
-  // assertions are unchanged, only where the record comes from.
+  // monthly filings that do not exist for this profile (see the note in `data/seed.ts`).
+  //
+  // PG-5 re-pin (replaced, not deleted): these rows are now `legacyDeclarations` — the monthly rows a
+  // pre-v11 payload carries, preserved read-only — and they produce NO action item. An item for one of
+  // them read „Declarație fără depunere înregistrată: 2026-06”, which asserts a submission this profile
+  // does not owe: a PFA în sistem real files one Declarația Unică per fiscal year. The obligation that
+  // does exist is carried by the annual filing model, not here.
   const declarationFixture: Declaration[] = [
     { id: 'd1', an: 2026, luna: 3, venituri: lei(12500), cheltuieli: lei(1800), status: 'transmisa', dataInregistrare: '2026-04-10', dataTrimitere: '2026-04-15' },
     { id: 'd2', an: 2026, luna: 6, venituri: lei(14200), cheltuieli: lei(2100), status: 'in-asteptare', dataInregistrare: '2026-07-08' },
     { id: 'd3', an: 2026, luna: 9, venituri: lei(9680), cheltuieli: lei(546), status: 'inregistrata', dataInregistrare: '2026-09-28' },
   ];
-  const seedWithDeclarations = { ...seedData, declarations: declarationFixture };
+  const seedWithLegacy = { ...seedData, legacyDeclarations: declarationFixture };
 
   const records = unresolvedRecords(seedData);
   const byId = new Map(records.map(r => [r.id, r]));
-  const withDeclarations = new Map(unresolvedRecords(seedWithDeclarations).map(r => [r.id, r]));
+  const withLegacy = new Map(unresolvedRecords(seedWithLegacy).map(r => [r.id, r]));
 
   it('surfaces the three genuinely unresolved seed records', () => {
     // TASK 9 re-pin (replaced, not deleted): old `['d2', 'e3', 'r2', 'r3']`. `d2` is gone because the
@@ -238,32 +242,24 @@ describe('the record family: what the seed actually holds', () => {
     expect(e3.reference).toBe('FCT-PRO-121');
   });
 
-  it('d2 has no recorded submission, and the app does not claim it was not filed', () => {
-    const d2 = withDeclarations.get('d2')!;
-    expect(d2.kind).toBe('declaration');
-    expect(d2.state).toBe('not_submitted');
-    expect(d2.registeredOn).toBe('2026-07-08');
-    expect(d2.submittedOn).toBeNull();
-    // The record holds no reason for a declaration, so none is invented.
-    expect(d2.reason).toBeNull();
-  });
-
-  it('a settled record leaves the surfaces: r1, r4, e1, e2, d1 and d3 produce nothing', () => {
-    // `d3` is `inregistrata` with no submission date. The app holds no expectation that a merely
-    // registered declaration was due to be filed, so calling it unresolved would state a reason the
-    // record does not carry. `d2` is `in-asteptare` — the record's own "not settled" marker — and that
-    // is what makes it an item.
-    for (const settled of ['r1', 'r4', 'e1', 'e2', 'd1', 'd3']) {
-      expect(withDeclarations.has(settled)).toBe(false);
+  it('a legacy monthly row produces no action item, whatever its status', () => {
+    // PG-5. `in-asteptare` and `respinsa` are the record's own not-settled markers, and they used to
+    // make `d2` an item. They no longer do: an action row for a monthly return asserts an obligation
+    // this profile does not have, which is the defect B-34 names. The rows stay readable on the
+    // Declarations page; they generate no obligation.
+    for (const legacy of ['d1', 'd2', 'd3']) {
+      expect(withLegacy.has(legacy)).toBe(false);
     }
+    // And the legacy rows do not disturb the records that ARE unresolved.
+    expect([...withLegacy.keys()].sort()).toEqual(['e3', 'r2', 'r3']);
   });
 
-  it('a declaration that carries a submission date is settled even when its status is not `transmisa`', () => {
-    const withSubmission = unresolvedRecords({
-      ...seedData,
-      declarations: [{ ...declarationFixture[1]!, dataTrimitere: '2026-07-20' }],
-    });
-    expect(withSubmission.some(d => d.id === 'd2')).toBe(false);
+  it('a settled record leaves the surfaces: r1, r4, e1 and e2 produce nothing', () => {
+    // `d1`/`d2`/`d3` are absent for the PG-5 reason above, so the settled list is re-pinned to the four
+    // revenue and expense records that are genuinely settled.
+    for (const settled of ['r1', 'r4', 'e1', 'e2']) {
+      expect(withLegacy.has(settled)).toBe(false);
+    }
   });
 
   it('a corrected revenue record stops appearing', () => {
@@ -312,7 +308,7 @@ describe('the record family: what the seed actually holds', () => {
 describe('the record facts carry what a target needs', () => {
   it('every unresolved record names the register it lives in', () => {
     for (const r of unresolvedRecords(seedData)) {
-      expect(['revenue', 'expense', 'declaration']).toContain(r.kind);
+      expect(['revenue', 'expense']).toContain(r.kind);
       expect(r.reference).not.toBe('');
       expect(r.status).not.toBe('');
     }
@@ -320,7 +316,7 @@ describe('the record facts carry what a target needs', () => {
 
   it('an empty register produces no items', () => {
     expect(
-      unresolvedRecords({ revenues: [], expenses: [], declarations: [] }),
+      unresolvedRecords({ revenues: [], expenses: [], legacyDeclarations: [] }),
     ).toEqual([]);
   });
 
@@ -328,7 +324,7 @@ describe('the record facts carry what a target needs', () => {
     const [only] = unresolvedRecords({
       revenues: [],
       expenses: [{ ...seedData.expenses[2], statusDetail: undefined }],
-      declarations: [],
+      legacyDeclarations: [],
     });
     expect(only.reason).toBeNull();
   });
@@ -337,7 +333,7 @@ describe('the record facts carry what a target needs', () => {
     const [r3] = unresolvedRecords({
       revenues: [seedData.revenues[2]],
       expenses: [],
-      declarations: [],
+      legacyDeclarations: [],
     });
     expect(r3.amountNet).toEqual(ron(800));
   });

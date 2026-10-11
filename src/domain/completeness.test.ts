@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type {
+  AnnualFiling,
   AppData,
   Client,
   CompanyDocument,
-  Declaration,
   DocumentItem,
   Expense,
   Revenue,
@@ -48,7 +48,10 @@ function makeProfile(): PfaProfile {
     pensionerStatus: 'nu',
     otherIncome: [],
     socialInsuranceStatus: 'obligatoriu',
-    vatExempt: false,
+    // PG-5: the fully-populated fixture is VAT-exempt, because that is the one VAT state the app can
+    // call complete — a scutire de TVA removes the periodic return, so there is no filing period to
+    // establish. The non-exempt case is tested on its own below, and it is NOT satisfied.
+    vatExempt: true,
     cashFloorLei: lei(0),
     identity: {
       nume: 'Test Person',
@@ -111,15 +114,14 @@ function makeClient(): Client {
   };
 }
 
-function makeDeclaration(): Declaration {
+function makeFiling(): AnnualFiling {
   return {
-    id: 'dec-1',
-    an: 2026,
-    luna: 6,
-    venituri: lei(100_000),
-    cheltuieli: lei(20_000),
-    status: 'inregistrata',
-    dataInregistrare: '2026-07-25',
+    id: 'fil-2026',
+    taxYear: 2026,
+    form: 'D212',
+    status: 'depusa',
+    filedOn: '2027-05-12',
+    reference: 'D212.2026.000042',
   };
 }
 
@@ -182,7 +184,8 @@ function makeData(overrides: Partial<AppData> = {}): AppData {
     ],
     expenses: [makeExpense()],
     clients: [makeClient()],
-    declarations: [makeDeclaration()],
+    filings: [makeFiling()],
+    legacyDeclarations: [],
     documents: [makeDocument()],
     companyDocs: {
       im: [makeCompanyDocument()],
@@ -205,7 +208,7 @@ function makeEmptyData(): AppData {
     revenues: [],
     expenses: [],
     clients: [],
-    declarations: [],
+    filings: [], legacyDeclarations: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],
@@ -221,14 +224,18 @@ const CHECK_KEYS = [
   'clients',
   'documents',
   'companyDocuments',
-  'declarations',
+  // PG-5: `declarations` ("any declaration record exists") became `annualFiling` ("the return this
+  // fiscal year owes is on the record"), and `vatFilingPeriod` states the one periodic obligation whose
+  // period the recorded facts cannot fix.
+  'annualFiling',
+  'vatFilingPeriod',
   'statements',
 ];
 
 describe('assessCompleteness', () => {
   it('reports every check unsatisfied for empty data without crashing', () => {
     const report = assessCompleteness(makeEmptyData());
-    expect(report.totalCount).toBe(8);
+    expect(report.totalCount).toBe(9);
     expect(report.satisfiedCount).toBe(0);
     expect(report.checks.map(c => c.key)).toEqual(CHECK_KEYS);
     for (const check of report.checks) {
@@ -236,13 +243,13 @@ describe('assessCompleteness', () => {
     }
     expect(report.checks[0].detail).toBe('profil lipsă');
     expect(report.checks[1].detail).toBe('nu există înregistrări de venituri');
-    expect(report.checks[7].detail).toBe('nu există situații de taxe');
+    expect(report.checks[8].detail).toBe('nu există situații de taxe');
   });
 
   it('reports every check satisfied for fully-populated data', () => {
     const report = assessCompleteness(makeData());
-    expect(report.totalCount).toBe(8);
-    expect(report.satisfiedCount).toBe(8);
+    expect(report.totalCount).toBe(9);
+    expect(report.satisfiedCount).toBe(9);
     for (const check of report.checks) {
       expect(check.satisfied).toBe(true);
     }
@@ -255,13 +262,107 @@ describe('assessCompleteness', () => {
       snapshots: [makeSnapshot('superseded')],
     });
     const report = assessCompleteness(data);
-    expect(report.totalCount).toBe(8);
-    expect(report.satisfiedCount).toBe(6);
+    expect(report.totalCount).toBe(9);
+    expect(report.satisfiedCount).toBe(7);
     const byKey = Object.fromEntries(report.checks.map(c => [c.key, c]));
     expect(byKey.expenses.satisfied).toBe(false);
     expect(byKey.expenses.detail).toBe('nu există înregistrări de cheltuieli');
     expect(byKey.statements.satisfied).toBe(false);
     expect(byKey.statements.detail).toBe('nu există situații de taxe');
+  });
+
+  // PG-5, acceptance 3: the check reports the annual filing FOR THE RELEVANT YEAR. The predicate it
+  // replaces was `list.length > 0` — literally "any declaration exists" — which a payload of monthly
+  // rows satisfied while the one return that is actually owed sat unrecorded.
+  describe('the annual filing check', () => {
+    const byKey = (report: ReturnType<typeof assessCompleteness>) =>
+      Object.fromEntries(report.checks.map(c => [c.key, c]));
+
+    it('is satisfied when the return for the fiscal year is on the record as filed', () => {
+      const report = assessCompleteness(makeData());
+      const check = byKey(report).annualFiling;
+      expect(check.satisfied).toBe(true);
+      expect(check.detail).toBe('Declarația unică (D212) pentru 2026 depusă pe 12.05.2027');
+    });
+
+    it('is not satisfied by a filed return for a DIFFERENT year — the check is per year, not a count', () => {
+      const data = makeData({
+        filings: [{ id: 'fil-2025', taxYear: 2025, form: 'D212', status: 'depusa', filedOn: '2026-05-12' }],
+      });
+      const check = byKey(assessCompleteness(data, [], '2027-06-01', '2027-05-25')).annualFiling;
+      expect(check.satisfied).toBe(false);
+      expect(check.detail).toContain('pentru 2026');
+    });
+
+    it('is not satisfied by a full register of legacy monthly rows', () => {
+      // This is B-34 in one assertion: the old predicate returned true here.
+      const data = makeData({
+        filings: [],
+        legacyDeclarations: [
+          { id: 'd1', an: 2026, luna: 3, venituri: lei(1000), cheltuieli: lei(100), status: 'inregistrata', dataInregistrare: '2026-04-10' },
+          { id: 'd2', an: 2026, luna: 6, venituri: lei(1000), cheltuieli: lei(100), status: 'transmisa', dataInregistrare: '2026-07-08', dataTrimitere: '2026-07-15' },
+        ],
+      });
+      const check = byKey(assessCompleteness(data, [], '2027-06-01', '2027-05-25')).annualFiling;
+      expect(check.satisfied).toBe(false);
+      expect(check.detail).toBe('Declarația unică (D212) pentru 2026 nu este înregistrată; termenul a fost 25.05.2027');
+    });
+
+    it('a record that exists but was not filed is not a filing', () => {
+      const data = makeData({
+        filings: [{ id: 'fil-2026', taxYear: 2026, form: 'D212', status: 'in_pregatire' }],
+      });
+      const check = byKey(assessCompleteness(data, [], '2027-06-01', '2027-05-25')).annualFiling;
+      expect(check.satisfied).toBe(false);
+      expect(check.detail).toBe('Declarația unică (D212) pentru 2026 este înregistrată în aplicație dar nu este depusă');
+    });
+
+    it('before the term, an absent return is "not owed yet", not missing data', () => {
+      // The distinction the whole phase turns on: absence before a due date is a state, not a gap.
+      const report = assessCompleteness(makeData({ filings: [] }), [], '2026-10-31', '2027-05-25');
+      const check = byKey(report).annualFiling;
+      expect(check.satisfied).toBe(true);
+      expect(check.detail).toBe('Declarația unică (D212) pentru 2026 nu se datorează încă — termenul este 25.05.2027');
+    });
+
+    it('with no rule package for the year it says the term cannot be established, and invents no date', () => {
+      const report = assessCompleteness(makeData({ filings: [] }), [], '2027-06-01', null);
+      const check = byKey(report).annualFiling;
+      expect(check.satisfied).toBe(false);
+      expect(check.detail).toBe('Declarația unică (D212) pentru 2026: termenul nu poate fi stabilit — niciun pachet de reguli pentru 2026');
+    });
+  });
+
+  // PG-5, acceptance 4 (B-35): the VAT period is stated as the unknown it is.
+  describe('the VAT filing period check (B-35)', () => {
+    const byKey = (report: ReturnType<typeof assessCompleteness>) =>
+      Object.fromEntries(report.checks.map(c => [c.key, c]));
+
+    it('a non-exempt profile with no VAT registration date gets the admission, not a cadence', () => {
+      const check = byKey(assessCompleteness(makeData({ profile: { ...makeProfile(), vatExempt: false } }))).vatFilingPeriod;
+      expect(check.satisfied).toBe(false);
+      expect(check.detail).toContain('nu poate fi stabilită');
+      expect(check.detail).toContain('data înregistrării în TVA');
+      expect(check.detail).toContain('CF art. 322 alin. (1)-(4)');
+      // No asserted cadence, in either direction.
+      expect(check.detail).not.toMatch(/trimestrial|lunar|D300/);
+    });
+
+    it('an exempt profile has no periodic return, which is a real satisfied state', () => {
+      const check = byKey(assessCompleteness(makeData())).vatFilingPeriod;
+      expect(check.satisfied).toBe(true);
+      expect(check.detail).toContain('scutit de TVA');
+    });
+
+    it('a recorded exceedance date does not let the app name a period it has not been told', () => {
+      // `vatExceedanceDate` is the date the ceiling was crossed; a taxpayer registered from the start
+      // never had that event, so it still does not fix the period.
+      const check = byKey(
+        assessCompleteness(makeData({ profile: { ...makeProfile(), vatExempt: false, vatExceedanceDate: '2026-04-01' } })),
+      ).vatFilingPeriod;
+      expect(check.satisfied).toBe(false);
+      expect(check.detail).toContain('nu poate fi stabilită');
+    });
   });
 
   // PG-1, acceptance 6: the circular check is gone, and the reason it was circular is pinned so it

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   CURRENT_DATA_VERSION,
   DATA_VERSION_RECORD_CURRENCY,
+  DATA_VERSION_ANNUAL_FILING,
   DATA_VERSION_RULE_SET_DIGEST,
   MIGRATION_CHAIN,
   migratePersistedData,
@@ -120,7 +121,9 @@ describe('record-currency is a no-op in value', () => {
   it('stamps the version and nothing else about the payload shape', () => {
     const after = migrateRecordCurrencyV10(v9Payload());
     expect(after.version).toBe(DATA_VERSION_RECORD_CURRENCY);
-    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_RECORD_CURRENCY);
+    // PG-5 re-pin (replaced, not deleted): this step is no longer the head of the chain — v11 follows
+    // it. Unchanged is that the step itself stamps exactly 10 and nothing else.
+    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_ANNUAL_FILING);
   });
 
   it('is idempotent: running it again on a v10 payload changes nothing', () => {
@@ -213,18 +216,23 @@ describe('the step touches only the two collections it names', () => {
 });
 
 describe('the chain', () => {
-  it('runs record-currency as its own final step, from 9 to 10', () => {
-    const last = MIGRATION_CHAIN[MIGRATION_CHAIN.length - 1]!;
-    expect(last.from).toBe(DATA_VERSION_RULE_SET_DIGEST);
-    expect(last.to).toBe(DATA_VERSION_RECORD_CURRENCY);
-    expect(last.name).toBe('record-currency');
+  it('runs record-currency as its own step, from 9 to 10', () => {
+    // PG-5 re-pin (replaced, not deleted): this used to assert record-currency was the FINAL step. It is
+    // now step 10 of 11 — the annual-filing step follows it — so the assertion moves from "last" to
+    // "present at exactly this edge", which is the property this file cares about.
+    const step = MIGRATION_CHAIN.find((s) => s.name === 'record-currency')!;
+    expect(step.from).toBe(DATA_VERSION_RULE_SET_DIGEST);
+    expect(step.to).toBe(DATA_VERSION_RECORD_CURRENCY);
+    expect(MIGRATION_CHAIN.indexOf(step)).toBe(MIGRATION_CHAIN.length - 2);
   });
 
-  it('a v9 payload needs exactly one step', () => {
+  it('a v9 payload needs one step per version above it', () => {
     const outcome = migratePersistedData(v9Payload());
     expect(outcome.fromVersion).toBe(DATA_VERSION_RULE_SET_DIGEST);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
-    expect(outcome.stepsApplied).toEqual(['record-currency']);
+    // PG-5 re-pin: `annual-filing` follows. It renames a collection and opens another; it touches no
+    // amount, which is what this file guards.
+    expect(outcome.stepsApplied).toEqual(['record-currency', 'annual-filing']);
   });
 
   it('a v9 payload keeps its stored digest through the whole chain', () => {
@@ -234,9 +242,22 @@ describe('the chain', () => {
     expect('preMigrationInputsHash' in outcome.data.snapshots![0]!).toBe(false);
   });
 
-  it('a payload already at v10 runs no step at all', () => {
+  it('a v10 payload runs exactly the annual-filing step, and no amount moves', () => {
+    // PG-5 re-pin (replaced, not deleted): v10 used to be the head, so a payload at v10 ran no step at
+    // all. It now runs one. The guarded property is intact — the v11 step renames a collection and opens
+    // another, and touches no money field.
     const atV10 = migrateRecordCurrencyV10(v9Payload());
+    const amountsBefore = JSON.stringify(atV10.revenues.map(r => [r.valoareFaraTva, r.tva]));
     const outcome = migratePersistedData(atV10);
+    expect(outcome.migrated).toBe(true);
+    expect(outcome.stepsApplied).toEqual(['annual-filing']);
+    expect(JSON.stringify(outcome.data.revenues.map(r => [r.valoareFaraTva, r.tva]))).toBe(amountsBefore);
+    expect(outcome.data.version).toBe(CURRENT_DATA_VERSION);
+  });
+
+  it('a payload already at the current version runs no step at all', () => {
+    const atHead = migratePersistedData(v9Payload()).data;
+    const outcome = migratePersistedData(atHead);
     expect(outcome.migrated).toBe(false);
     expect(outcome.stepsApplied).toEqual([]);
   });

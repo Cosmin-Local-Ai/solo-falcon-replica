@@ -82,9 +82,12 @@ describe('save effect — serialization contract', () => {
     expect(Object.keys(persisted).sort()).toEqual([
       'clients',
       'companyDocs',
-      'declarations',
       'documents',
       'expenses',
+      // PG-5: the annual returns, and the monthly rows the v10→v11 step preserved. `declarations` is
+      // gone from the written shape — the key list is the migration's evidence, in a test.
+      'filings',
+      'legacyDeclarations',
       'profile',
       // TASK 3: the recorded tax reserve is part of AppData, so it is serialized like the rest of the
       // dataset. It is written as `null` when nothing was recorded — the key is present and its value
@@ -128,7 +131,8 @@ describe('save effect — multiple save cycles', () => {
     const read = () => JSON.parse(localStorage.getItem(STORAGE_KEY)!) as {
       revenues: Revenue[];
       clients: { id: string; denumire: string }[];
-      declarations: { id: string; status: string }[];
+      filings: { id: string; status: string }[];
+      legacyDeclarations: { id: string; status: string }[];
     };
 
     // Cycle 1 — add a revenue.
@@ -157,31 +161,30 @@ describe('save effect — multiple save cycles', () => {
     persisted = read();
     expect(persisted.clients.find(c => c.id === 'c1')!.denumire).toBe('Presta Consulting S.R.L.');
 
-    // Cycle 5 — add a declaration, then update it.
+    // Cycle 5 — add an annual filing, then update it.
     // TASK 9 re-pin (replaced, not deleted): this cycle used to update the seed's `d2`. The seed holds no
-    // declaration records now — the three it carried recorded monthly filings that do not exist for this
-    // profile (see the note in `data/seed.ts`). The save-cycle coverage is unchanged: a declaration is
-    // still written and then updated, it is just created by this cycle instead of being assumed.
+    // monthly rows now (see the note in `data/seed.ts`).
+    // PG-5 re-pin (replaced, not deleted): the record is the annual return. The save-cycle coverage is
+    // unchanged in kind — a record is written, then updated, then read back from storage — only the
+    // record type moved with the model.
     act(() =>
-      storeRef!.addDeclaration({
-        an: 2026,
-        luna: 6,
-        venituri: lei(14200),
-        cheltuieli: lei(2100),
-        status: 'in-asteptare',
-        dataInregistrare: '2026-07-08',
+      storeRef!.addFiling({
+        taxYear: 2026,
+        form: 'D212',
+        status: 'in_pregatire',
       }),
     );
-    const addedDeclId = storeRef!.declarations[storeRef!.declarations.length - 1]!.id;
-    act(() => storeRef!.updateDeclaration({ ...storeRef!.declarations.find(d => d.id === addedDeclId)!, status: 'transmisa' }));
+    const addedFilingId = storeRef!.filings[storeRef!.filings.length - 1]!.id;
+    act(() => storeRef!.updateFiling({ ...storeRef!.filings.find(f => f.id === addedFilingId)!, status: 'depusa', filedOn: '2027-05-12' }));
     persisted = read();
-    expect(persisted.declarations.find(d => d.id === addedDeclId)!.status).toBe('transmisa');
+    expect(persisted.filings.find(f => f.id === addedFilingId)!.status).toBe('depusa');
 
     // After every cycle the persisted blob matches the live in-memory state
     // exactly — no stale or corrupted intermediate writes.
     expect(persisted.revenues).toEqual(storeRef!.revenues);
     expect(persisted.clients).toEqual(storeRef!.clients);
-    expect(persisted.declarations).toEqual(storeRef!.declarations);
+    expect(persisted.filings).toEqual(storeRef!.filings);
+    expect(persisted.legacyDeclarations).toEqual(storeRef!.legacyDeclarations);
   });
 });
 

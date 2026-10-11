@@ -45,7 +45,12 @@ describe('seedData — the fixture is a 2026 PFA (PG-3)', () => {
 
   it('holds no prior-year filing, in any of the three places one could sit', () => {
     // A PFA that started in 2026 has no prior income year. A 2025 return is not a record it could hold.
-    expect(seedData.declarations).toEqual([]);
+    // PG-5: `filings` is the annual-return register, and it is empty for the same reason — the seed
+    // cannot claim a Declarația Unică for 2025 that no source records. `legacyDeclarations` is the
+    // preserved pre-v11 monthly family, empty in the seed because TASK 9 removed the three rows that
+    // asserted a monthly cadence this profile does not have.
+    expect(seedData.filings).toEqual([]);
+    expect(seedData.legacyDeclarations).toEqual([]);
     expect(seedData.statements.filter(s => /^\d{4}$/.test(s.perioada) && Number(s.perioada) < 2026)).toEqual([]);
     expect(seedData.companyDocs.im).toEqual([]);
     expect(seedData.companyDocs.cs).toEqual([]);
@@ -89,7 +94,8 @@ describe('emptyData — what a first run actually holds', () => {
     expect(data.revenues).toEqual([]);
     expect(data.expenses).toEqual([]);
     expect(data.clients).toEqual([]);
-    expect(data.declarations).toEqual([]);
+    expect(data.filings).toEqual([]);
+    expect(data.legacyDeclarations).toEqual([]);
     expect(data.documents).toEqual([]);
     expect(data.statements).toEqual([]);
     expect(data.snapshots).toEqual([]);

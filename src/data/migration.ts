@@ -745,35 +745,39 @@ export function migrateRecordCurrencyV10(data: PersistedAppData): PersistedAppDa
  * exist and this step has no authority to reinterpret them.
  */
 export function migrateAnnualFilingV11(data: PersistedAppData): PersistedAppData {
-  const stamped = { ...data, version: DATA_VERSION_ANNUAL_FILING };
-  const monthly = data.declarations;
+  // `version` and `declarations` are destructured OUT of the payload copy, so the stamp written last
+  // cannot be overwritten by the stale version the payload carried. An earlier revision of this step
+  // spread `{ ...stamped, ...rest }` and put `version: 10` back on the result, which made the chain
+  // abort with "did not set version 11" — loudly, which is the only reason it was caught.
+  const { version: staleVersion, declarations: monthly, ...rest } = data;
+  void staleVersion;
 
-  // A payload that already carries the renamed key has been through this step (or was written by a
-  // v11 build). Leave it alone apart from the version stamp and any stray `declarations` key.
-  if (data.legacyDeclarations !== undefined) {
-    if (monthly === undefined) return stamped;
-    const { declarations: moved, ...rest } = data;
-    void moved;
-    return { ...stamped, ...rest } as PersistedAppData;
-  }
-
-  if (monthly === undefined) {
-    // Nothing to move. `filings` is opened empty only so the shape is explicit; the load path treats an
-    // absent key identically.
-    return data.filings === undefined ? { ...stamped, filings: [] } : stamped;
-  }
-
-  const { declarations: moved, ...rest } = data;
-  void moved;
-  return {
-    ...stamped,
+  const next: PersistedAppData = {
     ...rest,
-    legacyDeclarations: monthly,
-    filings: data.filings ?? [],
+    // `filings` is opened empty only so the shape is explicit; the load path treats an absent key
+    // identically. An existing array is never replaced.
+    filings: rest.filings ?? [],
+    version: DATA_VERSION_ANNUAL_FILING,
   };
+
+  if (rest.legacyDeclarations !== undefined) {
+    // Already renamed by a previous run of this step, or written by a v11 build. It is left exactly as
+    // it is; a stray `declarations` key alongside it is dropped, because the renamed key is the one the
+    // app reads and keeping both would let them disagree.
+    return next;
+  }
+
+  if (monthly !== undefined) {
+    // The move itself: byte for byte, no conversion, no summary, no derived annual row.
+    next.legacyDeclarations = monthly;
+  }
+  // A payload that never carried monthly rows gets no `legacyDeclarations` key at all — writing an
+  // empty one would claim a history it does not have.
+  return next;
 }
 
-/** The chain, in order. Append new steps at the end; never renumber old ones. */export const MIGRATION_CHAIN: MigrationStep[] = [
+/** The chain, in order. Append new steps at the end; never renumber old ones. */
+export const MIGRATION_CHAIN: MigrationStep[] = [
   {
     from: DATA_VERSION_BASE,
     to: DATA_VERSION_PROFILE,
