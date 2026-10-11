@@ -218,3 +218,13 @@ Chosen for PG-6, after the user asked how someone who has just started a PFA wou
 2. Where the cadence follows from those facts plus recorded income, **derive it and show the reasoning.**
 3. Where it does not — a new PFA — **state the rule in plain words and ask the user to confirm monthly or quarterly**, labelled as *their* answer, never as the app's conclusion.
 **Never** a guessed cadence, and never the current dead end of "cannot be established" with no way forward.
+
+### D-CAZ-1 — art. 68^3 accommodation income: **support it properly, do not refuse it** — **user decision, 2026-10-11**
+Brief 28 §PG-6b told the app to **refuse** accommodation income. The user overruled that: *"If we can implement it PROPERLY now, we do it now."* Asked which taxpayers to cover, they declined the legal question and told me to decide from the law in front of me.
+**Decision: implement all three paths**, because they are not three features — they are one arithmetic reaching three categories, and the most common real user is the one the narrowest option refuses:
+- **(a)** tourism operators providing accommodation measured in days — art. 68^3 alin. (1).
+- **(b)** a private person renting **more than 7** short-term rooms: from the fiscal year they cross 7, the income becomes an independent activity under art. 68^3 — **alin. (12)** with **art. 83 alin. (4)** (mod. Legea 239/2025 pct. 7).
+- **(c)** a private person renting **1–7** rooms: stays in **cedarea folosinței**, a different income category, but from 2026 it is **also** on the 30 % flat-expense basis — **art. 85 alin. (1)–(2)** (mod. pct. 10). This replaces the old tourist normă for 2026.
+**Refusing (c) would refuse the likeliest user of all** — someone with two or three apartments on a booking platform.
+**What is already answered:** the 30 % is a flat **expense** ratio (alin. 2), tax is 10 % of that net and **„impozitul fiind final"** (alin. 6) → effective 7 % of gross; the net **is cumulated for the CAS 12/24-SM band** — `research/07` §2 records that the 01.01.2026 amendment to art. 148 alin. (3) inserts art. 68^3 into the cumulation list, a cross-reference change only.
+**What is not answered, and blocks an honest build:** whether the 68^3 net enters the **CASS** base and the 6-SM floor, and whether the **ANAF order approving the new fișa de ocupare a capacității de cazare** — due ~mid-March 2026 under Legea 239/2025 art. XIV alin. (2) — was ever published. `research/30` §10 still lists the order as open.

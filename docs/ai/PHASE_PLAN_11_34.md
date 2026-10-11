@@ -396,6 +396,7 @@ The second audit produced a production-gate brief, saved at `docs/ai/briefs/28_p
 | PG-5 annual filing | **18A**, **18B** | **DONE** (2026-10-10, `phases/32_pg5_annual_filing.md`) — B-34, B-35, B-72, B-73 closed |
 | PG-6 unsupported scenarios | **12D, 12E, 12F, 12G**, 13 | B-39, B-29, B-41, B-31, B-30 |
 | PG-7 FX end to end | **10c** | B-36, B-37 |
+| **PG-6h art. 68^3 accommodation regime** | **new scope — D-CAZ-1, 2026-10-11.** Was a refusal in brief 28; the user ordered it supported properly. Three paths: tourism operators (alin. 1), private landlords above 7 rooms (alin. 12 + art. 83 alin. 4), and 1–7 rooms under cedare now also 30 % forfetar (art. 85 alin. 1–2) | B-29 |
 | PG-8 evidence + snapshots | **15** + **20** | B-43, **B-49** |
 | PG-9 rule governance | 25 + new | **B-50**, C2 resolved by D-VER-1 |
 | PG-10 trust copy | new | **B-51** |
