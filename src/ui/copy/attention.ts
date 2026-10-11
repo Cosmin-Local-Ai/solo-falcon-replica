@@ -63,9 +63,9 @@ export const attention = {
  *
  * They are not several spellings of one number: a computed figure, a figure that does not cover what
  * was recorded, a conclusion the engine withheld, and the absence of any calculation are different
- * claims, and each gets its own word, its own badge and its own sentence. `refused` and `closed_final`
- * have words before they have triggers — PG-4 and PG-6 produce them — so the surfaces stay exhaustive
- * over the union instead of inventing a sixth word later.
+ * claims, and each gets its own word, its own badge and its own sentence. `refused` got its trigger in
+ * PG-6a — the scenario registry, and nothing else. `closed_final` still has its word before its trigger;
+ * PG-6 produces it, and the surfaces stay exhaustive over the union in the meantime.
  */
 export const estimateState = {
   badges: {

@@ -146,9 +146,12 @@ export interface DashboardSnapshotView extends DashboardSnapshot {
  * - `incomplete` — a record is out of the figure for a reason the app could NOT settle: no category, no
  *   rule answer, no asset register, no rate, no measurable ceiling.
  *
- * `refused` and `closed_final` are declared now and produced by nobody: PG-4 (a refusal that is a final
- * answer rather than a review request) and PG-6 (a closed fiscal year) own their triggers. Declaring
- * them here is what makes the surfaces exhaustive over the union instead of adding a sixth word later.
+ * `refused` is PG-6a's. It is produced by the scenario registry, and only by it: a scenario whose effect
+ * is `refuse` stops the calculation before the engine is reached, and the basis carries which one. It is
+ * deliberately not a spelling of `review_required` — that word stays the engine's own withheld conclusion,
+ * which is a calculation that ran and declined to answer. `closed_final` is still declared and produced by
+ * nobody: PG-6 owns its trigger. Declaring it here is what makes the surfaces exhaustive over the union
+ * instead of adding a seventh word later.
  */export type TaxEstimateState =
   | 'complete'
   | 'incomplete'

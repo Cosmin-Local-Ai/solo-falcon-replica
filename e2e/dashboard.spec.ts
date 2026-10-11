@@ -1131,13 +1131,18 @@ test.describe('Dashboard — impozit_pe_cit on a PFA is a data-integrity failure
     const cell = page.locator('.stat-card').filter({ hasText: 'Impozit estimat' });
     await expect(cell.locator('.value')).toHaveText('—');
 
-    // The reason is rendered verbatim by FinancialChart and must cite the operative provisions, so the
-    // user can see WHICH record is wrong instead of being told a rule is missing.
-    const reason = page.locator('.chart-tax-note');
+    // PG-6a moved where this sentence is rendered; it did not move whether it is rendered. The reason is
+    // now the refusal block in the estimate section, beside the control that fixes it, instead of the
+    // chart note — because a refusal and a withheld conclusion are different states and the chart had
+    // been labelling both `review_required`. The citations are still asserted verbatim, so the user can
+    // still see WHICH record is wrong instead of being told a rule is missing.
+    const reason = page.locator('[data-scenario-refusal="regime-not-computable"]');
     await expect(reason).toContainText('nu poate aparține unui PFA');
     await expect(reason).toContainText('art. 13 alin. (1)');
     await expect(reason).toContainText('art. 120');
     await expect(reason).toContainText('abrogată');
+    // The chart no longer quotes the same paragraph a second time; it points here.
+    await expect(page.locator('.chart-tax-note[data-estimate-state="refused"]')).toBeVisible();
   });
 
   test('when the engine refuses, the contribution thresholds turn review_required instead of vanishing', async ({ page }) => {

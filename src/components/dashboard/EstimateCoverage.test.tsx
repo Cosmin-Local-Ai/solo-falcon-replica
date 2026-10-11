@@ -122,4 +122,47 @@ describe('EstimateCoverageRows', () => {
     );
     expect(document.querySelector('[data-coverage-count]')).toHaveAttribute('data-coverage-count', '3');
   });
+
+  it('a scenario gap shows its reason and its link, and shows no amount for it (PG-6a)', () => {
+    // A missing profile fact did not take a sum out of the figure. Rendering `0,00 lei` beside it would
+    // put a number on screen for an amount nobody ever recorded — the same mistake the mixed-unit group
+    // above refuses to make, in the opposite direction.
+    render(
+      <EstimateCoverageRows
+        coverage={[
+          gap({
+            recordId: 'scenario:test-vehicle-fact',
+            kind: 'profile',
+            reason: 'fact_missing',
+            amount: null,
+            fixTarget: '/settings#!/fiscal',
+          }),
+        ]}
+      />,
+    );
+    const row = document.querySelector('[data-coverage-reason="fact_missing"]');
+    expect(row?.textContent).toContain('faptă de profil care lipsește');
+    expect(row?.querySelector('a')?.getAttribute('href')).toBe('/settings#!/fiscal');
+    expect(row?.textContent).not.toMatch(/0,00/);
+  });
+
+  it('a group holding a scenario gap shows no total rather than a total that counts it as zero', () => {
+    render(
+      <EstimateCoverageRows
+        coverage={[
+          gap({ recordId: 'e1', reason: 'fact_missing' }),
+          gap({
+            recordId: 'scenario:test-vehicle-fact',
+            kind: 'profile',
+            reason: 'fact_missing',
+            amount: null,
+            fixTarget: '/settings#!/fiscal',
+          }),
+        ]}
+      />,
+    );
+    const row = document.querySelector('[data-coverage-reason="fact_missing"]');
+    expect(row?.textContent).toContain('2 înregistrări');
+    expect(row?.textContent).not.toMatch(/\d[.,]\d{2}\s*(RON|lei)/);
+  });
 });
