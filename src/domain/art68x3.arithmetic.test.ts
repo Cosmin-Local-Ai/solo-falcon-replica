@@ -22,9 +22,11 @@
  *    (art. 170 alin. (1), amended by Legea 239/2025 pct. 19), floored at 6 SM by art. 174 alin. (6) and
  *    capped at 72 SM. One shared "68^3 base" variable handed to both calculators is the defect, so the
  *    two are asserted apart, not merely asserted present.
- * 3. **Contributions cumulate; the income tax does not.** alin. (11) ring-fences the tax; art. 170 alin.
- *    (1) and art. 148 alin. (3) cumulate across art. 155 alin. (1) lit. b) sources. One test per
- *    direction, because getting either half wrong is silent.
+ * 3. **Contributions cumulate across SOURCES; the income tax is ring-fenced.** alin. (11) ring-fences the
+ *    tax; art. 170 alin. (1) and art. 148 alin. (3) cumulate across art. 155 alin. (1) lit. b) sources.
+ *    B-85 narrowed that sentence: a register is ONE source determined by ONE method, so the flat ratio
+ *    beside a sistem-real difference over the same receipts is two methods over one source and does not
+ *    cumulate. One test per direction, because getting either half wrong is silent.
  * 4. **The 6/12/24-SM ladder of art. 170 alin. (2)-(4) does not reach this income** — it is expressly
  *    limited to lit. c)-h), and 68^3 income is lit. b) via art. 67 alin. (1^1). So the floor is 6 SM.
  *
@@ -34,7 +36,12 @@
  * build derives and never something it defaults.
  */
 import { describe, expect, it } from 'vitest';
-import { computeTaxEstimate } from './tax';
+import {
+  computeTaxEstimate,
+  cumulateContributionBase,
+  sistemRealContributionRatio,
+  type ContributionLeg,
+} from './tax';
 import type { TaxInputsReference } from './derived';
 import type { PfaProfile } from './models';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal/package2026';
@@ -148,9 +155,14 @@ describe('art. 68^3 alin. (2) and (6) — the worked example', () => {
     if (res.status !== 'computed') return;
     // 10 % of the net, full stop. The art. 118 alin. (2) deductions run on the sistem-real source only.
     expect(line(res, 'Impozit art. 68^3')!.value).toBe(lei(7_000));
-    // And the sistem-real taxable base is zero here, so the art. 123 line is zero and cannot have
-    // absorbed the 68^3 figure.
-    expect(line(res, 'Impozit pe venit')!.value).toBe(lei(0));
+    // B-85 re-premised the second half of this test. It used to assert that the art. 123 line existed and
+    // was zero. Under one method per profile-year the sistem-real leg is never constructed, so the line is
+    // ABSENT — and absent matters, because a zero art. 123 line would still present this taxpayer as having
+    // been measured under a determination method that is not theirs.
+    expect(line(res, 'Impozit pe venit')).toBeUndefined();
+    expect(line(res, 'Venit net anual impozabil')).toBeUndefined();
+    expect(line(res, 'CAS deductibilă')).toBeUndefined();
+    expect(line(res, 'CASS deductibilă')).toBeUndefined();
   });
 
   it('every figure is parameter-driven — no fiscal value is hard-coded in the calculator', async () => {
@@ -231,9 +243,13 @@ describe('CAS — the 68^3 net raises the threshold test without becoming the ba
     const res = await run({ flatRatioGross: lei(100_000) });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    // The sistem-real net is zero; the amount the contribution was tested on is the 68^3 net.
-    expect(res.bases.venitulNetDinActivitate).toBe(lei(0));
-    expect(res.bases.venitulNetCumulatPentruContributii).toBe(lei(70_000));
+    // B-85 moved this pair. It used to read `venitulNetDinActivitate = 0` (a sistem-real net computed from
+    // nothing) beside `venitulNetCumulatPentruContributii = 70.000`. The first of those was the defect
+    // wearing a zero: the register has one source, and the amount the contribution was tested on is the
+    // 68^3 net. `data/dashboard.ts buildThresholdBases` reads `cumulat ?? net`, so the row now lands on the
+    // same 70.000 the engine used — with one source there is no second number to disagree with it.
+    expect(res.bases.venitulNetDinActivitate).toBe(lei(70_000));
+    expect(res.bases.venitulNetCumulatPentruContributii).toBeUndefined();
   });
 });
 
@@ -250,7 +266,8 @@ describe('CASS — the 68^3 net IS the base, floored at 6 SM', () => {
     expect(line(res, 'CASS (10%)')!.value).toBe(lei(2_430));
     // Not 10 % of the net: the floor is measured on the base, and the base includes this income.
     expect(line(res, 'CASS (10%)')!.value).not.toBe(lei(1_400));
-    expect(res.bases.venitulNetCumulatPentruContributii).toBe(lei(14_000));
+    expect(res.bases.venitulNetDinActivitate).toBe(lei(14_000));
+    expect(res.bases.venitulNetCumulatPentruContributii).toBeUndefined();
     expect(res.output.total).toBe(lei(3_830)); // CAS 0 + CASS 2.430 + 68^3 tax 1.400
   });
 
@@ -275,21 +292,23 @@ describe('CASS — the 68^3 net IS the base, floored at 6 SM', () => {
   });
 });
 
-describe('alin. (11) — contributions cumulate, the income tax is ring-fenced', () => {
+describe('alin. (11) — contributions cumulate across sources, the income tax is ring-fenced', () => {
   /**
-   * A mixed register: sistem real 130.000 − 100.000 = 30.000 lei net, plus 68^3 gross 100.000 → net
-   * 70.000. Cumulated lit. b) amount = 100.000 lei.
+   * B-85 RE-PREMISES this whole block, and the old premise was the defect.
    *
-   *   CAS  : 100.000 ≥ 24 SM → base 97.200 → 24.300
-   *   CASS : base = 100.000 (cumulated) → 10.000        ← cumulation, art. 170 alin. (1)
-   *   art. 118 alin. (2^2): 30.000 ÷ 100.000 × 24.300 = 7.290
-   *   art. 118 alin. (2^3): 30.000 ÷ 100.000 × 10.000 = 3.000
-   *   taxable = 30.000 − 10.290 = 19.710 → art. 123 tax = 1.971 (10 % of 19.710; already a whole number
-   *             of bani, so art. 66 alin. (1) has nothing to round)
-   *   68^3 tax = 10 % × 70.000 = 7.000                  ← ring-fenced, alin. (6) + alin. (11)
-   *   total  = 24.300 + 10.000 + 1.971 + 7.000 = 43.271
+   * These three tests used to feed the engine `revenues 130.000 / expenses 100.000` AND `flatRatioGross
+   * 100.000` and read the result as two lit. b) sources cumulating to 100.000 lei. They are not two
+   * sources. The assembler measures the flat gross on the SAME register it takes the sistem-real operands
+   * from, so that fixture was one register seen twice: a sistem-real leg of 130.000 − 100.000, and a flat
+   * leg of 70 % of the same receipts. The cumulated figure the tests praised was 1,7 × the register's
+   * money, and the total charged an art. 123 tax and an art. 68^3 alin. (6) tax on top of each other.
+   *
+   * What stays true is the rule those tests were reaching for: art. 148 alin. (3) and art. 170 alin. (1)
+   * cumulate across art. 155 alin. (1) lit. b) SOURCES, and Legea 239/2025 art. XII pct. 19 names art. 68^3
+   * in art. 170 alin. (1) expressly. That rule is asserted below on two genuine sources, and the engine's
+   * own composition is asserted not to build a second source out of one register.
    */
-  it('CASS cumulates the two lit. b) sources into one base', async () => {
+  it('one register is one source: the flat ratio beside a sistem-real difference does not cumulate', async () => {
     const res = await run({
       revenuesNet: lei(130_000),
       expensesNet: lei(100_000),
@@ -299,14 +318,17 @@ describe('alin. (11) — contributions cumulate, the income tax is ring-fenced',
     });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    expect(line(res, 'CASS (10%)')!.value).toBe(lei(10_000));
-    // Without cumulation the CASS base would be the sistem-real net alone → 3.000 lei. That understates
-    // the contribution, and it is the mistake art. 170 alin. (1) names art. 68^3 expressly to prevent.
+    // The CASS base is the 68^3 net alone: 10 % × 70.000 = 7.000.
+    expect(line(res, 'CASS (10%)')!.value).toBe(lei(7_000));
+    // The figure the old version of this test asserted, and the figure it asserted was the mistake for
+    // omitting. 10.000 is the 1,7 × cumulation; 3.000 is the sistem-real net alone.
+    expect(line(res, 'CASS (10%)')!.value).not.toBe(lei(10_000));
     expect(line(res, 'CASS (10%)')!.value).not.toBe(lei(3_000));
-    expect(res.bases.venitulNetCumulatPentruContributii).toBe(lei(100_000));
+    expect(res.bases.venitulNetDinActivitate).toBe(lei(70_000));
+    expect(res.bases.venitulNetCumulatPentruContributii).toBeUndefined();
   });
 
-  it('the income tax is ring-fenced: the 68^3 sum is 10 % of its own net, untouched by the other source', async () => {
+  it('the income tax is ring-fenced, and there is no second income tax beside it', async () => {
     const res = await run({
       revenuesNet: lei(130_000),
       expensesNet: lei(100_000),
@@ -317,25 +339,33 @@ describe('alin. (11) — contributions cumulate, the income tax is ring-fenced',
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
     expect(line(res, 'Impozit art. 68^3')!.value).toBe(lei(7_000));
-    // The sistem-real tax runs through art. 118 and is a different sum; the two never merge.
-    expect(line(res, 'Impozit pe venit (rată de bază 10%)')!.value).toBe(lei(1_971));
-    expect(res.output.total).toBe(lei(43_271));
+    // The art. 123 sum this test used to pin at 1.971 lei no longer exists for this register: the sistem-
+    // real leg is not run, so the 68^3 tax is the only income tax in the result.
+    expect(line(res, 'Impozit pe venit (rată de bază 10%)')).toBeUndefined();
+    // CAS 12.150 (91.000-band tier: 70.000 ≥ 12 SM, < 24 SM) + CASS 7.000 + 68^3 tax 7.000.
+    expect(res.output.total).toBe(lei(26_150));
+    expect(res.lines.filter((l) => l.label.startsWith('Impozit'))).toHaveLength(1);
   });
 
-  it('the sistem-real deduction is prorated, not inherited whole (art. 118 alin. (2^2)-(2^3))', async () => {
-    const res = await run({
-      revenuesNet: lei(130_000),
-      expensesNet: lei(100_000),
-      revenues: lei(130_000),
-      expenses: lei(100_000),
-      flatRatioGross: lei(100_000),
-    });
-    expect(res.status).toBe('computed');
-    if (res.status !== 'computed') return;
-    // 30.000 ÷ 100.000 = 0,3 of each contribution, not the whole of it.
-    expect(line(res, 'CAS deductibilă')!.value).toBe(lei(7_290));
-    expect(line(res, 'CASS deductibilă')!.value).toBe(lei(3_000));
-    expect(line(res, 'Venit net anual impozabil')!.value).toBe(lei(19_710));
+  /**
+   * The cumulation and the proration, asserted on two GENUINE sources rather than on one register twice.
+   *
+   * The engine builds one leg per source and the method gate keeps a single register at one leg, so the
+   * multi-source path is exercised on the composition helpers the engine itself calls. The arithmetic below
+   * is the arithmetic the old fixture claimed: sistem real 30.000 + 68^3 70.000 = 100.000 cumulated, and
+   * 30.000 ÷ 100.000 = 0,3 of each contribution deductible against the sistem-real base.
+   */
+  it('two genuine lit. b) sources still cumulate, and the sistem-real deduction is prorated (art. 118 alin. (2^2)-(2^3))', () => {
+    const legs: ContributionLeg[] = [
+      { method: 'sistem-real', net: lei(30_000) },
+      { method: 'accommodation-flat-ratio', net: lei(70_000) },
+    ];
+    expect(cumulateContributionBase(legs)).toBe(lei(100_000));
+    expect(sistemRealContributionRatio(legs).toString()).toBe('0.3');
+    // 0,3 × 24.300 CAS = 7.290 and 0,3 × 10.000 CASS = 3.000 — the two figures the pre-B-85 engine printed
+    // for a two-source year, now reachable only from two actual sources.
+    expect(sistemRealContributionRatio(legs).times(24_300).toString()).toBe('7290');
+    expect(sistemRealContributionRatio(legs).times(10_000).toString()).toBe('3000');
   });
 
   it('with no 68^3 source the sistem-real figures do not move by a single ban', async () => {

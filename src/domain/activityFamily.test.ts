@@ -90,7 +90,13 @@ describe('the declared family reaches the classifier from stored data', () => {
     }
     // `no-expense-engine` is NOT the answer for FY2026 any more — the flat-ratio rule is selected, so the
     // absence of an art. 68 expense engine is what art. 68 alin. (1) prescribes rather than a gap.
-    expect(operands.scenarios.map(s => s.id)).toEqual(['accommodation-gross-undetermined']);
+    // PG-6h-2b (B-85) adds the attribution entry alongside it: the register's receipts cannot be split
+    // between methods, so a second refusal is now true of the same payload. The surfaced one is still the
+    // gross question, because registry order is precedence and that entry comes first.
+    expect(operands.scenarios.map(s => s.id)).toEqual([
+      'accommodation-gross-undetermined',
+      'accommodation-method-attribution-missing',
+    ]);
   });
 
   it('with no art. 68^3 rule in the selected set, the missing method is still the honest answer', () => {

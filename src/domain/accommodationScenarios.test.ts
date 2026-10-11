@@ -183,11 +183,16 @@ describe('no CAEN code answers anything (acceptance 5)', () => {
 });
 
 describe('the new entry obeys the framework contract', () => {
-  it('the registry gained exactly one entry, and it is the title one', () => {
+  it('the registry gains one entry per task, in precedence order, and nothing else changes', () => {
+    // PG-6h-2 added the title entry; PG-6h-2b (B-85) added the attribution entry. Both arrived as
+    // `SCENARIO_SUPPORT` entries rather than as branches in `selectEstimateOperands`, which is the
+    // contract this list pins. The order is precedence, and the attribution entry sits after the gross
+    // one so the reason a person sees today stays the one with the rule's own open questions under it.
     expect(SCENARIO_SUPPORT.map(s => s.id)).toEqual([
       'no-expense-engine',
       'accommodation-gross-undetermined',
       'accommodation-title-cedarea-folosintei',
+      'accommodation-method-attribution-missing',
       'regime-not-computable',
       'activity-family-undeclared',
     ]);

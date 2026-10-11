@@ -294,7 +294,13 @@ describe('selectEstimateOperands — one assembler, feeding both selectors the s
     expect(operands.basis.scenario.id).toBe('accommodation-gross-undetermined');
     expect(operands.basis.scenario.effect).toBe('refuse');
     expect(operands.basis.scenario.fixTarget).toEqual({ page: 'settings', tab: 'fiscal' });
-    expect(operands.scenarios.map(s => s.id)).toEqual(['accommodation-gross-undetermined']);
+    // PG-6h-2b (B-85) — the attribution refusal now fires on the same payload, because a cazare register
+    // cannot say which of its receipts the flat method applies to. It is the SECOND refusal, not a second
+    // mechanism: the surfaced one stays the gross question, which is registry order doing its job.
+    expect(operands.scenarios.map(s => s.id)).toEqual([
+      'accommodation-gross-undetermined',
+      'accommodation-method-attribution-missing',
+    ]);
   });
 
   it('with no flat-ratio rule selected, the missing expense engine is itself the stop', () => {

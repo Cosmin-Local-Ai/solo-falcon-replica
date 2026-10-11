@@ -30,7 +30,11 @@ are untouched, and 48,600 / 97,200 / 291,600 are unchanged.
 
 ## Verification summary (counts from the **Phase 11 / PG-3 handoff, 2026-10-10**: 85 test files / 1409 unit tests, e2e 49; environment figures from 2026-10-05, all exit 0)
 
-**Current figures — 114 test files / 1705 unit tests, all passing; `tsc` 0; `build` 0; `e2e` 95 passed (91 functional + 4 axe); copy-guard allow-list empty**
+**Current figures — 116 test files / 1729 unit tests, all passing; `tsc` 0; `build` 0; `e2e` 95 passed (91 functional + 4 axe); copy-guard allow-list empty**
+
+Re-measured after the **PG-6h-2b single-leg pass** (brief `briefs/42_pg6h2b_single_leg.md`; `domain/tax.ts` composition only, `domain/scenarios.ts` one entry, `domain/estimateBasis.ts` threading only, `ui/copy/scenarios.ts`): **116 files / 1729 tests** (+2 files, +24 tests), **e2e 95 unchanged**, `tsc` 0, `build` 0, copy-guard `ALLOW_LIST` empty, **seed estimate still 311.200 bani**, nothing under `domain/fiscal/`, `data/schema.ts`, `data/migration.ts`, `data/types.ts` or `pages/` touched. All 60 `tax.test.ts` tests pass unedited, so the deduction apportionment is unchanged for every profile that was already computing.
+
+**Figures that moved, and why they should have.** Six assertions in `art68x3.arithmetic.test.ts` were re-premised because their old premise **was B-85**. On that fixture (receipts 130.000, expenses 100.000, flat gross 100.000): CASS **10.000 → 7.000 lei**; the art. 123 alin. (2) minimum **1.971 lei → line absent**; `CAS/CASS deductibilă` **7.290 / 3.000 → absent**; `Venit net anual impozabil` **19.710 → absent**; total **43.271 → 26.150 lei**. The old `venitulNetDinActivitate = 0` was the defect wearing a zero. **No seed figure moved.**
 
 Re-measured after the **PG-6h-2 accommodation-facts pass** (brief `briefs/41_pg6h2_accommodation_facts.md`; `domain/models.ts`, `domain/schema.ts`, `data/migration.ts` (new v12→v13 `accommodation-facts` step), `domain/scenarios.ts`, `domain/estimateBasis.ts` (threading only), `pages/Settings.tsx`, `pages/Onboarding.tsx`, `ui/copy/{settings,onboarding,scenarios,common}.ts`): **114 files / 1705 tests** (+4 files, +60 tests), **e2e 83 → 95** (new `e2e/accommodation-facts.spec.ts`, 12 tests), `tsc` 0, `build` 0, copy-guard `ALLOW_LIST` empty, **`git diff --stat -- src/domain/fiscal/` empty** — the arithmetic was not touched, which acceptance 8 required. **Seed estimate still 311.200 bani (3.112 lei)**, asserted both with the new fields absent and with all three filled in.
 

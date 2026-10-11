@@ -40,6 +40,7 @@ import type {
   AccommodationIncomeTitle,
   AccommodationTourismEligibility,
 } from './models';
+import type { IncomeDeterminationMethod } from './estimateBasis';
 import { regimeRefusalReason } from './regimes';
 
 /**
@@ -94,7 +95,8 @@ export type ScenarioMessageKey =
   | 'regimeNotComputable'
   | 'activityFamilyUndeclared'
   | 'accommodationGrossUndetermined'
-  | 'accommodationTitleCedareaFolosintei';
+  | 'accommodationTitleCedareaFolosintei'
+  | 'accommodationAttributionMissing';
 
 /**
  * Everything a detector is allowed to look at.
@@ -162,6 +164,18 @@ export interface ScenarioFacts {
   accommodationCommissionReading?: AccommodationCommissionReading;
   /** PG-6h-2 — the person's own answer to the art. 68^3 alin. (1) gate, or `undefined` when unanswered. */
   accommodationTourismEligibility?: AccommodationTourismEligibility;
+  /**
+   * PG-6h-2b (B-85) — the ONE determination method the assembler selected for this profile-year, read from
+   * `estimateBasis.ts selectIncomeDeterminationMethod`.
+   *
+   * It is a fact and not a verdict the registry reaches on its own. `flatRatioMethodAvailable` answers a
+   * different question — whether the rule set carries the art. 68^3 method — and the two are not the same:
+   * a rule set can carry a method the assembler did not select for this profile. If the registry re-derived
+   * the method from `activityFamily` plus `flatRatioMethodAvailable`, one register would be about two
+   * different activities at once, and the refusal would name a method the engine was never handed. Absent
+   * means the caller never went through the assembler, and absence is not `sistem-real`.
+   */
+  incomeDeterminationMethod?: IncomeDeterminationMethod;
 }
 
 /** The family this register is being evaluated under — resolved once, read by every detector that needs it. */
@@ -413,6 +427,51 @@ const accommodationTitleScenario: ScenarioSupport = {
 };
 
 /**
+ * The register's receipts cannot be attributed to a determination method (PG-6h-2b, B-85).
+ *
+ * This is the entry that stands where the 1,7 × used to be.
+ *
+ * `domain/tax.ts` now refuses to run a sistem-real leg beside a flat-ratio leg, so the inflated base is no
+ * longer constructible there. This entry is the other half: it says out loud WHY the app cannot mix the two.
+ * A `Revenue` record carries no category, no activity marker and no source — its `tip` is
+ * 'factura' | 'notafactura', a document type — so nothing in the stored data says which receipts are the
+ * accommodation ones. art. 68^3 alin. (11) contemplates a taxpayer with accommodation income AND other
+ * art. 155 alin. (1) lit. b) income determined in sistem real in the same year, and this app cannot tell
+ * that register apart from a pure one.
+ *
+ * The two ways out were both rejected. Splitting the receipts by method needs an attribution the records do
+ * not carry, and assuming the whole register is accommodation when the family is `cazare` silently
+ * reclassifies a mixed year — it moves income between fiscal titles on an assumption, which is a worse
+ * error than a bigger number. So the answer is a refusal that names the missing attribution, and the gap
+ * is recorded in `docs/ai/phases/39_pg6h2b_single_leg.md` for the task that supplies the fact.
+ *
+ * It sits after `accommodation-gross-undetermined` on purpose. Today that entry already stops every
+ * accommodation register, and its sentence — with the rule's own open questions rendered beneath it — is the
+ * reason the person sees. This one is the backstop for the day the gross question is retired: resolving
+ * B-80, building 6h-3 or adding the art. 85 rule must not be what lets two methods meet over one register.
+ *
+ * `detect` is total: no profile, no outcome; an empty register has no receipts to misattribute, and a
+ * register with no receipts has no figure to get wrong either way. It reads the recorded status the same
+ * way `selectYtd` and `selectDeductibleExpenses` do, and it reads no amount, no CAEN code and no room count.
+ */
+const accommodationAttributionScenario: ScenarioSupport = {
+  id: 'accommodation-method-attribution-missing',
+  effect: 'refuse',
+  message: 'accommodationAttributionMissing',
+  fixTarget: { page: 'settings', tab: 'fiscal' },
+  detect(facts) {
+    if (!facts.data?.profile) return null;
+    if (facts.incomeDeterminationMethod !== 'accommodation-flat-ratio') return null;
+    // 1–7 camere is a different title, and the entry above owns it. Leaving both firing would put two
+    // refusals on one register and make the reader guess which one the app means.
+    if (facts.accommodationIncomeTitle === 'cedarea_folosintei') return null;
+    const receipts = facts.data.revenues.filter((r) => r.status === 'inregistrata');
+    if (receipts.length === 0) return null;
+    return {};
+  },
+};
+
+/**
  * The recorded regime is one this rule package cannot compute (defect B-14).
  *
  * Already live today: `tax.ts` refuses it and the B-14 e2e pins the reason. It is registered here so
@@ -483,6 +542,7 @@ export const SCENARIO_SUPPORT: readonly ScenarioSupport[] = [
   noExpenseEngineScenario,
   accommodationGrossScenario,
   accommodationTitleScenario,
+  accommodationAttributionScenario,
   regimeScenario,
   activityFamilyScenario,
 ];

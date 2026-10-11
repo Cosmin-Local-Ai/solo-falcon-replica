@@ -13,7 +13,7 @@ import { readCassExceptionFacts, readPensionSuspension, readPensionerStatus } fr
 import { regimeRefusalReason } from './regimes';
 import { createCalculationSnapshot } from './snapshots/snapshot';
 import Decimal from 'decimal.js-light';
-import { addBani, lei, leiText, subBani, sumBani, type Bani } from './money';
+import { lei, leiText, subBani, sumBani, type Bani } from './money';
 
 export interface TaxCalculationInput {
   inputs: TaxInputsReference;
@@ -73,6 +73,11 @@ export interface TaxAmountBases {
    * chosen on (CF art. 148 alin. (1)-(2)) and the base CASS is owed on (CF art. 170 alin. (1),
    * art. 174 alin. (2) și (6)) — the exact value passed as `base` to `calcCas` and `calcCass`.
    * It is NOT `YtdTotals.net`, which subtracts VAT-inclusive operands.
+   *
+   * B-85: it is the net of the ONE determination method this profile-year is run under. For an
+   * art. 68^3 register that net is 70 % of the receipts under art. 68^3 alin. (2), not the difference
+   * between the register's receipts and its recorded expenses — the flat ratio replaces those expenses,
+   * it does not sit beside them. A consumer reading this field must not have to know which method ran.
    */
   venitulNetDinActivitate: Bani;
   /**
@@ -83,8 +88,81 @@ export interface TaxAmountBases {
    *
    * It exists because a threshold row that measures on a different amount than the engine did is the
    * B-71 defect class: the percentage and the figure disagreeing about the same record.
+   *
+   * B-85 narrowed what "a second source" means. A `cazare` register supplies ONE source, determined by
+   * ONE method, so it writes this field not at all — the flat ratio beside the sistem-real difference is
+   * two methods over one source, not two sources, and cumulating them produced 1,7 × the receipts.
    */
   venitulNetCumulatPentruContributii?: Bani;
+}
+
+/**
+ * B-85 — how the engine holds income: one LEG per SOURCE, each determined by ONE method.
+ *
+ * The name matters. A leg is not "a method" and it is not "a record set": it is one source of art. 155
+ * alin. (1) lit. b) income together with the net that source's determination method produced. art. 148
+ * alin. (3) and art. 170 alin. (1) cumulate across SOURCES, so the leg list is a list of sources. Two
+ * methods over one source are not two legs — that is defect B-85, and the method gate in
+ * `computeTaxEstimate` is what keeps the list at one entry per register.
+ */
+export type IncomeDeterminationMethodTag = 'sistem-real' | 'accommodation-flat-ratio';
+
+export interface ContributionLeg {
+  method: IncomeDeterminationMethodTag;
+  net: Bani;
+}
+
+/** The three quantities the art. 68^3 calculator returns for one register, kept together so no consumer
+ *  can pair one leg's gross with another leg's net. */
+interface FlatRatioLeg {
+  gross: Bani;
+  net: Bani;
+  tax: Bani;
+}
+
+/**
+ * The cumulated art. 155 alin. (1) lit. b) base the contributions are measured on.
+ *
+ * art. 148 alin. (3) (CAS) and art. 170 alin. (1) (CASS) both measure on the amount CUMULATED across
+ * lit. b) sources, and art. 170 alin. (1) keeps art. 118 fiscal losses out of it. With a single source
+ * this is that source's net itself — sign included, because `calcCass` reads a negative as the art. 174
+ * alin. (2) zero/loss case rather than as a positive base it has to be told about. Only once a SECOND
+ * SOURCE exists does it become a sum, and then the loss term is what drops out, which is why the legs are
+ * floored at zero from the second entry onward and not before it.
+ *
+ * Exported because this is the half of the composition that had to survive B-85's fix. The cumulation is
+ * the law and it is not what was wrong; what was wrong is that one register was allowed to supply two
+ * legs. `art68x3.arithmetic.test.ts` pins both directions: two genuine sources still sum, one register
+ * never does.
+ */
+export function cumulateContributionBase(legs: readonly ContributionLeg[]): Bani {
+  if (legs.length === 0) return lei(0);
+  if (legs.length === 1) return legs[0].net;
+  return sumBani(legs.map((leg) => (leg.net > 0 ? leg.net : lei(0))));
+}
+
+/**
+ * CF art. 118 alin. (2^2) and (2^3): the share of each contribution the sistem-real source may deduct.
+ *
+ * Both letters divide the same numerator — „venit net anual determinat în sistem real” — by a cumulated
+ * denominator, art. 148 alin. (3) for CAS and art. 170 alin. (1) for CASS. Those two denominators are the
+ * same quantity in this build, so both ratios come out of this one helper; they stay two calls at the call
+ * site because the law states them as two ratios and a later year may give them different bases.
+ *
+ * While there is one source the denominator IS the sistem-real net, so the ratio is exactly 1 and the
+ * proration is a no-op — no profile that computed before B-85 sees a deduction move. With a second genuine
+ * source the denominator is larger, the ratio falls below 1, and the sistem-real deduction is prorated
+ * instead of inherited whole. That is also what keeps the art. 68^3 tax ring-fenced: alin. (11) delimits
+ * the INCOME TAX, not the contributions, so a second source enlarges the denominator without ever
+ * receiving a deduction. With NO sistem-real leg there is nothing to apportion and 1 is the honest answer
+ * rather than 0: a ratio is not a deduction, and 0 would read like one.
+ */
+export function sistemRealContributionRatio(legs: readonly ContributionLeg[]): Decimal {
+  const sistemReal = legs.find((leg) => leg.method === 'sistem-real');
+  if (sistemReal === undefined) return new Decimal(1);
+  const total = cumulateContributionBase(legs);
+  if (total > 0) return new Decimal(sistemReal.net > 0 ? sistemReal.net : lei(0)).div(total);
+  return new Decimal(1);
 }
 
 export type TaxEstimateResult =
@@ -180,31 +258,34 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // SAME text, and added `norma_venit`: a regime the app can record but cannot compute (no norm rule
   // in the 2026 package, no norm values — none invented). Both surface as REVIEW_REQUIRED.
 
+  // ── PG-6h-2b (B-85): ONE determination method per profile-year ─────────────────────────
+  //
+  // The defect this gate exists to make impossible. `revenues`/`expenses` and `flatRatioGross` are not two
+  // sources. The assembler measures both on the SAME register — `estimateBasis.ts selectEstimateOperands`
+  // takes the flat gross from the same `selectYtd` pass it takes the sistem-real operands from. For a
+  // `cazare` register the expense engine returns an empty deductible set, so the sistem-real leg was
+  // „revenue with zero deductions" and the flat leg was „70 % of that same revenue", and the composition
+  // added them: `cumulatedNet` came out at 1,7 × the register's receipts, with an art. 123 income tax and
+  // an art. 68^3 alin. (6) income tax stacked on top of each other. Nothing structural prevented it — only
+  // an upstream scenario refusal did, and a refusal that lives in another module is not a guard.
+  //
+  // The honest shape is one method per profile-year. Where the law supplies the flat-ratio method the
+  // sistem-real leg is not run at all: not zeroed after the fact, not subtracted back out, not clamped —
+  // never constructed. That is why the flat leg is resolved BEFORE the leg list is built and before any
+  // line is pushed: the suppression has to be upstream of the combination, or the next refactor that
+  // reorders this function puts the 1,7 × back.
+  //
+  // What is deliberately NOT done here is the opposite fix — deciding which RECEIPTS belong to which
+  // method. A `Revenue` record carries no category, no activity marker and no source; its `tip` is
+  // 'factura' | 'notafactura', a document type. The app cannot attribute a receipt to a determination
+  // method, so it must not pretend one register is partly this method and partly that one. A genuinely
+  // mixed year is refused upstream, by `scenarios.ts`, naming the missing attribution.
+  //
   // Area 6: VAT is not taxable income. Non-exempt profiles are taxed on the net base
-  // (VAT excluded); exempt profiles keep the gross base.
-  const gross = inputs.vatExempt ? revenues : revenuesNet;
-  const deductibleBase = inputs.vatExempt ? expenses : expensesNet;
-  lines.push({ label: 'Venit brut', value: gross });
-  // B-16: this used to be `Math.min(deductibleBase, gross)`. That clamp forced the net to stay >= 0, so
-  // a fiscal loss was UNREPRESENTABLE — an expense-heavy year came out as "no tax, no loss" and the
-  // loss was silently thrown away. CF art. 118 alin. (2) lit. a) names „pierderea netă recalculată pe
-  // fiecare sursă” as a figure the taxpayer must determine, so a negative sistem-real difference is a
-  // legal number the engine has to carry, not clamp to zero.
-  // Still out of scope (recorded as an input gap, not faked into a rule): whether each individual
-  // expense is deductibilă under CF art. 68 alin. (4) — the app holds no per-expense nature data.
-  lines.push({ label: 'Cheltuieli deductibile', value: deductibleBase });
-  // `subBani`, not `-`: integer minus integer stays integer, and the Bani brand survives.
-  const net = subBani(gross, deductibleBase);
-  lines.push({ label: 'Venit net din activitate', value: net });
-
-  // CF art. 118 alin. (3) verbatim: „Veniturile din categoriile prevăzute la art. 61 lit. a), a^1), c) și
-  // f), ce se realizează într-o fracțiune de an sau în perioade diferite ce reprezintă fracțiuni ale
-  // aceluiași an, se consideră venit anual.” A PFA that started mid-year is taxed on the full-year
-  // basis — the CAS/CASS floors are NOT prorated. Surfaced from the profile's start date so the user
-  // sees the rule that applies; no figure changes. Date semantics stay Phase 9.
-  if (profile.pfaStartDate && !profile.pfaStartDate.endsWith('-01-01')) {
-    lines.push({ label: 'Fracțiune de an (art. 118 alin. (3)): venit anual', value: net });
-  }
+  // (VAT excluded); exempt profiles keep the gross base. These are the sistem-real operands only; the flat
+  // gross already carries the same VAT rule, applied per receipt by `estimateBasis.ts flatRatioGrossFromYtd`.
+  const sistemRealGross = inputs.vatExempt ? revenues : revenuesNet;
+  const sistemRealExpenseBase = inputs.vatExempt ? expenses : expensesNet;
 
   // ── PG-6h-1: art. 68^3 — the flat-ratio source, computed by its own registered calculator ──────
   //
@@ -227,8 +308,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   //   - Income tax — ring-fenced. alin. (6) says „impozitul fiind final", and alin. (11) ring-fences the
   //     INCOME TAX only: contributions cumulate, the tax does not. So this tax is 10 % of this net and
   //     is not routed through the art. 118 alin. (2) deduction composition below.
-  let flatNet: Bani | null = null;
-  let flatTax: Bani = lei(0);
+  let flatLeg: FlatRatioLeg | null = null;
   if (typeof flatRatioGross === 'number') {
     if (!flatRatioRule) {
       return rr(
@@ -251,22 +331,63 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
         lines,
       );
     }
-    flatNet = flatRes.determinedNet;
-    flatTax = flatRes.value;
-    lines.push({ label: 'Venit brut art. 68^3 (încasări)', value: flatRatioGross });
-    lines.push({ label: 'Cheltuieli forfetare 30 % (art. 68^3 alin. (2))', value: subBani(flatRatioGross, flatNet) });
-    lines.push({ label: 'Venit net art. 68^3', value: flatNet });
+    flatLeg = { gross: flatRatioGross, net: flatRes.determinedNet, tax: flatRes.value };
+  }
+
+  // THE GATE. One leg per source, and the operand the assembler supplied decides which one this register
+  // is. `flatRatioGross` is attached by `estimateBasis.ts withFlatRatioGross` only when
+  // `selectIncomeDeterminationMethod` answered `accommodation-flat-ratio`, so its presence IS the method
+  // decision — read here, not re-derived. When it is present the sistem-real operands do not become a leg:
+  // they are the same receipts seen twice, and adding them would be the 1,7 × again.
+  const legs: ContributionLeg[] =
+    flatLeg === null
+      ? [{ method: 'sistem-real', net: subBani(sistemRealGross, sistemRealExpenseBase) }]
+      : [{ method: 'accommodation-flat-ratio', net: flatLeg.net }];
+
+  // The three quantities every consumer reads, stated once per method so `gross - deductibleBase === net`
+  // holds on either branch and no surface has to know which method ran in order to read them. For the
+  // flat method the expense here is the deemed ratio, not a recorded cost: art. 68^3 alin. (2) replaces
+  // the register's expenses with it, which is precisely why the sistem-real expense leg is not run beside it.
+  const net = legs[0].net;
+  const gross = flatLeg === null ? sistemRealGross : flatLeg.gross;
+  const deductibleBase =
+    flatLeg === null ? sistemRealExpenseBase : subBani(flatLeg.gross, flatLeg.net);
+  const flatTax: Bani = flatLeg === null ? lei(0) : flatLeg.tax;
+
+  if (flatLeg === null) {
+    lines.push({ label: 'Venit brut', value: gross });
+    // B-16: this used to be `Math.min(deductibleBase, gross)`. That clamp forced the net to stay >= 0, so
+    // a fiscal loss was UNREPRESENTABLE — an expense-heavy year came out as "no tax, no loss" and the
+    // loss was silently thrown away. CF art. 118 alin. (2) lit. a) names „pierderea netă recalculată pe
+    // fiecare sursă” as a figure the taxpayer must determine, so a negative sistem-real difference is a
+    // legal number the engine has to carry, not clamp to zero.
+    // Still out of scope (recorded as an input gap, not faked into a rule): whether each individual
+    // expense is deductibilă under CF art. 68 alin. (4) — the app holds no per-expense nature data.
+    lines.push({ label: 'Cheltuieli deductibile', value: deductibleBase });
+    // `subBani`, not `-`: integer minus integer stays integer, and the Bani brand survives.
+    lines.push({ label: 'Venit net din activitate', value: net });
+  } else {
+    lines.push({ label: 'Venit brut art. 68^3 (încasări)', value: gross });
+    lines.push({ label: 'Cheltuieli forfetare 30 % (art. 68^3 alin. (2))', value: deductibleBase });
+    lines.push({ label: 'Venit net art. 68^3', value: net });
+  }
+
+  // CF art. 118 alin. (3) verbatim: „Veniturile din categoriile prevăzute la art. 61 lit. a), a^1), c) și
+  // f), ce se realizează într-o fracțiune de an sau în perioade diferite ce reprezintă fracțiuni ale
+  // aceluiași an, se consideră venit anual.” A PFA that started mid-year is taxed on the full-year
+  // basis — the CAS/CASS floors are NOT prorated. Surfaced from the profile's start date so the user
+  // sees the rule that applies; no figure changes. Date semantics stay Phase 9. It sits below the gate
+  // because the figure beside it is whichever net the method produced, not a sistem-real one.
+  if (profile.pfaStartDate && !profile.pfaStartDate.endsWith('-01-01')) {
+    lines.push({ label: 'Fracțiune de an (art. 118 alin. (3)): venit anual', value: net });
   }
 
   // art. 148 alin. (3) (CAS) and art. 170 alin. (1) (CASS) both measure the contributions on the amount
-  // CUMULATED across art. 155 alin. (1) lit. b) sources, and art. 170 alin. (1) keeps art. 118 fiscal
-  // losses out of it. With a single sistem-real source this is `net` itself — sign included, because
-  // `calcCass` reads a negative as the art. 174 alin. (2) zero/loss case rather than as a positive base
-  // it has to be told about. Only once a second source exists does it become a sum, and then the loss
-  // term is what drops out.
-  const vnaSistemReal: Bani = net > 0 ? net : lei(0);
-  const cumulatedNet: Bani = flatNet === null ? net : addBani(vnaSistemReal, flatNet);
-  if (flatNet !== null) {
+  // CUMULATED across art. 155 alin. (1) lit. b) SOURCES — see `cumulateContributionBase`. With one source
+  // this is that source's net itself, sign included; the cumulation only becomes a sum when a second
+  // genuine source exists, and B-85 is the reason one register never supplies two.
+  const cumulatedNet = cumulateContributionBase(legs);
+  if (legs.length > 1) {
     lines.push({ label: 'Venit cumulat pentru contribuții (art. 148 alin. (3), art. 170 alin. (1))', value: cumulatedNet });
   }
 
@@ -357,6 +478,26 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     lines.push({ label: `PROVENANȚĂ CASS: ${CASS_FLAG_REVIEW_REASON}`, value: lei(0) });
   }
 
+  // B-85 — the second half of the gate. With no sistem-real leg there is no art. 118 alin. (2) composition
+  // to run: alin. (6) settles the art. 68^3 tax on its own net, „impozitul fiind final", and the
+  // alin. (2^2)-(2^3) ratios apportion a deduction onto the SISTEM-REAL base, which this register does not
+  // have. Returning here is what makes "the sistem-real leg does not run" true of the code path and not
+  // merely true of the arithmetic — a reader who deletes the gate above still cannot reach a 1,7 × base,
+  // because there is no place left for a second leg to be added.
+  if (legs[0].method === 'accommodation-flat-ratio') {
+    const total = sumBani([casRes.value, cassValue, flatTax]);
+    lines.push({ label: 'Impozit art. 68^3 (10 %, impozitul fiind final)', value: flatTax });
+    lines.push({ label: 'Total taxe', value: total });
+    const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, rules: applicable, calculationLines: lines, output: { total } });
+    return {
+      status: 'computed',
+      lines,
+      output: { total },
+      snapshot: snap,
+      bases: contributionBases(gross, deductibleBase, net, legs),
+    };
+  }
+
   // ---- CF art. 118 alin. (2): the taxable base, composed in the order the law states it ----
   // alin. (2) lit. a): „venit net anual recalculat = venit net anual (sistem real) − pierderi fiscale
   // reportate”, PE SURSĂ, before incomes are summed. The app models one sistem-real source and has no
@@ -371,17 +512,18 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // potrivit art. 170 alin. (1)) × contribuția de asigurări sociale de sănătate calculată potrivit
   // art. 174 alin. (1).
   // While there is a single source, the cumulated denominator IS the sistem-real net, so both ratios are
-  // exactly 1 and the proration is a no-op — the numbers do not move. Once an art. 68^3 source exists the
-  // denominator is genuinely larger than the numerator, the ratios fall below 1, and the sistem-real
-  // deduction is prorated instead of inherited whole. That is what art. 118 alin. (2^2)-(2^3) ask for, and
-  // it is also what keeps the 68^3 tax ring-fenced: alin. (11) delimits the INCOME TAX, not the
-  // contributions, so the 68^3 source enlarges the denominator without ever receiving a deduction.
-  const totalCumulatCass = cumulatedNet; // art. 170 alin. (1)
-  const totalCumulatCas = cumulatedNet; // art. 148 alin. (3)
+  // exactly 1 and the proration is a no-op — the numbers do not move. Once a second genuine lit. b) source
+  // exists the denominator is genuinely larger than the numerator, the ratios fall below 1, and the
+  // sistem-real deduction is prorated instead of inherited whole. That is what art. 118 alin. (2^2)-(2^3)
+  // ask for, and it is also what keeps the 68^3 tax ring-fenced: alin. (11) delimits the INCOME TAX, not
+  // the contributions, so a second source enlarges the denominator without ever receiving a deduction.
+  // B-85 is the reason this paragraph speaks of a second SOURCE: a `cazare` register has one source and one
+  // method, and the flat ratio beside a sistem-real difference would have made the denominator 1,7 × the
+  // numerator while deducting a contribution from a base that was itself double-counted.
   // Phase 10: the ratios and their products are Decimal, not float. A float ratio is exactly how the
   // fractional line values `7_128.1` and `52_002.9` got into this engine in the first place.
-  const ratioCas = totalCumulatCas > 0 ? new Decimal(vnaSistemReal).div(totalCumulatCas) : new Decimal(1);
-  const ratioCass = totalCumulatCass > 0 ? new Decimal(vnaSistemReal).div(totalCumulatCass) : new Decimal(1);
+  const ratioCas = sistemRealContributionRatio(legs); // art. 118 alin. (2^2), denominator art. 148 alin. (3)
+  const ratioCass = sistemRealContributionRatio(legs); // art. 118 alin. (2^3), denominator art. 170 alin. (1)
   const casDeductibilaDec = ratioCas.times(casRes.value);
   // B-13: the art. 174 alin. (6) difference up to the 6 SM floor is OWED but never deductible — art. 118
   // alin. (2) lit. b) deducts the contributions „datorate potrivit prevederilor titlului V” „cu
@@ -437,7 +579,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     }
     const total = sumBani([casRes.value, cassValue, flatTax]);
     lines.push({ label: 'Impozit pe venit (fără bază impozabilă)', value: lei(0) });
-    if (flatNet !== null) {
+    if (flatLeg !== null) {
       lines.push({ label: 'Impozit art. 68^3 (10 %, impozitul fiind final)', value: flatTax });
     }
     lines.push({ label: 'Total taxe', value: total });
@@ -447,7 +589,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
       lines,
       output: { total },
       snapshot: snap,
-      bases: contributionBases(gross, deductibleBase, net, cumulatedNet, flatNet),
+      bases: contributionBases(gross, deductibleBase, net, legs),
     };
     if (lossCarryForward) computed.lossCarryForward = lossCarryForward;
     return computed;
@@ -456,7 +598,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   const incomeTaxRes = calculatorRegistry['calc-income-tax'](incomeTaxRule, { base: taxable });
   if ('reviewRequired' in incomeTaxRes) return rr(incomeTaxRes.reason, lines);
   lines.push({ label: 'Impozit pe venit (rată de bază 10%)', value: incomeTaxRes.value });
-  if (flatNet !== null) {
+  if (flatLeg !== null) {
     // alin. (6) + alin. (11): this sum is 10 % of the 68^3 net and nothing else. It is not reduced by the
     // CAS/CASS deductions the art. 118 composition above applies to the sistem-real source, because
     // „impozitul fiind final" settles it on the net and the ring-fence runs on the tax, not the
@@ -473,25 +615,26 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     lines,
     output: { total },
     snapshot: snap,
-    bases: contributionBases(gross, deductibleBase, net, cumulatedNet, flatNet),
+    bases: contributionBases(gross, deductibleBase, net, legs),
   };
 }
 
 /**
- * The `bases` block, built in one place so the two return paths cannot report different quantities.
+ * The `bases` block, built in one place so the return paths cannot report different quantities.
  *
- * `venitulNetCumulatPentruContributii` is written only when a second lit. b) source was actually in play.
+ * `venitulNetCumulatPentruContributii` is written only when a second lit. b) SOURCE was actually in play.
  * Writing it always would put two numbers on screen for one quantity whenever there is only one source —
  * and a consumer that reads the wrong one of two always-present fields is a defect waiting to be picked.
+ * B-85 is why the test is `legs.length > 1` and not "a flat ratio was supplied": one register is one leg,
+ * whichever method determined it.
  */
 function contributionBases(
   venitulBrut: Bani,
   cheltuieliDeductibile: Bani,
   venitulNetDinActivitate: Bani,
-  cumulatedNet: Bani,
-  flatNet: Bani | null,
+  legs: readonly ContributionLeg[],
 ): TaxAmountBases {
   const bases: TaxAmountBases = { venitulBrut, cheltuieliDeductibile, venitulNetDinActivitate };
-  if (flatNet !== null) bases.venitulNetCumulatPentruContributii = cumulatedNet;
+  if (legs.length > 1) bases.venitulNetCumulatPentruContributii = cumulateContributionBase(legs);
   return bases;
 }

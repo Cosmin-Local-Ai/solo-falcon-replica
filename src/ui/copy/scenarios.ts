@@ -83,6 +83,22 @@ export const scenarios = {
      */
     accommodationTitleCedareaFolosintei:
       'Numărul de camere înregistrat pentru acest an fiscal este între 1 și 7, iar legea pune venitul acesta sub un alt titlu decât activitatea independentă: art. 83 alin. (2) din Codul fiscal îl dă în cedarea folosinței bunurilor, iar art. 85 alin. (1) îl tratează ca categorie de sine stătătoare. Trecerea la art. 68^3 se face abia din anul fiscal în care numărul camerelor este peste 7 — art. 83 alin. (4). Metoda forfetară pe care aplicația o calculează aparține celuilalt titlu, iar o regulă pentru art. 85 nu există în acest pachet de reguli, așa că aplicația refuză o cifră în loc să aplice unor venituri din închiriere regulile altei categorii.',
+    /**
+     * PG-6h-2b — the register's receipts cannot be attributed to a determination method (B-85).
+     *
+     * This sentence has one job: to name what is missing without pretending the app could supply it. It
+     * must not say the law forbids mixing the two methods — art. 68^3 alin. (11) contemplates exactly that
+     * taxpayer — and it must not say the activity can never be calculated, which D-CAZ-1 already decided
+     * against. What it says is that the app holds one register of receipts and no record of which activity
+     * each receipt came from, and that choosing the split would be the app's guess, not the person's.
+     *
+     * It also has to be plainly different from the sentence above it. That one says the gross is not
+     * settled because three questions are unanswered, and answering them is the person's act. This one says
+     * that even a settled gross would not be enough, because the app cannot tell which receipts the method
+     * applies to. One is a missing answer; the other is a missing fact the app has never asked for.
+     */
+    accommodationAttributionMissing:
+      'Aplicația nu poate stabili care dintre încasările acestui registru sunt veniturile la care se aplică metoda forfetară. Înregistrările de venit nu păstrează activitatea din care a venit fiecare încasare, așa că aplicația nu poate împărți registrul între metoda forfetară și sistem real fără să ghicească ea. O astfel de împărțire ar muta venituri de la un titlu fiscal la altul dintr-o presupunere a aplicației, nu dintr-un răspuns al tău, așa că aplicația refuză o cifră în loc să atribuie ea încasările.',
   } satisfies Record<ScenarioMessageKey, string>,
 
   /** The control the scenario points at. */

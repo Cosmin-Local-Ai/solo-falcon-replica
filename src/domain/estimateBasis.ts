@@ -323,6 +323,20 @@ export function amountsForEstimate(basis: AttributedEstimateBasis): EstimateAmou
  */
 export type IncomeDeterminationMethod = 'sistem-real' | 'accommodation-flat-ratio';
 
+/**
+ * B-85 — the method is singular, and that is the contract, not an implementation detail.
+ *
+ * One profile-year gets exactly one of these two answers, and the engine runs one leg accordingly
+ * (`tax.ts` builds its leg list from the operand this selection attaches). The app cannot widen that to
+ * "part of this register is determined one way and part another way", because a `Revenue` record carries
+ * no category, no activity marker and no source — `tip` is 'factura' | 'notafactura', a document type — so
+ * there is nothing to partition on. A year that genuinely mixes accommodation income under art. 68^3 with
+ * art. 68 sistem-real income is therefore not a year this build can determine: it is refused by
+ * `scenarios.ts accommodation-method-attribution-missing`, which names the missing attribution. Splitting
+ * by percentage, tagging records the person never tagged, or assuming a `cazare` register is wholly
+ * accommodation are all rejected — the last one silently reclassifies a mixed year between fiscal titles.
+ */
+
 export function selectIncomeDeterminationMethod(
   data: AppData,
   rules: readonly FiscalRule[],
@@ -1556,6 +1570,14 @@ export function selectEstimateOperands(
     ),
     accommodationCommissionReading: ledger.data.profile.accommodationCommissionReading,
     accommodationTourismEligibility: ledger.data.profile.accommodationTourismEligibility,
+    // PG-6h-2b (B-85) — ONE scenario fact, and it is the method itself. The assembler has already decided
+    // which determination method this profile-year runs under; the registry is not entitled to decide it
+    // again from `activityFamily` plus `flatRatioMethodAvailable`, because those two answer a narrower
+    // question (does the rule set carry the art. 68^3 method) than the one the engine acts on (is this
+    // register determined by it). Handing over the resolved answer is what lets the registry refuse a
+    // mixed-method year about the SAME register the engine is about to run — and it is the reason the
+    // refusal and the composition cannot ever disagree about which method was in play.
+    incomeDeterminationMethod: method,
   });
   const refusal = scenarioRefusal(scenarios);
   if (refusal !== null) {
