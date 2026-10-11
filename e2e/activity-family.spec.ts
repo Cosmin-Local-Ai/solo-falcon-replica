@@ -11,6 +11,11 @@ import type { AppData } from '../src/data/types';
  * is the fact. Every case starts from a persisted profile — never a hand-built classification context —
  * because the defect was never that the app could not refuse; it was that no path led to the refusal.
  *
+ * PG-6h-1 re-premised the first case rather than deleting it. The method is implemented now, so the refusal
+ * an FY2026 cazare register gets is `accommodation-gross-undetermined` — the two open questions about the
+ * gross — and not `no-expense-engine`. The browser still shows no figure either way; what changed is that
+ * the sentence beside it is now true.
+ *
  * Four things are proven here:
  *   1. a profile that declares cazare gets `Nu putem calcula`, the rule's own sentence once, no figure,
  *      and a link that lands on the control that changes the answer;
@@ -52,16 +57,31 @@ test.describe('PG-6b — a declared cazare activity is refused, from stored data
     await expect(badge).toHaveCount(1);
     await expect(badge).toHaveText('Nu putem calcula');
 
-    const block = page.locator('[data-scenario-refusal="no-expense-engine"]');
+    const block = page.locator('[data-scenario-refusal="accommodation-gross-undetermined"]');
     await expect(block).toBeVisible();
-    // The sentence is the rule's own, lifted from `EXPENSE_ENGINE_CAZARE_2026` — not a paraphrase the UI
-    // wrote about accommodation income.
-    await expect(block.locator('[data-scenario-detail="no-expense-engine"]')).toContainText('art. 68^3');
-    await expect(block.locator('[data-scenario-detail="no-expense-engine"]')).toContainText(
-      'cotei forfetare de 30%',
+    // PG-6h-1 moved which entry refuses an FY2026 cazare register. `no-expense-engine` said this build had
+    // no method for the activity; the flat-ratio method now exists, so that sentence would be false. What
+    // still stops the figure is the gross, and the block quotes the two readings the rule records as open
+    // — in the rule's words, not a paraphrase the UI wrote about accommodation income.
+    await expect(block.locator('[data-scenario-detail="accommodation-gross-undetermined"]')).toContainText(
+      'Citește A',
     );
+    await expect(block.locator('[data-scenario-detail="accommodation-gross-undetermined"]')).toContainText(
+      'Citește B',
+    );
+    await expect(block.locator('[data-scenario-detail="accommodation-gross-undetermined"]')).toContainText(
+      'Citește A',
+    );
+    await expect(block.locator('[data-scenario-detail="accommodation-gross-undetermined"]')).toContainText(
+      'Citește B',
+    );
+    // The framing sentence — that the method exists and the gross is what is missing — is copy, and it is
+    // the only place the 30 % / 10 % arithmetic is stated in this block. The detail below it carries the
+    // rule's two readings verbatim and does not repeat it.
+    await expect(block.locator('.hint').first()).toContainText('cheltuieli forfetare de 30 %');
+    await expect(block.locator('.hint').first()).toContainText('nu alege în locul tău');
     // Rendered once. The chart points at this block instead of quoting the paragraph a second time.
-    await expect(page.locator('[data-scenario-detail="no-expense-engine"]')).toHaveCount(1);
+    await expect(page.locator('[data-scenario-detail="accommodation-gross-undetermined"]')).toHaveCount(1);
 
     // No figure beside a refusal, in the hero or in the cockpit strip.
     const hero = page.locator('section.card').filter({ has: page.locator('.tax-hero-value') });

@@ -2,6 +2,14 @@
 // 'cas' / 'cass' / 'income-tax': tax.ts resolves those three with applicable.find(r => r.taxRegime
 // === ...), so a second rule sharing one of them would be silently shadowed by whichever ruleId
 // sorts first. 'deadlines' and 'wage-reference' were added the same way.
+//
+// 'accommodation-flat-ratio' (PG-6h-1) is a fresh string for the same reason, and it carries a second
+// hazard specific to it: art. 68^3 produces an INCOME TAX of its own (alin. (6), „impozitul fiind
+// final") and a CASS/CAS consequence of its own. Reusing 'income-tax' would have shadowed art. 123
+// alin. (1) — the sistem-real rate provision — and reusing 'cass' or 'cas' would have shadowed the
+// Titlul V rules those contributions are actually computed under. The 68^3 rule supplies neither a
+// contribution rule nor a rate for another regime; it supplies the flat-ratio METHOD, and tax.ts reads
+// it as a fourth, separate lookup.
 export type FiscalRegime =
   | 'cass'
   | 'cas'
@@ -9,7 +17,8 @@ export type FiscalRegime =
   | 'vat'
   | 'deadlines'
   | 'wage-reference'
-  | 'expense-deductibility';
+  | 'expense-deductibility'
+  | 'accommodation-flat-ratio';
 
 /**
  * TASK 6: the lifecycle ladder, stated once. Six states, one step forward at a time, and the ladder is

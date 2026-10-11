@@ -12,8 +12,11 @@ describe('PFA 2026 system-real package', () => {
   // 9 because the deductibility rule set is data in this package, which is what makes a later legal
   // correction a new rule release rather than a code change. No parameter value, formula or computed
   // figure in the original 9 rules changed.
-  it('contains exactly 48 rules (9 fiscal + 39 expense-deductibility)', () => {
-    expect(PFA_2026_SYSTEM_REAL_PACKAGE).toHaveLength(48);
+  it('contains exactly 49 rules (10 fiscal + 39 expense-deductibility)', () => {
+    // PG-6h-1 added the 10th: ACCOMMODATION_68X3_2026, the art. 68^3 flat-ratio determination method.
+    // It is a new rule at version 1 — no existing rule's parameters, citation or version moved, which is
+    // what the registry's per-rule digest check enforces.
+    expect(PFA_2026_SYSTEM_REAL_PACKAGE).toHaveLength(49);
   });
 
   it('every rule has 16 defined fields and valid provenance', () => {
@@ -69,15 +72,15 @@ describe('PFA 2026 system-real package', () => {
 });
 
 describe('selectApplicableRules', () => {
-  // 48 - 1 = 47: only GENERAL_MINIMUM_WAGE_2026_H2 is outside the window on 2026-03-15. The two
+  // 49 - 1 = 48: only GENERAL_MINIMUM_WAGE_2026_H2 is outside the window on 2026-03-15. The two
   // art. 68 alin. (5) letters added by OUG 8/2026 (g^1 occupational pensions, g^2 PEPP) ARE selected
   // here because they take effect 2026-03-01 - contributions paid before that date must not reach them.
-  it('returns 47 rules for a date in H1 2026 (H2 wage rule not yet effective)', () => {
+  it('returns 48 rules for a date in H1 2026 (H2 wage rule not yet effective)', () => {
     const selected = selectApplicableRules(PFA_2026_SYSTEM_REAL_PACKAGE, {
       taxYear: 2026,
       asOfDate: '2026-03-15',
     });
-    expect(selected).toHaveLength(47);
+    expect(selected).toHaveLength(48);
   });
 
   it('excludes the H1 minimum wage rule after 2026-06-30', () => {
@@ -88,8 +91,9 @@ describe('selectApplicableRules', () => {
     const ids = selected.map((r) => r.ruleId);
     expect(ids).not.toContain('GENERAL_MINIMUM_WAGE_2026_H1');
     expect(ids).toContain('GENERAL_MINIMUM_WAGE_2026_H2');
-    // 48 - 1 = 47: only GENERAL_MINIMUM_WAGE_2026_H1 has expired by 2026-09-01.
-    expect(selected).toHaveLength(47);
+    // 49 - 1 = 48: only GENERAL_MINIMUM_WAGE_2026_H1 has expired by 2026-09-01. ACCOMMODATION_68X3_2026
+    // is inside the window — art. 68^3 applies from the FY2026 income year, with no mid-year start.
+    expect(selected).toHaveLength(48);
   });
 
   it('returns nothing for a year without rules', () => {
@@ -598,7 +602,10 @@ describe('PFA 2026 release identity (TASK 6)', () => {
 
   it('the release declares a lifecycle, a version and an open window', () => {
     expect(PFA_2026_RELEASE.lifecycle).toBe('ACTIVE');
-    expect(PFA_2026_RELEASE.version).toBe(1);
+    // PG-6h-1 moved this 1 → 2. The governance in docs/ai/phases/20_rule_release_immutability.md §6 makes
+    // `version` a consequence of a content change, and adding a rule moves contentHash — so a version that
+    // stayed at 1 would be the registry's own check failing, not a display number lagging behind.
+    expect(PFA_2026_RELEASE.version).toBe(2);
     expect(PFA_2026_RELEASE.effectiveTo).toBeNull();
     expect(PFA_2026_RELEASE.supersededBy).toBeUndefined();
   });

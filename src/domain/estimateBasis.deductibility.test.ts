@@ -263,7 +263,12 @@ describe('selectEstimateOperands — one assembler, feeding both selectors the s
     expect(operands.deductible.counts.undetermined).toBe(1);
   });
 
-  it('art. 68^3 cazare refuses the estimate instead of computing one (defect B-29)', () => {
+  it('art. 68^3 cazare still refuses the estimate instead of computing one (defect B-29)', () => {
+    // PG-6h-1 re-premised this test rather than deleting it. The estimate is still refused and still
+    // refuses to produce a plausible number — what changed is WHICH answer stops it. `no-expense-engine`
+    // said this build had no method for the activity; the flat-ratio method now exists, so that sentence
+    // would be false for FY2026. The stop is now the gross: art. 68^3 alin. (3) leaves the platform-
+    // commission scope open and alin. (1) puts the eligibility gate in tourism law.
     const operands = selectEstimateOperands(
       dataWith([expense({ category: 'postal_and_telecom' })]),
       AS_OF_YEAR_END,
@@ -275,22 +280,42 @@ describe('selectEstimateOperands — one assembler, feeding both selectors the s
     // A plausible number here would be a failure, not a result.
     expect(operands.result.status).toBe('review_required');
     if (operands.result.status !== 'review_required') return;
-    expect(operands.result.reason).toContain('EXPENSE_ENGINE_CAZARE_2026');
     expect(operands.result.reason).toContain('art. 68^3');
     expect(operands.deductible.records).toHaveLength(0);
     // The basis says nothing was computed — it does not pretend the operands were zero.
     expect(operands.basis.kind).toBe('refused');
     expect(estimateFigureLabel(operands.basis)).toBe('Nu putem calcula');
-    expect(estimateRefusalReason(operands.deductible.refusal!)).toContain(
-      'nu o implementă încă',
-    );
+    // The classifier's own refusal is still produced and still says the art. 68 expense engine does not
+    // apply — that is what the expense register shows, and PG-6h-1 did not change it.
+    expect(estimateRefusalReason(operands.deductible.refusal!)).toContain('EXPENSE_ENGINE_CAZARE_2026');
     // PG-6a — the refusal is the registry's answer, not a branch of this function. The scenario id and
     // its fix route travel on the basis, so the hero can name the case and link to what settles it.
     if (operands.basis.kind !== 'refused') return;
-    expect(operands.basis.scenario.id).toBe('no-expense-engine');
+    expect(operands.basis.scenario.id).toBe('accommodation-gross-undetermined');
     expect(operands.basis.scenario.effect).toBe('refuse');
     expect(operands.basis.scenario.fixTarget).toEqual({ page: 'settings', tab: 'fiscal' });
-    expect(operands.scenarios.map(s => s.id)).toContain('no-expense-engine');
+    expect(operands.scenarios.map(s => s.id)).toEqual(['accommodation-gross-undetermined']);
+  });
+
+  it('with no flat-ratio rule selected, the missing expense engine is itself the stop', () => {
+    // The other half of the same line: `no-expense-engine` was not deleted, it was scoped. Where the rule
+    // set offers no art. 68^3 method, "this package does not implement the method" is still the truth and
+    // still the answer the app gives.
+    const withoutFlatRatio = PFA_2026_SYSTEM_REAL_PACKAGE.filter(
+      (r) => r.taxRegime !== 'accommodation-flat-ratio',
+    );
+    const operands = selectEstimateOperands(
+      dataWith([expense({ category: 'postal_and_telecom' })]),
+      AS_OF_YEAR_END,
+      withoutFlatRatio,
+      { activityFamily: 'cazare' },
+    );
+    expect(operands.kind).toBe('refused');
+    if (operands.kind !== 'refused') return;
+    if (operands.result.status !== 'review_required') return;
+    expect(operands.result.reason).toContain('EXPENSE_ENGINE_CAZARE_2026');
+    if (operands.basis.kind !== 'refused') return;
+    expect(operands.basis.scenario.id).toBe('no-expense-engine');
   });
 
   it('without the cazare fact the engine still runs — the app holds no activity-family fact and invents none', () => {

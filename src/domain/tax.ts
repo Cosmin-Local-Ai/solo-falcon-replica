@@ -13,7 +13,7 @@ import { readCassExceptionFacts, readPensionSuspension, readPensionerStatus } fr
 import { regimeRefusalReason } from './regimes';
 import { createCalculationSnapshot } from './snapshots/snapshot';
 import Decimal from 'decimal.js-light';
-import { lei, leiText, subBani, sumBani, type Bani } from './money';
+import { addBani, lei, leiText, subBani, sumBani, type Bani } from './money';
 
 export interface TaxCalculationInput {
   inputs: TaxInputsReference;
@@ -24,6 +24,17 @@ export interface TaxCalculationInput {
   revenuesNet: Bani;
   /** Total expenses without VAT (valoareFaraTva only). */
   expensesNet: Bani;
+  /**
+   * PG-6h-1 — CF art. 68^3: the GROSS of an accommodation register whose net the law fixes at 70 % of
+   * gross (alin. (2)), already converted to lei at the per-collection BNR rate (alin. (4)).
+   *
+   * It is a GROSS, and it is a separate operand from `revenues` for a reason. art. 68^3 alin. (2) does
+   * not deduct the register's expenses at all — it replaces them with the flat ratio — so feeding these
+   * receipts through the sistem-real expense path would apply art. 68 alin. (4) to a taxpayer art. 68
+   * alin. (1) expressly excepts. Absent or `null` means this taxpayer has no art. 68^3 source, which is
+   * the state every pre-PG-6h payload is in and the state in which this whole path stays inert.
+   */
+  flatRatioGross?: Bani | null;
   /**
    * TASK 6: the release the calculation is bound to, or `null` when this build registers none for the
    * profile's fiscal year. `null` makes the engine refuse instead of writing a snapshot that names no law
@@ -64,6 +75,16 @@ export interface TaxAmountBases {
    * It is NOT `YtdTotals.net`, which subtracts VAT-inclusive operands.
    */
   venitulNetDinActivitate: Bani;
+  /**
+   * PG-6h-1 — the amount the CAS and CASS figures in this result were actually measured on, i.e. the
+   * cumulated art. 155 alin. (1) lit. b) base of art. 148 alin. (3) and art. 170 alin. (1). Present only
+   * when a second lit. b) source (art. 68^3) was in play; with one source it equals
+   * `venitulNetDinActivitate`, and saying so twice would be two numbers for one quantity.
+   *
+   * It exists because a threshold row that measures on a different amount than the engine did is the
+   * B-71 defect class: the percentage and the figure disagreeing about the same record.
+   */
+  venitulNetCumulatPentruContributii?: Bani;
 }
 
 export type TaxEstimateResult =
@@ -112,7 +133,7 @@ export const CASS_FLAG_REVIEW_REASON =
   + 'rămâne valoarea calculată, dar nu poate fi prezentată ca o scutire dovedită.';
 
 export async function computeTaxEstimate(input: TaxCalculationInput): Promise<TaxEstimateResult> {
-  const { inputs, profile, revenues, expenses, revenuesNet, expensesNet, ruleRelease, rules } = input;
+  const { inputs, profile, revenues, expenses, revenuesNet, expensesNet, flatRatioGross, ruleRelease, rules } = input;
   // `leiText`, not the raw value: these sentences are read by a person, and a person reads leu.
   if (!Number.isFinite(revenues) || revenues < 0) return rr(`Veniturile trebuie să fie >= 0, s-a obținut ${leiText(revenues)}`);
   if (!Number.isFinite(expenses) || expenses < 0) return rr(`Cheltuielile trebuie să fie >= 0, s-a obținut ${leiText(expenses)}`);
@@ -134,6 +155,11 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   const casRule = applicable.find((r) => r.taxRegime === 'cas');
   const cassRule = applicable.find((r) => r.taxRegime === 'cass');
   const incomeTaxRule = applicable.find((r) => r.taxRegime === 'income-tax');
+  // PG-6h-1: the art. 68^3 method rule. A FOURTH regime string, deliberately not a reuse of the three
+  // above — see the note on `FiscalRegime` in `fiscal/rules.ts`. Its absence is not neutral: it is the
+  // year-scoping guard. A fiscal year with no art. 68^3 rule (FY2027 today) must refuse a 68^3 gross
+  // rather than compute it under 2026 percentages it was never given.
+  const flatRatioRule = applicable.find((r) => r.taxRegime === 'accommodation-flat-ratio');
   if (!casRule) return rr(`Regula CAS nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}`, lines);
   if (!cassRule) return rr(`Regula CASS nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}`, lines);
   if (!incomeTaxRule) return rr(`Regula de impozit pe venit nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}`, lines);
@@ -180,6 +206,70 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     lines.push({ label: 'Fracțiune de an (art. 118 alin. (3)): venit anual', value: net });
   }
 
+  // ── PG-6h-1: art. 68^3 — the flat-ratio source, computed by its own registered calculator ──────
+  //
+  // Two things this block is, and two things it is not.
+  //
+  // It IS the composition: it calls the registered `calc-accommodation-flat-ratio`, which reads the 30 %
+  // and the 10 % from ACCOMMODATION_68X3_2026, and it decides where the resulting net goes. It does not
+  // do arithmetic of its own — there is no 0.7 and no 0.1 anywhere in this file.
+  //
+  // It is NOT a second opinion about who qualifies for art. 68^3. The caller decided that, from a fact
+  // the person declared; this block only honours the operand it was handed.
+  //
+  // Where the net goes is the part most likely to be got wrong, so it is stated once, here:
+  //   - CAS  (art. 148 alin. (3)) — the net joins the CUMULATED amount that SELECTS the 12 / 24-SM tier.
+  //     It never becomes the CAS base: art. 148 alin. (2) makes the base „venitul ales de contribuabil",
+  //     never below the tier floor. `calcCas` already encodes that, and it is fed an amount, not a base.
+  //   - CASS (art. 170 alin. (1)) — the net IS the base, floored at 6 SM by art. 174 alin. (6) and capped
+  //     at 72 SM. The 6/12/24-SM ladder of art. 170 alin. (2)-(4) is expressly limited to art. 155 alin.
+  //     (1) lit. c)-h) and does not reach this income, which is lit. b).
+  //   - Income tax — ring-fenced. alin. (6) says „impozitul fiind final", and alin. (11) ring-fences the
+  //     INCOME TAX only: contributions cumulate, the tax does not. So this tax is 10 % of this net and
+  //     is not routed through the art. 118 alin. (2) deduction composition below.
+  let flatNet: Bani | null = null;
+  let flatTax: Bani = lei(0);
+  if (typeof flatRatioGross === 'number') {
+    if (!flatRatioRule) {
+      return rr(
+        `Regula de stabilire a venitului din prestarea de servicii de cazare (art. 68^3) nu a fost găsită ` +
+          `pentru anul fiscal ${inputs.fiscalYear}; un venit brut din art. 68^3 nu poate fi calculat după ` +
+          'regulile unui alt an.',
+        lines,
+      );
+    }
+    const flatRes = calculatorRegistry['calc-accommodation-flat-ratio'](flatRatioRule, {
+      gross: flatRatioGross,
+    });
+    if ('reviewRequired' in flatRes) return rr(flatRes.reason, lines);
+    if (typeof flatRes.determinedNet !== 'number') {
+      // Defensive, and reported rather than assumed: the composition needs the net the rule determined,
+      // and re-deriving it here by subtracting a ratio this file does not hold is exactly how a figure
+      // and the sentence beside it start disagreeing.
+      return rr(
+        'Regula art. 68^3 nu a raportat venitul net determinat; compoziția nu îl recalculează pe cont propriu.',
+        lines,
+      );
+    }
+    flatNet = flatRes.determinedNet;
+    flatTax = flatRes.value;
+    lines.push({ label: 'Venit brut art. 68^3 (încasări)', value: flatRatioGross });
+    lines.push({ label: 'Cheltuieli forfetare 30 % (art. 68^3 alin. (2))', value: subBani(flatRatioGross, flatNet) });
+    lines.push({ label: 'Venit net art. 68^3', value: flatNet });
+  }
+
+  // art. 148 alin. (3) (CAS) and art. 170 alin. (1) (CASS) both measure the contributions on the amount
+  // CUMULATED across art. 155 alin. (1) lit. b) sources, and art. 170 alin. (1) keeps art. 118 fiscal
+  // losses out of it. With a single sistem-real source this is `net` itself — sign included, because
+  // `calcCass` reads a negative as the art. 174 alin. (2) zero/loss case rather than as a positive base
+  // it has to be told about. Only once a second source exists does it become a sum, and then the loss
+  // term is what drops out.
+  const vnaSistemReal: Bani = net > 0 ? net : lei(0);
+  const cumulatedNet: Bani = flatNet === null ? net : addBani(vnaSistemReal, flatNet);
+  if (flatNet !== null) {
+    lines.push({ label: 'Venit cumulat pentru contribuții (art. 148 alin. (3), art. 170 alin. (1))', value: cumulatedNet });
+  }
+
   // CF art. 150 alin. (1): pensioners and persons insured in their own social insurance system owe no
   // CAS. TASK 5 reads it from `pensionerStatus` — the STATUS fact, which is the correct key here and the
   // only place in this area where a status is the correct key. `inputs.salaryStatus` is deliberately NOT
@@ -192,7 +282,10 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   const pensionerStatus = readPensionerStatus(inputs);
   const cassFacts = readCassExceptionFacts(inputs, inputs.fiscalYear);
   const casRes = calculatorRegistry['calc-cas'](casRule, {
-    base: net,
+    // PG-6h-1: the CUMULATED lit. b) amount, per art. 148 alin. (3). With one source this is exactly the
+    // value this call always received. It is an amount that SELECTS the statutory tier — `calcCas` never
+    // makes it the base, which is what art. 148 alin. (2) forbids.
+    base: cumulatedNet,
     pensionerStatus,
   });
   if ('reviewRequired' in casRes) return rr(casRes.reason, lines);
@@ -215,7 +308,12 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // lines rather than reporting a wrong number.
   if (inputs.socialInsuranceStatus === 'obligatoriu') {
     const cassRes = calculatorRegistry['calc-cass'](cassRule, {
-      base: net,
+      // PG-6h-1: the CUMULATED lit. b) amount, per art. 170 alin. (1) — which names art. 68^3 expressly
+      // (Legea 239/2025 art. XII pct. 19). Here the amount IS the base, floored at 6 SM by art. 174 alin.
+      // (6) and capped at 72 SM. Same number as the CAS call above, a different job: threshold test there,
+      // base here. That asymmetry is the law, not an accident, and it is why one shared "68^3 base"
+      // variable handed to both calculators would be wrong.
+      base: cumulatedNet,
       // Read by calcCass for ONE purpose — noticing that the receipt fact is missing. It switches
       // nothing off in this calculator.
       pensionerStatus,
@@ -272,12 +370,14 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // alin. (2^3): CASS deductibilă = (venit net anual determinat în sistem real ÷ total venituri cumulate
   // potrivit art. 170 alin. (1)) × contribuția de asigurări sociale de sănătate calculată potrivit
   // art. 174 alin. (1).
-  // While there is a single source, each denominator IS the sistem-real net, so both ratios are exactly
-  // 1 and the proration is a no-op — the numbers do not move. It is written out anyway so that a second
-  // income source (Phase 6) cannot silently inherit a full deduction it is not entitled to.
-  const vnaSistemReal: Bani = net > 0 ? net : lei(0);
-  const totalCumulatCass = vnaSistemReal; // art. 170 alin. (1)
-  const totalCumulatCas = vnaSistemReal; // art. 148 alin. (3)
+  // While there is a single source, the cumulated denominator IS the sistem-real net, so both ratios are
+  // exactly 1 and the proration is a no-op — the numbers do not move. Once an art. 68^3 source exists the
+  // denominator is genuinely larger than the numerator, the ratios fall below 1, and the sistem-real
+  // deduction is prorated instead of inherited whole. That is what art. 118 alin. (2^2)-(2^3) ask for, and
+  // it is also what keeps the 68^3 tax ring-fenced: alin. (11) delimits the INCOME TAX, not the
+  // contributions, so the 68^3 source enlarges the denominator without ever receiving a deduction.
+  const totalCumulatCass = cumulatedNet; // art. 170 alin. (1)
+  const totalCumulatCas = cumulatedNet; // art. 148 alin. (3)
   // Phase 10: the ratios and their products are Decimal, not float. A float ratio is exactly how the
   // fractional line values `7_128.1` and `52_002.9` got into this engine in the first place.
   const ratioCas = totalCumulatCas > 0 ? new Decimal(vnaSistemReal).div(totalCumulatCas) : new Decimal(1);
@@ -335,8 +435,11 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
         rule: 'CF art. 118 alin. (4): „Pierderea fiscală anuală înregistrată pe fiecare sursă din activități independente … determinată în sistem real, se reportează și se compensează de către contribuabil în limita a 70% din veniturile nete anuale, obținute din aceeași sursă de venit în următorii 5 ani fiscali consecutivi.” Alin. (5): reportul se face cronologic pe 5 ani consecutivi, dreptul este personal și netransmisibil, iar pierderea necompensată la expirarea perioadei este pierdere definitivă.',
       };
     }
-    const total = sumBani([casRes.value, cassValue]);
+    const total = sumBani([casRes.value, cassValue, flatTax]);
     lines.push({ label: 'Impozit pe venit (fără bază impozabilă)', value: lei(0) });
+    if (flatNet !== null) {
+      lines.push({ label: 'Impozit art. 68^3 (10 %, impozitul fiind final)', value: flatTax });
+    }
     lines.push({ label: 'Total taxe', value: total });
     const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, rules: applicable, calculationLines: lines, output: { total } });
     const computed: TaxEstimateResult = {
@@ -344,7 +447,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
       lines,
       output: { total },
       snapshot: snap,
-      bases: { venitulBrut: gross, cheltuieliDeductibile: deductibleBase, venitulNetDinActivitate: net },
+      bases: contributionBases(gross, deductibleBase, net, cumulatedNet, flatNet),
     };
     if (lossCarryForward) computed.lossCarryForward = lossCarryForward;
     return computed;
@@ -353,9 +456,16 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   const incomeTaxRes = calculatorRegistry['calc-income-tax'](incomeTaxRule, { base: taxable });
   if ('reviewRequired' in incomeTaxRes) return rr(incomeTaxRes.reason, lines);
   lines.push({ label: 'Impozit pe venit (rată de bază 10%)', value: incomeTaxRes.value });
+  if (flatNet !== null) {
+    // alin. (6) + alin. (11): this sum is 10 % of the 68^3 net and nothing else. It is not reduced by the
+    // CAS/CASS deductions the art. 118 composition above applies to the sistem-real source, because
+    // „impozitul fiind final" settles it on the net and the ring-fence runs on the tax, not the
+    // contributions.
+    lines.push({ label: 'Impozit art. 68^3 (10 %, impozitul fiind final)', value: flatTax });
+  }
   // Art. 66 was already applied to each of the three sums, inside their calculators. Summing the rounded
   // integers is exact, and it is why no second rounding can happen anywhere downstream.
-  const total = sumBani([casRes.value, cassValue, incomeTaxRes.value]);
+  const total = sumBani([casRes.value, cassValue, incomeTaxRes.value, flatTax]);
   lines.push({ label: 'Total taxe', value: total });
   const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, rules: applicable, calculationLines: lines, output: { total } });
   return {
@@ -363,6 +473,25 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     lines,
     output: { total },
     snapshot: snap,
-    bases: { venitulBrut: gross, cheltuieliDeductibile: deductibleBase, venitulNetDinActivitate: net },
+    bases: contributionBases(gross, deductibleBase, net, cumulatedNet, flatNet),
   };
+}
+
+/**
+ * The `bases` block, built in one place so the two return paths cannot report different quantities.
+ *
+ * `venitulNetCumulatPentruContributii` is written only when a second lit. b) source was actually in play.
+ * Writing it always would put two numbers on screen for one quantity whenever there is only one source —
+ * and a consumer that reads the wrong one of two always-present fields is a defect waiting to be picked.
+ */
+function contributionBases(
+  venitulBrut: Bani,
+  cheltuieliDeductibile: Bani,
+  venitulNetDinActivitate: Bani,
+  cumulatedNet: Bani,
+  flatNet: Bani | null,
+): TaxAmountBases {
+  const bases: TaxAmountBases = { venitulBrut, cheltuieliDeductibile, venitulNetDinActivitate };
+  if (flatNet !== null) bases.venitulNetCumulatPentruContributii = cumulatedNet;
+  return bases;
 }

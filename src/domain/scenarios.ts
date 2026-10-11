@@ -34,7 +34,7 @@
  * - **Not a place where any fiscal value lives.**
  */
 import type { AppData } from '../data/types';
-import type { RefusedExpense } from './fiscal/deductibility';
+import type { ActivityFamily, RefusedExpense } from './fiscal/deductibility';
 import { regimeRefusalReason } from './regimes';
 
 /**
@@ -87,7 +87,8 @@ export function scenarioFixHref(target: ScenarioFixTarget): string {
 export type ScenarioMessageKey =
   | 'noExpenseEngine'
   | 'regimeNotComputable'
-  | 'activityFamilyUndeclared';
+  | 'activityFamilyUndeclared'
+  | 'accommodationGrossUndetermined';
 
 /**
  * Everything a detector is allowed to look at.
@@ -100,6 +101,42 @@ export type ScenarioMessageKey =
 export interface ScenarioFacts {
   data: AppData;
   classifierRefusal: RefusedExpense | null;
+  /**
+   * PG-6h-1 — whether the rule set selected for this fiscal year actually carries the art. 68^3 flat-ratio
+   * method. Read from the rule set by `estimateBasis.ts`, never inferred here.
+   *
+   * It decides what the classifier's refusal MEANS, and that is the whole reason it is a fact rather than
+   * a branch. "This activity has no art. 68 expense engine" is fatal when the law offers no other method
+   * and is simply the shape of a different regime when it does — art. 68 alin. (1) excepts art. 68^3 from
+   * the expense engine precisely because alin. (2) replaces it with a flat ratio. Optional, and absence is
+   * not `false`: a caller that never went through the assembler has no answer to give, and inventing one
+   * would let a hand-built fixture decide a legal question the rule set is the only thing entitled to
+   * decide.
+   */
+  flatRatioMethodAvailable?: boolean;
+  /**
+   * PG-6h-1 — the open questions the art. 68^3 rule carries in its own parameters, lifted verbatim by the
+   * assembler. `null` means "not asked", `[]` means the rule carries none.
+   *
+   * The registry never composes a legal sentence of its own, so the two readings of art. 68^3 alin. (3) and
+   * the alin. (1) eligibility gate reach the screen as the rule's words, not as a paraphrase written here.
+   */
+  flatRatioOpenQuestions?: readonly string[] | null;
+  /**
+   * PG-6h-1 — the activity family the estimate is actually being run under.
+   *
+   * The assembler resolves it as `context.activityFamily ?? profile.activityFamily`, and the registry reads
+   * that resolved value rather than re-reading the profile. If it did not, a per-call family could select
+   * the art. 68^3 method while the detectors still described the stored profile, and one register would be
+   * two activities at once. Absent means the assembler supplied nothing, so the profile is the answer —
+   * which is what every caller that has not gone through the assembler gets.
+   */
+  activityFamily?: ActivityFamily;
+}
+
+/** The family this register is being evaluated under — resolved once, read by every detector that needs it. */
+function effectiveActivityFamily(facts: ScenarioFacts): ActivityFamily | undefined {
+  return facts.activityFamily ?? facts.data?.profile?.activityFamily;
 }
 
 /** What a detector hands back when the scenario applies. `null` means it does not. */
@@ -156,6 +193,21 @@ export function estimateRefusalReason(refusal: RefusedExpense): string {
 }
 
 /**
+ * The detail a refused art. 68^3 gross carries: the rule's own open questions, verbatim, joined.
+ *
+ * No framing sentence is added here. The framing — that the method is implemented and that the gross is
+ * what is missing — is copy, and it already exists once in `ui/copy/scenarios.ts
+ * accommodationGrossUndetermined`, which `ScenarioRefusal` renders directly above this detail. Composing a
+ * second framing sentence here put the same claim twice in one block, the duplication this codebase treats
+ * as its own defect class (one producer per sentence). What does belong here is the text with exactly one
+ * producer: the two readings lifted from `ACCOMMODATION_68X3_2026`, which must reach the screen in the
+ * rule's words rather than in a paraphrase that can drift from them.
+ */
+export function accommodationOpenQuestionDetail(questions: readonly string[]): string | undefined {
+  return questions.length > 0 ? questions.join(' ') : undefined;
+}
+
+/**
  * The activity has no expense engine **in this build** (CF art. 68^3, defect B-29).
  *
  * This is the one scenario that already refused before this module existed — it is here so the framework
@@ -188,7 +240,55 @@ const noExpenseEngineScenario: ScenarioSupport = {
   detect(facts) {
     const refusal = facts.classifierRefusal;
     if (refusal === null) return null;
+    // PG-6h-1 — the refusal says the art. 68 expense engine does not apply to this activity. That is still
+    // true, and it is still a stop, but only while the rule set offers no other method. Once the art. 68^3
+    // flat-ratio rule is selected for the year, the absence of an expense engine is what art. 68 alin. (1)
+    // and alin. (2) prescribe, not a gap — and the scenario below is the one that decides whether a figure
+    // can be produced. This entry stays live for a year with no such rule (FY2027 today), where "this rule
+    // package does not implement the method" is the truthful answer rather than a stale one.
+    if (facts.flatRatioMethodAvailable === true) return null;
     return { detail: estimateRefusalReason(refusal) };
+  },
+};
+
+/**
+ * The art. 68^3 method is available, and the gross it would run on is not determinable (PG-6h-1, B-80).
+ *
+ * This is the honest half of D-CAZ-1. The arithmetic is built — `ACCOMMODATION_68X3_2026` plus
+ * `calc-accommodation-flat-ratio` compute net = 70 % × gross and tax = 10 % × net, and the CAS and CASS
+ * consequences follow from that net. What is not built is the input, and it cannot be built from the
+ * fiscal code alone:
+ *
+ * - **alin. (3)** excludes from gross „comisionul reținut de către entitățile care facilitează închirierea
+ *   pe termen scurt a camerelor situate în locuințe proprietate personală”, but the words are limited to
+ *   personal dwellings while alin. (1) puts the article's subject with a tourism-sector operator. ANAF
+ *   Brașov leans broad, the statutory words lean narrow, and no primary source reconciles them
+ *   (`docs/ai/research/38_art68x3_cass_and_occupancy_order.md` §3, §5 item 1). The choice moves gross,
+ *   therefore the tax, the CASS base and the CAS threshold — so the app does not choose it.
+ * - **alin. (1)** addresses „operatorii economici definiți potrivit legislației specifice domeniului
+ *   turismului”. Whether a given person is one is decided in tourism law and the ONRC authorisation, not
+ *   in the fiscal code. The app can ask; it cannot decide.
+ *
+ * Both are questions for the person, and 6h-2 asks them (D-COM-1). Until they are answered this is a
+ * `refuse`, not an `incomplete`: unlike a missing profile fact, no number exists beside the gap that would
+ * still be this taxpayer's number. Applying either reading to produce one would be a default, and a
+ * default here is the defect.
+ */
+const accommodationGrossScenario: ScenarioSupport = {
+  id: 'accommodation-gross-undetermined',
+  effect: 'refuse',
+  message: 'accommodationGrossUndetermined',
+  fixTarget: { page: 'settings', tab: 'fiscal' },
+  detect(facts) {
+    // Total: a payload with no profile object has no declared activity family, so there is no
+    // accommodation register to have a question about. Same answer `regimeScenario` gives for a missing
+    // regime.
+    if (!facts.data?.profile) return null;
+    if (effectiveActivityFamily(facts) !== 'cazare') return null;
+    if (facts.flatRatioMethodAvailable !== true) return null;
+    const questions = facts.flatRatioOpenQuestions ?? null;
+    if (questions === null) return null;
+    return { detail: accommodationOpenQuestionDetail(questions) };
   },
 };
 
@@ -249,7 +349,7 @@ const activityFamilyScenario: ScenarioSupport = {
     // a missing regime.
     const profile = facts.data?.profile;
     if (!profile) return null;
-    const declared = profile.activityFamily;
+    const declared = effectiveActivityFamily(facts);
     if (declared === 'cazare' || declared === 'other') return null;
     return {};
   },
@@ -261,6 +361,7 @@ const activityFamilyScenario: ScenarioSupport = {
  */
 export const SCENARIO_SUPPORT: readonly ScenarioSupport[] = [
   noExpenseEngineScenario,
+  accommodationGrossScenario,
   regimeScenario,
   activityFamilyScenario,
 ];

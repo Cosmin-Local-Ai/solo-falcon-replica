@@ -106,6 +106,10 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
       expenses: amounts.expenses,
       revenuesNet: amounts.revenuesNet,
       expensesNet: amounts.expensesNet,
+      // PG-6h-1 — threading only, identical to `data/dashboard.ts getTaxEstimate` by construction: both
+      // read the field the assembler decided, so the rendered figure and the tested figure cannot disagree
+      // about whether an art. 68^3 source exists.
+      flatRatioGross: amounts.flatRatioGross ?? null,
       ruleRelease: selection ? selection.release : null,
       rules,
     }).then((result) => {

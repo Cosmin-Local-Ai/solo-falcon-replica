@@ -46,6 +46,20 @@ export const scenarios = {
      */
     activityFamilyUndeclared:
       'Profilul nu declară ce activitate desfășori, iar aplicația nu ghicește acest lucru din codul CAEN. Cifra de mai jos este calculată pe regulile de cheltuieli efective (sistem real); dacă activitatea ta se impune prin altă metodă legală, cifra nu este a ta.',
+    /**
+     * PG-6h-1 — the art. 68^3 method is implemented, and the gross it would run on is not settled.
+     *
+     * This sentence must not read like the one above it. `noExpenseEngine` says the app lacks the method;
+     * that was true until this task and is no longer. What is missing is the input, and the reason is that
+     * the law leaves two readings of art. 68^3 alin. (3) on the table and puts the alin. (1) gate outside
+     * the fiscal code. So the sentence says the calculation exists, says the gross is what is missing, and
+     * points down at the two readings, which are the rule's own words lifted from
+     * `ACCOMMODATION_68X3_2026` and rendered directly below this one. It does not restate what those
+     * readings cost — the rule text already says that choosing moves the tax, the CASS base and the CAS
+     * threshold, and saying it twice in one block is the duplication this codebase treats as a defect.
+     */
+    accommodationGrossUndetermined:
+      'Aplicația știe să calculeze metoda pentru cazare: cheltuieli forfetare de 30 % din venitul brut și impozit de 10 % din venitul net. Ceea ce nu se poate stabili este venitul brut la care se aplică metoda, pentru că legea lasă deschise două întrebări: ce se cuprinde în brut, și cine este operator economic în domeniul turismului. Ambele sunt mai jos, în cuvintele legii; aplicația nu alege în locul tău.',
   } satisfies Record<ScenarioMessageKey, string>,
 
   /** The control the scenario points at. */

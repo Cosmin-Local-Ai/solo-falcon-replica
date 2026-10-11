@@ -102,7 +102,10 @@ describe('the activity family reaches the hero state', () => {
 
     expect(estimate.status).toBe('review_required');
     if (estimate.basis.kind !== 'refused') throw new Error('expected a refused basis');
-    expect(estimate.basis.scenario.id).toBe('no-expense-engine');
+    // PG-6h-1: the FY2026 refusal is no longer "there is no method" — the method is implemented. It is
+    // "the gross the method would run on is not settled", which is the honest reason while B-80 and the
+    // alin. (1) gate stay unanswered.
+    expect(estimate.basis.scenario.id).toBe('accommodation-gross-undetermined');
     expect(view.estimateState).toBe('refused');
     // A refusal outranks the gap, and the two are not the same claim: the cazare profile HAS answered, so
     // it produces no `fact_missing` row at all.

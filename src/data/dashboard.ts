@@ -391,6 +391,9 @@ export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEsti
     expenses: amounts.expenses,
     revenuesNet: amounts.revenuesNet,
     expensesNet: amounts.expensesNet,
+    // PG-6h-1 — threading only. The assembler decided whether this register has an art. 68^3 source and
+    // measured its gross on the same ledger pass as every other operand; this call site only hands it over.
+    flatRatioGross: amounts.flatRatioGross ?? null,
     ruleRelease: selection ? selection.release : null,
     rules,
   }).then((result) => attachEstimateBasis(result, basis, operands.scenarios));
@@ -414,7 +417,12 @@ export function buildThresholdBases(ytd: YtdTotals, tax: TaxEstimateResult | nul
     'expense-excl-vat': ytd.expenseNet,
   };
   if (tax !== null && tax.status === 'computed') {
-    bases['net-income'] = tax.bases.venitulNetDinActivitate;
+    // PG-6h-1: when an art. 68^3 source was in play, the engine measured CAS and CASS on the CUMULATED
+    // art. 148 alin. (3) / art. 170 alin. (1) amount, not on the sistem-real net alone. A threshold row
+    // that tests a different amount than the engine did is the B-71 defect class — the percentage and the
+    // figure disagreeing about the same record — so the row reads the amount the engine names.
+    bases['net-income'] =
+      tax.bases.venitulNetCumulatPentruContributii ?? tax.bases.venitulNetDinActivitate;
   }
   return bases;
 }

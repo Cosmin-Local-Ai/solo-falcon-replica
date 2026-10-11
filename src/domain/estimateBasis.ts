@@ -38,11 +38,13 @@ import {
   expenseEngineRefusal,
   capAmount,
   type DeductibilityCap,
+  type ActivityFamily,
   type ExpenseCategory,
   type ExpenseClassificationContext,
   type RefusedExpense,
 } from './fiscal/deductibility';
 import type { FiscalRule } from './fiscal/rules';
+import { selectApplicableRules } from './fiscal/select';
 import { strikeCapCeiling, type CapCeilingStrike } from './fx/capCeiling';
 import {
   normaliseLedgerToRon,
@@ -83,6 +85,19 @@ export interface EstimateAmounts {
   revenuesNet: Bani;
   expensesNet: Bani;
   readonly asOfDate: string;
+  /**
+   * PG-6h-1 — CF art. 68^3 alin. (2): the gross of an accommodation register, cash basis, already
+   * converted to lei at the per-collection BNR rate (alin. (4)). Present only when the profile declares
+   * the accommodation activity family AND the selected rule set carries the art. 68^3 method rule for
+   * this fiscal year — the two conditions `selectIncomeDeterminationMethod` checks together.
+   *
+   * It is a GROSS and it sits beside, not inside, `revenues`: art. 68^3 alin. (2) replaces the
+   * register's expenses with a flat ratio, so these receipts must not travel through the art. 68 alin.
+   * (4) deductible subset that art. 68 alin. (1) expressly excepts for this activity. Optional, and
+   * `ForecastAmounts` has no such field — the same `asOfDate` gap that keeps a projection out of the
+   * engine keeps a projected gross out of it too.
+   */
+  flatRatioGross?: Bani;
 }
 
 /**
@@ -286,6 +301,117 @@ export function selectTaxEstimateBasis(
  */
 export function amountsForEstimate(basis: AttributedEstimateBasis): EstimateAmounts {
   return basis.actual;
+}
+
+/**
+ * PG-6h-1 — which determination method the law applies to this register's income.
+ *
+ * This is a SELECTION, not a classification the app performs. The two inputs are (a) a fact the person
+ * declared — `profile.activityFamily`, asked and stored by PG-6b and never inferred from a CAEN code —
+ * and (b) whether the rule set selected for this fiscal year actually carries the art. 68^3 method rule.
+ * Both are read; neither is decided here.
+ *
+ * The second condition is the year-scoping guard. The FY2027 minimum wage is not published and no 2027
+ * release exists, so a 2027 profile has no art. 68^3 rule to run and must not be measured with 2026
+ * percentages. `sistem-real` in that case does not mean "the 2026 rules apply instead" — the engine
+ * refuses for the year as a whole; it means this module does not manufacture a method the rule set does
+ * not contain.
+ */
+export type IncomeDeterminationMethod = 'sistem-real' | 'accommodation-flat-ratio';
+
+export function selectIncomeDeterminationMethod(
+  data: AppData,
+  rules: readonly FiscalRule[],
+  asOfDate: string,
+  declaredFamily?: ActivityFamily,
+): IncomeDeterminationMethod {
+  const profile = data.profile;
+  // The SAME precedence `selectDeductibleExpenses` uses for the classification context: an explicitly
+  // supplied family wins over the stored one, and absence stays absence. One precedence rule stated once —
+  // two different rules would let the determination method and the classifier be about two different
+  // activities from the same call.
+  const family = declaredFamily ?? profile?.activityFamily;
+  if (family !== 'cazare' || !profile) return 'sistem-real';
+  const applicable = selectApplicableRules([...rules], {
+    taxYear: profile.fiscalYear,
+    asOfDate,
+  });
+  return applicable.some((r) => r.taxRegime === 'accommodation-flat-ratio')
+    ? 'accommodation-flat-ratio'
+    : 'sistem-real';
+}
+
+/**
+ * The gross the flat ratio runs on: the register's receipts, cash basis, in lei.
+ *
+ * art. 68^3 alin. (2) measures „încasate în cursul anului fiscal”, and alin. (4) converts each foreign
+ * receipt at the BNR rate of the last banking day before that collection. Both are already the rule the
+ * Phase 10c ledger pass implements (`fx/ledger.ts`, basis `payment_date_daily` with the labelled
+ * carry-forward from the last published banking day), so this reuses that pass rather than writing a
+ * second FX walk — a second walk is the B-70 defect class and would drift from the first the moment
+ * either changes.
+ *
+ * The VAT rule is the sistem-real one, for the same reason: OMFP 3254/2017 art. 4 alin. (3) says TVA
+ * colectată nu reprezintă venit, so a VAT payer's gross is the VAT-exclusive amount and a
+ * VAT-exempt profile's is the amount actually received.
+ *
+ * What this does NOT decide is what the gross CONTAINS. art. 68^3 alin. (3) may or may not exclude a
+ * platform commission from it (B-80), and no primary source settles that. This function reports the
+ * receipts; the caller that cannot settle alin. (3) must refuse rather than pick.
+ */
+export function selectAccommodationGross(
+  data: AppData,
+  asOfDate: string,
+): { gross: Bani; conversions: LedgerConversion[]; unconverted: UnconvertedLedgerRecord[] } {
+  const ledger = normaliseStoredLedger(data);
+  const ytd = selectYtd(ledger.data, asOfDate);
+  return {
+    gross: flatRatioGrossFromYtd(ytd, data),
+    conversions: ledger.conversions,
+    unconverted: ledger.unconverted,
+  };
+}
+
+/** The one VAT rule, shared by the standalone selector above and by the assembler below. */
+function flatRatioGrossFromYtd(ytd: YtdTotals, data: AppData): Bani {
+  return data.profile.vatExempt ? ytd.revenue : ytd.revenueNet;
+}
+
+/**
+ * The open questions the art. 68^3 rule carries in its own parameters.
+ *
+ * Lifted, not written. The registry is not a wording layer and neither is this module: the two readings of
+ * alin. (3) and the alin. (1) eligibility gate exist in exactly one place — `ACCOMMODATION_68X3_2026` —
+ * and a refusal that paraphrases them creates a second text that can drift from the rule while still
+ * quoting the same article.
+ */
+export function accommodationOpenQuestions(
+  rules: readonly FiscalRule[],
+  taxYear: number,
+  asOfDate: string,
+): string[] {
+  const rule = selectApplicableRules([...rules], { taxYear, asOfDate }).find(
+    (r) => r.taxRegime === 'accommodation-flat-ratio',
+  );
+  if (!rule) return [];
+  const ids = ['gross_scope_open_question', 'eligibility_open_question'];
+  const found: string[] = [];
+  for (const id of ids) {
+    const value = rule.parameters.find((p) => p.id === id)?.value;
+    if (typeof value === 'string' && value.length > 0) found.push(value);
+  }
+  return found;
+}
+
+/**
+ * Attach the art. 68^3 gross to an operand set, or leave the set exactly as it was.
+ *
+ * A separate function rather than an inline spread at each of the two `kind: 'run'` returns, because the
+ * whole point of this module is that the operands are decided once. Two call sites attaching the field
+ * independently is how one of them forgets.
+ */
+function withFlatRatioGross(amounts: EstimateAmounts, gross: Bani | undefined): EstimateAmounts {
+  return gross === undefined ? amounts : { ...amounts, flatRatioGross: gross };
 }
 
 // ── TASK 2b: the deductible subset, assembled here and nowhere else ───────────
@@ -1370,6 +1496,12 @@ export function selectEstimateOperands(
   // the projection and the ceilings are all struck on the SAME record set. Converting after aggregation
   // would be the Phase 10 drift class in a new costume.
   const ledger = normaliseStoredLedger(data);
+  // PG-6h-1 — which determination method the law applies to this register. Read, not decided: a declared
+  // profile fact plus the presence of the art. 68^3 rule in the rule set selected for this year. It is
+  // computed here, before the registry runs, because the registry needs it as a fact: whether the art. 68
+  // expense engine's absence is fatal depends on whether the law supplied a different method for this
+  // income, and that is a question about the rule set, not about the classifier.
+  const method = selectIncomeDeterminationMethod(ledger.data, rules, asOfDate, context.activityFamily);
   const deductible = {
     ...selectDeductibleExpenses(ledger.data, asOfDate, rules, context),
     // The assembler's own pass covers revenues as well as expenses, so the audit trail it reports is the
@@ -1388,7 +1520,20 @@ export function selectEstimateOperands(
   // The classifier's refusal is handed to the registry as a fact the app already holds rather than
   // re-detected here: the rule layer decides whether an activity has an expense engine, and a second
   // place deciding that is how two answers to one question start.
-  const scenarios = evaluateScenarios({ data: ledger.data, classifierRefusal: deductible.refusal ?? null });
+  const scenarios = evaluateScenarios({
+    data: ledger.data,
+    classifierRefusal: deductible.refusal ?? null,
+    // PG-6h-1 — a fact, not a verdict: the rule set does or does not carry the art. 68^3 method. The
+    // registry reads it to decide whether "there is no expense engine" is a stop or simply the shape of
+    // a different method. It does not get to decide that itself, and neither does this function.
+    flatRatioMethodAvailable: method === 'accommodation-flat-ratio',
+    // And the questions the rule itself records as open, lifted verbatim so the refusal names them in the
+    // rule's words rather than in a paraphrase written here.
+    flatRatioOpenQuestions: accommodationOpenQuestions(rules, ledger.data.profile.fiscalYear, asOfDate),
+    // The resolved family, so the registry and the classifier answer about the same activity even when a
+    // caller supplied the fact per-call instead of storing it.
+    activityFamily: context.activityFamily ?? ledger.data.profile?.activityFamily,
+  });
   const refusal = scenarioRefusal(scenarios);
   if (refusal !== null) {
     const reason = refusal.detail ?? '';
@@ -1409,6 +1554,10 @@ export function selectEstimateOperands(
   // selectors get the SAME object — a subset applied to only one of them is the Phase 10 drift class.
   const scoped: AppData = { ...ledger.data, expenses: deductible.records };
   const ytd = selectYtd(scoped, asOfDate);
+  // PG-6h-1 — the art. 68^3 gross, struck on the SAME ledger pass and the SAME record set as every other
+  // operand here. A second FX walk would be the B-70 defect class and would drift from the first.
+  const flatRatioGross =
+    method === 'accommodation-flat-ratio' ? flatRatioGrossFromYtd(ytd, ledger.data) : undefined;
   const projection = selectProjectionV1(scoped, asOfDate);
   const basisBeforeCaps = selectTaxEstimateBasis(projection, ytd, asOfDate);
 
@@ -1416,7 +1565,7 @@ export function selectEstimateOperands(
     return {
       kind: 'run',
       basis: basisBeforeCaps,
-      amounts: amountsForEstimate(basisBeforeCaps),
+      amounts: withFlatRatioGross(amountsForEstimate(basisBeforeCaps), flatRatioGross),
       deductible,
       capAdjustments: [],
       conversions: ledger.conversions,
@@ -1435,7 +1584,7 @@ export function selectEstimateOperands(
   return {
     kind: 'run',
     basis,
-    amounts: amountsForEstimate(basis),
+    amounts: withFlatRatioGross(amountsForEstimate(basis), flatRatioGross),
     deductible,
     capAdjustments: adjustments,
     conversions: ledger.conversions,

@@ -225,6 +225,115 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     // order of the base moved.
     verifiedAt: '2026-10-06',
   },
+  // ── PG-6h-1: art. 68^3 — the flat 30 % expense ratio, the only determination method the law
+  // supplies for `prestarea de servicii de cazare` from FY2026 (D-CAZ-1).
+  //
+  // This rule carries the METHOD, not a contribution rule and not a second rate for another regime.
+  // The CAS and CASS consequences of the 68^3 net are computed by CAS_2026 and CASS_2026 under their
+  // own regimes — see `tax.ts` for where the net is cumulated and where it is ring-fenced.
+  {
+    ...PROVENANCE_2026,
+    ruleId: 'ACCOMMODATION_68X3_2026',
+    name: 'Venit din prestarea de servicii de cazare — cotă forfetară 30 %, cota 10 % (art. 68^3)',
+    taxRegime: 'accommodation-flat-ratio',
+    effectiveFrom: '2026-01-01',
+    effectiveTo: null,
+    parameters: [
+      {
+        id: 'expense_ratio',
+        label: 'Cotă forfetară de cheltuieli (procente din venitul brut)',
+        value: 30,
+        unit: 'percent',
+        // art. 68^3 alin. (2): „Venitul net anual din prestarea de servicii de cazare se determină
+        // prin deducerea din venitul brut a cheltuielilor determinate prin aplicarea cotei forfetare
+        // de 30% asupra venitului brut." This is an EXPENSE ratio, not a tax rate: the net is 70 % of
+        // gross. Reading 30 as the rate applied to gross would be a 10× error in the wrong direction.
+        description:
+          'art. 68^3 alin. (2): cheltuieli forfetare = 30 % din venitul brut, deci venitul net = 70 % din venitul brut. Nu este o cotă de impozitare.',
+      },
+      {
+        id: 'tax_rate',
+        label: 'Cota de impozitare aplicată venitului net (procente)',
+        value: 10,
+        unit: 'percent',
+        // art. 68^3 alin. (6): „Impozitul anual datorat … se determină prin aplicarea cotei de 10%
+        // asupra venitului net, impozitul fiind final." „impozitul fiind final" is what makes the
+        // effective burden 7 % of gross: CAS and CASS are NOT deducted from this base. That is the
+        // contrast with art. 123 alin. (1) + art. 118 alin. (2), where they are — see INCOME_TAX_2026.
+        description:
+          'art. 68^3 alin. (6): 10 % asupra venitului net, „impozitul fiind final" — effective 7 % din venitul brut; CAS și CASS nu se scad din această bază.',
+      },
+      {
+        id: 'fx_basis',
+        label: 'Temeiul de conversie pentru veniturile în valută',
+        value: 'last_banking_day_before_collection',
+        unit: 'text',
+        // art. 68^3 alin. (4): the BNR rate „din ultima zi bancară anterioară" each collection. NOT an
+        // annual average and NOT the year-end rate. The machinery that applies it is the Phase 10c
+        // ledger pass (`fx/ledger.ts`, basis `payment_date_daily` with the labelled carry-forward from
+        // the last published banking day) — reused, not reimplemented.
+        description:
+          'art. 68^3 alin. (4): cursul BNR din ultima zi bancară anterioară fiecărei încasări; nu media anuală, nu cursul de la sfârșitul anului.',
+      },
+      {
+        id: 'filing_deadline',
+        label: 'Termen de depunere a declarației unice',
+        value: '2027-05-25',
+        unit: 'date',
+        description:
+          'art. 68^3 alin. (9) cu art. 122 alin. (3): declarația unică se depune până la data de 25 mai inclusiv a anului următor. NU art. 121.',
+      },
+      {
+        id: 'payment_deadline',
+        label: 'Termen de plată',
+        value: '2027-05-25',
+        unit: 'date',
+        description:
+          'art. 68^3 alin. (10) cu art. 122 alin. (3): impozitul se achită tot până la 25 mai — același termen ca depunerea. NU art. 121.',
+      },
+      {
+        id: 'gross_scope_open_question',
+        label: 'Întrebare deschisă: comisionul reținut de platformă (alin. (3))',
+        value:
+          'art. 68^3 alin. (3) exclude din venitul brut „comisionul reținut de către entitățile care facilitează închirierea pe termen scurt a camerelor situate în locuințe proprietate personală", dar alineatul stă într-un articol al cărui subiect la alin. (1) este spațiul unui operator economic din turism. Citește A: excluderea operează doar prin alin. (12) / art. 83 alin. (4), deci brutul unui hotel e suma integrală încasată. Citește B: este o regulă generală de stabilire a brutului pentru tot venitul din art. 68^3. ANAF Brașov înclină spre B, textul legii spre A; nicio sursă primară nu le împacă. Alegearea uneia schimbă brutul, deci impozitul, baza de CASS și pragul de CAS — aplicația nu alege.',
+        unit: 'text',
+        description:
+          'B-80 (`docs/ai/research/38_art68x3_cass_and_occupancy_order.md` §3 și §5). Rămâne review_required până la 6h-2, care pune întrebarea utilizatorului (D-COM-1). Fără nicio valoare implicită.',
+      },
+      {
+        id: 'eligibility_open_question',
+        label: 'Întrebare deschisă: cine intră sub alin. (1)',
+        value:
+          'art. 68^3 alin. (1) se adresează „operatorilor economici definiți potrivit legislației specifice domeniului turismului – contribuabili potrivit prezentului titlu". Dacă o persoană fizică care închiriază spațiu de cazare este sau nu „operator economic" se decide în Legea 97/2020 / OG 21/2015 și în autorizația ONRC, nu în Codul fiscal. Aplicația poate întreba; nu poate decide.',
+        unit: 'text',
+        description:
+          'research/38 §3 alin. (1) și §5 pct. 6. Rămâne review_required; 6h-2 o pune ca întrebare (D-COM-1).',
+      },
+    ],
+    calculatorId: 'calc-accommodation-flat-ratio',
+    // Introduced by Legea nr. 239 din 15.12.2025 (MO 1160/15.12.2025), art. XII pct. 5, aplicabilă
+    // „începând cu veniturile aferente anului 2026" (art. XIII alin. (2) lit. b)). Read in full against
+    // the Codul fiscal consolidation at 08.08.2026 (Portal Legislativ 171282) in
+    // `docs/ai/research/38_art68x3_cass_and_occupancy_order.md` §3 — no later amendment.
+    //
+    // NOT ENCODED, deliberately:
+    //  - alin. (3) — the platform-commission scope (B-80). Two live readings, no primary resolution.
+    //    It is carried above as an open question, never as a default.
+    //  - alin. (1) — the tourism-law eligibility gate. Outside the fiscal code.
+    //  - alin. (12) / art. 83 alin. (4) — the >7-rooms conversion, and art. 85 alin. (1)-(2) for the
+    //    1-7 room case. Those decide WHO lands on this method, which is 6h-2's question, not arithmetic.
+    //  - alin. (8) — the occupancy sheet (OPANAF 381/2026, MO I 250/31.03.2026). That is 6h-3, under
+    //    D-OCC-1.
+    //  - Any SM multiple. The 6/12/24/72-SM figures this method touches are already year-scoped on
+    //    CAS_2026 and CASS_2026 (taxYear 2026). Nothing here may hard-code 24.300 or 291.600, because
+    //    the FY2027 minimum wage is not published and a 2027 release does not exist yet.
+    sourceAct: 'Cod fiscal — Legea nr. 239/2025, Art. XII pct. 5 (MO 1160/15.12.2025)',
+    sourceArticle:
+      'art. 68^3 alin. (2) (cotă forfetară 30 % din venitul brut); art. 68^3 alin. (6) (cota 10 % asupra venitului net, „impozitul fiind final"); art. 68^3 alin. (4) (curs BNR din ultima zi bancară anterioară încasării); art. 68^3 alin. (5) (fracțiune de an considerată venit anual, fără proration); art. 68^3 alin. (9)-(10) cu art. 122 alin. (3) (depunere și plată până la 25 mai); art. 68^3 alin. (11) (impozitul este delimitat, contribuțiile se cumulează)',
+    sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/305208',
+    // Re-verified 2026-10-11 against the 08.08.2026 consolidation and Legea 239/2025 in research/38.
+    verifiedAt: '2026-10-11',
+  },
   {
     ...PROVENANCE_2026,
     ruleId: 'VAT_THRESHOLD_2026',

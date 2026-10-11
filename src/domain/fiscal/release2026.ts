@@ -12,11 +12,18 @@ import { ruleSetDigest } from './ruleSetDigest';
  * (`./ruleSetDigest`), so any change to a formula-bearing parameter produces a different release.
  *
  * `createdAt` is now a real instant, not the effective date repeated. It is the commit instant of the
- * last change to this rule set's content — `431afaf` (TASK 2d, 2026-10-09T09:05:44+03:00), which changed
- * a parameter the engine surfaces; the last change to an arithmetic parameter was `1583d9e` (TASK 2a,
- * which added the 39 art. 68 rules). Derivation and the full history are recorded in
+ * last change to this rule set's content — the PG-6h-1 addition of `ACCOMMODATION_68X3_2026` (art. 68^3,
+ * 2026-10-11), which added a rule and therefore moved the content hash; before that it was `431afaf`
+ * (TASK 2d, 2026-10-09T09:05:44+03:00), and the last change to an arithmetic parameter before that was
+ * `1583d9e` (TASK 2a, which added the 39 art. 68 rules). Derivation and the full history are recorded in
  * `docs/ai/phases/20_rule_release_immutability.md` §4. `effectiveFrom: '2026-01-01'` is when the law
  * bites; `createdAt` is when this record was made. A test now pins that they differ.
+ *
+ * PG-6h-1 moved `version` from 1 to 2 for one reason: the rule set grew, so `contentHash` moved, and the
+ * governance in `docs/ai/phases/20_rule_release_immutability.md` §6 makes the version a *consequence* of
+ * a content change rather than a display number. No existing rule was edited — `CAS_2026`, `CASS_2026`,
+ * `INCOME_TAX_2026` and the 39 deductibility rules keep their parameters, citations and `version: 1`
+ * byte-for-byte; the registry's per-rule digest check would have thrown otherwise.
  */
 export const PFA_2026_RELEASE: RuleRelease = {
   releaseId: 'PFA_2026_SYSTEM_REAL',
@@ -25,7 +32,7 @@ export const PFA_2026_RELEASE: RuleRelease = {
   entityType: 'PFA',
   taxYear: 2026,
   lifecycle: 'ACTIVE',
-  version: 1,
+  version: 2,
   contentHash: ruleSetDigest(PFA_2026_SYSTEM_REAL_PACKAGE),
   ruleIds: [
     'PFA_2026_TAX_REFERENCE',
@@ -34,6 +41,10 @@ export const PFA_2026_RELEASE: RuleRelease = {
     'CAS_2026',
     'CASS_2026',
     'INCOME_TAX_2026',
+    // PG-6h-1 — the art. 68^3 flat-ratio determination method (Legea 239/2025 art. XII pct. 5, from
+    // FY2026 incomes). Its own regime, so none of the three `taxRegime` lookups in tax.ts can see or be
+    // shadowed by it. See docs/ai/phases/37_pg6h1_art68x3_arithmetic.md.
+    'ACCOMMODATION_68X3_2026',
     'VAT_THRESHOLD_2026',
     'PFA_DEADLINE_2026',
     'VAT_REGISTRATION_DEADLINE_2026',
@@ -84,7 +95,7 @@ export const PFA_2026_RELEASE: RuleRelease = {
   status: 'SAFE_ACTIVATION',
   effectiveFrom: '2026-01-01',
   effectiveTo: null,
-  createdAt: '2026-10-09T09:05:44+03:00',
+  createdAt: '2026-10-11T16:29:57+03:00',
   evidence: [
     // Cod fiscal, consolidated (Portal Legislativ doc 312601, consolidation history newest 08.08.2026)
     // — art. 68, 118, 122 alin. (3), 123 alin. (1), 135^1 alin. (3), 148 alin. (2), 170 alin. (1),
@@ -104,6 +115,11 @@ export const PFA_2026_RELEASE: RuleRelease = {
     'https://static.anaf.ro/static/10/Anaf/formulare/Instructiuni_D212_2736_2025.pdf',
     // Titlul V comparative amendment table (Legea 239/2025) — corroborates the art. 170 alin. (1) change.
     'https://static.anaf.ro/static/10/Brasov/Brasov/titl_V_cf.pdf',
+    // PG-6h-1: the Codul fiscal consolidation the art. 68^3 text was read out of in full — Portal
+    // Legislativ, consolidation at 08.08.2026 (`docs/ai/research/38_art68x3_cass_and_occupancy_order.md`
+    // §3). The 30 % ratio, the 10 % rate with „impozitul fiind final", the alin. (4) conversion basis and
+    // the alin. (9)-(10) deadlines all come from this text, not from a secondary summary.
+    'https://legislatie.just.ro/Public/DetaliiDocument/171282',
     // Minimum-wage reference acts (unchanged from the original package; TASK 9 re-pointed them from the
     // legalteka.ro mirror to Portal Legislativ — HG 1.506/2024 is doc 291450, HG 146/2026 is doc 308231).
     'https://legislatie.just.ro/Public/DetaliiDocument/291450',
@@ -124,5 +140,13 @@ export const PFA_2026_RELEASE: RuleRelease = {
     'are read only by classifyExpenseDeductibility, never by tax.ts, so no computed figure in this ' +
     'release moves. Their legal basis is CF art. 68 - NOT art. 21 and not art. 123: Titlul IV ' +
     'contains zero references to art. 21 and the corporate general rule is art. 25 alin. (1). No ' +
-    'corporate-only Titlul II limit is encoded for a PFA beyond the named borrowings art. 68 makes.',
+    'corporate-only Titlul II limit is encoded for a PFA beyond the named borrowings art. 68 makes. ' +
+    'PG-6h-1 adds ACCOMMODATION_68X3_2026 under the new taxRegime "accommodation-flat-ratio": the art. ' +
+    '68^3 flat 30 % expense ratio and the 10 % rate with „impozitul fiind final" (Legea 239/2025 art. XII ' +
+    'pct. 5, from FY2026 incomes). It is a METHOD rule, not a second CAS / CASS / income-tax rule: the ' +
+    'contribution figures stay owned by CAS_2026 and CASS_2026. Two of its alineate are carried as open ' +
+    'questions and are NOT encoded — alin. (3) (platform-commission scope, B-80) and alin. (1) (the ' +
+    'tourism-law eligibility gate) — because both move the gross and no primary source resolves them. ' +
+    'No existing rule value, threshold or citation moved, so the release version moved from 1 to 2 only ' +
+    'because the rule set did.',
 };

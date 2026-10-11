@@ -22,6 +22,18 @@ export type CalculatorResult =
        * deductible CASS over „contribuția … calculată potrivit art. 174 alin. (1)”, which is the 10% on
        * the art. 68 net income — not the top-up to the 6 SM floor. Absent or 0 = fully deductible. */
       nonDeductible?: Bani;
+      /**
+       * PG-6h-1 — the net income this rule DETERMINED as its own intermediate legal quantity, when it
+       * determines one. Today exactly one rule does: CF art. 68^3 alin. (2), where the net is 70 % of
+       * gross by statute rather than by subtracting recorded expenses.
+       *
+       * It is reported rather than left for the caller to re-subtract, for the reason this codebase has
+       * already been burned by twice: a quantity recomputed at the surface is a quantity that can
+       * disagree with the figure it sits beside. The composition layer needs the 68^3 net to feed the
+       * CAS threshold test (art. 148 alin. (3)) and the CASS base (art. 170 alin. (1)); taking it from
+       * here is the only way those three numbers are guaranteed to be about the same money.
+       */
+      determinedNet?: Bani;
     }
   | ReviewRequired;
 
@@ -102,6 +114,16 @@ export type CalculatorInput = {
    * assumed. Never an input to CAS (art. 150 alin. (2) covers only lit. b^1)).
    */
   salaryIncomeLei?: Bani;
+  /**
+   * PG-6h-1 — CF art. 68^3 alin. (2): the GROSS of an accommodation register, cash basis („încasate în
+   * cursul anului fiscal”), already converted to lei per alin. (4).
+   *
+   * Deliberately a separate field and NOT `base`. In `calcCas` and `calcCass`, `base` means the NET the
+   * contributions are measured on; in `calcAccommodationFlatRatio` the input is the GROSS the flat ratio
+   * is applied to. One variable meaning gross in one calculator and net in another is precisely the
+   * mistake that would turn the 68^3 net into the CAS base, which art. 148 alin. (2) does not allow.
+   */
+  gross?: Bani;
   /**
    * CF art. 148 alin. (2): the CAS base is "venitul ales de contribuabil". An
    * explicitly chosen base is honoured, but never below the applicable statutory
@@ -470,6 +492,95 @@ function calcIncomeTax(rule: FiscalRule, input?: CalculatorInput): CalculatorRes
   };
 }
 
+/**
+ * PG-6h-1 — CF art. 68^3: the flat-ratio determination method for `prestarea de servicii de cazare`,
+ * introduced by Legea nr. 239/2025 art. XII pct. 5 and applicable from FY2026 incomes.
+ *
+ * The arithmetic is two multiplications and nothing else:
+ *
+ *   venitul net = venitul brut − 30 % × venitul brut = 70 % × venitul brut   — alin. (2)
+ *   impozitul   = 10 % × venitul net, „impozitul fiind final"                — alin. (6)
+ *
+ * **The 30 % is an expense ratio, not a tax rate.** Applying it as a rate to gross would produce a figure
+ * roughly ten times too small and is the single most likely way to get this rule wrong. The net is what
+ * is left after the deemed expense, and the 10 % runs on the net, which is why the effective burden is
+ * 7 % of gross — and why it stays 7 %: „impozitul fiind final" means CAS and CASS are NOT deducted from
+ * this base, unlike art. 123 alin. (1) + art. 118 alin. (2) where they are.
+ *
+ * **What this calculator does NOT do, on purpose.** It takes the gross as an input and returns a net and
+ * a tax. It does not decide what the gross contains. art. 68^3 alin. (3) excludes from gross „comisionul
+ * reținut de către entitățile care facilitează închirierea pe termen scurt a camerelor situate în
+ * locuințe proprietate personală”, but the words are limited to personal dwellings while alin. (1) puts
+ * the article's subject in the hands of a tourism-sector operator, and no primary source reconciles them
+ * (B-80, `docs/ai/research/38_art68x3_cass_and_occupancy_order.md` §3). The choice moves gross, therefore
+ * the tax, the CASS base and the CAS threshold. So the choice is not made here: the gross arrives as an
+ * input, and the caller that cannot settle it refuses rather than picking a reading.
+ *
+ * It also does not prorate anything. art. 68^3 alin. (5) makes a fraction-of-year amount the annual
+ * amount, and art. 151 alin. (2) keeps the 12/24-SM and 6/72-SM figures whole for a mid-year taxpayer.
+ *
+ * Rounding follows the house boundary: art. 66 alin. (1) rounds the sums that are DUE, so the tax is
+ * rounded once here; the net is a BASE, and an inexact base is reported, never repaired — the same
+ * discipline `exactBani` applies to a prorated deduction in `tax.ts`.
+ */
+function calcAccommodationFlatRatio(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
+  const expenseRatioPercent = paramNumber(rule, 'expense_ratio'); // unscaled integer percent
+  const taxRatePercent = paramNumber(rule, 'tax_rate'); // unscaled integer percent
+  const gross = input?.gross;
+  if (typeof gross !== 'number') {
+    return {
+      reviewRequired: true,
+      reason:
+        'art. 68^3 alin. (2): cota forfetară se aplică asupra venitului brut, iar niciun venit brut nu a fost ' +
+        'furnizat. Fără brut nu există bază de calcul — aplicația refuză în loc să presupună unul.',
+    };
+  }
+  if (gross < 0) {
+    return {
+      reviewRequired: true,
+      reason: `art. 68^3: venitul brut nu poate fi negativ; s-a primit ${leiText(gross)} lei.`,
+    };
+  }
+
+  // One multiplication, not a subtraction of two separately-derived halves: `gross − 30 % × gross` and
+  // `70 % × gross` are the same law, but the first form can leave the deemed expense and the net
+  // disagreeing by a ban if either side is ever rounded on the way.
+  const netDec = applyRateDecimal(gross, 100 - expenseRatioPercent);
+  if (!netDec.isInteger()) {
+    return {
+      reviewRequired: true,
+      reason:
+        `art. 68^3 alin. (2): venitul net rezultat din ${leiText(gross)} lei × ${(100 - expenseRatioPercent) / 100} ` +
+        'nu este un număr întreg de bani. art. 66 alin. (1) rotește sumele datorate, nu bazele, deci ' +
+        'aplicația nu rotunjește o bază ca să obțină un număr rotund — raportează în schimb.',
+    };
+  }
+  const net = netDec.toNumber() as Bani;
+  // CF art. 66 alin. (1) — the one rounding, on the sum that is due.
+  const tax = roundArt66(applyRateDecimal(net, taxRatePercent));
+
+  const filingDeadline = paramValue(rule, 'filing_deadline');
+  const paymentDeadline = paramValue(rule, 'payment_deadline');
+  const breakdown = [
+    `venit brut (art. 68^3 alin. (2), încasate în cursul anului fiscal): ${leiText(gross)} lei`,
+    `cheltuieli forfetare = ${expenseRatioPercent}% din venitul brut = ${leiText(subBani(gross, net))} lei — art. 68^3 alin. (2)`,
+    `venit net = ${leiText(gross)} × ${(100 - expenseRatioPercent) / 100} = ${leiText(net)} lei`,
+    `impozit = ${leiText(net)} × ${taxRatePercent / 100} = ${leiText(tax)} lei — art. 68^3 alin. (6), „impozitul fiind final"`,
+    `povara efectivă = ${taxRatePercent * (100 - expenseRatioPercent) / 100}% din venitul brut; CAS și CASS NU se scad din această bază (impozitul fiind final), spre deosebire de art. 123 alin. (1) cu art. 118 alin. (2)`,
+    'venitul net de aici alimentează TESTUL de prag din art. 148 alin. (3) (12 / 24 SM) și este CHIAR baza de calcul CASS din art. 170 alin. (1) (prag 6 SM, plafon 72 SM) — art. 170 alin. (2)-(4) nu se aplică, fiind mărginite la art. 155 alin. (1) lit. c)-h)',
+    'art. 68^3 alin. (11): impozitul pe venit este delimitat la acest venit; contribuțiile se cumulează cu celelalte venituri din art. 155 alin. (1) lit. b)',
+    'art. 68^3 alin. (4): veniturile în valută se convertesc la cursul BNR din ultima zi bancară anterioară fiecărei încasări — nu media anuală, nu cursul de la sfârșitul anului',
+    'art. 68^3 alin. (5): o fracțiune de an este considerată venit anual; nimic de aici nu este proratat',
+  ];
+  if (typeof filingDeadline === 'string') {
+    breakdown.push(`depunerea declarației unice: ${filingDeadline} — art. 68^3 alin. (9) cu art. 122 alin. (3), nu art. 121`);
+  }
+  if (typeof paymentDeadline === 'string') {
+    breakdown.push(`plata: ${paymentDeadline} — art. 68^3 alin. (10) cu art. 122 alin. (3), nu art. 121`);
+  }
+  return { value: tax, determinedNet: net, breakdown };
+}
+
 function calcVatThreshold(rule: FiscalRule): CalculatorResult {
   const threshold = paramBani(rule, 'threshold');
   return { value: threshold, breakdown: [`VAT threshold: ${leiText(threshold)} lei`] };
@@ -503,6 +614,7 @@ export const calculatorRegistry: Record<string, CalculatorFunction> = {
   'calc-cas': calcCas,
   'calc-cass': calcCass,
   'calc-income-tax': calcIncomeTax,
+  'calc-accommodation-flat-ratio': calcAccommodationFlatRatio,
   'calc-vat-threshold': calcVatThreshold,
   'calc-deadline': calcDeadline,
 };

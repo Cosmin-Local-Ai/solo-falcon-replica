@@ -70,15 +70,47 @@ describe('the declared family reaches the classifier from stored data', () => {
     if (operands.kind !== 'run') {
       // The refusal is the registry's, and it travels with the outcome so the surface names the same id
       // the registry registered — not a sentence re-composed on the way out.
+      //
+      // PG-6h-1 moved which entry refuses an FY2026 cazare register. `no-expense-engine` said the app had
+      // no method for this activity; it has one now, so that sentence would be false. What still stops the
+      // figure is the gross: art. 68^3 alin. (3) leaves the platform-commission scope open and alin. (1)
+      // puts the eligibility gate in tourism law, and neither may be defaulted.
       expect(operands.basis.kind).toBe('refused');
-      expect(operands.basis.scenario.id).toBe('no-expense-engine');
+      expect(operands.basis.scenario.id).toBe('accommodation-gross-undetermined');
       expect(operands.basis.scenario.effect).toBe('refuse');
       expect(operands.basis.scenario.fixTarget).toEqual({ page: 'settings', tab: 'fiscal' });
-      // The rule's own sentence, lifted from `EXPENSE_ENGINE_CAZARE_2026`, not paraphrased by the app.
-      expect(operands.basis.scenario.detail).toContain('art. 68^3');
+      // The two open questions are the rule's own words, lifted from ACCOMMODATION_68X3_2026 — not a
+      // paraphrase the app composed on the way out. The framing sentence that says the method IS
+      // implemented is copy, rendered by `ScenarioRefusal` above this detail, and is not repeated here.
+      expect(operands.basis.scenario.detail).toContain('comisionul reținut');
+      expect(operands.basis.scenario.detail).toContain('operator economic');
+      expect(operands.basis.scenario.detail).toContain('Citește A');
+      expect(operands.basis.scenario.detail).toContain('Citește B');
       expect(operands.result.lines).toEqual([]);
     }
-    expect(operands.scenarios.map(s => s.id)).toContain('no-expense-engine');
+    // `no-expense-engine` is NOT the answer for FY2026 any more — the flat-ratio rule is selected, so the
+    // absence of an art. 68 expense engine is what art. 68 alin. (1) prescribes rather than a gap.
+    expect(operands.scenarios.map(s => s.id)).toEqual(['accommodation-gross-undetermined']);
+  });
+
+  it('with no art. 68^3 rule in the selected set, the missing method is still the honest answer', () => {
+    // PG-6h-1 kept `no-expense-engine` alive rather than deleting it, and this is the case that keeps it:
+    // a rule set that carries no flat-ratio method. The app must not claim it can compute accommodation
+    // income under a rule package that does not offer the method — the sentence stays true where it is true,
+    // and stops being said where it is not.
+    pinClock(fixedInstant());
+    const withoutFlatRatio = PFA_2026_SYSTEM_REAL_PACKAGE.filter(
+      (r) => r.taxRegime !== 'accommodation-flat-ratio',
+    );
+    const operands = selectEstimateOperands(
+      profileWith({ activityFamily: 'cazare' }),
+      AS_OF,
+      withoutFlatRatio,
+    );
+    expect(operands.kind).toBe('refused');
+    if (operands.kind !== 'run') {
+      expect(operands.basis.scenario.id).toBe('no-expense-engine');
+    }
   });
 
   it('the same register under a declared `other` computes, and no scenario fires at all', () => {
