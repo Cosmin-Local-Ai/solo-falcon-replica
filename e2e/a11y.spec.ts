@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fixedInstant } from '../src/test/fixedInstant';
-import { seedBrowser } from './fixtures';
+import { seedBrowser, seedPayload } from './fixtures';
 
 /**
  * PG-0 — axe-core on `/dashboard`, failing on `serious` and `critical` only.
@@ -90,6 +90,29 @@ async function scanDashboard(page: import('@playwright/test').Page): Promise<Axe
   return runAxe(page);
 }
 
+/**
+ * PG-5 — the route this phase rebuilt.
+ *
+ * `/declarations` was recorded in `docs/ai/phases/27_pg0_groundwork.md` as a route the gate had not
+ * widened to. It is widened here because PG-5 replaced the page: a register table, a second read-only
+ * table for the preserved monthly rows, and a modal form with a required-date rule. That is new markup
+ * on a route the gate had never looked at, and a new surface should not enter the tree unscanned.
+ */
+async function loadDeclarations(page: import('@playwright/test').Page): Promise<void> {
+  await seedBrowser(page, {
+    ...seedPayload(),
+    filings: [{ id: 'f-2026', taxYear: 2026, form: 'D212', status: 'depusa', filedOn: '2027-05-12', reference: 'D212.2026.000042' }],
+    legacyDeclarations: [
+      { id: 'd-1', an: 2026, luna: 3, venituri: 1250000 as never, cheltuieli: 180000 as never, status: 'inregistrata', dataInregistrare: '2026-04-10' },
+    ],
+  });
+  await page.clock.setFixedTime(fixedInstant());
+  await page.goto('/declarations');
+  await expect(page.getByRole('heading', { name: 'Declarația unică (D212)' })).toBeVisible();
+  // Both tables, so the scan covers the legacy section too rather than only the register.
+  await expect(page.getByText('2026-03')).toBeVisible();
+}
+
 test.describe('PG-0 — axe-core accessibility gate on /dashboard', () => {
   test('the dashboard has no serious or critical axe violations', async ({ page }) => {
     const violations = await scanDashboard(page);
@@ -105,6 +128,22 @@ test.describe('PG-0 — axe-core accessibility gate on /dashboard', () => {
     if (noise.length > 0) console.log(`axe, non-blocking on /dashboard:\n${describeViolations(noise)}`);
 
     expect(fatal, `axe found blocking violations on /dashboard:\n\n${describeViolations(fatal)}`).toHaveLength(0);
+  });
+
+  test('the annual filing register has no serious or critical axe violations', async ({ page }) => {
+    await loadDeclarations(page);
+    const violations = await runAxe(page);
+    const fatal = blocking(violations);
+    const noise = violations.filter((v) => !BLOCKING_IMPACTS.includes(v.impact ?? ''));
+
+    test.info().annotations.push({
+      type: 'axe',
+      description: `${fatal.length} blocking (serious+critical), ${noise.length} non-blocking ` +
+        `(minor+moderate) on /declarations`,
+    });
+    if (noise.length > 0) console.log(`axe, non-blocking on /declarations:\n${describeViolations(noise)}`);
+
+    expect(fatal, `axe found blocking violations on /declarations:\n\n${describeViolations(fatal)}`).toHaveLength(0);
   });
 
   // ── Negative controls ─────────────────────────────────────────────────────────
