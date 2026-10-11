@@ -13,6 +13,9 @@ import {
   selectableRegimes,
 } from '../domain/regimes';
 import { epochMs, isoCalendarDateProblem, isoCalendarDateProblemText } from '../domain/date';
+// PG-6b (B-29) — the declared activity family. The type comes from the classifier that reads the fact, so
+// the option list on this form and the rule condition cannot drift into two vocabularies.
+import type { ActivityFamily } from '../domain/fiscal/deductibility';
 import type {
   PfaRegime,
   PfaSalaryStatus,
@@ -145,6 +148,12 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     // is where its "does not change the regime" caveat belongs, but it reads and
     // writes `identity.caen`, not the deprecated `profile.caen` string.
     caen: identity.caen?.[0]?.cod ?? '',
+    // PG-6b (B-29) — a THREE-state field, like the pension facts below it: `''` means the person has never
+    // answered, which is not the same answer as `other`. `other` asserts that the sistem real rules apply;
+    // leaving it unanswered keeps the estimate `incomplete` and says so. The app never fills this in from
+    // the CAEN field above — `research/30` §3 records that the CAEN columns of the nomenclator are
+    // „menționate cu titlu exemplificativ”, so a code is not a statement about the taxation method.
+    activityFamily: (profile.activityFamily ?? '') as ActivityFamily | '',
     pfaStartYear: String(profile.pfaStartYear),
     fiscalYear: String(profile.fiscalYear),
     pfaStartDate: profile.pfaStartDate ?? '',
@@ -287,6 +296,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       pfaStartYear: year,
       fiscalYear: fy,
       pfaStartDate: fiscal.pfaStartDate || undefined,
+      // PG-6b — `''` writes absence, never `'other'`. A stored empty string would be a third value the
+      // type cannot hold, and defaulting it here would mint the fact whose absence the estimate reports.
+      activityFamily: fiscal.activityFamily || undefined,
       salaryStatus: fiscal.salaryStatus,
       // No salary ⇒ no art. 174 alin. (7) lit. a) relief, and no stale amount left behind.
       salaryIncomeLei: fiscal.salaryStatus === 'da' ? salary : undefined,
@@ -735,6 +747,26 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                   hint={settingsCopy.fiscal.caenHint}
                   source={copy.sources.caenDoesNotChangeRegime}
                 />
+              </div>
+
+              <div className="field">
+                <label htmlFor="set-activity-family">{settingsCopy.fiscal.activityFamily}</label>
+                <select
+                  id="set-activity-family"
+                  className="input"
+                  data-activity-family
+                  value={fiscal.activityFamily}
+                  onChange={e => setFiscal({ ...fiscal, activityFamily: e.target.value as ActivityFamily | '' })}
+                >
+                  <option value="">{copy.ui.answerUnrecorded}</option>
+                  <option value="other">{settingsCopy.fiscal.activityFamilyOptions.other}</option>
+                  <option value="cazare">{settingsCopy.fiscal.activityFamilyOptions.cazare}</option>
+                </select>
+                <span className="hint" data-activity-family-hint>
+                  {fiscal.activityFamily === ''
+                    ? settingsCopy.fiscal.activityFamilyUnanswered
+                    : settingsCopy.fiscal.activityFamilyHint}
+                </span>
               </div>
 
               <div className="field">

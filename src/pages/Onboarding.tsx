@@ -12,8 +12,10 @@
  *   the exceedance date · salary status and amount · pension status and receipt fact · other-income flags.
  *
  * What it deliberately does NOT collect, and says so on screen:
- *   the activity declaration (CAEN → activity family) — 12E is blocked on a mapping decision research 21
- *   §7(c) left undecided, so asking here would manufacture a fact;
+ *   the activity FAMILY is collected here (PG-6b), as a declared fact — what is NOT collected is any
+ *   attempt to derive it: no CAEN code is read as an answer, because OMFP 925/2017 art. 2 alin. (4) keys
+ *   the determination method to the activity description „independent de codurile CAEN menționate cu titlu
+ *   exemplificativ” (research 30 §3); the CAEN list itself stays an identity field, not a fiscal input;
  *   other-income AMOUNTS — 12F owns them, and `otherIncome: PfaOtherIncomeFlag[]` models the flag only.
  *
  * And what it refuses: `norma_venit`. D-NORMA-2 gates the regime, not the research, and the requirement is
@@ -30,6 +32,8 @@ import { Card } from '../components/ui';
 import { isoCalendarDateProblem, isoCalendarDateProblemText, localYear } from '../domain/date';
 import { parseLeiInput } from '../domain/money';
 import { PFA_REGIME_DESCRIPTORS, PFA_REGIME_VALUES, isComputableRegime } from '../domain/regimes';
+// PG-6b (B-29) — the declared activity family, typed from the classifier that reads it.
+import type { ActivityFamily } from '../domain/fiscal/deductibility';
 import type {
   PfaOtherIncomeFlag,
   PfaPensionStatus,
@@ -71,6 +75,10 @@ export default function OnboardingPage() {
   const [cnp, setCnp] = useState('');
   const [regCom, setRegCom] = useState('');
   const [regime, setRegime] = useState<PfaRegime>(DEFAULT_REGIME);
+  // PG-6b — `''` is "not recorded", the same third state the VAT, salary and pension questions use.
+  // It is NOT collapsed into `'other'`: answering nothing leaves the estimate `incomplete` and reported,
+  // while answering `other` is a claim the person made.
+  const [activityFamily, setActivityFamily] = useState<ActivityFamily | ''>('');
   const [startDate, setStartDate] = useState('');
   const [vatRegistered, setVatRegistered] = useState<TriState>('');
   const [vatDate, setVatDate] = useState('');
@@ -148,6 +156,11 @@ export default function OnboardingPage() {
       ...(pensionReceipt === ''
         ? {}
         : { pensionReceiptYears: [{ fiscalYear, received: pensionReceipt }] }),
+      // PG-6b (B-29) — an unanswered question writes nothing at all, so the profile keeps the third state
+      // and `scenarios.ts activity-family-undeclared` reports it. There is no `?? 'other'` here: that one
+      // token would turn "nobody asked" into "the ordinary rules apply", which is the defect this field
+      // exists to remove.
+      ...(activityFamily === '' ? {} : { activityFamily }),
       otherIncome,
     });
 
@@ -257,6 +270,34 @@ export default function OnboardingPage() {
               </label>
             );
           })}
+        </div>
+      </Card>
+
+      <Card title={copy_.sections.activityFamily}>
+        <div className="stack">
+          <span className="hint">{copy_.fields.activityFamilyHint}</span>
+          <label className="row" data-activity-family="">
+            <input
+              type="radio"
+              name="activity-family"
+              value=""
+              checked={activityFamily === ''}
+              onChange={() => setActivityFamily('')}
+            />
+            {copy_.notRecorded}
+          </label>
+          {(['other', 'cazare'] as ActivityFamily[]).map(value => (
+            <label key={value} className="row" data-activity-family={value}>
+              <input
+                type="radio"
+                name="activity-family"
+                value={value}
+                checked={activityFamily === value}
+                onChange={() => setActivityFamily(value)}
+              />
+              {copy_.fields.activityFamilyOptions[value]}
+            </label>
+          ))}
         </div>
       </Card>
 
@@ -385,7 +426,6 @@ export default function OnboardingPage() {
       <Card title={copy_.sections.deferred}>
         <div className="stack">
           <p>{copy_.deferred.intro}</p>
-          <p className="hint">{copy_.deferred.activity}</p>
           <p className="hint">{copy_.deferred.otherAmounts}</p>
         </div>
       </Card>

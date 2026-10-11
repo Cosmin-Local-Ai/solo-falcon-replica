@@ -28,6 +28,7 @@ export const onboarding = {
   sections: {
     identity: 'Cine ești',
     regime: 'Ce regim fiscal ai',
+    activityFamily: 'Cum îți este impozitată activitatea',
     start: 'Când ai început activitatea',
     vat: 'TVA',
     salary: 'Venit din salarii',
@@ -49,6 +50,25 @@ export const onboarding = {
     regime: 'Regimul fiscal al activității',
     regimeHint:
       'Alege varianta care corespunde activității tale. Dacă regimul nu este susținut, aplicația o spune înainte să calculeze ceva.',
+
+    /**
+     * PG-6b (B-29) — the activity-family question, asked rather than inferred.
+     *
+     * This is the fact the art. 68^3 refusal has been waiting for since the rule was written: the classifier
+     * could match `activity_cazare` all along, and no caller ever supplied it, so an accommodation taxpayer
+     * and a software consultant got the same confident figure. The hint states the two things a person
+     * needs before answering: that the app will not read the answer off their CAEN code (OMFP 925/2017
+     * art. 2 alin. (4) calls those code lists exemplary — „independent de codurile CAEN menționate cu titlu
+     * exemplificativ”, research 30 §3), and what answering „Da” costs them today, which is no figure at all.
+     */
+    activityFamily:
+      'Activitatea ta se impune prin altă metodă legală decât cheltuielile efective?',
+    activityFamilyHint:
+      'Aplicația nu citește răspunsul din codul CAEN: pentru lege listele de coduri sunt exemplificative, deci un cod nu spune cum e impozitată activitatea. Fără răspuns, calculul se face pe cheltuieli efective și aplicația semnalează că acest fapt lipsește. Dacă alegi prestarea de servicii de cazare, aplicația refuză calculul în loc să aplice unor venituri din cazare reguli care nu sunt ale lor — regimul forfetar de 30 % nu este încă implementat aici.',
+    activityFamilyOptions: {
+      other: 'Nu — cheltuieli efective (sistem real)',
+      cazare: 'Da — prestare de servicii de cazare',
+    },
 
     startDate: 'Data începerii activității',
     startDateHint:
@@ -88,9 +108,10 @@ export const onboarding = {
   notRecorded: 'Nu răspund acum',
 
   deferred: {
-    intro: 'Două lucruri nu se întreabă în acest pas, și nu sunt omise din greșeală:',
-    activity:
-      'Declararea activității pe coduri CAEN nu se colectează aici. Aplicația nu știe încă să lege un cod CAEN de o familie de activități, și o presupunere aici ar schimba modul de calcul.',
+    // PG-6b removed the activity declaration from this list: the family is asked now, on the screen above.
+    // What stays deferred is the money behind the other-income flags — a flag without an amount is a fact
+    // the engine cannot use, and 12F owns the amounts.
+    intro: 'Un lucru nu se întreabă în acest pas, și nu este omis din greșeală:',
     otherAmounts:
       'Sumele pentru celelalte surse de venit nu se colectează aici. Se înregistrează doar că sursa există; câtă vreme lipsește cuantumul, calculul la care ar conta rămâne de verificat.',
   },

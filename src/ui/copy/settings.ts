@@ -102,6 +102,27 @@ export const settings = {
     regimeHint: 'Un PFA nu poate alege impozit pe profit; temeiurile sunt în „Surse și note de interpretare”.',
     caen: 'Cod CAEN',
     caenHint: 'Codul CAEN nu schimbă regimul fiscal.',
+    /**
+     * PG-6b (B-29) — the declared activity family, and the three captions for it.
+     *
+     * The question is about the **method**, not about the trade: art. 68 alin. (1) excepts art. 68^1, 68^3
+     * and 69 from the expense rules, so a person whose activity falls under one of those is not on the
+     * sistem real this app computes. `research/30` §3 is why the field is asked rather than derived —
+     * OMFP 925/2017 art. 2 alin. (4) keys the determination method to the activity description
+     * „independent de codurile CAEN menționate cu titlu exemplificativ”, so the CAEN code two fields above
+     * is expressly not an answer. The hint says that out loud because the field sits directly under the
+     * CAEN field, and a form that asks the same question twice in different words teaches the person that
+     * the second one was guessed from the first.
+     */
+    activityFamily: 'Familia de activități declarată',
+    activityFamilyHint:
+      'Faptă declarată de tine, nu dedusă din codul CAEN. Determină dacă regula de calcul este cea a cheltuielilor efective sau una pentru care acest pachet de reguli nu are calcul.',
+    activityFamilyUnanswered:
+      'Fără răspuns. Calculul de pe tabloul de bord folosește regulile cheltuielilor efective; dacă activitatea ta se impune prin altă metodă, aplicația semnalează că acest fapt lipsește în loc să ghicească.',
+    activityFamilyOptions: {
+      other: 'Altă activitate — cheltuieli efective (sistem real)',
+      cazare: 'Prestare de servicii de cazare',
+    },
     startYear: 'Anul începerii activității',
     fiscalYear: 'An fiscal de referință',
     establishmentDate: 'Data înființării (fracțiune de an)',
