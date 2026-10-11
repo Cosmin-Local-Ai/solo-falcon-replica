@@ -226,7 +226,7 @@ the SM in force on 1 January of the income year governs annual bases):
    the consolidation (only three "Articolul 148" hits: the article itself plus the two notes). Treated as
    "no change", but **the OUG 8/2026 text itself was not read for art. 148.** Given that the same note set
    was proven incomplete for art. 68 (`phases/02` §8.2), this remains an open risk, not a closed negative.
-4. **art. 68^3 not read in full.** If the app must handle 2026 accommodation-services income, art. 68^3
+4. **art. 68^3 not read in full.** If the app must handle 2026 accommodation-services income, art. 68^3 — **CLOSED 2026-10-11: alin. (1)–(12) read verbatim against the 08.08.2026 consolidation, see `research/38` §3. The CASS question is closed there too: art. 170 alin. (1) names 68^3 expressly (L239/2025 art. XII pct. 19), so the net is the CASS base, floored at 6 SM and capped at 72 SM.**
    (net = brut − 30% forfetar; platform commissions excluded from brut) now feeds the art. 148 alin. (3)
    cumulation and must be read before it is modelled.
 5. **SM assumption for the 2026 annual bases.** Art. 148 uses the SM "în vigoare la termenul de depunere a

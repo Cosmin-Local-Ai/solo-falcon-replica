@@ -140,4 +140,4 @@ If it is **not** built, the refusal must be concrete — name the nomenclator an
 4. **Do all 42 județe publish coeficienți de corecție for 2026?** art. 69 alin. (2) lit. b) requires it; only Brașov's title confirms it. Hard dependency for modelling *norma ajustată*.
 5. **Exact field list of DU 212 Subsecțiunea 2** from the OpANAF 2.736/2025 instructions — currently from search snippets, not the instructions themselves.
 6. **Did OMFP 925/2017 shrink the list vs OMFP 2.875/2011** — unconfirmed in either direction.
-7. **The ANAF order approving the new fișa de ocupare a capacității de cazare** (due ~mid-March 2026 under Legea 239/2025 art. XIV alin. (2)) — needed only if art. 68^3 is ever modelled.
+7. **The ANAF order approving the new fișa de ocupare a capacității de cazare** (due ~mid-March 2026 under Legea 239/2025 art. XIV alin. (2)) — needed only if art. 68^3 is ever modelled. — **CLOSED 2026-10-11: published as OPANAF nr. 381 din 24.03.2026, MO I nr. 250 din 31.03.2026 — 9 days past the art. XIV alin. (2) deadline. Model, fields and instructions in `research/38` §2. It abrogates OPANAF 398/2021, which the current D212 instructions still cite.**
