@@ -413,7 +413,11 @@ export function selectAccommodationGross(
 function flatRatioGrossFromYtd(ytd: YtdTotals, data: AppData): Bani | null {
   const registration = data.profile.vatRegistration;
   if (!registration) return null;
-  return registrationChargesVat(registration.status) ? ytd.revenue : ytd.revenueNet;
+  // A person who charges TVA has that TVA excluded from the income measure (art. 286/292 with art. 310
+  // alin. (10) lit. b) for the other side), so the gross the art. 68^3 rule measures is the VAT-
+  // EXCLUSIVE one. A person in the scutire keeps the VAT in, because they may not show it and may not
+  // claim it back.
+  return registrationChargesVat(registration.status) ? ytd.revenueNet : ytd.revenue;
 }
 
 /**

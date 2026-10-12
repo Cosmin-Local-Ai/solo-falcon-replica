@@ -340,7 +340,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // Area 6: VAT is not taxable income. The revenue measure follows from whether this person charges TVA at
   // all. These are the sistem-real operands only; the flat gross already carries the same rule, applied
   // per receipt by `estimateBasis.ts flatRatioGrossFromYtd`.
-  const sistemRealGross = registrationChargesVat(inputs.vatRegistration.status) ? revenues : revenuesNet;
+  const sistemRealGross = registrationChargesVat(inputs.vatRegistration.status) ? revenuesNet : revenues;
 
   // D-VAT-2 — where a half-count rule met VAT the taxpayer could not claim back, the ordering changes the
   // figure and no PFA rule settles which ordering applies. Compute neither; show both, and quote the only

@@ -296,7 +296,13 @@ describe('Dashboard page', () => {
   });
 
   test('TASK 9: the estimate hero attributes its figure to the rule package that produced it', async () => {
-    // Empty localStorage → the store falls back to the app's own seed dataset, whose estimate computes.
+    // PG-6f (B-30): this used to render on empty storage, where the retired `vatExempt: false` default
+    // quietly settled the VAT measure and let a zero compute. There is no such default any more — a
+    // profile that has never been asked whether it charges TVA is a profile the engine refuses to choose a
+    // money measure for, and that refusal is the point of this phase, not an obstacle to this test. So the
+    // payload declares the registration state the seed declares, and what stays under test is the
+    // attribution: the hero naming the package that produced the figure.
+    writeCurrentPayload();
     renderDashboard();
     const heroCard = await waitFor(() => {
       const card = [...document.querySelectorAll('section.card')].find(
