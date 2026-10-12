@@ -426,6 +426,29 @@ The second audit produced a production-gate brief, saved at `docs/ai/briefs/28_p
 | PG-12 UX, a11y, performance | **27, 28, 33** | **B-52**, **B-53**, the nine wording calls |
 | PG-13 release audit | **30–34** | all open |
 
+### PG status, as derived from the defect register on 2026-10-12
+
+The table above has no status column, which is why this had to be re-derived by hand. It is recorded once here.
+
+| PG | Status | What decides it |
+|---|---|---|
+| **PG-0** | **DONE** `def8a3c` | — |
+| **PG-1** | **DONE** `a871a68` | the silent-exclusion channel is live and reused by every later refusal |
+| **PG-2** | **DONE** `700bd2a` | **B-38 still open** — date *defaults*, carried as phase 12C, not a gate on PG-2's own scope |
+| **PG-3** | **DONE** `05ab925` | D-DEMO-1's persona set is a later addition, not a reopening |
+| **PG-4** | **DONE** `c44efb0` | — |
+| **PG-5** | **DONE** `ab7461d` | B-34, B-35, B-72, B-73 closed |
+| **PG-6** | **substantially done, not closed** | **all five owner defects are closed** — B-29, B-30, B-31, B-39, B-41. What still sits in its territory: **B-88** (1–7 rooms uncomputed, no art. 85 rule — D-CAZ-1 path (c)) and **B-16 remainder** (the fiscal-loss record is not persisted). **12H normă de venit is not part of PG-6's row** and awaits **D-NORMA-2**, a user decision, not research. |
+| **PG-7** | **ALREADY DONE** — phase 10c landed early; **B-36 and B-37 are both closed** | nothing outstanding |
+| **PG-8** | open | **B-43** (the estimate loses the evidence that produced it), **B-49** (`addSnapshot` has no production caller) |
+| **PG-9** | open | **B-50** (39 rules ACTIVE with one `verifiedAt` while caps carry CONFLICT NEREZOLVAT) |
+| **PG-10** | **in flight 2026-10-12** | **B-51**, brief `49_b51_scope_statement.md` |
+| **PG-11** | open — **release gate** | phase 29: persistence, export, import, document blobs. Not started. |
+| **PG-12** | open | **B-52**, **B-53**, the nine parked wording calls, **B-86**, **B-91** |
+| **PG-13** | open — **all of phases 30–34 unstarted** | including **phase 31 golden fiscal fixtures**: no test in the suite is pinned against an independently derived expected return |
+
+**So the remaining sequence is PG-8 … PG-13, not PG-7 … PG-13.** PG-7 was completed early, when Phase 10c landed.
+
 **PG-1 goes first after PG-0.** It is the channel every later refusal reuses, and it is the finding that undermines every number on the screen: the hero says Calculat while records are quietly dropped, in both directions — an unconverted euro expense *raises* the tax and an unconverted euro revenue *lowers* it.
 
 ---
