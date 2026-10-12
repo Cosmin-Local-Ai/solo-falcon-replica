@@ -34,6 +34,13 @@ import type { Bani } from '../domain/money';
 // PG-6b (B-29) — the declared activity family. The type comes from the classifier that reads the fact, so
 // the option list on this form and the rule condition cannot drift into two vocabularies.
 import type { ActivityFamily } from '../domain/fiscal/deductibility';
+// PG-6f (B-30) — the registration state and its six values come from the domain, not from a list written
+// here. A select whose options drift from the union the engine switches on is the same defect class as a
+// rule constant hard-coded at a call site.
+import {
+  VAT_REGISTRATION_VALUES,
+  type VatRegistrationStatus,
+} from '../domain/fiscal/vat';
 import type {
   AccommodationCommissionReading,
   PfaProfile,
@@ -490,7 +497,12 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
         : ''
     ) as TriState,
     socialInsuranceStatus: profile.socialInsuranceStatus,
-    vatExempt: profile.vatExempt ? 'da' : 'nu',
+    // PG-6f (B-30) — the retired `vatExempt` yes/no is replaced by the registration STATE the law
+    // actually uses, plus the orthogonal TVA la încasare flag. Empty means „never asked”, which is a
+    // third state and not `scutit_art310`: the app does not know whether this person charges TVA, and
+    // either guess moves the money measure of every record in the register.
+    vatRegistration: (profile.vatRegistration?.status ?? '') as VatRegistrationStatus | '',
+    vatCashAccounting: (profile.vatRegistration?.cashAccounting ?? '') as TriState,
     // Optional: an empty field means "the app does not know the date", which is not
     // the same as "there is no VAT deadline" — see VAT_REGISTRATION_DEADLINE_2026.
     vatExceedanceDate: profile.vatExceedanceDate ?? '',
@@ -736,7 +748,18 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               proved: recorded(fiscal.foreignInsuranceProved),
             },
       socialInsuranceStatus: fiscal.socialInsuranceStatus,
-      vatExempt: fiscal.vatExempt === 'da',
+      // PG-6f — an empty select writes nothing at all, so the field stays absent rather than becoming a
+      // default. `cashAccounting` is only attached when it was answered; it is a scheme, not a status.
+      ...(fiscal.vatRegistration === ''
+        ? {}
+        : {
+            vatRegistration: {
+              status: fiscal.vatRegistration,
+              ...(recorded(fiscal.vatCashAccounting) === undefined
+                ? {}
+                : { cashAccounting: recorded(fiscal.vatCashAccounting) }),
+            },
+          }),
       // '' ⇒ undefined, never '': a stored empty string would be a malformed date.
       vatExceedanceDate: fiscal.vatExceedanceDate || undefined,
       cashFloorLei: cash,
@@ -1662,15 +1685,43 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.vatExempt}</label>
+                <label>{settingsCopy.fiscal.vatRegistration}</label>
                 <select
                   className="input"
-                  value={fiscal.vatExempt}
-                  onChange={e => setFiscal({ ...fiscal, vatExempt: e.target.value })}
+                  value={fiscal.vatRegistration}
+                  onChange={e =>
+                    setFiscal({
+                      ...fiscal,
+                      vatRegistration: e.target.value as VatRegistrationStatus | '',
+                    })
+                  }
                 >
+                  <option value="">{settingsCopy.fiscal.vatRegistrationUnanswered}</option>
+                  {VAT_REGISTRATION_VALUES.map(status => (
+                    <option key={status} value={status}>{settingsCopy.fiscal.vatRegistrationOptions[status]}</option>
+                  ))}
+                </select>
+                <FieldLegal
+                  hint={settingsCopy.fiscal.vatRegistrationHint}
+                  source={copy.sources.vatRegistration}
+                />
+              </div>
+
+              <div className="field">
+                <label>{settingsCopy.fiscal.vatCashAccounting}</label>
+                <select
+                  className="input"
+                  value={fiscal.vatCashAccounting}
+                  onChange={e => setFiscal({ ...fiscal, vatCashAccounting: e.target.value as TriState })}
+                >
+                  <option value="">{copy.ui.answerUnrecorded}</option>
                   <option value="nu">{copy.ui.answerNo}</option>
                   <option value="da">{copy.ui.answerYes}</option>
                 </select>
+                <FieldLegal
+                  hint={settingsCopy.fiscal.vatCashAccountingHint}
+                  source={copy.sources.vatCashAccounting}
+                />
               </div>
 
               <div className="field">

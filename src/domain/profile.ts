@@ -54,7 +54,11 @@ export function createDefaultProfile(
     // profile has answered none of them. Writing an empty array would say „asked, and none”; absence
     // says „not asked yet”, and only the second one is true.
     socialInsuranceStatus: 'neplata',
-    vatExempt: false,
+    // PG-6f (D-LEG-1, B-30): the `vatExempt` boolean is deleted, and nothing replaces it here. What
+    // replaces it is a declared registration STATE, and a fresh profile has not declared one. Writing
+    // `scutit_art310` would assert the person is inside the small-business exemption; writing
+    // `inregistrat_art316` would assert they charge TVA. Both are facts about the tax office's register,
+    // and this factory has no source for either — so the field stays absent and the estimate says so.
     // Phase 10: money is integer bani. `lei(0)` rather than a bare `0` keeps the unit explicit at the
     // factory — a cash floor of 0 is a deliberate value, not an absent one.
     cashFloorLei: lei(0),

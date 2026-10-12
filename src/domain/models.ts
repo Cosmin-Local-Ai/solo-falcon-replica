@@ -3,6 +3,10 @@ import type { Bani } from './money';
 // profile stores a value of it. Type-only import: no runtime coupling between the profile model and the
 // rule layer, and one declaration of the two families instead of two.
 import type { ActivityFamily } from './fiscal/deductibility';
+// PG-6f (B-30) — the VAT registration states are the fiscal layer's own vocabulary
+// (`fiscal/vat.ts`), and the profile stores a declared value of it. Type-only import, for the same
+// reason as `ActivityFamily` above: one declaration of the six states instead of two.
+import type { VatProRataYear, VatRegistration } from './fiscal/vat';
 
 /**
  * PFA/profile domain model — the single source of truth for the PFA profile.
@@ -781,8 +785,37 @@ export interface PfaProfile {
   accommodationTourismEligibility?: AccommodationTourismEligibility;
   /** CASS status. */
   socialInsuranceStatus: PfaSocialInsuranceStatus;
-  /** VAT-exempt (scutire de TVA). */
-  vatExempt: boolean;
+  /**
+   * PG-6f (B-30, D-LEG-1) — the VAT registration state, **declared**, replacing the retired
+   * `vatExempt: boolean`.
+   *
+   * The boolean is deleted rather than deprecated, on D-USER-1/D-LEG-1: there are no stored payloads to
+   * protect. It is deleted because it was never a simplification of a true fact — it was a wrong answer
+   * in both directions. `vatExempt ? expenses : expensesNet` asserted that a non-exempt PFA deducts
+   * every leu of input VAT (art. 310 alin. (10) lit. a) denies the right to the exempt, but art. 297
+   * alin. (7) lit. b), art. 298 alin. (1), art. 300 alin. (4) and art. 11 alin. (7)-(9) deny parts of it
+   * to the registered as well) and that an exempt one deducts none — true, but for a reason the boolean
+   * never stated, while also settling the separate income-tax question of whether the base is
+   * VAT-inclusive. `research/42` §11.2: „vatExempt expresses none of them".
+   *
+   * **Optional, and absence is the third state.** An unanswered registration does not become
+   * `scutit_art310` and does not become `inregistrat_art316`: the app does not know whether this person
+   * charges TVA, and either guess moves the money measure of every record in the register. No default,
+   * no backfill — the v17→v18 step drops the boolean and mints nothing in its place.
+   *
+   * `vatExceedanceDate` below stays the single date for the plafon case; this field does not duplicate it.
+   */
+  vatRegistration?: VatRegistration;
+  /**
+   * PG-6f — the declared art. 300 pro rata, **one record per fiscal year**.
+   *
+   * Only a mixed-regime person has one, and there is **no de-minimis in Romanian art. 300**
+   * (`research/42` §4 — the only reliefs are the alin. (7) exclusions and the alin. (8) round-up), so an
+   * undeclared pro rata cannot be assumed to be 100 %: the affected lines are parked as unresolved.
+   * A registered PFA doing only taxable operations never has one at all, and for that person absence is
+   * the normal state, not a gap.
+   */
+  vatProRataYears?: VatProRataYear[];
   /**
    * The date the VAT turnover ceiling (CF art. 310 alin. (1)) was actually exceeded, ISO
    * `YYYY-MM-DD`. Optional on purpose — see the data-loss note on `pfaProfileSchema`: a

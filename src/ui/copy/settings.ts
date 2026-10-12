@@ -14,6 +14,8 @@
  * are internal names for the CASS quality; the person sees Romanian.
  */
 
+import type { VatRegistrationStatus } from '../../domain/fiscal/vat';
+
 export const settings = {
   title: 'Setări',
   subtitle: 'Datele PFA, regim fiscal, e-Factura, conturi bancare și cont personal',
@@ -301,7 +303,24 @@ export const settings = {
       exempt: 'Exceptat (art. 154 alin. (1))',
       neplata: 'Nu se datorează',
     },
-    vatExempt: 'Scutire de TVA',
+    // PG-6f (B-30) — replaces the retired `vatExempt` yes/no. The law does not ask whether a person is
+    // „exempt”; it places them in one of six registration states, and the answer decides both the money
+    // measure of every record and whether any input VAT may be claimed at all.
+    vatRegistration: 'Starea de înregistrare în scopuri de TVA',
+    vatRegistrationUnanswered: 'Nu este înregistrată — aplicația nu a întrebat',
+    vatRegistrationOptions: {
+      scutit_art310: 'Scutit de TVA (art. 310)',
+      inregistrat_art316: 'Înregistrat în scopuri de TVA (art. 316)',
+      inregistrare_voluntara: 'Înregistrare voluntară, sub plafon (art. 316 alin. (1) lit. a) pct. 2)',
+      plafon_depasit: 'Înregistrat din depășirea plafonului (art. 316 alin. (1) lit. b))',
+      inregistrare_anulata: 'Codul de TVA a fost anulat (art. 316 alin. (11))',
+      reinregistrat: 'Reînregistrat după anulare (art. 316 alin. (12))',
+    } as Record<VatRegistrationStatus, string>,
+    vatRegistrationHint:
+      'Necompletat nu înseamnă „scutit”. Câtă vreme aplicația nu știe starea, ea nu alege măsura banilor pe care o calculează și nu stabilește dacă ai drept de deducere; fiecare variantă schimbă atât venitul cât și cheltuiala deductibilă. Scutirea de TVA se aplică și când cifra de afaceri este exact egală cu plafonul — „nu depășește”. Aplicația nu deduce starea din cifra de afaceri pe care o ai înregistrată, pentru că plafonul se măsoară pe un venit restrâns la operațiunile cu locul în România, pe care aplicația nu îl calculează.',
+    vatCashAccounting: 'Aplici regimul TVA la încasare',
+    vatCashAccountingHint:
+      'Nu este o stare de înregistrare, ci un regim care amână exigibilitatea și, cu ea, dreptul de deducere. Amână în ambele sensuri: deducerea întârzie până când ai plătit furnizorul, iar taxa de la un furnizor care aplică el însuși acest regim poate fi dedusă abia când el a încasat-o. Fac excepție achiziția intracomunitară, importul și taxarea inversă. Regimul se menționează obligatoriu pe factură.',
     vatExceedanceDate: 'Data depășirii pragului de TVA',
     vatExceedanceDateHint:
       'Necompletat înseamnă că aplicația nu cunoaște data și nu afișează niciun termen de înregistrare.',

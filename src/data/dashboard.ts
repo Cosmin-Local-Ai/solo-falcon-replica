@@ -391,6 +391,10 @@ export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEsti
     expenses: amounts.expenses,
     revenuesNet: amounts.revenuesNet,
     expensesNet: amounts.expensesNet,
+    // PG-6f (B-30) — threading only, identical to `data/derived.ts useLatestTaxEstimate` by construction:
+    // both read the base the assembler's single per-line VAT decision produced, so the rendered figure and
+    // the tested figure cannot disagree about which measure the engine ran on.
+    expenseBase: operands.expenseBase,
     // PG-6h-1 — threading only. The assembler decided whether this register has an art. 68^3 source and
     // measured its gross on the same ledger pass as every other operand; this call site only hands it over.
     flatRatioGross: amounts.flatRatioGross ?? null,

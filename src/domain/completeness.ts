@@ -290,11 +290,22 @@ function vatFilingPeriodCheck(profile: PfaProfile | null | undefined): Completen
       detail: 'perioada de depunere pentru declarația de TVA nu poate fi stabilită — profil lipsă',
     };
   }
-  if (profile.vatExempt) {
+  // PG-6f (B-30) — this branch used to read `profile.vatExempt`, a boolean that records no registration
+  // state. The declared state decides, and an unanswered question stays unsatisfied and names the fact.
+  const registration = profile.vatRegistration;
+  if (!registration) {
+    return {
+      key: 'vatFilingPeriod',
+      satisfied: false,
+      detail:
+        'perioada de depunere nu poate fi stabilită — completează starea de înregistrare în scopuri de TVA (CF art. 316) și venitul de TVA pe anul precedent (art. 322 alin. (1)-(4))',
+    };
+  }
+  if (registration.status === 'scutit_art310') {
     return {
       key: 'vatFilingPeriod',
       satisfied: true,
-      detail: 'scutit de TVA — nicio declarație periodică de TVA de depus',
+      detail: 'scutit de TVA conform art. 310 — nicio declarație periodică de TVA de depus',
     };
   }
   return {

@@ -13,6 +13,10 @@ import { PFA_REGIME_VALUES } from './regimes';
 // PG-6b — one spelling of the activity families. The classifier owns the vocabulary; the persisted
 // profile reads its value list instead of restating the pair.
 import { ACTIVITY_FAMILY_VALUES } from './fiscal/deductibility';
+// PG-6f (B-30) — the persisted token space and the fiscal layer must be one spelling, the same reason
+// `ACTIVITY_FAMILY_VALUES` is imported above rather than restated. The registration states and the
+// `da`/`nu` answers come from `fiscal/vat.ts`; nothing here invents a seventh state.
+import { VAT_REGISTRATION_VALUES, VAT_YES_NO_VALUES } from './fiscal/vat';
 import { ISO_CALENDAR_DATE } from './date';
 
 /**
@@ -164,7 +168,33 @@ export const pfaProfileSchema: z.ZodType<PfaProfile> = z.object({
   accommodationCommissionReading: z.enum(['reading_a', 'reading_b']).optional(),
   accommodationTourismEligibility: z.enum(['da', 'nu']).optional(),
   socialInsuranceStatus: z.enum(['obligatoriu', 'exempt', 'neplata']),
-  vatExempt: z.boolean(),
+  // PG-6f (B-30, D-LEG-1) — `vatExempt: z.boolean()` is **removed**, not widened. D-LEG-1 is standing
+  // („we do not need legacy data. we have no users yet”): a retired shape is deleted from the type, the
+  // schema, the fixtures, the copy and the migration's tolerance for it, rather than carried as a shim.
+  // The v17→v18 chain step drops the stored key; the chain itself and its numbering are untouched.
+  //
+  // The replacement is OPTIONAL with no `.default()`, and that is load-bearing rather than tidy: the two
+  // plausible defaults move the money measure of every record in the register in opposite directions.
+  // `effectiveFrom` is optional too — a person may know the state and not the date, and the app then
+  // names the missing date instead of choosing one under art. 316 alin. (1¹).
+  vatRegistration: z
+    .object({
+      status: z.enum(VAT_REGISTRATION_VALUES),
+      effectiveFrom: z.string().regex(ISO_CALENDAR_DATE, 'vatRegistration.effectiveFrom must be ISO YYYY-MM-DD').optional(),
+      // TVA la încasare is an orthogonal scheme, not a registration state — see `fiscal/vat.ts`.
+      cashAccounting: z.enum(VAT_YES_NO_VALUES).optional(),
+    })
+    .optional(),
+  // PG-6f — the declared art. 300 pro rata, per fiscal year. Year-attributed like the pension and
+  // accommodation facts above, because the pro rata is an annual figure (art. 300 alin. (9), (14)).
+  vatProRataYears: z
+    .array(
+      z.object({
+        fiscalYear: z.number().int().min(1990).max(2100),
+        percent: z.number().min(0).max(100),
+      }),
+    )
+    .optional(),
   // The one input `VAT_REGISTRATION_DEADLINE_2026` was still missing (P-PROFILE-VAT-DATE).
   // OPTIONAL for the same data-loss reason as every addition above: this is the persisted gate,
   // and a required field here would reset every pre-existing payload to seed. The shape check is

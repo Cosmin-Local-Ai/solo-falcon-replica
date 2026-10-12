@@ -160,7 +160,14 @@ export const seedData: AppData = {
     // the demo profile assert an incomplete estimate for a reason unrelated to what that test is about.
     activityFamily: 'other',
     socialInsuranceStatus: 'obligatoriu',
-    vatExempt: false,
+    // PG-6f (B-30): `vatExempt: false` is gone, and what replaces it is the fact this file has always
+    // asserted in prose two lines below — the demo PFA is VAT-registered from the start. That is a
+    // FIXTURE answering a question, not a default: `domain/profile.ts createDefaultProfile` leaves
+    // `vatRegistration` absent, and an absent registration makes the estimate refuse rather than guess
+    // the money measure. Declaring it here is what keeps the pinned seed estimate (311.200 bani) on the
+    // same VAT-exclusive measure it has always computed on, and it is the only honest way to do it: the
+    // boolean said „not exempt” without ever saying registered, and the two are not the same claim.
+    vatRegistration: { status: 'inregistrat_art316' },
     // No `vatExceedanceDate`: this PFA is VAT-registered from the start rather than by exceeding the
     // art. 310 alin. (1) ceiling, so there is no exceedance date to record. The absence is the honest
     // state and `VAT_REGISTRATION_DEADLINE_2026` correctly resolves to nothing.

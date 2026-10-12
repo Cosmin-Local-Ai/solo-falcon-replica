@@ -106,6 +106,10 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
       expenses: amounts.expenses,
       revenuesNet: amounts.revenuesNet,
       expensesNet: amounts.expensesNet,
+      // PG-6f (B-30) — threading only, identical to `data/dashboard.ts getTaxEstimate` by construction.
+      // The assembler ran the per-line input-VAT decision once, over the same ledger pass, and this is the
+      // base it produced; the engine no longer chooses a measure from a profile boolean.
+      expenseBase: operands.expenseBase,
       // PG-6h-1 — threading only, identical to `data/dashboard.ts getTaxEstimate` by construction: both
       // read the field the assembler decided, so the rendered figure and the tested figure cannot disagree
       // about whether an art. 68^3 source exists.

@@ -453,20 +453,6 @@ export interface InputVatDecision {
   unresolved: InputVatLine[];
   deferred: InputVatLine[];
   zero: InputVatLine[];
-  /**
-   * D-VAT-2 — the two candidate expense bases, kept apart rather than reconciled.
-   *
-   * `netFirst` measures a half-count rule on the VAT-exclusive amount; `grossFirst` measures it over
-   * the amount **including** the VAT the taxpayer could not claim back. For a company the second is
-   * explicit — Titlul II norm pct. 16 alin. (3) applies the cap after the VAT limitation and over the
-   * non-deductible VAT, with a worked example (2.000 + 240 = 2.240 → 1.120). **For a PFA no such rule
-   * exists**: `research/35` §1.5 swept the Titlul IV Norme and `research/42` §10 gap 2 swept 463.145
-   * characters of Titlul VII law and found `nedeductibil` 0 and `cheltuial` 0.
-   *
-   * So when the two differ the app computes **neither** and reports `review_required` with both numbers;
-   * when they are equal the choice cannot change the figure and the engine simply runs.
-   */
-  expenseBase: { netFirst: Bani; grossFirst: Bani; divergent: boolean };
 }
 
 /**
@@ -520,7 +506,7 @@ export interface InputVatVehicleRecord {
   years?: readonly VatVehicleYearFacts[];
 }
 
-export interface InputVatProRataYear {
+export interface VatProRataYear {
   fiscalYear: number;
   /** The declared pro rata, a whole percent 0-100. art. 300 alin. (8) rounds the definitive one UP. */
   percent: number;
@@ -532,7 +518,7 @@ export interface InputVatInput {
   registration?: VatRegistration;
   /** The profile's existing exceedance date — the art. 316 alin. (1¹) lit. b) answer. */
   vatExceedanceDate?: string;
-  proRataYears?: readonly InputVatProRataYear[];
+  proRataYears?: readonly VatProRataYear[];
   fiscalYear: number;
   asOfDate: string;
 }
@@ -755,7 +741,6 @@ export function decideInputVat(input: InputVatInput): InputVatDecision {
     unresolved: lines.filter((l) => l.outcome.kind === 'unresolved'),
     deferred: lines.filter((l) => l.outcome.kind === 'deferred'),
     zero: lines.filter((l) => l.outcome.kind === 'zero'),
-    expenseBase: { netFirst: lei(0), grossFirst: lei(0), divergent: false },
   };
 }
 
@@ -771,21 +756,56 @@ export function decideInputVat(input: InputVatInput): InputVatDecision {
  * recoverability the app has not decided would mint a cost the person may in fact have recovered; the
  * line itself still enters both bases at its net, so it is never dropped.
  */
-export function expenseBaseWithVat(
+/**
+ * The two candidate expense bases D-VAT-2 keeps apart, plus the flag that says whether the choice can
+ * change the figure at all. Named as a type so the engine's operand and the assembler's output cannot
+ * drift into two spellings of one idea.
+ */
+export interface ExpenseBaseWithVat {
+  /** A half-count rule measured on the VAT-exclusive amount. */
+  netFirst: Bani;
+  /** The same rule measured over the amount including the VAT that could not be claimed back. */
+  grossFirst: Bani;
+  /** True when the two differ — i.e. a half-count rule met non-recoverable VAT. Compute neither. */
+  divergent: boolean;
+}
+
+/**
+ * The two candidate expense bases, expressed as what the VAT decision **adds** to the expense measure the
+ * assembler already struck, so the adjustment composes with the annual-ceiling pass instead of replacing it.
+ *
+ * `capped` is the income-tax half-count (art. 68 alin. (7) lit. k) at 50 %). Where such a line also
+ * carries VAT the taxpayer could not claim back, the ordering changes the figure and D-VAT-2 says the app
+ * computes neither. Where no line is both capped and VAT-burdened, the two totals are equal and the engine
+ * runs on that number.
+ *
+ * The records handed in are the ones that reached the deductible set **after** the per-expense cap, which
+ * is what makes reading B come out right without re-deriving any percentage here: a capped line's `tva`
+ * is already the capped amount, so adding it is exactly the Titlul II worked example — 50 % of (1.000 +
+ * 190) = 595, reached here as 500 + 95.
+ *
+ * A line whose VAT outcome is **unresolved** contributes nothing to either base. Adding an amount whose
+ * recoverability the app has not decided would mint a cost the person may in fact have recovered; the
+ * line itself still enters both bases at its net, so it is never dropped.
+ */
+export function applyVatToExpenseBase(
   decision: InputVatDecision,
-  deductible: readonly { id: string; net: Bani; tva: Bani; capped: boolean; nonRecoverableVat: Bani }[],
-): { netFirst: Bani; grossFirst: Bani; divergent: boolean } {
-  const decided = new Map<string, boolean>();
+  expenseMeasure: Bani,
+  deductible: readonly { id: string; tva: Bani; capped: boolean }[],
+): ExpenseBaseWithVat {
+  const decidedZero = new Set<string>();
   for (const line of decision.lines) {
-    if (line.outcome.kind === 'zero') decided.set(line.id, true);
+    if (line.outcome.kind === 'zero') decidedZero.add(line.id);
   }
-  let netFirst = lei(0);
-  let grossFirst = lei(0);
+  let addedUncapped = lei(0);
+  let addedCapped = lei(0);
   for (const record of deductible) {
-    const nonRecoverable = decided.get(record.id) === true ? record.nonRecoverableVat : lei(0);
-    netFirst = addBani(netFirst, record.capped ? record.net : addBani(record.net, nonRecoverable));
-    grossFirst = addBani(grossFirst, addBani(record.net, nonRecoverable));
+    if (!decidedZero.has(record.id)) continue;
+    if (record.capped) addedCapped = addBani(addedCapped, record.tva);
+    else addedUncapped = addBani(addedUncapped, record.tva);
   }
+  const netFirst = addBani(expenseMeasure, addedUncapped);
+  const grossFirst = addBani(netFirst, addedCapped);
   return { netFirst, grossFirst, divergent: netFirst !== grossFirst };
 }
 

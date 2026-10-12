@@ -47,6 +47,17 @@ import {
 import type { FiscalRule } from './fiscal/rules';
 import { selectApplicableRules } from './fiscal/select';
 import { strikeCapCeiling, type CapCeilingStrike } from './fx/capCeiling';
+// PG-6f (B-30) — the per-line input-VAT decision, and the two candidate expense bases D-VAT-2 keeps
+// apart. The assembler does not decide anything about VAT here: it runs the one decision function over
+// the SAME normalised ledger pass every other operand comes from, and hands the result to the engine.
+// A second traversal, or a second place deciding deductibility, would be the B-70 defect class.
+import {
+  applyVatToExpenseBase,
+  decideInputVat,
+  registrationChargesVat,
+  type ExpenseBaseWithVat,
+  type InputVatDecision,
+} from './fiscal/vat';
 import {
   normaliseLedgerToRon,
   normaliseStoredLedger,
@@ -381,7 +392,7 @@ export function selectIncomeDeterminationMethod(
 export function selectAccommodationGross(
   data: AppData,
   asOfDate: string,
-): { gross: Bani; conversions: LedgerConversion[]; unconverted: UnconvertedLedgerRecord[] } {
+): { gross: Bani | null; conversions: LedgerConversion[]; unconverted: UnconvertedLedgerRecord[] } {
   const ledger = normaliseStoredLedger(data);
   const ytd = selectYtd(ledger.data, asOfDate);
   return {
@@ -391,9 +402,18 @@ export function selectAccommodationGross(
   };
 }
 
-/** The one VAT rule, shared by the standalone selector above and by the assembler below. */
-function flatRatioGrossFromYtd(ytd: YtdTotals, data: AppData): Bani {
-  return data.profile.vatExempt ? ytd.revenue : ytd.revenueNet;
+/**
+ * The one VAT rule, shared by the standalone selector above and by the assembler below.
+ *
+ * PG-6f (B-30): it used to read `profile.vatExempt`. It now reads the declared registration state, and
+ * returns **null** when none is declared — the measure of an art. 68^3 gross is the same open question as
+ * the measure of the sistem-real gross, and picking one silently would mint a gross the person may never
+ * have collected in that measure.
+ */
+function flatRatioGrossFromYtd(ytd: YtdTotals, data: AppData): Bani | null {
+  const registration = data.profile.vatRegistration;
+  if (!registration) return null;
+  return registrationChargesVat(registration.status) ? ytd.revenue : ytd.revenueNet;
 }
 
 /**
@@ -1500,6 +1520,14 @@ export type EstimateOperands =
       kind: 'run';
       basis: AttributedEstimateBasis;
       amounts: EstimateAmounts;
+      /**
+       * PG-6f (B-30, D-VAT-2) — the expense base the per-line VAT decision produced, in its two candidate
+       * forms. Required on the `run` branch so no call site can reach `computeTaxEstimate` without having
+       * run the decision; the retired `vatExempt` fallback is not available at any level.
+       */
+      expenseBase: ExpenseBaseWithVat;
+      /** PG-6f — the claimable-VAT decision for this period, produced once and carried, not re-derived. */
+      inputVat: InputVatDecision;
       deductible: DeductibleExpenseSet;
       /** TASK 2c — the annual ceilings that were struck, each with the base it was struck on. */
       capAdjustments: AnnualCapAdjustment[];
@@ -1613,15 +1641,67 @@ export function selectEstimateOperands(
   // PG-6h-1 — the art. 68^3 gross, struck on the SAME ledger pass and the SAME record set as every other
   // operand here. A second FX walk would be the B-70 defect class and would drift from the first.
   const flatRatioGross =
-    method === 'accommodation-flat-ratio' ? flatRatioGrossFromYtd(ytd, ledger.data) : undefined;
+    method === 'accommodation-flat-ratio'
+      ? flatRatioGrossFromYtd(ytd, ledger.data) ?? undefined
+      : undefined;
   const projection = selectProjectionV1(scoped, asOfDate);
   const basisBeforeCaps = selectTaxEstimateBasis(projection, ytd, asOfDate);
 
+  // PG-6f (B-30) — the input-VAT decision, run ONCE here over the same normalised ledger the totals come
+  // from. Two things about the population it runs on, both deliberate:
+  //
+  // - It is every registered expense line in the period, NOT only the deductible subset. Whether the VAT
+  //   on a purchase may be claimed is a Titlul VII question (art. 297-300) and is independent of whether
+  //   the cost is deductible for income tax under art. 68; a non-deductible cost can still carry fully
+  //   claimable VAT, and restricting the pass to the deductible subset would silently drop those lines
+  //   from the taxpayer's claim.
+  // - The period and status filter is the SAME one `selectYtd` and `selectDeductibleExpenses` apply, so
+  //   the claim, the totals and the coverage rows are counts of one record set and not of three.
+  const periodExpenses = scoped.expenses.filter(
+    (e) => e.status === 'inregistrata' && inPeriod(expenseFiscalDate(e), asOfDate, scoped.profile.fiscalYear),
+  );
+  const inputVat: InputVatDecision = decideInputVat({
+    expenses: periodExpenses.map((e) => ({
+      id: e.id,
+      date: e.date,
+      paid: e.paid,
+      supplierCui: e.cui,
+      tip: e.tip,
+      tva: e.tva,
+      vatFacts: e.vatFacts,
+      vehicleId: e.vehicleId,
+    })),
+    vehicles: (scoped.vehicles ?? []).map((v) => ({ id: v.id, years: v.vatYears })),
+    registration: scoped.profile.vatRegistration,
+    vatExceedanceDate: scoped.profile.vatExceedanceDate,
+    proRataYears: scoped.profile.vatProRataYears,
+    fiscalYear: scoped.profile.fiscalYear,
+    asOfDate,
+  });
+  // Which deductible records entered the engine through a half-count rule. Read off the record the
+  // classifier scaled, not re-derived: `selectDeductibleExpenses` returns a capped record as a scaled
+  // copy of the stored one, so a net that differs from the stored net is the cap having bitten. Comparing
+  // the two is arithmetic on facts already in hand; re-running the classifier to answer it would be a
+  // second producer of one figure.
+  const storedNetById = new Map<string, Bani>(
+    ledger.data.expenses.map((e) => [e.id, isRon(e.valoareFaraTva) ? e.valoareFaraTva.amount : lei(0)]),
+  );
+  const deductibleForVat = deductible.records.map((r) => ({
+    id: r.id,
+    tva: requireRon(r.tva, `expense ${r.id}.tva`),
+    capped: (storedNetById.get(r.id) ?? r.valoareFaraTva.amount) !== r.valoareFaraTva.amount,
+  }));
+  const vatExpenseBase = (amounts: EstimateAmounts): ExpenseBaseWithVat =>
+    applyVatToExpenseBase(inputVat, amounts.expensesNet, deductibleForVat);
+
   if (deductible.annualCapped.length === 0) {
+    const amounts = withFlatRatioGross(amountsForEstimate(basisBeforeCaps), flatRatioGross);
     return {
       kind: 'run',
       basis: basisBeforeCaps,
-      amounts: withFlatRatioGross(amountsForEstimate(basisBeforeCaps), flatRatioGross),
+      amounts,
+      expenseBase: vatExpenseBase(amounts),
+      inputVat,
       deductible,
       capAdjustments: [],
       conversions: ledger.conversions,
@@ -1637,10 +1717,13 @@ export function selectEstimateOperands(
     claimed: claimAnnualMeasure(line),
   }));
   const { basis, adjustments } = applyAnnualDeductibilityCaps(basisBeforeCaps, claims);
+  const amounts = withFlatRatioGross(amountsForEstimate(basis), flatRatioGross);
   return {
     kind: 'run',
     basis,
-    amounts: withFlatRatioGross(amountsForEstimate(basis), flatRatioGross),
+    amounts,
+    expenseBase: vatExpenseBase(amounts),
+    inputVat,
     deductible,
     capAdjustments: adjustments,
     conversions: ledger.conversions,

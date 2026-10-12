@@ -11,6 +11,9 @@ import { selectMonthly, selectYtd, inPeriod, revenueFiscalDate, expenseFiscalDat
 import { normaliseStoredLedger } from './fx/ledger';
 import { selectProjectionV1, type ProjectionV1 } from './projection';
 import type { FiscalRule } from './fiscal/rules';
+// PG-6f (B-30) — the engine's input reference now carries the declared VAT registration state instead of
+// the retired `vatExempt` boolean. Type-only import: the vocabulary lives in `fiscal/vat.ts`.
+import type { VatRegistration } from './fiscal/vat';
 import { sumMoney, type Bani, type Money } from './money';
 import type {
   CassLadderYear,
@@ -150,7 +153,16 @@ export interface TaxInputsReference {
    */
   cassLadderYears: CassLadderYear[];
   socialInsuranceStatus: PfaSocialInsuranceStatus;
-  vatExempt: boolean;
+  /**
+   * PG-6f (B-30) — replaces `vatExempt: boolean` on the engine's input reference.
+   *
+   * It is `null` when the person never declared a registration state, and `null` is not a fourth state:
+   * it means the app does not know whether this taxpayer charges TVA, which is the one fact that decides
+   * whether the revenue measure is VAT-exclusive or VAT-inclusive. The engine refuses rather than pick,
+   * because picking would move every record in the register on a guess — the exact shape of the defect
+   * this phase removes.
+   */
+  vatRegistration: VatRegistration | null;
   cashFloorLei: Bani;
   fiscalYear: number;
   /** Exact PFA start date (ISO `YYYY-MM-DD`) or null. Read by the engine only for CF art. 118 alin. (3). */
@@ -199,7 +211,9 @@ export function selectTaxDerived(data: AppData, activeRules: FiscalRule[]): TaxD
     foreignSicknessInsurance: profile.foreignSicknessInsurance ?? null,
     cassLadderYears: [...(profile.cassLadderYears ?? [])].sort((a, b) => a.fiscalYear - b.fiscalYear),
     socialInsuranceStatus: profile.socialInsuranceStatus,
-    vatExempt: profile.vatExempt,
+    // PG-6f — threading only. `null` is the unanswered state, not a default: nothing here turns an
+    // absent registration into `scutit_art310` or into `inregistrat_art316`.
+    vatRegistration: profile.vatRegistration ?? null,
     cashFloorLei: profile.cashFloorLei,
     fiscalYear: profile.fiscalYear,
     pfaStartDate: profile.pfaStartDate ?? null,

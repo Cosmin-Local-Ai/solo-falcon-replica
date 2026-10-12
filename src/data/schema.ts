@@ -7,8 +7,19 @@ import { CURRENCY_CODES } from '../domain/money';
 import { fxRateRecordSchema, type FxRateRecord } from '../domain/fx/rates';
 import type { MoneyPrecisionNotice } from './migration';
 import type { RuleRelease } from '../domain/fiscal/rules';
-import { EXPENSE_CATEGORIES, VEHICLE_EXCEPTION_CATEGORIES } from '../domain/fiscal/deductibility';
+import { EXPENSE_CATEGORIES, VEHICLE_EXCEPTION_CATEGORIES, VEHICLE_USE_VALUES } from '../domain/fiscal/deductibility';
 import type { VehicleYearFacts } from '../domain/fiscal/deductibility';
+// PG-6f (B-30) — the VAT fact vocabularies, imported rather than restated, for the same reason as the
+// deductibility lists above: the persisted token space and the decision layer must be one spelling.
+import {
+  VAT_DESTINATION_VALUES,
+  VAT_DOCUMENT_KIND_VALUES,
+  VAT_EFACTURA_VALUES,
+  VAT_SUPPLIER_REGIME_VALUES,
+  VAT_VEHICLE_EXCEPTION_VALUES,
+  VAT_YES_NO_VALUES,
+} from '../domain/fiscal/vat';
+import type { ExpenseVatFacts, VatVehicleYearFacts } from '../domain/fiscal/vat';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import type {
   AnnualFiling,
@@ -139,6 +150,24 @@ export const expenseSchema = z.object({
   // silently become unattributed. Optional and never defaulted: the v14→v15 step invents no vehicle and
   // attributes nothing, exactly as v6 did for `category`.
   vehicleId: z.string().optional(),
+  // PG-6f (B-30): the per-line input-VAT facts. Declared because **zod strips undeclared keys** — an
+  // undeclared block would be erased on the next load and the line would silently fall back to
+  // „unresolved”. Every inner field is `.optional()` with no `.default()` anywhere: an absent answer is
+  // an unresolved line, and a default would answer a question the person never answered. That is the
+  // defect class the retired `vatExempt` boolean used to settle for a whole register at once.
+  vatFacts: z
+    .object({
+      destination: z.enum(VAT_DESTINATION_VALUES).optional(),
+      supplierRegime: z.enum(VAT_SUPPLIER_REGIME_VALUES).optional(),
+      supplierCashAccounting: z.enum(VAT_YES_NO_VALUES).optional(),
+      alcoholOrTobacco: z.enum(VAT_YES_NO_VALUES).optional(),
+      forResale: z.enum(VAT_YES_NO_VALUES).optional(),
+      documentKind: z.enum(VAT_DOCUMENT_KIND_VALUES).optional(),
+      eFactura: z.enum(VAT_EFACTURA_VALUES).optional(),
+      buyerVatCodeOnDocument: z.enum(VAT_YES_NO_VALUES).optional(),
+      preRegistration: z.enum(VAT_YES_NO_VALUES).optional(),
+    })
+    .optional(),
 });
 
 /**
@@ -159,6 +188,24 @@ export const vehicleYearFactsSchema = z.object({
   designatedForRunningCosts: z.enum(['da', 'nu']).optional(),
 });
 
+/**
+ * PG-6f: one car's declared VAT facts for one fiscal year (art. 298 alin. (1)-(3), Norme pct. 68).
+ *
+ * `use` deliberately reuses `VEHICLE_USE_VALUES`: art. 298 alin. (1) and art. 68 alin. (7) lit. k) ask
+ * the same factual question („nu sunt utilizate exclusiv …”), and a third spelling of one fact is the
+ * B-70 defect class. What differs is the consequence and the evidence rule, and those stay in the two
+ * layers. No `.default()` on any field: MTMA and seats decide whether art. 298 alin. (2) puts the vehicle
+ * outside the restriction altogether, and a minted number would move a car across that line.
+ */
+export const vatVehicleYearFactsSchema = z.object({
+  fiscalYear: z.number().int().min(1990).max(2100),
+  use: z.enum(VEHICLE_USE_VALUES).optional(),
+  exceptionCategory: z.enum(VAT_VEHICLE_EXCEPTION_VALUES).optional(),
+  massMaxKg: z.number().int().min(0).optional(),
+  seats: z.number().int().min(0).optional(),
+  logbook: z.enum(VAT_YES_NO_VALUES).optional(),
+});
+
 export const vehicleSchema = z.object({
   id: nonEmptyString,
   // The person's own name for the car. Required because an unlabelled car cannot be designated, refused
@@ -166,6 +213,11 @@ export const vehicleSchema = z.object({
   label: nonEmptyString,
   plate: z.string().optional(),
   years: z.array(vehicleYearFactsSchema),
+  // PG-6f — the car's VAT facts, a SEPARATE array from `years`. Two provisions, two category lists: the
+  // income-tax list has five members (`VEHICLE_EXCEPTION_CATEGORIES`), the VAT list six
+  // (`VAT_VEHICLE_EXCEPTION_VALUES`, the extra one being art. 298 alin. (3) lit. e). Merging the arrays
+  // would make a financial lease — 100 % for VAT, 50 % for income tax — unrepresentable.
+  vatYears: z.array(vatVehicleYearFactsSchema).optional(),
 });
 
 export const clientSchema = z.object({

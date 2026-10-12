@@ -114,6 +114,13 @@ export const expenses = {
     ` · ${article} · plafon ${percent}% din baza art. 68 alin. (6)`,
   measureWithVat: 'cu TVA inclus',
   measureWithoutVat: 'fără TVA',
+  /**
+   * PG-6f (B-30) — the third state. The engine refuses to pick a money measure when the VAT registration
+   * state is undeclared, so a ceiling shown while the state is missing must say that the choice is not
+   * established and name which of the two numbers is on screen. Naming neither, or naming one as if it
+   * were decided, is the `vatExempt` habit in a new costume.
+   */
+  measureUndeclared: 'măsură nesetabilă — starea de înregistrare în TVA lipsește; afișată cea fără TVA',
   /** A legal ceiling the app cannot measure — a missing fact, not a completion error. */
   capBlockedOne: 'O cheltuială are',
   capBlockedMany: (n: number): string => `${n} cheltuieli au`,

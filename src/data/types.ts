@@ -1,5 +1,8 @@
 import type { PfaProfile } from '../domain/models';
 import type { ExpenseCategory, VehicleYearFacts } from '../domain/fiscal/deductibility';
+// PG-6f (B-30) — the VAT fact vocabularies come from the layer that reads them, for the standing reason
+// in this repository: a vocabulary spelled twice drifts (B-70).
+import type { ExpenseVatFacts, VatVehicleYearFacts } from '../domain/fiscal/vat';
 import type { FixedAssetFacts } from '../domain/fiscal/depreciation';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import type { MoneyPrecisionNotice } from './migration';
@@ -107,6 +110,20 @@ export interface Expense {
    * An id that no longer names a vehicle (the car was deleted) is treated the same way, not repaired.
    */
   vehicleId?: string;
+  /**
+   * PG-6f (B-30) — the facts this line's **input VAT** decision needs, declared by the person.
+   *
+   * They live on the record and not on the profile because every one of the switches art. 297-300 asks
+   * about is a property of the purchase: what it was bought for, who sold it, what document proves it and
+   * whether it has been paid. The vocabulary is `domain/fiscal/vat.ts ExpenseVatFacts` — the layer that
+   * reads it — so the stored shape and the decision cannot drift into two spellings.
+   *
+   * **Optional, and no field inside it has a default.** Absence is not „no": it makes the line's VAT
+   * outcome *unresolved*, which keeps it out of the claimable total and lists it separately (D-VAT-3),
+   * instead of answering a question nobody was asked. That is the exact defect the retired `vatExempt`
+   * boolean used to answer for the whole register at once.
+   */
+  vatFacts?: ExpenseVatFacts;
 }
 
 // ── Vehicule (PG-6c, D-VEH-3) ────────────────────────────
@@ -142,6 +159,21 @@ export interface Vehicle {
   plate?: string;
   /** Declared facts, one per fiscal year. Absence of a year entry means that year was never answered. */
   years: VehicleYearFacts[];
+  /**
+   * PG-6f — the same car's **VAT** facts, per fiscal year, kept in a separate array on purpose.
+   *
+   * The two arrays are two provisions and must never be merged. `years` is art. 68 alin. (4)/(5) lit. j)
+   * /(7) lit. k) — **five** exception categories, and full income-tax deductibility is the thing that must
+   * be evidenced with a *foaie de parcurs*. `vatYears` is art. 298 alin. (1)-(3) — **six** categories, the
+   * extra one being lit. e) „închiriere sau … leasing financiar ori operațional” — and the evidence shape
+   * is inverted: the 50 % VAT branch needs **no** logbook (Norme pct. 68 alin. (4)), full VAT deduction
+   * does. `research/42` §3 works out the consequence: a financial or operating lease is 100 % for VAT and
+   * 50 % for income tax. One array holding both would make that unrepresentable, which is the same reason
+   * `Vehicle` and `FixedAsset` are separate records.
+   *
+   * Optional, no defaults, and the v17→v18 step backfills none of it.
+   */
+  vatYears?: VatVehicleYearFacts[];
 }
 
 /**

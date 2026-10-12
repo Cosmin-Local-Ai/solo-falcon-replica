@@ -4,7 +4,11 @@ import { useStore } from '../data/store';
 import { fmtDate, sumTotalsByCurrency, total, statusBadge } from '../data/types';
 import type { Expense } from '../data/types';
 import { EXPENSE_CATEGORIES } from '../domain/fiscal/deductibility';
-import { selectDeductibleExpenses, selectEstimateOperands, coverageReasonForExclusion, type CoverageReason } from '../domain/estimateBasis';
+import { selectDeductibleExpenses, selectEstimateOperands, coverageReasonForExclusion, type CoverageReason, type MeasurePair } from '../domain/estimateBasis';
+// PG-6f (B-30) — the money measure the engine ran on is decided by the declared VAT registration state.
+// The page reads the same predicate the engine reads, so the label beside a ceiling and the figure inside
+// it cannot disagree about which measure was chosen.
+import { registrationChargesVat } from '../domain/fiscal/vat';
 import { expenseFiscalDate, type FiscalDateField } from '../domain/aggregation';
 import { selectRuleSet } from '../domain/fiscal';
 import type { FiscalRule } from '../domain/fiscal/rules';
@@ -338,12 +342,19 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
   const euroStruck = capStruck.filter(a => a.euro !== undefined);
   // TASK 10b — ledger records that entered the lei base only because a recorded rate converted them.
   const converted = classification.conversions;
-  // The engine picks the money measure by `vatExempt` (`tax.ts:143-144`); the page shows the one that
-  // actually moved the deductible total, and says which one it is.
-  const measure = store.profile.vatExempt ? 'inclVat' : 'exclVat';
-  const measureLabel = store.profile.vatExempt
-    ? expensesCopy.measureWithVat
-    : expensesCopy.measureWithoutVat;
+  // PG-6f (B-30) — the engine picks the money measure from the **declared VAT registration state**, not
+  // from the retired `vatExempt` boolean, and the page shows the one that actually moved the deductible
+  // total. When the state is undeclared the app does not silently adopt a measure: the index still has to
+  // name the number that is on screen, and the label says plainly that the choice is not established.
+  const registration = store.profile.vatRegistration;
+  const chargesVat = registration !== undefined && registrationChargesVat(registration.status);
+  const measure: keyof MeasurePair = registration === undefined ? 'exclVat' : chargesVat ? 'exclVat' : 'inclVat';
+  const measureLabel =
+    registration === undefined
+      ? expensesCopy.measureUndeclared
+      : chargesVat
+        ? expensesCopy.measureWithoutVat
+        : expensesCopy.measureWithVat;
 
   return (
     <div>

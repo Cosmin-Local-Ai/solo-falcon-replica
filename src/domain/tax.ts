@@ -12,6 +12,15 @@ import { selectApplicableRules } from './fiscal/select';
 import { calculatorRegistry } from './fiscal/calculators';
 import { readCassExceptionFacts, readPensionSuspension, readPensionerStatus } from './pensionFacts';
 import { regimeRefusalReason } from './regimes';
+// PG-6f (B-30) — the base selection is the defect this phase owns, and the vocabulary it selects on
+// lives in `fiscal/vat.ts`. Importing the predicate rather than re-spelling the six states is what keeps
+// the engine and the Settings screen from disagreeing about which states charge TVA.
+import {
+  TITLUL_II_VAT_ORDERING_RULE,
+  registrationChargesVat,
+  type ExpenseBaseWithVat,
+} from './fiscal/vat';
+import { formatBani } from './money';
 import { createCalculationSnapshot } from './snapshots/snapshot';
 import Decimal from 'decimal.js-light';
 import { lei, leiText, subBani, sumBani, type Bani } from './money';
@@ -25,6 +34,23 @@ export interface TaxCalculationInput {
   revenuesNet: Bani;
   /** Total expenses without VAT (valoareFaraTva only). */
   expensesNet: Bani;
+  /**
+   * PG-6f (B-30, D-VAT-2) — the expense base the **per-line** input-VAT decision produced, in its two
+   * candidate forms, replacing the `vatExempt ? expenses : expensesNet` selection.
+   *
+   * `netFirst` measures a half-count rule on the VAT-exclusive amount; `grossFirst` measures it over the
+   * amount including the VAT the taxpayer could not claim back. For a company the second is explicit —
+   * Titlul II norm pct. 16 alin. (3), with a worked example (2.000 + 240 = 2.240 → 1.120). **For a PFA no
+   * such rule exists**: `research/35` §1.5 swept the Titlul IV Norme, and `research/42` §10 gap 2 swept
+   * 463.145 characters of Titlul VII law and found `nedeductibil` 0 and `cheltuial` 0. So when the two
+   * differ the engine computes **neither** and reports `review_required` with both numbers; when they are
+   * equal the choice cannot change the figure and the engine runs on it.
+   *
+   * Required, and that is the enforcement: a call site cannot reach the engine without having run the
+   * per-line decision, exactly as `EstimateAmounts.asOfDate` makes a projected operand unrepresentable.
+   * There is deliberately no fallback to the retired boolean.
+   */
+  expenseBase: ExpenseBaseWithVat;
   /**
    * PG-6h-1 — CF art. 68^3: the GROSS of an accommodation register whose net the law fixes at 70 % of
    * gross (alin. (2)), already converted to lei at the per-collection BNR rate (alin. (4)).
@@ -222,7 +248,7 @@ export const CASS_FLAG_REVIEW_REASON =
   + 'rămâne valoarea calculată, dar nu poate fi prezentată ca o scutire dovedită.';
 
 export async function computeTaxEstimate(input: TaxCalculationInput): Promise<TaxEstimateResult> {
-  const { inputs, profile, revenues, expenses, revenuesNet, expensesNet, flatRatioGross, ruleRelease, rules } = input;
+  const { inputs, profile, revenues, expenses, revenuesNet, expensesNet, expenseBase, flatRatioGross, ruleRelease, rules } = input;
   // `leiText`, not the raw value: these sentences are read by a person, and a person reads leu.
   if (!Number.isFinite(revenues) || revenues < 0) return rr(`Veniturile trebuie să fie >= 0, s-a obținut ${leiText(revenues)}`);
   if (!Number.isFinite(expenses) || expenses < 0) return rr(`Cheltuielile trebuie să fie >= 0, s-a obținut ${leiText(expenses)}`);
@@ -292,11 +318,48 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // method, so it must not pretend one register is partly this method and partly that one. A genuinely
   // mixed year is refused upstream, by `scenarios.ts`, naming the missing attribution.
   //
-  // Area 6: VAT is not taxable income. Non-exempt profiles are taxed on the net base
-  // (VAT excluded); exempt profiles keep the gross base. These are the sistem-real operands only; the flat
-  // gross already carries the same VAT rule, applied per receipt by `estimateBasis.ts flatRatioGrossFromYtd`.
-  const sistemRealGross = inputs.vatExempt ? revenues : revenuesNet;
-  const sistemRealExpenseBase = inputs.vatExempt ? expenses : expensesNet;
+  // ── PG-6f (B-30): the money measure is a registration fact, not an „exempt" flag ─────────
+  //
+  // These two lines were the defect. `vatExempt ? revenues : revenuesNet` and its mirror settled, for a
+  // whole register at once, both whether the person charges TVA and whether every leu of input VAT was
+  // recoverable. The first is a question about the tax office's register (art. 310 vs art. 316); the
+  // second is decided line by line by art. 297 alin. (7), art. 298 alin. (1), art. 300 alin. (4) and
+  // art. 11 alin. (7)-(9). One boolean answered both, wrongly, in both directions.
+  //
+  // An unanswered registration refuses. Guessing it would move the measure of every record in the
+  // register, which is the same class of invented legal fact this project refuses elsewhere.
+  if (inputs.vatRegistration === null) {
+    return rr(
+      'Starea de înregistrare în scopuri de TVA nu este declarată în profil. Fără ea aplicația nu poate alege '
+        + 'măsura banilor pe care o calculează: un PFA în scutirea art. 310 păstrează TVA-ul în venit și nu are '
+        + 'niciun drept de deducere (art. 310 alin. (10) lit. a)), iar unul înregistrat conform art. 316 scoate '
+        + 'TVA colectată din venit și deduce potrivit art. 297 și urm. Aplicația nu alege între ele.',
+      lines,
+    );
+  }
+  // Area 6: VAT is not taxable income. The revenue measure follows from whether this person charges TVA at
+  // all. These are the sistem-real operands only; the flat gross already carries the same rule, applied
+  // per receipt by `estimateBasis.ts flatRatioGrossFromYtd`.
+  const sistemRealGross = registrationChargesVat(inputs.vatRegistration.status) ? revenues : revenuesNet;
+
+  // D-VAT-2 — where a half-count rule met VAT the taxpayer could not claim back, the ordering changes the
+  // figure and no PFA rule settles which ordering applies. Compute neither; show both, and quote the only
+  // text that exists while saying plainly that it is a corporate-tax rule and not a Titlul IV one.
+  if (expenseBase.divergent) {
+    lines.push({ label: 'Cheltuieli deductibile — jumătate din baza fără TVA', value: expenseBase.netFirst });
+    lines.push({ label: 'Cheltuieli deductibile — jumătate din baza cu TVA nedeductibilă', value: expenseBase.grossFirst });
+    return rr(
+      `Regula de limitare la jumătate întâlnește TVA pe care contribuabilul nu o poate recupera, iar cele două `
+        + 'ordini posibile dau cifre diferite: ' + formatBani(expenseBase.netFirst) + ' lei față de '
+        + formatBani(expenseBase.grossFirst) + ' lei. Pentru impozitul pe profit ordinea este explicită — '
+        + TITLUL_II_VAT_ORDERING_RULE.quote + ' ' + TITLUL_II_VAT_ORDERING_RULE.scope
+        + ' Nicio regulă echivalentă nu există pentru un PFA, deci aplicația nu calculează niciuna dintre ele.',
+      lines,
+    );
+  }
+  // The choice cannot change this figure — no line is both half-count-limited and carrying non-recoverable
+  // VAT — so the engine runs on the single number the per-line decision produced.
+  const sistemRealExpenseBase = expenseBase.netFirst;
 
   // ── PG-6h-1: art. 68^3 — the flat-ratio source, computed by its own registered calculator ──────
   //

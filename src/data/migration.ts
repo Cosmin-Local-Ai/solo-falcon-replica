@@ -310,8 +310,27 @@ export const DATA_VERSION_OTHER_INCOME_LADDER = 16;
  * invents one: `depreciationSchedule` refuses on the missing facts and names the gap.
  */
 export const DATA_VERSION_FIXED_ASSETS = 17;
+/**
+ * PG-6f (B-30, D-LEG-1) — the profile's `vatExempt` boolean is **dropped**, and the registration states
+ * that replace it are opened as absent.
+ *
+ * This is the second step in the chain that removes stored data, the first being v15→v16's `otherIncome`
+ * removal, and it stands on the same user decision: D-LEG-1 („we do not need legacy data. we have no
+ * users yet. We should generally clean legacy stuff”). What is NOT done is the conversion a naive reading
+ * would reach for — turning `vatExempt: false` into `inregistrat_art316`, or `true` into `scutit_art310`.
+ * Neither is a mapping, because the boolean never recorded a registration state. `research/42` §11.2
+ * lists the six states the law uses and says outright that the boolean expresses none of them; the seed
+ * file said the same thing in its own words since PG-5. Converting it would mint a registration fact
+ * nobody declared, and that one fact decides the money measure of every record in the register — the
+ * same class of invented legal fact that made PG-2 refuse to backfill a payment date.
+ *
+ * So the key is dropped and the replacement is **asked**. A payload ends with no `vatRegistration` key at
+ * all, and the estimate says it does not know whether this person charges TVA. Idempotent-safe for the
+ * same reason v13-v17 are: it removes at most one key and writes a version.
+ */
+export const DATA_VERSION_INPUT_VAT = 18;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_FIXED_ASSETS;
+export const CURRENT_DATA_VERSION = DATA_VERSION_INPUT_VAT;
 
 export interface MigrationStep {
   readonly from: number;
@@ -374,7 +393,9 @@ export function legacyProfileFromSettings(s: SettingsState, instant: Date = now(
     // PG-6d (D-LEG-1): no `otherIncome: []` either — that flag list is retired outright, and minting an
     // empty one here would assert that somebody was asked about other income and had none.
     socialInsuranceStatus: 'neplata',
-    vatExempt: false,
+    // PG-6f (D-LEG-1): no `vatExempt: false` either. The boolean is retired outright, and the legacy
+    // `settings` block never recorded a VAT registration state — minting one here would decide the money
+    // measure of every record in the register on a source that holds no such fact.
     cashFloorLei: lei(0),
     identity: absorbCompanyIdentity(
       {
@@ -994,6 +1015,16 @@ export function migrateFixedAssetsV17(data: PersistedAppData): PersistedAppData 
   return { ...data, version: DATA_VERSION_FIXED_ASSETS };
 }
 
+/**
+ * v17 → v18 (`input-vat-registration`). Drops the retired `profile.vatExempt` boolean and opens the
+ * registration states as absent. See `DATA_VERSION_INPUT_VAT` for why nothing is converted.
+ */
+export function migrateInputVatRegistrationV18(data: PersistedAppData): PersistedAppData {
+  if (!data.profile) return { ...data, version: DATA_VERSION_INPUT_VAT };
+  const { vatExempt: _dropped, ...profile } = data.profile as PfaProfile & { vatExempt?: unknown };
+  return { ...data, profile: profile as PfaProfile, version: DATA_VERSION_INPUT_VAT };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -1130,6 +1161,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Datele pot înregistra acum mijloacele fixe din patrimoniul activității, cu faptele de care are nevoie amortizarea fiscală: data intrării în patrimoniu, data punerii în funcțiune, valoarea fiscală de amortizare (care, potrivit pct. 28 lit. b) din normele Titlul II, include și TVA devenită nedeductibilă), durata normală de funcționare stabilită de contribuabil, metoda (liniară sau degresivă) și opțiunea sub prag din art. 28 alin. (21), care potrivit pct. 31 din aceleași norme se exercită la data intrării în patrimoniu. Nimic nu a fost completat: fiecare dintre aceste câmpuri este o afirmație juridică. O dată a punerii în funcțiune inventată alege anul în care începe amortizarea, iar expresia nu este definită nicăieri în legea fiscală. O durată inventată alege cota anuală și plafonul de la scăderea din gestiune, pe care pct. 27 le lasă în mod expres contribuabilului. Un „aport” sau un „cumpărare” inventat decide întrebarea contestată dintre art. 68 alin. (7) lit. k^1) și art. 7 pct. 44 lit. c). O opțiune alin. (21) inventată alege între două căi alternative care, potrivit pct. 31, se aleg la intrarea în patrimoniu și nu pot fi schimbate ulterior. Nicio cheltuială nu a fost transformată în mijloc fix: o cheltuială de achiziție de bun amortizabil înregistrează că a plecat o sumă, nu că a intrat un bun amortizabil în patrimoniu, iar art. 68 alin. (7) lit. h) tocmai de aceea ține achiziția în afara cheltuielilor deductibile. Un payload care nu a numit niciodată un bun rămâne fără cheia `fixedAssets`.',
     apply: migrateFixedAssetsV17,
+  },
+  {
+    from: DATA_VERSION_FIXED_ASSETS,
+    to: DATA_VERSION_INPUT_VAT,
+    name: 'input-vat-registration',
+    summary:
+      'Cheia `vatExempt` a profilului a fost ștearsă. Nu a fost convertită în nicio stare de înregistrare: booleanul nu înregistra o astfel de stare, iar research/42 §11.2 arată că cele șase stări pe care legea le folosește (art. 310, art. 316, înregistrare voluntară, plafon depășit, anulare, reinregistrare) nu pot fi citite din el. O conversie ar fi inventat un fapt despre registrul ANAF care decide măsura banilor pentru fiecare înregistrare din registru. Starea de înregistrare este acum o faptă declarată, iar un payload fără ea rămâne fără cheia `vatRegistration`, iar aplicația spune că nu știe dacă persoana facturează TVA.',
+    apply: migrateInputVatRegistrationV18,
   },
 ];
 

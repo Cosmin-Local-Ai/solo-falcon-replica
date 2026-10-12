@@ -658,17 +658,36 @@ export function applicabilityFor(
     }
 
     case 'vat-art-310': {
-      // The plafon only decides anything while the taxpayer is NOT already in the VAT system. A
-      // profile that applies VAT (`vatExempt: false`) has already passed the registration test, so the
-      // row would otherwise report a duty that has already been discharged.
-      if (!profile.vatExempt) {
+      // PG-6f (B-30) — this row used to read `!profile.vatExempt`, which asserted a registration state
+      // from a boolean that records none. The declared state is what decides, and an unanswered question
+      // is reported as unanswered rather than resolved in either direction.
+      const registration = profile.vatRegistration;
+      if (!registration) {
         return {
-          applicability: 'not_applicable',
+          applicability: 'unknown',
           reason:
-            'Profilul aplică TVA (nu se află în scutirea de TVA): obligația de înregistrare în scopuri de TVA prevăzută de art. 310 alin. (1) din Codul fiscal a intervenit deja, deci acest plafon nu mai decide nicio obligație.',
+            'Starea de înregistrare în scopuri de TVA nu este declarată în profil, deci aplicația nu poate stabili dacă plafonul scutirii decide o obligație încă neîndeplinită sau o obligație deja stinsă. Aplicația nu deduce starea din cifra de afaceri înregistrată: art. 310 alin. (2) măsoară plafonul pe un venit restrâns la operațiunile cu locul în România, pe care aplicația nu îl calculează.',
         };
       }
-      return { applicability: 'applicable' };
+      if (registration.status === 'scutit_art310') {
+        return { applicability: 'applicable' };
+      }
+      if (registration.status === 'inregistrare_anulata') {
+        // art. 316 alin. (12), (14): after an annulment the person is back in the system from the
+        // re-registration decision, with NO fallback to art. 310 before that date. Whether the plafon
+        // re-creates a duty is a question about the prior year's restricted turnover, which the app does
+        // not compute — so the row says so instead of guessing.
+        return {
+          applicability: 'unknown',
+          reason:
+            'Codul de TVA a fost anulat. art. 316 alin. (12) și (14) readuc persoana în sistem de la data deciziei de reinregistrare, fără revenire la art. 310 până atunci; dacă plafonul renaște o obligație depinde de venitul restrâns al anului precedent (art. 310 alin. (2)), pe care aplicația nu îl calculează.',
+        };
+      }
+      return {
+        applicability: 'not_applicable',
+        reason:
+          'Profilul declară o înregistrare în scopuri de TVA în vigoare: obligația de înregistrare prevăzută de art. 310 alin. (1) din Codul fiscal a intervenit deja, deci acest plafon nu mai decide nicio obligație.',
+      };
     }
   }
 }
