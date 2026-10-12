@@ -60,6 +60,41 @@ export const disclosure = {
 /** The label of the reusable „Notă de interpretare" component (`src/components/ui/InterpretationNote.tsx`). */
 export const noteLabel = 'Notă de interpretare' as const;
 
+/**
+ * B-51 — the scope statement. One sentence, one key, two surfaces.
+ *
+ * Until now nothing in user-facing copy said what these figures are and are not: a grep for
+ * `consultan`, `nu constituie`, `informativ` across `src/ui/copy/` and `src/pages/` returned one hit, and
+ * it was a code comment. That silence sits on top of a claimable-VAT total that is filed nowhere
+ * (D-VAT-3), a Form 300 rubric drawn with lines deliberately left without values (B-98), and figures the
+ * corpus records as INFERRED or CORROBORATED rather than FACT.
+ *
+ * Four things the sentence has to say, and nothing else:
+ *  - the figures are **estimates computed from what the person entered** — they are not measurements;
+ *  - **nothing is filed or transmitted from here** — stated as a negative, because B-56 is open and some
+ *    success messages already claim operations that do not happen; this sentence must not add another;
+ *  - it is **not a substitute for a consultant or for the ANAF window**, and a figure can be wrong because
+ *    the law moves during the year;
+ *  - it must **not undersell the arithmetic**: the legal bases are displayed and the calculations are
+ *    tested, and that is the app's whole value. A disclaimer that reads as "this is a toy" is its own
+ *    defect, so the sentence says what the work rests on before it says what it does not replace.
+ *
+ * Deliberately absent: no product self-reference (no „software", no „program"), no English calque, no
+ * hedge repeated beside individual figures. It is keyed here, in the shared half of the layer, because it
+ * is one statement read from two places — Onboarding, where expectations are set, and Settings → Date,
+ * where it can be found again after the first run. A third copy of the string would be the drift the
+ * duplicate-sentence test in `copy.guard.test.ts` exists to stop.
+ */
+export const scope = {
+  title: 'Estimări, nu declarații',
+  statement:
+    'Cifrele de aici sunt estimări: le calculăm din ce ai introdus și din regulile anului fiscal '
+    + 'respectiv. Nimic nu se depune și nimic nu se trimite la ANAF din acest cont — declarația o depui '
+    + 'tu, la ghișeu sau în SPV. Un consultant fiscal și ANAF pot ajunge la o altă cifră, iar o cifră de '
+    + 'aici poate fi greșită pentru că legea se schimbă în timpul anului. Temeiurile legale ale '
+    + 'calculelor sunt afișate, iar calculele sunt testate; totuși ele nu înlocuiesc consultanța fiscală.',
+} as const;
+
 /** Field labels repeated across pages — one key, one wording. */
 export const fields = {
   date: 'Data',

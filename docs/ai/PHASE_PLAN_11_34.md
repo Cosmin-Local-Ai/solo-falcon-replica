@@ -449,6 +449,8 @@ The table above has no status column, which is why this had to be re-derived by 
 
 **So the remaining sequence is PG-8 … PG-13, not PG-7 … PG-13.** PG-7 was completed early, when Phase 10c landed.
 
+**The agreed order of work is recorded in `docs/ai/NEXT_STEPS.md`** — written 2026-10-12, with the reason each item sits where it does, the two sequencing traps, and what is deliberately *not* in the queue. That file answers "what next"; this plan answers "what is already done".
+
 **PG-1 goes first after PG-0.** It is the channel every later refusal reuses, and it is the finding that undermines every number on the screen: the hero says Calculat while records are quietly dropped, in both directions — an unconverted euro expense *raises* the tax and an unconverted euro revenue *lowers* it.
 
 ---

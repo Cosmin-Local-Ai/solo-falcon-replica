@@ -30,7 +30,7 @@
  */
 import { useState } from 'react';
 import { useStore } from '../data/store';
-import { onboarding as copy_, settings as settingsCopy, validation } from '../ui/copy';
+import { onboarding as copy_, scope as scopeCopy, settings as settingsCopy, validation } from '../ui/copy';
 import { Card } from '../components/ui';
 import { isoCalendarDateProblem, isoCalendarDateProblemText, localYear } from '../domain/date';
 import { parseLeiInput } from '../domain/money';
@@ -245,6 +245,19 @@ export default function OnboardingPage() {
       </div>
       <p className="sub">{copy_.subtitle}</p>
       <p>{copy_.intro}</p>
+
+      {/* B-51 — the scope statement, on the one screen where it costs nothing to say it: the person has
+          not yet trusted a figure, and the sentence is read before any figure exists on screen. It is a
+          card of its own rather than a line under the hero or beside an amount, because a hedge parked next
+          to a single number reads as a caveat about *that* number — and that number may be exactly right.
+          The wording is one shared key (`ui/copy/common.ts` → `scope`), reused verbatim in Settings → Date;
+          the paragraph carries no class, so it inherits the body colour rather than the low-contrast
+          `.hint`/`.muted` ladder that B-52 is open on. */}
+      <Card title={scopeCopy.title}>
+        <div className="stack">
+          <p data-scope-statement>{scopeCopy.statement}</p>
+        </div>
+      </Card>
 
       <Card title={settingsCopy.data.sandboxCard}>
         <div className="stack">

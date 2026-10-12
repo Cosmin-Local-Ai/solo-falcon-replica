@@ -674,3 +674,29 @@ test.describe('Phase 10c — a rate entered in Settings reconciles the ledger (B
     expect(saved.fxRates ?? []).toHaveLength(0);
   });
 });
+
+test.describe('B-51 — the scope statement is reachable in Settings', () => {
+  /**
+   * The statement is one shared copy key (`src/ui/copy/common.ts` → `scope`), rendered on the first run and
+   * again on the Settings tab that already answers "where do these numbers come from". This spec proves the
+   * second surface in a browser: a key that exists but is never mounted would pass a unit test on the copy
+   * layer and still leave the app with no scope statement, which is exactly how B-51 stayed open.
+   *
+   * The assertion is on a stable fragment, not on the whole sentence — the wording may be reworded honestly
+   * (the content pins live in `src/pages/scope.statement.test.tsx`), and a spec that retypes a whole
+   * paragraph breaks on every comma.
+   */
+  test('the Date tab carries the statement, and it survives a reload', async ({ page }) => {
+    await fixClock(page);
+    await seedBrowserOnce(page);
+    await page.goto('/settings#!/data');
+
+    await expect(page.locator('[data-scope-statement]')).toBeVisible();
+    await expect(page.locator('[data-scope-statement]')).toContainText('sunt estimări');
+    await expect(page.locator('[data-scope-statement]')).toContainText('Nimic nu se depune');
+
+    // Reachable again after a reload, from the same route — it is a durable statement, not a first-run toast.
+    await page.reload();
+    await expect(page.locator('[data-scope-statement]')).toContainText('consultanța fiscală');
+  });
+});

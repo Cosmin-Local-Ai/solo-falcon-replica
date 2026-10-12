@@ -6,7 +6,7 @@ import { Disclosure } from '../components/ui/Disclosure';
 import { InterpretationNote } from '../components/ui/InterpretationNote';
 import { FxRateProvenance } from '../components/ui/FxRateProvenance';
 import { FxRateEntryForm } from '../components/ui/FxRateEntryForm';
-import { copy, fields, settings as settingsCopy, validation, occupancy as occupancyCopy, vehicles as vehiclesCopy } from '../ui/copy';
+import { copy, fields, scope as scopeCopy, settings as settingsCopy, validation, occupancy as occupancyCopy, vehicles as vehiclesCopy } from '../ui/copy';
 // PG-6c (D-VEH-3) — the vehicle facts are read and written through the same resolver the classifier runs,
 // so the screen and the calculation cannot disagree about which car the one-car allowance follows. The
 // option lists come from the rule vocabulary, not from a list written here.
@@ -1780,6 +1780,18 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
           unloading it restores exactly what was there. */}
       {tab === 'data' && (
         <div style={{ display: 'grid', gap: 16, maxWidth: 720 }}>
+          {/* B-51 — the durable half of the scope statement. Onboarding says it once, before any figure
+              exists; this is where it can be found again after the first run, on the tab that already
+              answers "where do these numbers come from". Same key, same sentence, no second wording —
+              `copy.guard.test.ts` fails a sentence spelled twice, and two near-identical disclaimers drift
+              apart exactly like two status vocabularies do. No class on the paragraph: `.muted` and
+              `.hint` sit on the low-contrast ladder B-52 is open on. */}
+          <Card title={scopeCopy.title}>
+            <div className="stack">
+              <p data-scope-statement>{scopeCopy.statement}</p>
+            </div>
+          </Card>
+
           <Card title={settingsCopy.data.card}>
             <div className="stack">
               <p data-settings-origin>

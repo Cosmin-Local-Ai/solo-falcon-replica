@@ -37,6 +37,18 @@ test.describe('First run — a fresh profile with zero stored entries', () => {
     expect(await page.evaluate(() => localStorage.length)).toBe(0);
     expect(await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY)).toBeNull();
   });
+
+  test('states its scope before the person has trusted any figure (B-51)', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: onboarding.title })).toBeVisible();
+
+    // One shared copy key (`src/ui/copy/common.ts` → `scope`), on the surface where it is read before any
+    // figure exists on screen. Asserted as fragments, not as the whole sentence: the content pins live in
+    // `src/pages/scope.statement.test.tsx`, and a spec that retypes a paragraph breaks on every comma.
+    await expect(page.locator('[data-scope-statement]')).toBeVisible();
+    await expect(page.locator('[data-scope-statement]')).toContainText('sunt estimări');
+    await expect(page.locator('[data-scope-statement]')).toContainText('Nimic nu se depune');
+  });
 });
 
 test.describe('First run — validation and refusal', () => {
