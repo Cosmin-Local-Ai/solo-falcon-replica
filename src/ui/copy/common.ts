@@ -106,6 +106,9 @@ export const validation = {
   // PG-6h-2 — the room count is a count, not an amount. A fraction or a negative is not a number of rooms,
   // and letting a non-number through would silently read as "unanswered" instead of an error on screen.
   roomsInvalid: 'Număr invalid de camere: număr întreg, ≥ 0.',
+  // PG-6e — a declared *durată normală de funcționare* is a count of months, not a month-of-year list and
+  // not an amount. Reusing `monthsInvalid` would tell the reader to write „3,4”.
+  monthsCountInvalid: 'Număr invalid de luni: număr întreg, ≥ 1.',
   nameNotEmpty: 'Numele nu poate fi gol',
   bankNameRequired: 'Introdu denumirea băncii',
   salaryAmountNeededForSixSm:
@@ -132,6 +135,10 @@ export const nav = {
   'e-factura': 'e-Factura',
   declarations: 'Declarații',
   documents: 'Documente',
+  // PG-6e (B-31, D-FA-1): the fixed-asset register. Its own page rather than a tab under Cheltuieli,
+  // because a capital purchase is not an expense (art. 68 alin. (7) lit. h)), and folding the register in
+  // there would invite exactly that reading.
+  assets: 'Mijloace fixe',
   clients: 'Clienți',
   settings: 'Setări',
 } as const;

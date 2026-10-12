@@ -50,6 +50,7 @@ export { scenarios } from './scenarios';
 export { settings } from './settings';
 export { onboarding } from './onboarding';
 export { occupancy } from './occupancy';
+export { assets } from './assets';
 export { vehicles } from './vehicles';
 export {
   revenues,
@@ -84,6 +85,7 @@ import { scenarios } from './scenarios';
 import { settings } from './settings';
 import { onboarding } from './onboarding';
 import { occupancy } from './occupancy';
+import { assets } from './assets';
 import { vehicles } from './vehicles';
 import {
   revenues, expenses, expenseCategoryLabels, clients, declarations, recordStatus,
@@ -106,6 +108,7 @@ export const copy = {
   settings,
   onboarding,
   occupancy,
+  assets,
   vehicles,
   revenues, expenses, expenseCategoryLabels, clients, declarations, recordStatus,
   moneyDate, fiscalDateSource, documents, eFactura,

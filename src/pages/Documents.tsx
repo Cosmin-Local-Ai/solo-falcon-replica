@@ -9,15 +9,21 @@ import type { AppData } from '../data/types';
 import type { DocTypeCode, CompanyDocument, TaxStatement } from '../data/types';
 import { type Bani, formatBani, formatBaniRON, requireRon, sumBani, subBani } from '../domain/money';
 import { expenseFiscalDate, revenueFiscalDate } from '../domain/aggregation';
-import { localYear } from '../domain/date';
+import { localYear, localDateISO, now } from '../domain/date';
 import { getLedgerDisclosure, type LedgerDisclosure } from '../data/dashboard';
 import { Card, Badge, Modal, Empty } from '../components/ui';
-import { copy, documents as documentsCopy, expenses as expensesCopy, moneyDate, occupancy as occupancyCopy } from '../ui/copy';
+import { copy, documents as documentsCopy, expenses as expensesCopy, moneyDate, occupancy as occupancyCopy, assets as assetsCopy } from '../ui/copy';
 import { isoCalendarDateProblem } from '../domain/date';
 import {
   occupancyStayExceedsShortTermCeiling, isCnpShaped,
   type OccupancySheet, type GuestIdentifierKind,
 } from '../data/types';
+import {
+  inventoryRegisterCsv, assetFicheCsv, retentionFor, retentionText,
+} from '../data/fixedAssetDocuments';
+import { selectRuleSet } from '../domain/fiscal';
+import type { FiscalRule } from '../domain/fiscal/rules';
+import { FISCAL_DEPRECIATION_RULE_ID } from '../domain/fiscal/depreciation';
 
 // Canonical route hash keys — mirror the original SOLO Documents feature:
 //   documents.company     → "Documente PFA"  (registration documents, real uploads)
@@ -31,6 +37,10 @@ const TABS = [
   { key: 'statements', label: documentsCopy.tabs.declarations },
   { key: 'reports', label: documentsCopy.tabs.reports },
   { key: 'occupancy', label: occupancyCopy.title },
+  // PG-6e (D-FA-2): the two retained documents the fixed-asset register owes. They live on this page and
+  // not on /assets, because they are documents the taxpayer keeps rather than facts they enter — the same
+  // division that puts the occupancy sheet here.
+  { key: 'fixed-assets', label: assetsCopy.documents.tabTitle },
 ] as const;
 type TabKey = (typeof TABS)[number]['key'];
 
@@ -1010,6 +1020,120 @@ function OccupancyTab() {
   );
 }
 
+// ---------- Fixed-asset retained documents (PG-6e, D-FA-2) ----------
+
+// The rule the generated documents read their depreciation figures from — **selected, never imported by
+// year name**, for the reason `domain/fiscal/registry.test.ts` enforces and `Expenses.tsx` records: a call
+// site that names the year can only ever ask for that year. The year comes from the profile the store holds.
+function depreciationRule(fiscalYear: number): FiscalRule | undefined {
+  const asOf = localDateISO(now());
+  const selection = selectRuleSet(fiscalYear, asOf);
+  return selection ? selection.rules.find(r => r.ruleId === FISCAL_DEPRECIATION_RULE_ID) : undefined;
+}
+
+/**
+ * The two documents OMFP 170/2015 requires a partidă simplă taxpayer to keep for their fixed assets, built
+ * from the register on /assets. Nothing here is a filing surface: there is no upload, no "send to ANAF" and
+ * no deadline widget, because the obligation is păstrare — and the retention sentences below are the
+ * current ones, after OMF 1.447/2023 abrogated the 10-year rule people remember.
+ */
+function FixedAssetsTab() {
+  const { fixedAssets, toast, profile } = useStore();
+  const rule = depreciationRule(profile.fiscalYear);
+
+  if (fixedAssets.length === 0) {
+    return (
+      <Card>
+        <div style={{ padding: '20px 18px' }}>
+          <Empty icon="🏷" title={assetsCopy.documents.emptyTitle} text={assetsCopy.documents.empty} />
+        </div>
+      </Card>
+    );
+  }
+
+  const registerCsv = rule ? inventoryRegisterCsv(fixedAssets, rule) : '';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <Card>
+        <div style={{ padding: '4px 2px' }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>{assetsCopy.documents.heading}</div>
+          <div className="text-sm">{assetsCopy.documents.body}</div>
+        </div>
+      </Card>
+
+      <Card title={`${assetsCopy.documents.registerTitle} (${assetsCopy.documents.registerCode})`}>
+        <div style={{ padding: '4px 2px' }}>
+          <div className="text-sm muted">{assetsCopy.documents.registerCitation}</div>
+          <div className="text-sm" style={{ marginTop: 8 }}>{assetsCopy.documents.retentionRegister}</div>
+          <button
+            className="btn btn-primary"
+            style={{ marginTop: 10 }}
+            data-testid="fa-download-register"
+            disabled={!rule}
+            onClick={() => {
+              if (!registerCsv) {
+                toast('info', assetsCopy.documents.nothingToExport);
+                return;
+              }
+              downloadText(registerCsv, 'Registrul-inventar-14-1-2b.csv');
+              toast('success', assetsCopy.documents.generated);
+            }}
+          >
+            {assetsCopy.documents.downloadRegister}
+          </button>
+        </div>
+      </Card>
+
+      {fixedAssets.map(asset => {
+        // The fișa's own retention is inferred, not quoted — `retentionFor` says so in the sentence it
+        // returns, and the inference is recorded in research/36 §14.3.
+        const retention = retentionText(retentionFor(asset));
+        return (
+          <Card key={asset.id} title={`${assetsCopy.documents.ficheTitle} — ${asset.label}`}>
+            <div style={{ padding: '4px 2px' }}>
+              <div className="text-sm muted">{assetsCopy.documents.ficheCitation}</div>
+              <div className="text-sm muted" style={{ marginTop: 6 }}>{assetsCopy.documents.ficheInferred}</div>
+              <div className="text-sm" style={{ marginTop: 8 }} data-testid={`fa-retention-${asset.id}`}>
+                {retention}
+              </div>
+              <button
+                className="btn btn-primary"
+                style={{ marginTop: 10 }}
+                data-testid={`fa-download-fiche-${asset.id}`}
+                disabled={!rule}
+                onClick={() => {
+                  if (!rule) {
+                    toast('info', assetsCopy.documents.nothingToExport);
+                    return;
+                  }
+                  downloadText(
+                    assetFicheCsv(asset, rule),
+                    `Fisa-mijlocului-fix-14-2-2-${asset.label}.csv`,
+                  );
+                  toast('success', assetsCopy.documents.generated);
+                }}
+              >
+                {assetsCopy.documents.downloadFiche}
+              </button>
+            </div>
+          </Card>
+        );
+      })}
+
+      <Card>
+        <div style={{ padding: '4px 2px' }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>{assetsCopy.documents.retentionHeading}</div>
+          <div className="text-sm">{assetsCopy.documents.retentionProvenance}</div>
+          <div className="text-sm" style={{ marginTop: 8 }}>{assetsCopy.documents.retentionAbrogated}</div>
+          <div className="text-sm muted" style={{ marginTop: 8 }}>{assetsCopy.documents.retentionOwnCopy}</div>
+          <div className="text-sm muted" style={{ marginTop: 6 }}>{assetsCopy.documents.retentionDeletion}</div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 // ---------- page ----------
 
 interface DocumentsProps {
@@ -1066,6 +1190,7 @@ export default function Documents({ initialTab, onTabChange }: DocumentsProps) {
       {tab === 'statements' && <StatementsTab />}
       {tab === 'reports' && <ReportsTab />}
       {tab === 'occupancy' && <OccupancyTab />}
+      {tab === 'fixed-assets' && <FixedAssetsTab />}
     </div>
   );
 }

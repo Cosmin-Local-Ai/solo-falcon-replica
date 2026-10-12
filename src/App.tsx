@@ -9,6 +9,7 @@ import Expenses from './pages/Expenses';
 import EFactura from './pages/EFactura';
 import Declarations from './pages/Declarations';
 import Documents from './pages/Documents';
+import Assets from './pages/Assets';
 import Clients from './pages/Clients';
 import Settings from './pages/Settings';
 import OnboardingPage from './pages/Onboarding';
@@ -23,6 +24,10 @@ export type Page =
   | 'e-factura'
   | 'declarations'
   | 'documents'
+  // PG-6e (B-31, D-FA-1): the fixed-asset register. Its own page, not a tab under `expenses` — see the
+  // header comment in `pages/Assets.tsx` for why a register placed among expenses invites the reading
+  // art. 68 alin. (7) lit. h) forbids.
+  | 'assets'
   | 'clients'
   | 'settings';
 
@@ -33,6 +38,7 @@ const PAGES: Page[] = [
   'e-factura',
   'declarations',
   'documents',
+  'assets',
   'clients',
   'settings',
 ];
@@ -44,6 +50,7 @@ const NAV: { page: Page; label: string; icon: string }[] = [
   { page: 'e-factura', label: nav['e-factura'], icon: '⚡' },
   { page: 'declarations', label: nav.declarations, icon: '📋' },
   { page: 'documents', label: nav.documents, icon: '📁' },
+  { page: 'assets', label: nav.assets, icon: '🏷' },
   { page: 'clients', label: nav.clients, icon: '👥' },
   { page: 'settings', label: nav.settings, icon: '⚙' },
 ];
@@ -81,7 +88,7 @@ const VALID_TABS: Partial<Record<Page, string[]>> = {
   // is unreachable by URL — `parseRoute` drops an unlisted hash, so the Settings entry point would land
   // on the default tab instead of the sheet, and a deep link to a document would silently open something
   // else. This is the router's whitelist, not a navigation surface: the sidebar still offers four pages.
-  documents: ['company', 'statements', 'reports', 'occupancy'],
+  documents: ['company', 'statements', 'reports', 'occupancy', 'fixed-assets'],
   // Mirrors the live SOLO settings tabs (docs/reference/settings.md);
   // the real app's "Abonament" (subscription) tab is not replicated.
   // `fiscal` is an addition of this replica: the PfaProfile write path (Phase 6).
@@ -349,6 +356,7 @@ function Shell() {
             />
           )}
           {route.page === 'clients' && <Clients />}
+          {route.page === 'assets' && <Assets />}
           {route.page === 'settings' && (
             <Settings
               initialTab={route.tab ?? undefined}

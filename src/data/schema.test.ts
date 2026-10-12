@@ -105,6 +105,49 @@ describe('parseAppData — valid payloads', () => {
     expect(parsed?.expenses?.[0] && 'category' in parsed.expenses[0]).toBe(false);
   });
 
+  // PG-6e (B-31, D-FA-1): `fixedAssets` is declared in `persistedAppDataSchema` for the same reason
+  // `category` and `reservedAmount` are — zod STRIPS undeclared keys, so a register that lived only on the
+  // TypeScript type would be erased on the next save-and-load, and the taxpayer would lose the register
+  // OMFP 170/2015 obliges them to keep, with no error anywhere to show it.
+  it('keeps the fixed-asset register through the parse gate', () => {
+    const parsed = parseAppData(write({
+      fixedAssets: [{
+        id: 'a1',
+        label: 'Utilaj de birou',
+        entryDate: '2026-02-10',
+        fiscalValue: 12000000,
+      }],
+    }));
+    expect(parsed?.fixedAssets).toHaveLength(1);
+    expect(parsed?.fixedAssets?.[0].label).toBe('Utilaj de birou');
+    // Every other fact stays absent unless it was written — the gate neither defaults nor backfills.
+    expect('putInFunctionDate' in parsed!.fixedAssets![0]!).toBe(false);
+    expect('normalLifeMonths' in parsed!.fixedAssets![0]!).toBe(false);
+  });
+
+  it('accepts a payload with no fixedAssets key at all — a pre-v17 write is not corruption', () => {
+    const preV17 = JSON.stringify(
+      Object.fromEntries(Object.entries(baseline()).filter(([k]) => k !== 'fixedAssets')),
+    );
+    const parsed = parseAppData(preV17);
+    expect(parsed).not.toBeNull();
+    expect(parsed && 'fixedAssets' in (parsed as object)).toBe(false);
+  });
+
+  it('is permissive about an asset money shape and strict about a negative one — the same split as every other collection', () => {
+    // The gate checks shape, not arithmetic: a fractional stored value is what the v5 `money-bani` step
+    // exists to notice and report, and a gate that silently converts is a gate that decides. A negative
+    // depreciable value, by contrast, is not a shape this application will hold.
+    const fractional = parseAppData(write({
+      fixedAssets: [{ id: 'a1', label: 'X', entryDate: '2026-02-10', fiscalValue: 12000.5 }],
+    }));
+    expect(fractional).not.toBeNull();
+    const negative = parseAppData(write({
+      fixedAssets: [{ id: 'a1', label: 'X', entryDate: '2026-02-10', fiscalValue: -1 }],
+    }));
+    expect(negative).toBeNull();
+  });
+
   it('refuses a category outside the rule vocabulary — the token space belongs to the rules, not to free text', () => {
     // Only a build with a wider vocabulary could write such a token, and that payload is already
     // refused by its version number before this gate matters. Pinning it here keeps `category` from
