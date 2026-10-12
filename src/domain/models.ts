@@ -7,6 +7,7 @@ import type { ActivityFamily } from './fiscal/deductibility';
 // (`fiscal/vat.ts`), and the profile stores a declared value of it. Type-only import, for the same
 // reason as `ActivityFamily` above: one declaration of the six states instead of two.
 import type { VatProRataYear, VatRegistration } from './fiscal/vat';
+import type { VatPeriodicityFacts } from './fiscal/vatPeriodicity';
 
 /**
  * PFA/profile domain model — the single source of truth for the PFA profile.
@@ -816,6 +817,28 @@ export interface PfaProfile {
    * the normal state, not a gap.
    */
   vatProRataYears?: VatProRataYear[];
+  /**
+   * PG-6g (D-VAT-1, B-35 residual) — the facts CF art. 322 asks for, **one record per calendar year**, all
+   * of them declared and none of them derived.
+   *
+   * **Why the app stores facts and not an answer.** Art. 322 does not offer a periodicity to pick. It
+   * states a default (alin. (1) „luna calendaristică"), an exception (alin. (2), trimestrul), two
+   * registration-year tests that compare **different figures against different caps** (alin. (3) a forecast
+   * for the stub against a pro-rated cap; alin. (4) an annualised actual against the full cap), an
+   * automatic test for the following year (alin. (5)) and an event-driven flip (alin. (7)). Storing
+   * `periodicity: 'month'` would record a conclusion the app is not entitled to reach, and it is exactly
+   * what the old monthly D300 cadence did. So the profile holds the inputs and `deriveVatPeriodicity`
+   * produces the answer, with the arithmetic shown.
+   *
+   * **Optional, and absence is the third state** — the same discipline as `vatRegistration` above. An
+   * unanswered year does not become `month` and does not become `quarter`: the app asks, states the rule in
+   * plain Romanian, and marks the answer as the person's own. No default and no backfill; the v18→v19 step
+   * opens nothing here.
+   *
+   * `userChoice` inside a record is the only place a periodicity is ever stored, and it carries
+   * `confirmedBy: 'user'` and the date it was given — an answer offered for 2026 cannot silently decide 2028.
+   */
+  vatPeriodicityYears?: VatPeriodicityFacts[];
   /**
    * The date the VAT turnover ceiling (CF art. 310 alin. (1)) was actually exceeded, ISO
    * `YYYY-MM-DD`. Optional on purpose — see the data-loss note on `pfaProfileSchema`: a

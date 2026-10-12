@@ -191,6 +191,8 @@ export interface VatObligation {
   period?: VatFiscalPeriod;
   /** Set when the 5-working-day term could not account for sărbători legale. */
   holidayCaveat?: string;
+  /** Set when an exception in the article could not be checked against the record. */
+  exceptionNote?: string;
 }
 
 /**
@@ -246,6 +248,12 @@ export function annualMentiuniObligation(input: {
   year: number;
   quarterlyUnder: 'alin2' | 'alin5' | 'alin3' | 'alin4' | null;
   requestingArt310Return: boolean;
+  /**
+   * True when the dataset cannot say whether the art. 316→art. 310 return was requested. The obligation is
+   * still emitted — the duty exists unless the taxpayer exercised the exception — but the row says the
+   * exception was not checked, rather than implying that it was.
+   */
+  art310ReturnUnknown?: boolean;
 }): VatObligation | null {
   if (input.quarterlyUnder === null) return null;
   if (input.quarterlyUnder === 'alin3' || input.quarterlyUnder === 'alin4') return null;
@@ -261,6 +269,15 @@ export function annualMentiuniObligation(input: {
     label:
       `Declarație de mențiuni până la 25 ianuarie ${input.year}: cifra de afaceri din ${input.year - 1} și `
       + 'mențiunea că nu ai efectuat achiziții intracomunitare de bunuri în anul precedent. Nu este un decont.',
+    ...(input.art310ReturnUnknown
+      ? {
+          exceptionNote:
+            'Art. 322 alin. (6) ultima teză scutește persoana care cere scoaterea din evidența persoanelor '
+            + 'înregistrate conform art. 316, în vederea aplicării regimului de scutire de la art. 310. '
+            + 'Aplicația nu are înregistrată nicio astfel de cerere, deci obligația este afișată ca '
+            + 'existentă; dacă ai făcut cererea, excepția se aplică și termenul nu există.',
+        }
+      : {}),
   };
 }
 

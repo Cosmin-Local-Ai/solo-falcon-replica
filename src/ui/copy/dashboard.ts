@@ -274,6 +274,9 @@ export const deadlineAppliesToLabels: Record<string, string> = {
   cas_annual: 'CAS anual',
   cass_annual: 'CASS anual',
   vat_periodic: 'TVA periodic',
+  // PG-6g — the art. 322 alin. (6) and alin. (8) duties, named apart from the decont because they are not
+  // deconturi: a row that calls one a decont tells the taxpayer to file the wrong form.
+  vat_mentiuni: 'Mențiuni TVA',
   vat_registration: 'Înregistrare în scop de TVA',
 };
 
@@ -295,6 +298,9 @@ export const deadlineLabels: Record<string, (taxYear: number) => string> = {
   cas_annual: () => 'Declarație și plată CAS',
   cass_annual: () => 'Declarație și plată CASS',
   vat_periodic: () => 'Declarație periodică de TVA',
+  // PG-6g. The alin. (6) and alin. (8) duties read as mențiuni, never as a declarație periodică: the first
+  // word of the label is what tells the taxpayer which form the term is about.
+  vat_mentiuni: () => 'Declarație de mențiuni TVA',
   vat_registration: () => 'Înregistrare în scop de TVA',
 };
 
@@ -337,6 +343,11 @@ export const deadlines = {
   eventLabels: {
     d212_filing: 'Depunere D212',
     vat_registration: 'Înregistrare TVA',
+    // PG-6g — the two VAT families the art. 322/323 calendar emits. `Record<DeadlineEventType, string>`
+    // means an event type cannot exist on screen without a sentence beside it, and cannot render as its
+    // own identifier.
+    vat_return: 'Depunere decont periodic de TVA',
+    vat_mentiuni: 'Depunere declarație de mențiuni TVA',
   } satisfies Record<DeadlineEventType, string>,
 } as const;
 

@@ -17,6 +17,15 @@ import { ACTIVITY_FAMILY_VALUES } from './fiscal/deductibility';
 // `ACTIVITY_FAMILY_VALUES` is imported above rather than restated. The registration states and the
 // `da`/`nu` answers come from `fiscal/vat.ts`; nothing here invents a seventh state.
 import { VAT_REGISTRATION_VALUES, VAT_YES_NO_VALUES } from './fiscal/vat';
+// PG-6g (D-VAT-1) — same rule as the two lines above: the persisted token space and the art. 322
+// derivation must be ONE spelling. Nothing here restates a route, a branch or a `da`/`nu`/`nedeclarat`
+// answer, so a value the derivation cannot read can never reach storage.
+import {
+  ART322_BRANCH_VALUES,
+  VAT_PERIODICITY_VALUES,
+  VAT_REGISTRATION_ROUTE_VALUES,
+  VAT_YES_NO_UNDECLARED_VALUES,
+} from './fiscal/vatPeriodicity';
 import { ISO_CALENDAR_DATE } from './date';
 
 /**
@@ -192,6 +201,56 @@ export const pfaProfileSchema: z.ZodType<PfaProfile> = z.object({
       z.object({
         fiscalYear: z.number().int().min(1990).max(2100),
         percent: z.number().min(0).max(100),
+      }),
+    )
+    .optional(),
+  /**
+   * PG-6g (D-VAT-1, B-35 residual) — the CF art. 322 facts, per calendar year. Every field is optional and
+   * **no field has a `.default()`**, which is the whole design: art. 322 alin. (3) asks for a figure the
+   * taxpayer `preconizează`, and alin. (4) turns on whether they came from the art. 310 exemption. A
+   * default for either would be the app answering its own question, and the two plausible defaults move a
+   * new PFA between monthly and quarterly filing.
+   *
+   * `userChoice` is the only place a periodicity is ever stored, and it requires `confirmedBy: 'user'` —
+   * the literal, not an enum with an app-side value. There is no way to write down "the app decided".
+   *
+   * Money fields are **integer bani**, like every other stored amount since Phase 10: the cap comparison in
+   * art. 322 is done in bani against a lei equivalent derived through `domain/fx/capCeiling.ts`.
+   */
+  vatPeriodicityYears: z
+    .array(
+      z.object({
+        year: z.number().int().min(1990).max(2100),
+        registrationEffectiveFrom: z
+          .string()
+          .regex(ISO_CALENDAR_DATE, 'vatPeriodicityYears.registrationEffectiveFrom must be ISO YYYY-MM-DD')
+          .optional(),
+        registrationRoute: z.enum(VAT_REGISTRATION_ROUTE_VALUES).optional(),
+        inArt310BeforeRegistration: z.enum(VAT_YES_NO_UNDECLARED_VALUES).optional(),
+        precedingYearTurnover: z.number().int().min(0).transform((n) => n as Bani).optional(),
+        precedingYearAicGoods: z.enum(VAT_YES_NO_UNDECLARED_VALUES).optional(),
+        forecastStubTurnover: z.number().int().min(0).transform((n) => n as Bani).optional(),
+        actualTurnover: z.number().int().min(0).transform((n) => n as Bani).optional(),
+        actualActivityMonths: z.number().int().min(0).max(12).optional(),
+        actualTurnoverScope: z
+          .enum(['doar_cu_cod_de_tva', 'include_ante_inregistrare', 'nedeclarat'])
+          .optional(),
+        aicGoodsBeforeRegistration: z.enum(VAT_YES_NO_UNDECLARED_VALUES).optional(),
+        aicGoodsWhileQuarterly: z.enum(VAT_YES_NO_UNDECLARED_VALUES).optional(),
+        // art. 322 alin. (7) answers differently per month of the quarter, so the month is a separate fact
+        // from the yes/no. Bounded to 1-12: a value outside that range cannot name a month, and the
+        // derivation must not guess one.
+        aicGoodsExigibilityMonth: z.number().int().min(1).max(12).optional(),
+        art310ReturnRequested: z.enum(VAT_YES_NO_UNDECLARED_VALUES).optional(),
+        userChoice: z
+          .object({
+            periodicity: z.enum(VAT_PERIODICITY_VALUES),
+            branch: z.enum(ART322_BRANCH_VALUES),
+            // The literal, not a vocabulary: the app cannot record that IT chose.
+            confirmedBy: z.literal('user'),
+            confirmedOn: z.string().regex(ISO_CALENDAR_DATE, 'userChoice.confirmedOn must be ISO YYYY-MM-DD'),
+          })
+          .optional(),
       }),
     )
     .optional(),

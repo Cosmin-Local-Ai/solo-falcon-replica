@@ -52,8 +52,24 @@ const makeRule = (overrides: Partial<FiscalRule> = {}): FiscalRule => ({
 });
 
 describe('DEADLINE_EVENT_TYPES', () => {
-  it('is exactly the two event types that have a legal basis in 2026', () => {
-    expect(DEADLINE_EVENT_TYPES).toEqual(['d212_filing', 'vat_registration']);
+  it('is exactly the event types that have a legal basis in 2026', () => {
+    // PG-6g widened this from two to four, deliberately and with a citation per entry. The pin still does
+    // its job: an event type with no article behind it fails here rather than reaching the screen.
+    expect(DEADLINE_EVENT_TYPES).toEqual([
+      'd212_filing',      // CF art. 122 alin. (3) — D212, termenul de depunere
+      'vat_registration', // CF art. 316 alin. (1) lit. b) — „cel târziu la data depășirii plafonului"
+      'vat_return',       // CF art. 323 alin. (1) — decontul pe fiecare perioadă fiscală; plată art. 326 alin. (1)
+      'vat_mentiuni',     // CF art. 322 alin. (6) și alin. (8) — declarația de mențiuni, nu un decont
+    ]);
+  });
+
+  it('keeps the two PG-6g types apart, because a mențiune is not a decont', () => {
+    // Collapsing them into one type is how a 25-ianuarie mențiuni duty would come to be presented as a
+    // periodic return, and how a taxpayer would be told to file the wrong form. The types differ, the
+    // `appliesTo` keys differ, and the labels differ.
+    expect(DEADLINE_EVENT_TYPES).toContain('vat_return');
+    expect(DEADLINE_EVENT_TYPES).toContain('vat_mentiuni');
+    expect(DEADLINE_EVENT_TYPES).not.toContain('vat_obligatie');
   });
 
   it('contains none of the four deleted event types', () => {

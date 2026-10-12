@@ -2,6 +2,12 @@ import type { FiscalRule } from './fiscal/rules';
 import { selectApplicableRules } from './fiscal/select';
 import type { AnnualFiling } from '../data/types';
 import { isFiledFiling } from '../data/types';
+// PG-6g — the periodic VAT return is a record type in its own right, with its own filed-status test, for
+// the same reason `AnnualFiling`/`isFiledFiling` are separate: a decont answers for a fiscal period and a
+// D212 answers for a tax year, and neither discharges the other.
+import type { VatReturnRecord } from '../data/types';
+import { isFiledVatReturn } from '../data/types';
+import type { VatObligation } from './fiscal/vatReturn';
 
 /**
  * The ONLY deadline event types this application models.
@@ -35,13 +41,23 @@ import { isFiledFiling } from '../data/types';
  * in docs/ai/research/15_verification_of_deadline_claims_2026.md §1. A PFA start date therefore
  * resolves NO deadline at all — silence is the correct behaviour, not a gap to fill.
  */
-export type DeadlineEventType = 'd212_filing' | 'vat_registration';
+export type DeadlineEventType = 'd212_filing' | 'vat_registration' | 'vat_return' | 'vat_mentiuni';
 
 /**
  * Runtime registry of the event types above. A deadline rule whose `event_type` parameter is not
  * one of these emits NOTHING — the engine never coerces an unknown value into a `Deadline`.
+ *
+ * **PG-6g: `vat_return` and `vat_mentiuni` are emitted by `vatObligationDeadlines`, not by a rule.**
+ * Every other event type here is produced by a `taxRegime: 'deadlines'` rule in `fiscal/package2026.ts`.
+ * These two cannot be: `registry.ts` refuses a release whose `ruleIds` and rule set disagree in either
+ * direction, and PG-6g may not touch `release2026.ts`, so a new rule could not be registered. The
+ * calendar is therefore generated from art. 322/323 in `domain/fiscal/vatReturn.ts` and mapped to
+ * `Deadline` rows here — one producer for the mapping, with the citation carried on every row. Recorded
+ * as a boundary deviation in `docs/ai/phases/45_pg6g_form300.md`.
  */
-export const DEADLINE_EVENT_TYPES: readonly DeadlineEventType[] = ['d212_filing', 'vat_registration'];
+export const DEADLINE_EVENT_TYPES: readonly DeadlineEventType[] = [
+  'd212_filing', 'vat_registration', 'vat_return', 'vat_mentiuni',
+];
 
 export interface Deadline {
   deadlineId: string;
@@ -313,6 +329,57 @@ export function isDeadlineDone(
 }
 
 /**
+ * PG-6g — the periodic return that discharges a VAT term, or `null` when the dataset holds none.
+ *
+ * The join is on the **fiscal period**, not on the year: a Q4 2026 decont is keyed to 2026 while its term
+ * falls on 25 ianuarie 2027, so matching on the term's calendar year would look for a 2027 return. The
+ * obligation's own id encodes the period, and that id is what the record is matched against.
+ *
+ * `isFiledVatReturn` is the whole test, mirroring `isFiledFiling`: only `depusa` discharges a term. An
+ * annual D212 filing never discharges a decont, and a decont never discharges the D212 — the two records
+ * answer for different obligations, which is why they are different types.
+ */
+export function vatReturnForDeadline(
+  vatReturns: readonly VatReturnRecord[],
+  deadline: Deadline,
+): VatReturnRecord | null {
+  if (deadline.eventType !== 'vat_return' && deadline.eventType !== 'vat_mentiuni') return null;
+  return (
+    vatReturns.find((r) => r.form === '300' && r.id === deadline.deadlineId && isFiledVatReturn(r)) ?? null
+  );
+}
+
+/**
+ * PG-6g — the rows the art. 322/323 calendar produces, as `Deadline`s.
+ *
+ * This is the ONLY place a `VatObligation` becomes a `Deadline`, so the card, the attention pipeline and
+ * the completeness check cannot disagree about whether a decont is owed. `dateFormula` carries the article
+ * rather than a rule id, because there is no rule behind these rows — see the note on
+ * `DEADLINE_EVENT_TYPES`. `legalSource` is filled from the obligation's own citation, so a rendered term
+ * always names the provision it came from; an obligation with no citation cannot be built.
+ */
+export function vatObligationDeadlines(
+  obligations: readonly VatObligation[],
+  taxYear: number,
+): Deadline[] {
+  return obligations.map((o) => {
+    const act = o.citation.split(';')[0]!.trim();
+    return {
+      deadlineId: o.id,
+      taxYear,
+      eventType: o.kind === 'decont' ? 'vat_return' as const : 'vat_mentiuni' as const,
+      date: o.dueOn,
+      dateFormula: o.citation,
+      appliesTo: o.kind === 'decont' ? 'vat_periodic' : 'vat_mentiuni',
+      legalSource: { act: 'Codul fiscal', article: act.trim() },
+      effectiveFrom: null,
+      effectiveTo: null,
+      status: 'active' as const,
+    };
+  });
+}
+
+/**
  * Resolve a term to what the app may say about it. Done beats every temporal phase — a filed return is
  * not overdue no matter what the calendar says — and a term with no resolved date is `undated`, never
  * `overdue`.
@@ -321,8 +388,10 @@ export function resolveDeadlineOutcome(
   deadline: Deadline,
   filings: readonly AnnualFiling[],
   asOfDate: string,
+  vatReturns: readonly VatReturnRecord[] = [],
 ): DeadlineOutcome {
   if (isDeadlineDone(filings, deadline)) return 'done';
+  if (vatReturnForDeadline(vatReturns, deadline) !== null) return 'done';
   const phase = classifyDeadline(deadline, asOfDate);
   if (phase === null) return 'undated';
   return phase === 'past' ? 'overdue' : phase;

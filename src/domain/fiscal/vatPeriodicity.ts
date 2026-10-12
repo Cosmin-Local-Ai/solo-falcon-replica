@@ -332,6 +332,20 @@ export interface VatPeriodicityFacts {
   aicGoodsBeforeRegistration?: VatYesNoUndeclared;
   /** alin. (7)/(8): a taxable intra-community goods acquisition while the period was a quarter. */
   aicGoodsWhileQuarterly?: VatYesNoUndeclared;
+  /**
+   * The month (1-12) in which the exigibility of that acquisition intervened. Art. 322 alin. (7) gives
+   * three different answers depending on which month of the quarter it lands in — lit. a) monthly from
+   * month 1, lit. b) months 1-2 become a distinct fiscal period, lit. c) the quarter is untouched and the
+   * month starts next quarter — so a bare `da` cannot generate a calendar. Absent means the flip is not
+   * applied and the app says so, rather than picking a letter.
+   */
+  aicGoodsExigibilityMonth?: number;
+  /**
+   * art. 322 alin. (6) final sentence: the person has asked to be taken off the VAT register under
+   * art. 316 in order to apply the art. 310 exemption. That request is the ONLY exception to the 25
+   * January mențiuni duty, and it is an act of the taxpayer, not a fact the register can show.
+   */
+  art310ReturnRequested?: VatYesNoUndeclared;
   /** The user's confirmed answer, when the app asked. */
   userChoice?: VatPeriodicityChoice;
 }
@@ -804,6 +818,28 @@ function deriveAlin4(
       { label: 'Comparare', value: over ? 'depășește plafonul → luna calendaristică în anul înregistrării' : 'nu depășește plafonul → trimestrul calendaristic' },
     ],
   };
+}
+
+/**
+ * PG-6g — the art. 322 derivation for one profile, for one calendar year.
+ *
+ * The profile stores the facts per year (`PfaProfile.vatPeriodicityYears`); this finds the record for
+ * `year` and runs the article over it. **A missing record is not an empty one**: it produces the same
+ * `ask` outcome an all-absent record produces, because for art. 322 „the person never answered" and „the
+ * person answered nothing" are the same state — there is no figure to compare.
+ *
+ * The cap is struck here rather than at the call site so the rate and its date travel with the answer on
+ * every surface that renders one, and so no surface can show a lei threshold it derived itself.
+ */
+export function vatPeriodicityForYear(
+  years: readonly VatPeriodicityFacts[] | undefined,
+  year: number,
+  provider: FxRateProvider,
+): VatPeriodicityOutcome {
+  const cap = periodicityCapForYear(year, provider);
+  const facts = (years ?? []).find((y) => y.year === year);
+  if (!facts) return deriveVatPeriodicity({ year }, cap);
+  return deriveVatPeriodicity(facts, cap);
 }
 
 function confirmedOutcome(

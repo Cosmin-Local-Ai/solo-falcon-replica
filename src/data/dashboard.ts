@@ -36,7 +36,23 @@ import {
   type MeasuredBasis,
   type ThresholdBases,
 } from '../domain/thresholds';
-import { computeDeadlines, classifyDeadline, filingForDeadline, resolveDeadlineOutcome, type DeadlineView } from '../domain/deadlines';
+import { computeDeadlines, classifyDeadline, filingForDeadline, vatObligationDeadlines, vatReturnForDeadline, resolveDeadlineOutcome, type DeadlineView } from '../domain/deadlines';
+// PG-6g — the art. 322 fiscal period and the art. 322/323 filing calendar. Imported from the domain, never
+// re-derived here: `data/dashboard.ts` is an adapter, and a second calendar in this file is how two
+// surfaces start disagreeing about whether a decont is owed.
+import {
+  vatPeriodicityForYear,
+  type VatPeriodicityOutcome,
+} from '../domain/fiscal/vatPeriodicity';
+import {
+  aicFlipForQuarter,
+  aicMentiuniObligation,
+  annualMentiuniObligation,
+  decontObligations,
+  type AicFlip,
+  type VatObligation,
+} from '../domain/fiscal/vatReturn';
+import { recordedRateProvider } from '../domain/fx/ledger';
 import {
   computeTaxReserve,
   createTaxReserveState,
@@ -267,6 +283,25 @@ export interface DashboardData {
    * present this as a filed or filable number.
    */
   inputVat: InputVatDecision | null;
+  /**
+   * PG-6g (D-VAT-1) — the CF art. 322 fiscal period for this profile's fiscal year, **derived**.
+   *
+   * Four states, and the fourth is the one the phase exists to make rare: `derived` (the facts and the
+   * arithmetic give the answer), `user_confirmed` (they do not, and the person answered after the app
+   * stated the rule — labelled as their answer, never as the app's conclusion), `ask` (the app says which
+   * fact is missing and where to give it), and `not_registered`. **There is no state in which the app
+   * silently picks a cadence**, which is what the old monthly D300 cadence did.
+   */
+  vatPeriodicity: VatPeriodicityOutcome;
+  /**
+   * PG-6g — the art. 322/323 filing calendar for this fiscal year: the deconturi, the alin. (6) mențiuni
+   * until 25 ianuarie, and the alin. (8) 5-working-day mențiuni for an intra-community goods acquisition.
+   *
+   * Empty when the periodicity is not settled — a decont cannot be dated without knowing the period it
+   * covers, and guessing the period would put a false term on screen. The unanswered case reaches the
+   * person through the completeness channel, not through a dateless row here.
+   */
+  vatObligations: VatObligation[];
   /**
    * PG-4 — which fiscal year this view is about, whether it is closed, and whether this build has the
    * rules for it. The banner and the hero label both read this instead of re-deriving a year from the
@@ -513,17 +548,97 @@ export function getThresholdStatuses(
 export type { DeadlineView };
 
 /**
- * Every deadline the rule set resolves for this profile, annotated once.
+ * PG-6g — the art. 322 fiscal period for this profile, derived rather than stored.
+ *
+ * One call per dashboard build, read by the Form 300 surface, the completeness channel and the calendar
+ * below. The cap (the 100.000-euro equivalent in lei, with the BNR rate and the date it is valid for) is
+ * struck inside it, so no surface can render a lei threshold it derived itself.
+ */
+export function getVatPeriodicity(data: AppData): VatPeriodicityOutcome {
+  return vatPeriodicityForYear(
+    data.profile.vatPeriodicityYears,
+    data.profile.fiscalYear,
+    recordedRateProvider(data),
+  );
+}
+
+/**
+ * PG-6g — the filing calendar for this profile's fiscal year, from art. 322 and art. 323.
+ *
+ * **It is empty when the periodicity is not settled, and that is the correct output.** A decont cannot be
+ * dated without knowing the fiscal period it covers, and dating one by guessing the period would put a
+ * false term on a taxpayer who has not answered the question yet. The unanswered case is carried by the
+ * completeness channel (`domain/completeness.ts`), which states the rule and asks — not by a dateless row
+ * in this list.
+ *
+ * Three kinds of obligation, never collapsed into one date list:
+ * - the deconturi, one per fiscal period, art. 323 alin. (1) — including the Q4 term that falls on 25
+ *   ianuarie of the following year;
+ * - the art. 322 alin. (6) mențiuni until 25 ianuarie, which is **not** a decont and is owed only by a
+ *   person quarterly „potrivit alin. (2) și (5)";
+ * - the art. 322 alin. (8) 5-working-day mențiuni for an intra-community goods acquisition.
+ *
+ * The alin. (7) split is applied only when the month of exigibility is declared; a bare `da` cannot pick
+ * between lit. a), lit. b) and lit. c), and picking one would invent a fiscal period.
+ */
+export function getVatObligations(data: AppData, asOfDate: string): VatObligation[] {
+  const periodicity = getVatPeriodicity(data);
+  if (periodicity.kind !== 'derived' && periodicity.kind !== 'user_confirmed') return [];
+  const year = data.profile.fiscalYear;
+  const facts = (data.profile.vatPeriodicityYears ?? []).find((y) => y.year === year);
+
+  const flips: AicFlip[] = [];
+  const extra: VatObligation[] = [];
+  if (facts?.aicGoodsWhileQuarterly === 'da' && facts.aicGoodsExigibilityMonth) {
+    const q = Math.ceil(facts.aicGoodsExigibilityMonth / 3);
+    const flip = aicFlipForQuarter(year, q, facts.aicGoodsExigibilityMonth);
+    if (flip) flips.push(flip);
+    const aic = aicMentiuniObligation({ year, monthOfExigibility: facts.aicGoodsExigibilityMonth });
+    if (aic) extra.push(aic);
+  }
+
+  // Which alineat put this person on the quarter decides whether the alin. (6) mențiuni duty exists: the
+  // article names alin. (2) and alin. (5) only, so a quarterly status that came from the registration-year
+  // estimate (alin. (3)) or the registration-year annualised actual (alin. (4)) does not carry it.
+  const quarterlyUnder: 'alin2' | 'alin5' | 'alin3' | 'alin4' | null =
+    periodicity.periodicity !== 'quarter' ? null
+      : periodicity.branch === 'alin2' || periodicity.branch === 'alin5' ? periodicity.branch
+      : periodicity.branch === 'alin3' || periodicity.branch === 'alin4' ? periodicity.branch
+      : null;
+  const mentiuni = annualMentiuniObligation({
+    year,
+    quarterlyUnder,
+    requestingArt310Return: facts?.art310ReturnRequested === 'da',
+    art310ReturnUnknown: facts?.art310ReturnRequested === undefined || facts?.art310ReturnRequested === 'nedeclarat',
+  });
+
+  return [
+    ...decontObligations(periodicity.periodicity, year, { flips, closedThrough: asOfDate }),
+    ...(mentiuni ? [mentiuni] : []),
+    ...extra,
+  ];
+}
+
+/**
+ * Every deadline this profile has, annotated once.
  *
  * One `computeDeadlines` call per dashboard build feeds the card, the snapshot and the completeness
  * check. Before this, each of them called the engine separately; three calls that could disagree about
  * whether a term exists is exactly the drift the rest of this file keeps closing off.
+ *
+ * PG-6g appends the art. 322/323 VAT calendar to the same list and annotates both halves in the same map,
+ * so the card and the attention pipeline cannot disagree about whether a decont is owed. The two halves
+ * have different producers — a registered rule package, and a calendar generated from the article because
+ * `release2026.ts` is off-limits to this phase and `registry.ts` refuses an unregistered rule — but one
+ * annotation path, which is what keeps `done` meaning the same thing on every row.
  */
 export function getDeadlineRows(data: AppData, asOfDate: string): DeadlineView[] {
   const filings = data.filings;
-  return computeDeadlines(selectionRules(data, asOfDate), {
-    taxYear: data.profile.fiscalYear,
-    asOfDate,
+  const vatReturns = data.vatReturns;
+  const rows: DeadlineView[] = [
+    ...computeDeadlines(selectionRules(data, asOfDate), {
+      taxYear: data.profile.fiscalYear,
+      asOfDate,
     // Phase 9b: `pfaStartDate` is passed but read by NO deadline rule, and none may be — the only
     // rule that ever consumed it implemented an obligation abrogated on 01-01-2025, and the CPF
     // 30-day fiscal-registration term does not reach a PFA (OUG 44/2008 art. 13 alin. (3) is itself
@@ -534,17 +649,21 @@ export function getDeadlineRows(data: AppData, asOfDate: string): DeadlineView[]
     // could only ever resolve `date: null, status: 'not_applicable'`. It is still optional, and an
     // absent value still produces NO dated deadline — the engine has no source for the exceedance
     // date and must not invent one. Passing it is a data-model fix, not a rule change.
-    pfaStartDate: data.profile.pfaStartDate,
-    vatExceedanceDate: data.profile.vatExceedanceDate,
-  }).map((d) => {
+      pfaStartDate: data.profile.pfaStartDate,
+      vatExceedanceDate: data.profile.vatExceedanceDate,
+    }),
+    ...vatObligationDeadlines(getVatObligations(data, asOfDate), data.profile.fiscalYear),
+  ].map((d) => {
     const filing = filingForDeadline(filings, d);
+    const vatReturn = vatReturnForDeadline(vatReturns, d);
     return {
       ...d,
-      done: filing !== null,
-      filedOn: filing?.filedOn ?? null,
-      outcome: resolveDeadlineOutcome(d, filings, asOfDate),
+      done: filing !== null || vatReturn !== null,
+      filedOn: filing?.filedOn ?? vatReturn?.filedOn ?? null,
+      outcome: resolveDeadlineOutcome(d, filings, asOfDate, vatReturns),
     };
   });
+  return rows;
 }
 
 /**
@@ -907,6 +1026,8 @@ export function buildDashboardData(
     tax: estimate,
     estimateState: estimateStateOf(estimate, coverage),
     inputVat: estimate?.inputVat ?? null,
+    vatPeriodicity: getVatPeriodicity(data),
+    vatObligations: getVatObligations(data, asOfDate),
     year: fiscalYearView(data, asOfDate, instant),
     coverage,
     thresholds: getThresholdStatuses(data, asOfDate, estimate),
