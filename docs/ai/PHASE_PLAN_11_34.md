@@ -458,6 +458,8 @@ The table above has no status column, which is why this had to be re-derived by 
 
 The queue, with the reason each item sits where it does. **This section answers "what next"; the rest of this plan answers "what is already done".** Re-derive status from the defect register in §4 before acting on any row here.
 
+**Status as of 2026-10-12:** **PG-10 / B-51 — DONE** (`phases/46_b51_scope_statement.md`; one sentence, one shared key, two surfaces; `git diff --stat -- src/domain/ src/data/` empty). **B-51 closed; B-56 deliberately left open**, and now contradicted in the app's own voice by the new sentence — which is the point of it. **Next up: step 1, B-97.** Also surfaced by that pass: **D-6 in `USER_DECISIONS.md` („who owns the disclaimer and terms wording") is still an open user decision**, and `ui/copy/common.ts` → `scope` is the single place to change if that wording is ever reviewed.
+
 ## The order
 
 | # | Step | Closes | Why here | Size |
