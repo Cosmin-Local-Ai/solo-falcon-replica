@@ -311,3 +311,20 @@ This **changes a default this project has followed.** Until now the rule has bee
 **Decided 2026-10-12.** Asked whether PG-6f should fix only the income-tax base or also produce the deductible-VAT figure, the user chose **also produce it**. So 6f computes a **per-period claimable-VAT total**, labelled throughout as **not filed anywhere**, with **6g** owning the form it lands on (D300 **rd. 30** „TOTAL TAXĂ DEDUCTIBILĂ", with the 50 % vehicle cut and the pro rata landing partly inside rd. 20–28 and partly on **rd. 33/34** — `research/42` §7).
 
 **The risk the user was shown and accepted:** this puts a VAT figure on screen that nothing yet files, which a taxpayer could act on before it can be checked against the form. **Mitigations that are part of the decision, not optional:** the figure is labelled as unfiled and unverified against a return; it is derived only from facts the user declared; and where a line's deductibility is unresolved — the e-Factura question, the 100–400 euro simplified invoice, the Titlul IV ordering — the line is **excluded from the total and listed separately**, never silently added.
+
+### D-DEMO-1 — five demo personas: IT, content creator, Uber driver, Airbnb host, and a plain small PFA
+**Decided 2026-10-12.** Asked how many demo profiles the platform should ship, the user chose **the four they named plus the existing plain one**. The set is chosen by **which fiscal switches each persona exercises**, not by trade label:
+
+| Persona | The switch only it teaches |
+|---|---|
+| **IT / programmer** | turnover **crossing the 395.000-lei plafon**, so VAT registration is **forced by law** rather than chosen; TVA la încasare; euro invoicing; equipment as a fixed asset |
+| **Content creator** | foreign-platform payouts (USD), the cap and provisional-rate path, camera-class fixed assets, mid-band CASS |
+| **Uber driver** | the vehicle 50 % cap, the one-car rule and the logbook question; **ocazional vs autorizat**; low-band CASS |
+| **Airbnb host** | **art. 68³ cedarea folosinței, 1–7 rooms**, the occupancy sheet, and the **tourism-CAEN commission prompt** under D-COM-1 |
+| **Plain small PFA** (today's seed) | the app working when there is nothing in it — exempt, low turnover, no vehicle, no FX |
+
+**Why not three.** Vehicle and accommodation are the two most fact-hungry regimes in the app — a car carries per-year use facts and a logbook question, a cazare property carries an occupancy sheet and a commission question. Merging them yields one bloated profile instead of two clean ones. **Why not a sixth.** The only remaining candidates are *normă de venit* (refused today, D-NORMA-2 pending) and *microîntreprindere* (outside PFA scope). **A persona whose purpose is to show a refusal belongs on a card, not as a profile** — `domain/scenarios.ts` already carries six refusal scenarios for exactly that.
+
+**The boundary that survives the whole feature.** D-COM-1 stands: a CAEN code may **prompt** a question and must never **answer** one. A persona seeds **declared** facts that happen to be plausible for a trade; the app still asks, and nothing is inferred from the code.
+
+**This is the agreed resolution of B-96.** The current demo's implausibility — 9.700 lei of turnover next to a 395.000-lei threshold the app itself displays — is fixed by giving the **IT persona turnover above the plafon**, where registration is mandatory. The 9.700-lei profile survives, but as the persona it is honest for: the plain exempt PFA. **B-96 stays open until the set exists.**
