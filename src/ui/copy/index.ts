@@ -49,6 +49,7 @@ export { attention, estimateState } from './attention';
 export { scenarios } from './scenarios';
 export { settings } from './settings';
 export { onboarding } from './onboarding';
+export { occupancy } from './occupancy';
 export {
   revenues,
   expenses,
@@ -81,6 +82,7 @@ import { attention, estimateState } from './attention';
 import { scenarios } from './scenarios';
 import { settings } from './settings';
 import { onboarding } from './onboarding';
+import { occupancy } from './occupancy';
 import {
   revenues, expenses, expenseCategoryLabels, clients, declarations, recordStatus,
   moneyDate, fiscalDateSource, documents, eFactura,
@@ -101,6 +103,7 @@ export const copy = {
   scenarios,
   settings,
   onboarding,
+  occupancy,
   revenues, expenses, expenseCategoryLabels, clients, declarations, recordStatus,
   moneyDate, fiscalDateSource, documents, eFactura,
 };

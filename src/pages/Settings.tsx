@@ -6,7 +6,7 @@ import { Disclosure } from '../components/ui/Disclosure';
 import { InterpretationNote } from '../components/ui/InterpretationNote';
 import { FxRateProvenance } from '../components/ui/FxRateProvenance';
 import { FxRateEntryForm } from '../components/ui/FxRateEntryForm';
-import { copy, fields, settings as settingsCopy, validation } from '../ui/copy';
+import { copy, fields, settings as settingsCopy, validation, occupancy as occupancyCopy } from '../ui/copy';
 import {
   isSelectableRegime,
   regimeRefusalReason,
@@ -934,6 +934,26 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                   )}
                 </div>
               )}
+
+              {/* PG-6h-3 — the entry point to the occupancy sheet.
+
+                  Deliberately **outside** the accommodation block above, and deliberately not conditioned on
+                  `activityFamily`, on the room count, or on the resolved fiscal title. OPANAF 381/2026
+                  addresses two different beneficiary groups — 1–7 rooms in a personal dwelling, and
+                  independent-activity accommodation above 7 — and the app does not know which one a given
+                  person is. Gating this link on any of those facts would use a fiscal classification to
+                  decide whether a retention duty is reachable, which is the mistake in reverse: the sheet
+                  is owed under both titles, and under neither answer to "we could not work out your title".
+
+                  It is a link, not a form: the sheet itself lives on the Documents page, beside the other
+                  documents this person keeps. */}
+              <div className="field" data-occupancy-entry>
+                <label>{occupancyCopy.entry.label}</label>
+                <a className="btn btn-ghost" href="/documents#!/occupancy" data-occupancy-entry-link>
+                  {occupancyCopy.entry.label}
+                </a>
+                <span className="hint">{occupancyCopy.entry.hint}</span>
+              </div>
 
               <div className="field">
                 <label>{settingsCopy.fiscal.startYear} <span className="req">*</span></label>

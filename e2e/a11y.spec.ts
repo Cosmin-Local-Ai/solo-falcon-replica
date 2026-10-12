@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fixedInstant } from '../src/test/fixedInstant';
+import { SYNTHETIC_CNP_A, SYNTHETIC_SHEET } from '../src/test/occupancyFixtures';
 import { seedBrowser, seedPayload } from './fixtures';
 
 /**
@@ -114,6 +115,29 @@ async function loadDeclarations(page: import('@playwright/test').Page): Promise<
   await expect(page.getByText('D212.2026.000042')).toBeVisible();
 }
 
+/**
+ * PG-6h-3 — the route this task added.
+ *
+ * The occupancy tab is the first table in the app whose rows are other people's names and identity
+ * numbers, and it is the first table built with a `<caption>`, a `<th scope="col">` header row and a
+ * visually-hidden column header for the delete control. That markup is exactly what an axe run is for,
+ * and the same rule PG-5 recorded applies: a new surface must not enter the tree unscanned.
+ *
+ * The scan runs against a sheet **with two stays in it**, not an empty form — an empty-state shell passes
+ * axe whether or not the table underneath it is accessible.
+ */
+async function loadOccupancy(page: import('@playwright/test').Page): Promise<void> {
+  await seedBrowser(page, {
+    ...seedPayload(),
+    occupancySheets: [SYNTHETIC_SHEET],
+  });
+  await page.clock.setFixedTime(fixedInstant());
+  await page.goto('/documents#!/occupancy');
+  await expect(page.getByTestId('occ-sheet-heading')).toBeVisible();
+  // Populated rows, so the scan covers the table and not only its shell.
+  await expect(page.getByText(SYNTHETIC_CNP_A)).toBeVisible();
+}
+
 test.describe('PG-0 — axe-core accessibility gate on /dashboard', () => {
   test('the dashboard has no serious or critical axe violations', async ({ page }) => {
     const violations = await scanDashboard(page);
@@ -145,6 +169,22 @@ test.describe('PG-0 — axe-core accessibility gate on /dashboard', () => {
     if (noise.length > 0) console.log(`axe, non-blocking on /declarations:\n${describeViolations(noise)}`);
 
     expect(fatal, `axe found blocking violations on /declarations:\n\n${describeViolations(fatal)}`).toHaveLength(0);
+  });
+
+  test('the occupancy sheet has no serious or critical axe violations', async ({ page }) => {
+    await loadOccupancy(page);
+    const violations = await runAxe(page);
+    const fatal = blocking(violations);
+    const noise = violations.filter((v) => !BLOCKING_IMPACTS.includes(v.impact ?? ''));
+
+    test.info().annotations.push({
+      type: 'axe',
+      description: `${fatal.length} blocking (serious+critical), ${noise.length} non-blocking `
+        + `(minor+moderate) on /documents#!/occupancy`,
+    });
+    if (noise.length > 0) console.log(`axe, non-blocking on /documents#!/occupancy:\n${describeViolations(noise)}`);
+
+    expect(fatal, `axe found blocking violations on /documents#!/occupancy:\n\n${describeViolations(fatal)}`).toHaveLength(0);
   });
 
   // ── Negative controls ─────────────────────────────────────────────────────────

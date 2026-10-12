@@ -2,8 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   CURRENT_DATA_VERSION,
   DATA_VERSION_RECORD_CURRENCY,
-  DATA_VERSION_ACTIVITY_FAMILY,
-  DATA_VERSION_ACCOMMODATION_FACTS,
+  DATA_VERSION_OCCUPANCY_SHEET,
   DATA_VERSION_RULE_SET_DIGEST,
   MIGRATION_CHAIN,
   migratePersistedData,
@@ -122,9 +121,9 @@ describe('record-currency is a no-op in value', () => {
   it('stamps the version and nothing else about the payload shape', () => {
     const after = migrateRecordCurrencyV10(v9Payload());
     expect(after.version).toBe(DATA_VERSION_RECORD_CURRENCY);
-    // PG-5 re-pin (replaced, not deleted): this step is no longer the head of the chain — v11, v12 and now
-    // v13 follow it. Unchanged is that the step itself stamps exactly 10 and nothing else.
-    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_ACCOMMODATION_FACTS);
+    // PG-5 re-pin (replaced, not deleted): this step is no longer the head of the chain — v11, v12, v13
+    // and now v14 follow it. Unchanged is that the step itself stamps exactly 10 and nothing else.
+    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_OCCUPANCY_SHEET);
   });
 
   it('is idempotent: running it again on a v10 payload changes nothing', () => {
@@ -224,7 +223,7 @@ describe('the chain', () => {
     const step = MIGRATION_CHAIN.find((s) => s.name === 'record-currency')!;
     expect(step.from).toBe(DATA_VERSION_RULE_SET_DIGEST);
     expect(step.to).toBe(DATA_VERSION_RECORD_CURRENCY);
-    expect(MIGRATION_CHAIN.indexOf(step)).toBe(MIGRATION_CHAIN.length - 4);
+    expect(MIGRATION_CHAIN.indexOf(step)).toBe(MIGRATION_CHAIN.length - 5);
   });
 
   it('a v9 payload needs one step per version above it', () => {
@@ -238,6 +237,7 @@ describe('the chain', () => {
       'annual-filing',
       'activity-family',
       'accommodation-facts',
+      'occupancy-sheet',
     ]);
   });
 
@@ -256,7 +256,7 @@ describe('the chain', () => {
     const amountsBefore = JSON.stringify(atV10.revenues.map(r => [r.valoareFaraTva, r.tva]));
     const outcome = migratePersistedData(atV10);
     expect(outcome.migrated).toBe(true);
-    expect(outcome.stepsApplied).toEqual(['annual-filing', 'activity-family', 'accommodation-facts']);
+    expect(outcome.stepsApplied).toEqual(['annual-filing', 'activity-family', 'accommodation-facts', 'occupancy-sheet']);
     expect(JSON.stringify(outcome.data.revenues.map(r => [r.valoareFaraTva, r.tva]))).toBe(amountsBefore);
     expect(outcome.data.version).toBe(CURRENT_DATA_VERSION);
   });

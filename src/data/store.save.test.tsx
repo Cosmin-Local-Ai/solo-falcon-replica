@@ -88,6 +88,12 @@ describe('save effect — serialization contract', () => {
       // `annual-filing` step and `legacyDeclarations` is gone with the record type. The key list is the
       // migration's evidence, written as a test.
       'filings',
+      // PG-6h-3: the occupancy sheets are part of AppData, so they are serialized with the rest of the
+      // dataset — and this key list is the evidence that they survive a save. The alternative is the
+      // worse failure D-OCC-1 forbids: a sheet the taxpayer is legally required to keep vanishing on the
+      // next load. Guest data reaches storage and stops there; the no-egress half is pinned in
+      // `src/data/occupancy.privacy.test.tsx`, not here.
+      'occupancySheets',
       'profile',
       // TASK 3: the recorded tax reserve is part of AppData, so it is serialized like the rest of the
       // dataset. It is written as `null` when nothing was recorded — the key is present and its value

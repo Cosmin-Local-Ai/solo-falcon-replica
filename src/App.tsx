@@ -77,7 +77,11 @@ interface Route {
 const VALID_TABS: Partial<Record<Page, string[]>> = {
   revenues: ['registered', 'pending', 'rejected'],
   expenses: ['registered', 'rejected'],
-  documents: ['company', 'statements', 'reports'],
+  // PG-6h-3 adds `occupancy`: the occupancy sheet (OPANAF 381/2026). It has to be listed here or the tab
+  // is unreachable by URL — `parseRoute` drops an unlisted hash, so the Settings entry point would land
+  // on the default tab instead of the sheet, and a deep link to a document would silently open something
+  // else. This is the router's whitelist, not a navigation surface: the sidebar still offers four pages.
+  documents: ['company', 'statements', 'reports', 'occupancy'],
   // Mirrors the live SOLO settings tabs (docs/reference/settings.md);
   // the real app's "Abonament" (subscription) tab is not replicated.
   // `fiscal` is an addition of this replica: the PfaProfile write path (Phase 6).

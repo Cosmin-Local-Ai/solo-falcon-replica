@@ -30,7 +30,9 @@ are untouched, and 48,600 / 97,200 / 291,600 are unchanged.
 
 ## Verification summary (counts from the **Phase 11 / PG-3 handoff, 2026-10-10**: 85 test files / 1409 unit tests, e2e 49; environment figures from 2026-10-05, all exit 0)
 
-**Current figures — 116 test files / 1729 unit tests, all passing; `tsc` 0; `build` 0; `e2e` 95 passed (91 functional + 4 axe); copy-guard allow-list empty**
+**Current figures — 118 test files / 1762 unit tests, all passing; `tsc` 0; `build` 0; `e2e` 102 passed (97 functional + 5 axe); copy-guard allow-list empty**
+
+Re-measured after the **PG-6h-3 occupancy-sheet pass** (brief `briefs/43_pg6h3_occupancy_sheet.md`; `data/types.ts`, `data/schema.ts`, `data/migration.ts` (new v13→v14 `occupancy-sheet` step, no backfill), `data/seed.ts`, `data/store.tsx`, `pages/Documents.tsx`, `pages/Settings.tsx`, `App.tsx` (router hash whitelist — a recorded boundary deviation), `ui/copy/occupancy.ts`): **118 files / 1762 tests** (+2 files, +33 tests), **e2e 95 → 102** (new `e2e/occupancy-sheet.spec.ts`, plus a new axe route on `/documents#!/occupancy`), `tsc` 0, `build` 0, copy-guard `ALLOW_LIST` empty, **`git diff --stat -- src/domain/fiscal/` empty**, **seed estimate still 311.200 bani** and `inputsHash` byte-identical with a sheet present — which is the proof that guest data never reaches a calculation digest.
 
 Re-measured after the **PG-6h-2b single-leg pass** (brief `briefs/42_pg6h2b_single_leg.md`; `domain/tax.ts` composition only, `domain/scenarios.ts` one entry, `domain/estimateBasis.ts` threading only, `ui/copy/scenarios.ts`): **116 files / 1729 tests** (+2 files, +24 tests), **e2e 95 unchanged**, `tsc` 0, `build` 0, copy-guard `ALLOW_LIST` empty, **seed estimate still 311.200 bani**, nothing under `domain/fiscal/`, `data/schema.ts`, `data/migration.ts`, `data/types.ts` or `pages/` touched. All 60 `tax.test.ts` tests pass unedited, so the deduction apportionment is unchanged for every profile that was already computing.
 

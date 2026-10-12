@@ -461,7 +461,11 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // Re-pinned again 2026-10-11 (PG-6h-2): 12 → 13, because `accommodation-facts` (12→13) follows it — the
     // fifth time for the same reason. What this test exists for is still untouched, and the v13 step is the
     // same kind of step as v12: it writes a version and touches no value, so no money figure moves.
-    expect(saved.version).toBe(13);
+    // Re-pinned 2026-10-12 (PG-6h-3): 13 → 14, because `occupancy-sheet` (13→14) follows it — the sixth time
+    // for the same reason, and the same kind of step again: it opens a collection and backfills it empty, so
+    // it writes a version and touches no value. What this test exists for is untouched: the notice is still
+    // one long, `original` is still the verbatim 674.504 and `converted` is still 67450 bani.
+    expect(saved.version).toBe(14);
     // The v12 step's own half, asserted on the store's bytes: this legacy profile carried no activity
     // family, and the step did not give it one. `'other'` here would have been exactly the default the
     // brief forbids — it reads as "the ordinary rules apply", asserted by the migration rather than chosen
@@ -473,6 +477,11 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     expect('accommodationRoomCounts' in saved.profile).toBe(false);
     expect('accommodationCommissionReading' in saved.profile).toBe(false);
     expect('accommodationTourismEligibility' in saved.profile).toBe(false);
+    // The v14 step's own half, on the same bytes. This payload carried no `occupancySheets` collection, so
+    // the step opened one and left it empty — it invented no form, no room, and above all no guest. A sheet
+    // written here would have put a third party's name and identity number into a migration that was only
+    // ever allowed to open a drawer. Absence is what comes back out.
+    expect(saved.occupancySheets).toEqual([]);
     // And the half of the v11 step that is a NON-write, asserted on the bytes: this payload carried no
     // `declarations` collection, so nothing was moved and nothing was invented. PG-5b re-pin: the monthly
     // key is now absent from the written bytes rather than present and empty — the record type is gone, so

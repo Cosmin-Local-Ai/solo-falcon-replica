@@ -219,8 +219,28 @@ export const DATA_VERSION_ACTIVITY_FAMILY = 12;
  * refuse, rather than picking a title and producing a figure under rules that may not be this person's.
  */
 export const DATA_VERSION_ACCOMMODATION_FACTS = 13;
+/**
+ * PG-6h-3 (D-OCC-1) — the dataset can now hold the occupancy sheet, OPANAF 381/2026.
+ *
+ * The step's entire content is that it **backfills nothing**, and for this collection that is not a
+ * convention but the only safe behaviour. A sheet is a document the taxpayer completed by hand, per room,
+ * per year, recording other people's names and identity numbers. A step that opened the collection with a
+ * placeholder sheet, or that inferred one from the recorded room count, would mint stays for guests who
+ * never existed and put their names on a document the taxpayer is legally required to keep — the worst
+ * kind of invented fact this repository has spent the series refusing.
+ *
+ * Two things the step must also not do, both recorded here because the surrounding files invite them:
+ *  - it must not move these records onto the profile. `snapshots/snapshot.ts` hashes the whole profile
+ *    into `inputsHash`, so guest data carried there would enter fiscal digest bytes and would survive
+ *    deletion inside every stored snapshot;
+ *  - it must not derive anything from `accommodationRoomCounts`. The room count is a declared annual fact
+ *    that picks a tax title; the fișă is a per-stay document. `docs/ai/phases/38_pg6h2_accommodation_facts.md`
+ *    warns that the count must not be used as an occupancy record, and a migration that bridged the two
+ *    would be exactly that bridge.
+ */
+export const DATA_VERSION_OCCUPANCY_SHEET = 14;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_ACCOMMODATION_FACTS;
+export const CURRENT_DATA_VERSION = DATA_VERSION_OCCUPANCY_SHEET;
 
 export interface MigrationStep {
   readonly from: number;
@@ -845,6 +865,18 @@ export function migrateAccommodationFactsV13(data: PersistedAppData): PersistedA
   return { ...data, version: DATA_VERSION_ACCOMMODATION_FACTS };
 }
 
+/**
+ * v13 → v14 (`occupancy-sheet`). Writes a version and touches no value.
+ *
+ * A payload that never held a sheet ends with **no `occupancySheets` key at all** — not an empty array.
+ * Absence is the honest third state and the load path turns it into `[]`; writing `[]` here would put a
+ * key in the stored bytes that reads as „sheets were made and none exist”, which is a different claim
+ * from „nobody ever made one”. Same discipline as `fxRates` and the v12/v13 steps.
+ */
+export function migrateOccupancySheetV14(data: PersistedAppData): PersistedAppData {
+  return { ...data, version: DATA_VERSION_OCCUPANCY_SHEET };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -949,6 +981,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Profilul poate înregistra acum faptele pe care se decide TITLUL sub care intră veniturile din cazare: câte camere se închiriază pe termen scurt în fiecare an fiscal, răspunsul persoanei la condiția din art. 68^3 alin. (1) (operator economic potrivit legislației turismului) și ce citire a art. 68^3 alin. (3) alege pentru venitul brut. Nimic nu a fost completat în acest pas, și acesta este tot conținutul lui. Numărul de camere nu este o sumă care intră într-o formulă, ci un comutator de categorie: 1–7 camere înseamnă cedarea folosinței bunurilor (art. 83 alin. (2), art. 85), peste 7 camere înseamnă activitate independentă potrivit art. 68^3 (art. 83 alin. (4)). Un număr inventat la migrare ar inventa și un titlu fiscal pe care persoana nu l-a revendicat niciodată. La fel pentru celelalte două: o citire implicită a alin. (3) ar închide o întrebare pe care două lecturi vii și nicio sursă primară nu o hotărăsc, iar un răspuns implicit la alin. (1) ar decide o clasificare din legea turismului pe care Codul fiscal nu o decide. Un profil fără răspuns rămâne fără răspuns, iar aplicația refuză cifra în loc să ghicească titlul.',
     apply: migrateAccommodationFactsV13,
+  },
+  {
+    from: DATA_VERSION_ACCOMMODATION_FACTS,
+    to: DATA_VERSION_OCCUPANCY_SHEET,
+    name: 'occupancy-sheet',
+    summary:
+      'Datele pot reține acum fișa de ocupare a capacității de cazare, aprobată prin OPANAF nr. 381 din 24.03.2026 (MO I nr. 250 din 31.03.2026), care abrogă OPANAF nr. 398/2021. Fișa se completează per cameră, per an, și conține date cu caracter personal ale persoanelor cazate. Nimic nu a fost completat în acest pas și nimic nu putea fi completat: fișa este un document pe care persoana îl întocmește de mână, iar o șablonă sau o fișă derivată din numărul de camere ar pune nume și date de identitate ale unor persoane care nu au existat niciodată pe un document pe care contribuabilul are obligația legală să-l păstreze. Colecția rămâne absentă atâta timp cât n-a fost întocmită nicio fișă. Fișa este o obligație de păstrare, nu o declarație: „să completeze și să păstreze”, un exemplar, păstrat de contribuabil — nimic nu se trimite către ANAF, iar aplicația nu construiește nicio cale de trimitere. Datele despre cazați nu intră în niciun calcul: nu sunt sursă de venit, nu sunt număr de camere, nu sunt cifră de ocupare și nu pot ajunge în motorul fiscal.',
+    apply: migrateOccupancySheetV14,
   },
 ];
 

@@ -91,6 +91,11 @@ export function emptyData(): AppData {
     expenses: [],
     clients: [],
     filings: [],
+    // PG-6h-3: the seed declares **no** occupancy sheet, and therefore holds no third-party personal data
+    // at all. A demo fixture carrying a guest name and CNP would put invented identities on a document
+    // whose whole purpose is to record real ones, and the fixture ships inside the bundle. Absence here is
+    // the same discipline as `filings: []` — the app never mints a document nobody made.
+    occupancySheets: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],
@@ -240,6 +245,12 @@ export const seedData: AppData = {
   // so `filings` is empty and the deadline says so. Seeding a filing would be seeding a fact the demo
   // cannot support — the same mistake TASK 9 removed, in a tidier shape.
   filings: [],
+  // PG-6h-3 (D-OCC-1): the demo fixture holds **no** occupancy sheet, so it carries no data about any
+  // person who is not the demo taxpayer. A fixture guest with a name and a CNP would be an invented
+  // identity written onto a document whose only purpose is to record real ones — and this object ships
+  // inside the bundle and is loaded by e2e specs. Any fixture that needs a sheet builds its own, clearly
+  // commented as synthetic.
+  occupancySheets: [],
   documents: [
     { id: 'doc1', nume: 'FCT-2026-001.pdf', data: '2026-02-02', categoria: 'Facturi' },
     { id: 'doc3', nume: 'Contract Presta Consulting.pdf', data: '2026-01-26', categoria: 'Contracte' },

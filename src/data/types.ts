@@ -117,7 +117,7 @@ export type LegacyExpense = Omit<Expense, 'valoareFaraTva' | 'tva'> & { valoareF
  * at a `version` below 10, and assert what the chain produces — so the fixture must be typed as the shape
  * that arrives, not the shape that leaves.
  */
-export type LegacyAppData = Omit<AppData, 'revenues' | 'expenses' | 'filings'> & {
+export type LegacyAppData = Omit<AppData, 'revenues' | 'expenses' | 'filings' | 'occupancySheets'> & {
   revenues: LegacyRevenue[];
   expenses: LegacyExpense[];
   /**
@@ -127,6 +127,12 @@ export type LegacyAppData = Omit<AppData, 'revenues' | 'expenses' | 'filings'> &
    * with an application record type — there is no longer such a thing.
    */
   declarations?: LegacyMonthlyDeclaration[];
+  /**
+   * PG-6h-3: omitted rather than re-declared, because a pre-v14 payload has no such key and a legacy
+   * fixture must look like the payload it claims to be. Leaving it in the `Omit` list would force every
+   * migration fixture to carry occupancy sheets that could not exist at the version being tested — and
+   * would quietly defeat the one thing the v13→v14 step has to prove, that it backfills nothing.
+   */
 };
 
 // ── Clienți ───────────────────────────────────────────────
@@ -187,6 +193,110 @@ export interface AnnualFiling {
  * hand to it.
  */
 export const isFiledFiling = (f: Pick<AnnualFiling, 'status'>): boolean => f.status === 'depusa';
+
+// ── Fișa de ocupare a capacității de cazare (PG-6h-3) ────
+/**
+ * OPANAF nr. 381 din 24.03.2026, MO I nr. 250 din 31.03.2026 — „Fișa de ocupare a capacității de
+ * cazare", approved under CF art. 68^3 alin. (8) and art. 85 alin. (8)-(9). It abrogates OPANAF 398/2021;
+ * ANAF's own D212 instructions (OPANAF 2736/2025) still point at the abrogated order, so every sentence
+ * in this app that names a fișă names **381/2026**.
+ *
+ * **It is a retention obligation, not a filing.** The order's wording is „să completeze și să
+ * păstreze", and its Annex 3: „Se întocmește **un exemplar**, de către contribuabil. **Se păstrează de
+ * către contribuabil.**" Nothing here is submitted, so there is no submission path, no upload and no
+ * deadline in this module — the only deadline is the taxpayer's own duty to keep the sheet.
+ *
+ * **This is the first data in this application about people who are not the user.** D-OCC-1 accepted
+ * that, and its consequences are the constraints on everything below: local storage only, no network
+ * path, no export default, real deletion, and no guest field that any calculation can read. The shape
+ * of that guarantee is decided by WHERE these records live, not by how carefully they are read — see
+ * `occupancySheets` on `AppData` for why they are not on the profile.
+ */
+/**
+ * Which identifier the taxpayer recorded for the guest. The order asks for the CNP „sau, după caz,
+ * seria și numărul actului de identitate" for a guest who has no CNP, so the form has two answers and
+ * the app records which one was given.
+ *
+ * This is the person's own statement. It is **never inferred from the shape of the value** — a value
+ * that looks like 13 digits is not evidence of a CNP, and inferring one would be the same class of
+ * mistake as answering a fiscal question from a CAEN code.
+ */
+export type GuestIdentifierKind = 'cnp' | 'act_de_identitate';
+
+/**
+ * One stay in one room: who stayed, on which identifier, from which day to which day.
+ *
+ * Every field is recorded by the taxpayer and reproduced as recorded. `guestIdentifier` is deliberately
+ * a plain string with no checksum and no charset rule: a CNP has a check digit, but the app records what
+ * the taxpayer recorded, so a suspect value may be **flagged** and must never block the stay or reject
+ * the stored payload.
+ */
+export interface OccupancyStay {
+  id: string;
+  /** Secțiunea II — numele guest-ului, as the taxpayer wrote it. */
+  guestName: string;
+  /** Secțiunea II — CNP, or the ID series and number where there is no CNP. */
+  guestIdentifier: string;
+  /** Which of the two the person recorded. Never derived from `guestIdentifier`. */
+  identifierKind: GuestIdentifierKind;
+  /** Secțiunea II — first day of the stay, ISO calendar date. */
+  firstDay: string;
+  /** Secțiunea II — last day of the stay, ISO calendar date. */
+  lastDay: string;
+}
+
+/**
+ * One form, per room, per year — the order's own granularity. Not per stay (stays are rows inside it)
+ * and not per property (Secțiunea I is repeated on every room's form).
+ */
+export interface OccupancySheet {
+  id: string;
+  /** „Anul" — four digits. The sheet is scoped to one calendar year, which is also the year the
+   * 30-day ceiling in the order's definition of a short-term let is measured over. */
+  fiscalYear: number;
+  /** Secțiunea I — adresa imobilului. */
+  propertyAddress: string;
+  /** Secțiunea II — which room or amenaged space this form covers. */
+  roomLabel: string;
+  stays: OccupancyStay[];
+}
+
+/**
+ * The order's definition of a short-term let, and the two rules the sheet's dates are read under:
+ * „închirierea neîntreruptă a unei camere aceleiași persoane, pentru perioade de **maximum 30 de zile**,
+ * într-un an calendaristic", and „Închirierea/ocuparea … pentru o fracție de zi, se consideră
+ * închiriere/ocupare pentru o zi."
+ *
+ * The ceiling is a **definitional flag, not a figure**. It says only that a stay longer than the order's
+ * own definition may not be a short-term let under it. It is not an occupancy statistic, not a night
+ * count for revenue, and nothing outside the sheet's own row reads it.
+ */
+export const SHORT_TERM_LET_MAX_DAYS = 30;
+
+/**
+ * True when one stay spans more days than the order's definition of a short-term let allows.
+ *
+ * A fraction of a day counts as a day, so a stay from the 3rd to the 4th is two days. Dates are
+ * compared as calendar days; a malformed date returns `false` rather than throwing, because a suspect
+ * value must never turn into a crash on a page that shows a person their own retained document.
+ */
+export const occupancyStayExceedsShortTermCeiling = (stay: Pick<OccupancyStay, 'firstDay' | 'lastDay'>): boolean => {
+  const first = Date.parse(`${stay.firstDay}T00:00:00Z`);
+  const last = Date.parse(`${stay.lastDay}T00:00:00Z`);
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return false;
+  const days = Math.round((last - first) / 86_400_000) + 1;
+  return days > SHORT_TERM_LET_MAX_DAYS;
+};
+
+/**
+ * A CNP-shaped value: 13 digits. Used only to **flag** a suspect identifier — never to reject a record,
+ * never to block a save, and never to decide anything.
+ *
+ * The check digit is deliberately not verified. The app records what the taxpayer recorded; refusing a
+ * stay because a CNP looks wrong would put the app in the position of correcting a document it has no
+ * authority to correct.
+ */
+export const isCnpShaped = (value: string): boolean => /^[0-9]{13}$/.test(value.trim());
 
 // ── Documente (dashboard) ─────────────────────────────────
 export interface DocumentItem {
@@ -291,6 +401,23 @@ export interface AppData {
    * nobody made.
    */
   filings: AnnualFiling[];
+  /**
+   * PG-6h-3 (D-OCC-1): the occupancy sheets this taxpayer keeps, per room, per year.
+   *
+   * **Why this is a top-level collection and not a field on `profile`.** That choice is the whole privacy
+   * guarantee, and it is forced by the tree rather than chosen for tidiness. `snapshots/snapshot.ts`
+   * builds `inputSnapshot` as `{ profile, revenues, expenses }` and `snapshots/serialize.ts`
+   * `canonicalize` emits **every own key** of what it is handed, so a guest name or CNP carried on the
+   * profile would (a) enter the bytes of every stored `inputsHash`, (b) move a fiscal digest when a
+   * guest's stay changed, and (c) survive deletion of the sheet, because each stored snapshot keeps its
+   * own copy of the profile — which would break acceptance 5 outright. On `AppData` the collection is
+   * outside the engine's operand type by construction: `CalculationInput` cannot reach it, so "the engine
+   * must not read this data" is a structural fact here, not a discipline someone has to keep.
+   *
+   * Optional, and absence is the honest state: the v13→v14 chain step backfills nothing, because a sheet
+   * the taxpayer never made cannot be minted by a migration. The load path resolves absence to `[]`.
+   */
+  occupancySheets: OccupancySheet[];
   documents: DocumentItem[];
   companyDocs: Record<DocTypeCode, CompanyDocument[]>;
   statements: TaxStatement[];

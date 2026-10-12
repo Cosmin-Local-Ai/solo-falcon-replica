@@ -16,6 +16,8 @@ import type {
   DocTypeCode,
   DocumentItem,
   Expense,
+  OccupancySheet,
+  OccupancyStay,
   Revenue,
   SettingsState,
   TaxStatement,
@@ -181,6 +183,37 @@ export const annualFilingSchema = z.object({
   status: z.enum(['in_pregatire', 'depusa', 'respinsa']),
   filedOn: z.string().optional(),
   reference: z.string().optional(),
+});
+
+/**
+ * PG-6h-3 (D-OCC-1) — the occupancy sheet, OPANAF 381/2026.
+ *
+ * The gate is deliberately **permissive about the guest identifier and about the dates**, and that is a
+ * privacy decision rather than laziness. `safeParse` runs before the migration chain and a rejected
+ * payload is quarantined: a strict CNP rule here would mean one mistyped digit in a guest's CNP could
+ * reject the taxpayer's whole dataset and take their revenues, expenses and filings down with it. The
+ * damage would fall on the person trying to read their own records. So the schema checks the shape of the
+ * record, and the surface only ever **flags** a suspect identifier — it never blocks it and never
+ * discards it.
+ *
+ * `identifierKind` is the person's own statement about which identifier they recorded. It is not derived
+ * from the value's length or charset anywhere.
+ */
+export const occupancyStaySchema = z.object({
+  id: nonEmptyString,
+  guestName: z.string(),
+  guestIdentifier: z.string(),
+  identifierKind: z.enum(['cnp', 'act_de_identitate']),
+  firstDay: z.string(),
+  lastDay: z.string(),
+});
+
+export const occupancySheetSchema = z.object({
+  id: nonEmptyString,
+  fiscalYear: z.number().int().min(1990).max(2100),
+  propertyAddress: z.string(),
+  roomLabel: z.string(),
+  stays: z.array(occupancyStaySchema),
 });
 
 export const documentItemSchema = z.object({
@@ -356,6 +389,13 @@ export interface PersistedAppData {
   declarations?: LegacyMonthlyDeclaration[];
   /** PG-5: the annual returns. Absent means none recorded — never backfilled. */
   filings?: AnnualFiling[];
+  /**
+   * PG-6h-3: the occupancy sheets. Declared here rather than left off, for the standing reason in this
+   * file: **zod strips undeclared keys**, so an undeclared `occupancySheets` would be erased by the next
+   * save-and-load and the taxpayer would silently lose the very document they are legally required to
+   * keep. Absent means none recorded, and the v13→v14 step backfills nothing.
+   */
+  occupancySheets?: OccupancySheet[];
   documents?: DocumentItem[];
   companyDocs?: Record<DocTypeCode, CompanyDocument[]>;
   statements?: TaxStatement[];
@@ -405,6 +445,9 @@ export const persistedAppDataSchema = z.object({
   // and drops it; it stays declared so the step, not the load gate, is what decides.
   declarations: z.array(declarationSchema).optional(),
   filings: z.array(annualFilingSchema).optional(),
+  // PG-6h-3. Permissive on purpose — see `occupancyStaySchema`. A guest's mistyped CNP must not be able
+  // to quarantine the taxpayer's whole dataset.
+  occupancySheets: z.array(occupancySheetSchema).optional(),
   documents: z.array(documentItemSchema).optional(),
   companyDocs: z
     .record(z.enum(['im', 'cs', 'tva', 'facturi']), z.array(companyDocumentSchema))
@@ -592,6 +635,8 @@ export type _checks = [
   Expect<Equal<z.output<typeof clientSchema>, Client>>,
   Expect<Equal<z.output<typeof declarationSchema>, LegacyMonthlyDeclaration>>,
   Expect<Equal<z.output<typeof annualFilingSchema>, AnnualFiling>>,
+  Expect<Equal<z.output<typeof occupancyStaySchema>, OccupancyStay>>,
+  Expect<Equal<z.output<typeof occupancySheetSchema>, OccupancySheet>>,
   Expect<Equal<z.output<typeof documentItemSchema>, DocumentItem>>,
   Expect<Equal<z.output<typeof companyDocumentSchema>, CompanyDocument>>,
   Expect<Equal<z.output<typeof taxStatementSchema>, TaxStatement>>,

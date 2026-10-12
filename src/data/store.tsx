@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { ReactNode } from 'react';
 import type {
   AnnualFiling, AppData, Client, CompanyDocument, DocTypeCode, DocumentItem,
-  Expense, Revenue, SettingsState, TaxStatement, Toast, ToastKind,
+  Expense, OccupancySheet, OccupancyStay, Revenue, SettingsState, TaxStatement, Toast, ToastKind,
 } from './types';
 import type { PfaProfile } from '../domain/models';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
@@ -113,6 +113,21 @@ interface StoreValue extends AppData {
   deleteDocument: (code: DocTypeCode, id: string) => void;
   addStatement: (s: Omit<TaxStatement, 'id'>) => boolean;
   deleteStatement: (id: string) => void;
+  /**
+   * PG-6h-3 (D-OCC-1) — the occupancy sheet, OPANAF 381/2026.
+   *
+   * Four writes and no more. There is deliberately **no update path for a sheet's identity fields and no
+   * bulk import**: every additional write path over third-party personal data is another place a guest
+   * name or CNP can be written wrongly or swept somewhere it should not go, and none of them is needed to
+   * complete or to keep a sheet. A sheet is made, filled with stays, and deleted.
+   *
+   * `deleteOccupancySheet` is the acceptance-5 path: it removes the record from the dataset the save
+   * effect writes, so the bytes in localStorage stop containing it. It is not a view filter.
+   */
+  addOccupancySheet: (s: Omit<OccupancySheet, 'id'>) => boolean;
+  deleteOccupancySheet: (id: string) => void;
+  addOccupancyStay: (sheetId: string, stay: Omit<OccupancyStay, 'id'>) => boolean;
+  deleteOccupancyStay: (sheetId: string, stayId: string) => void;
   addSnapshot: (s: TaxCalculationSnapshot) => void;
   getSnapshot: (id: string) => TaxCalculationSnapshot | undefined;
   updateProfile: (patch: Partial<PfaProfile>) => void;
@@ -173,6 +188,10 @@ function toAppData(parsed: PersistedAppData): AppData {
     // did not happen. PG-5b: the monthly rows a pre-v11 payload carried do not reach here at all; the
     // v10→v11 step drops them.
     filings: parsed.filings ?? [],
+    // PG-6h-3: the occupancy sheets. Absent resolves to empty here and nowhere else — the v13→v14 step
+    // deliberately leaves the key off, because „no sheet has been made” and „sheets were made and none
+    // exist” are different claims about the taxpayer's own documents.
+    occupancySheets: parsed.occupancySheets ?? [],
     documents: parsed.documents ?? [],
     companyDocs: parsed.companyDocs ?? { im: [], cs: [], tva: [], facturi: [] },
     statements: parsed.statements ?? [],
@@ -407,6 +426,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return true;
     },
     deleteStatement: id => setData(d => ({ ...d, statements: d.statements.filter(x => x.id !== id) })),
+
+    // PG-6h-3 (D-OCC-1). The sheet is retained data about other people, so the write surface is small and
+    // the delete is real: `filter` on the stored collection, which the save effect then writes back, so
+    // the guest's name and identifier leave the persisted bytes rather than merely the screen. Nothing
+    // here copies a sheet into a snapshot, a log, an export or a calculation operand — see
+    // `src/data/occupancy.privacy.test.tsx`, which pins that.
+    addOccupancySheet: s => {
+      setData(d => ({ ...d, occupancySheets: [...d.occupancySheets, { ...s, id: uid() }] }));
+      return true;
+    },
+    deleteOccupancySheet: id => setData(d => ({
+      ...d,
+      occupancySheets: d.occupancySheets.filter(x => x.id !== id),
+    })),
+    addOccupancyStay: (sheetId, stay) => {
+      setData(d => ({
+        ...d,
+        occupancySheets: d.occupancySheets.map(x =>
+          x.id === sheetId ? { ...x, stays: [...x.stays, { ...stay, id: uid() }] } : x,
+        ),
+      }));
+      return true;
+    },
+    deleteOccupancyStay: (sheetId, stayId) => setData(d => ({
+      ...d,
+      occupancySheets: d.occupancySheets.map(x =>
+        x.id === sheetId ? { ...x, stays: x.stays.filter(s => s.id !== stayId) } : x,
+      ),
+    })),
     addSnapshot: s => setData(d => ({ ...d, snapshots: [...d.snapshots, s] })),
     getSnapshot: id => data.snapshots.find(x => x.calculationId === id),
 

@@ -12,16 +12,25 @@ import { expenseFiscalDate, revenueFiscalDate } from '../domain/aggregation';
 import { localYear } from '../domain/date';
 import { getLedgerDisclosure, type LedgerDisclosure } from '../data/dashboard';
 import { Card, Badge, Modal, Empty } from '../components/ui';
-import { copy, documents as documentsCopy, expenses as expensesCopy, moneyDate } from '../ui/copy';
+import { copy, documents as documentsCopy, expenses as expensesCopy, moneyDate, occupancy as occupancyCopy } from '../ui/copy';
+import { isoCalendarDateProblem } from '../domain/date';
+import {
+  occupancyStayExceedsShortTermCeiling, isCnpShaped,
+  type OccupancySheet, type GuestIdentifierKind,
+} from '../data/types';
 
 // Canonical route hash keys — mirror the original SOLO Documents feature:
 //   documents.company     → "Documente PFA"  (registration documents, real uploads)
 //   documents.statements  → "Declarații"     (local registry of filed tax declarations)
 //   documents.reports     → "Rapoarte"       (RJIP cashflow registers, CSV download)
+// PG-6h-3 adds a fourth: the occupancy sheet. It is a retained document, so it belongs on this page and
+// nowhere else — and it is deliberately NOT folded into "Rapoarte", because a report is something the app
+// produces from the register, while the fișă is something the taxpayer completes by hand and keeps.
 const TABS = [
   { key: 'company', label: documentsCopy.tabs.pfa },
   { key: 'statements', label: documentsCopy.tabs.declarations },
   { key: 'reports', label: documentsCopy.tabs.reports },
+  { key: 'occupancy', label: occupancyCopy.title },
 ] as const;
 type TabKey = (typeof TABS)[number]['key'];
 
@@ -635,6 +644,372 @@ function ReportsTab() {
   );
 }
 
+// ---------- Occupancy sheet (PG-6h-3, OPANAF 381/2026) ----------
+
+/**
+ * The taxpayer's own copy of one fișă, as a file.
+ *
+ * This is the **only** path in the application that writes a guest name or a guest identifier outside
+ * localStorage, and it exists only because a retention obligation has to be producible on paper or in a
+ * spreadsheet to be kept at all. It is not a report: it takes one sheet the person completed and prints
+ * that sheet. It is reached from one button on that sheet, never from the register export, never
+ * automatically, and never for more than the one form the person is looking at.
+ *
+ * Same file shape the RJIP register uses and the tests pin — BOM, semicolons, CRLF — because Romanian
+ * Excel is the reader. Every field is quoted, because an address contains a comma and a name may contain
+ * a semicolon.
+ *
+ * There is deliberately **no money column**. The sheet is not a revenue source, and a column that could
+ * hold one would be the first step towards the thing D-OCC-1 forbids.
+ */
+export function occupancyCsv(sheet: OccupancySheet): string {
+  const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
+  const lines = [
+    occupancyCopy.export.csvHeader,
+    ...sheet.stays.map(stay => [
+      String(sheet.fiscalYear),
+      esc(sheet.propertyAddress),
+      esc(sheet.roomLabel),
+      esc(stay.guestName),
+      esc(stay.guestIdentifier),
+      esc(stay.identifierKind === 'cnp'
+        ? occupancyCopy.form.identifierKindCnp
+        : occupancyCopy.form.identifierKindId),
+      stay.firstDay,
+      stay.lastDay,
+    ].join(';')),
+  ];
+  return '\uFEFF' + lines.join('\r\n');
+}
+
+/** A stay is only as good as its dates; a malformed one is flagged, never silently repaired. */
+function stayDateProblems(stay: { firstDay: string; lastDay: string }): string[] {
+  const problems: string[] = [];
+  for (const value of [stay.firstDay, stay.lastDay]) {
+    if (value === '') problems.push(occupancyCopy.validation.dateRequired);
+    else {
+      const problem = isoCalendarDateProblem(value);
+      if (problem !== null) problems.push(occupancyCopy.validation.dateInvalid(value));
+    }
+  }
+  if (problems.length === 0 && stay.lastDay < stay.firstDay) problems.push(occupancyCopy.validation.dateOrder);
+  return problems;
+}
+
+function StayForm({ sheetId, onDone }: { sheetId: string; onDone: () => void }) {
+  const { addOccupancyStay } = useStore();
+  const [f, setF] = useState({
+    guestName: '',
+    guestIdentifier: '',
+    identifierKind: 'cnp' as GuestIdentifierKind,
+    firstDay: '',
+    lastDay: '',
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  function save() {
+    const next: Record<string, string> = {};
+    if (f.guestName.trim() === '') next.guestName = occupancyCopy.validation.guestNameRequired;
+    if (f.guestIdentifier.trim() === '') next.guestIdentifier = occupancyCopy.validation.identifierRequired;
+    for (const p of stayDateProblems(f)) next.dates = p;
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
+    // The identifier is stored exactly as typed — trimmed of surrounding space only. No checksum, no
+    // reformatting, no refusal of a suspect value: the app records what the taxpayer recorded.
+    addOccupancyStay(sheetId, {
+      guestName: f.guestName.trim(),
+      guestIdentifier: f.guestIdentifier.trim(),
+      identifierKind: f.identifierKind,
+      firstDay: f.firstDay,
+      lastDay: f.lastDay,
+    });
+    onDone();
+  }
+
+  const field = (key: keyof typeof f, label: string, type = 'text') => (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12.5 }}>
+      <span>{label}</span>
+      <input
+        type={type}
+        value={f[key] as string}
+        data-testid={`occ-stay-${key}`}
+        onChange={e => setF(prev => ({ ...prev, [key]: e.target.value }))}
+      />
+    </label>
+  );
+
+  return (
+    <div data-testid="occ-stay-form" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+        {field('guestName', occupancyCopy.form.guestName)}
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12.5 }}>
+          <span>{occupancyCopy.form.identifierKind}</span>
+          <select
+            value={f.identifierKind}
+            data-testid="occ-stay-identifierKind"
+            onChange={e => setF(prev => ({ ...prev, identifierKind: e.target.value as GuestIdentifierKind }))}
+          >
+            <option value="cnp">{occupancyCopy.form.identifierKindCnp}</option>
+            <option value="act_de_identitate">{occupancyCopy.form.identifierKindId}</option>
+          </select>
+        </label>
+        {field('guestIdentifier', occupancyCopy.form.identifier)}
+        {field('firstDay', occupancyCopy.form.firstDay, 'date')}
+        {field('lastDay', occupancyCopy.form.lastDay, 'date')}
+      </div>
+      {errors.guestName && <div className="text-sm" style={{ color: 'var(--danger)' }}>{errors.guestName}</div>}
+      {errors.guestIdentifier && <div className="text-sm" style={{ color: 'var(--danger)' }}>{errors.guestIdentifier}</div>}
+      {errors.dates && <div className="text-sm" style={{ color: 'var(--danger)' }}>{errors.dates}</div>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn btn-primary" onClick={save} data-testid="occ-save-stay">{occupancyCopy.form.addStay}</button>
+        <button className="btn btn-ghost" onClick={onDone}>{copy.ui.cancel}</button>
+      </div>
+    </div>
+  );
+}
+
+function SheetCard({ sheet }: { sheet: OccupancySheet }) {
+  const { deleteOccupancySheet, deleteOccupancyStay, toast } = useStore();
+  const [adding, setAdding] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  function download() {
+    if (sheet.stays.length === 0) {
+      toast('info', occupancyCopy.export.nothingToExport);
+      return;
+    }
+    downloadText(
+      occupancyCsv(sheet),
+      occupancyCopy.export.fileName(sheet.fiscalYear, sheet.roomLabel),
+    );
+    toast('success', occupancyCopy.export.generated(sheet.fiscalYear, sheet.stays.length));
+  }
+
+  return (
+    <Card>
+      <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <strong data-testid="occ-sheet-heading">{occupancyCopy.form.sheetHeading(sheet.fiscalYear, sheet.roomLabel)}</strong>
+          <span className="muted text-sm">{occupancyCopy.form.staysCount(sheet.stays.length)}</span>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <button className="btn btn-ghost" onClick={download} data-testid="occ-download">
+              {occupancyCopy.form.download}
+            </button>
+            <button className="btn btn-ghost" onClick={() => setAdding(v => !v)} data-testid="occ-add-stay">
+              {occupancyCopy.form.addStay}
+            </button>
+            <button className="btn btn-ghost" onClick={() => setConfirmDelete(true)} data-testid="occ-delete-sheet">
+              {occupancyCopy.form.deleteSheet}
+            </button>
+          </div>
+        </div>
+
+        <div className="text-sm muted" data-testid="occ-sheet-address">
+          {occupancyCopy.form.sectionOne}: {sheet.propertyAddress}
+        </div>
+
+        {sheet.stays.length === 0 ? (
+          <div className="text-sm muted">{occupancyCopy.form.noStays}</div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <caption className="text-sm muted" style={{ textAlign: 'left', paddingBottom: 6 }}>
+              {occupancyCopy.form.sectionTwo}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col" style={{ textAlign: 'left' }}>{occupancyCopy.form.guestName}</th>
+                <th scope="col" style={{ textAlign: 'left' }}>{occupancyCopy.form.identifier}</th>
+                <th scope="col" style={{ textAlign: 'left' }}>{occupancyCopy.form.firstDay}</th>
+                <th scope="col" style={{ textAlign: 'left' }}>{occupancyCopy.form.lastDay}</th>
+                <th scope="col"><span className="visually-hidden">{occupancyCopy.form.deleteStay}</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {sheet.stays.map(stay => {
+                const dateProblems = stayDateProblems(stay);
+                // A flag, never a correction and never a block. The app records what the taxpayer
+                // recorded; it has no authority over a document it did not issue.
+                const suspectIdentifier = stay.identifierKind === 'cnp' && !isCnpShaped(stay.guestIdentifier);
+                const beyondCeiling = occupancyStayExceedsShortTermCeiling(stay);
+                return (
+                  <tr key={stay.id} data-testid={`occ-stay-${stay.id}`}>
+                    <td>{stay.guestName}</td>
+                    <td>
+                      {stay.guestIdentifier}
+                      {suspectIdentifier && (
+                        <div className="text-sm muted" data-testid="occ-suspect">{occupancyCopy.identifier.suspect}</div>
+                      )}
+                      {beyondCeiling && (
+                        <div className="text-sm muted" data-testid="occ-over-ceiling">
+                          {occupancyCopy.definition.overCeiling(
+                            Math.round(
+                              (Date.parse(`${stay.lastDay}T00:00:00Z`) - Date.parse(`${stay.firstDay}T00:00:00Z`)) / 86_400_000,
+                            ) + 1,
+                          )}
+                        </div>
+                      )}
+                      {dateProblems.length > 0 && (
+                        <div className="text-sm muted" data-testid="occ-stay-days-warning">{dateProblems[0]}</div>
+                      )}
+                    </td>
+                    <td>{stay.firstDay}</td>
+                    <td>{stay.lastDay}</td>
+                    <td>
+                      <button
+                        className="btn btn-ghost"
+                        onClick={() => deleteOccupancyStay(sheet.id, stay.id)}
+                        data-testid={`occ-delete-stay-${stay.id}`}
+                      >
+                        {occupancyCopy.form.deleteStay}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+
+        {adding && <StayForm sheetId={sheet.id} onDone={() => setAdding(false)} />}
+
+        {confirmDelete && (
+          <Modal title={occupancyCopy.form.deleteSheet} onClose={() => setConfirmDelete(false)}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <p>{occupancyCopy.retention.deletion}</p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  className="btn btn-danger"
+                  data-testid="occ-confirm-delete"
+                  onClick={() => {
+                    deleteOccupancySheet(sheet.id);
+                    toast('info', occupancyCopy.retention.deleted);
+                  }}
+                >
+                  {occupancyCopy.form.deleteSheet}
+                </button>
+                <button className="btn btn-ghost" onClick={() => setConfirmDelete(false)}>{copy.ui.cancel}</button>
+              </div>
+            </div>
+          </Modal>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function OccupancyTab() {
+  const { occupancySheets, addOccupancySheet, toast } = useStore();
+  // The year the form opens on comes from the app's own clock seam — a raw `new Date().getFullYear()`
+  // here would seed the wrong year at 00:30 on 1 January, which is the B-46 defect class.
+  const currentYear = localYear();
+  const [adding, setAdding] = useState(false);
+  const [f, setF] = useState({
+    fiscalYear: String(currentYear),
+    propertyAddress: '',
+    roomLabel: '',
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  function save() {
+    const year = Number(f.fiscalYear);
+    const next: Record<string, string> = {};
+    if (!Number.isInteger(year) || year < 1990 || year > 2100) next.fiscalYear = occupancyCopy.validation.yearRequired;
+    if (f.propertyAddress.trim() === '') next.propertyAddress = occupancyCopy.validation.addressRequired;
+    if (f.roomLabel.trim() === '') next.roomLabel = occupancyCopy.validation.roomRequired;
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
+    addOccupancySheet({
+      fiscalYear: year,
+      propertyAddress: f.propertyAddress.trim(),
+      roomLabel: f.roomLabel.trim(),
+      stays: [],
+    });
+    setF({ fiscalYear: String(currentYear), propertyAddress: '', roomLabel: '' });
+    setErrors({});
+    setAdding(false);
+    toast('success', occupancyCopy.form.addSheet);
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* The three sentences that make this page unlike every other page in the app. They are placed
+          above the data, not under it, because each one changes what a reasonable reader would otherwise
+          assume: that a form in a tax app is a filing, that a delete removes an obligation, and that data
+          in an app lives on somebody's server. */}
+      <Card>
+        <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <strong data-testid="occ-retention">{occupancyCopy.retention.heading}</strong>
+          <div className="text-sm">{occupancyCopy.retention.body}</div>
+          <div className="text-sm muted">{occupancyCopy.retention.ownCopy}</div>
+          <div className="text-sm muted">{occupancyCopy.retention.deletion}</div>
+        </div>
+      </Card>
+      <Card>
+        <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <strong data-testid="occ-privacy">{occupancyCopy.privacy.heading}</strong>
+          <div className="text-sm">{occupancyCopy.privacy.body}</div>
+          <div className="text-sm muted">{occupancyCopy.privacy.exportIsExplicit}</div>
+        </div>
+      </Card>
+      <Card>
+        <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 8 }} data-testid="occ-scope">
+          <strong>{occupancyCopy.scope.heading}</strong>
+          <div className="text-sm">{occupancyCopy.scope.body}</div>
+          <div className="text-sm muted">{occupancyCopy.scope.notGatedOnTitle}</div>
+          <div className="text-sm muted" data-testid="occ-definition">{occupancyCopy.definition.shortTerm}</div>
+          <div className="text-sm muted">{occupancyCopy.definition.fractionOfDay}</div>
+          <div className="text-sm muted">{occupancyCopy.definition.citation}</div>
+        </div>
+      </Card>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button className="btn btn-primary" onClick={() => setAdding(v => !v)} data-testid="occ-add-sheet">
+          {occupancyCopy.form.addSheet}
+        </button>
+      </div>
+
+      {adding && (
+        <Card>
+          <div data-testid="occ-sheet-form" style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12.5 }}>
+                <span>{occupancyCopy.form.year}</span>
+                <input value={f.fiscalYear} data-testid="occ-field-fiscalYear"
+                  onChange={e => setF(prev => ({ ...prev, fiscalYear: e.target.value }))} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12.5 }}>
+                <span>{occupancyCopy.form.address}</span>
+                <input value={f.propertyAddress} data-testid="occ-field-propertyAddress"
+                  onChange={e => setF(prev => ({ ...prev, propertyAddress: e.target.value }))} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12.5 }}>
+                <span>{occupancyCopy.form.room}</span>
+                <input value={f.roomLabel} data-testid="occ-field-roomLabel"
+                  onChange={e => setF(prev => ({ ...prev, roomLabel: e.target.value }))} />
+              </label>
+            </div>
+            {Object.values(errors).map(msg => (
+              <div key={msg} className="text-sm" style={{ color: 'var(--danger)' }}>{msg}</div>
+            ))}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-primary" onClick={save} data-testid="occ-save-sheet">{occupancyCopy.form.addSheet}</button>
+              <button className="btn btn-ghost" onClick={() => setAdding(false)}>{copy.ui.cancel}</button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {occupancySheets.length === 0 ? (
+        <div style={{ padding: '20px 18px' }}>
+          <Empty icon="📌" title={occupancyCopy.form.emptyTitle} text={occupancyCopy.form.empty} />
+        </div>
+      ) : (
+        occupancySheets.map(sheet => <SheetCard key={sheet.id} sheet={sheet} />)
+      )}
+    </div>
+  );
+}
+
 // ---------- page ----------
 
 interface DocumentsProps {
@@ -690,6 +1065,7 @@ export default function Documents({ initialTab, onTabChange }: DocumentsProps) {
       )}
       {tab === 'statements' && <StatementsTab />}
       {tab === 'reports' && <ReportsTab />}
+      {tab === 'occupancy' && <OccupancyTab />}
     </div>
   );
 }
