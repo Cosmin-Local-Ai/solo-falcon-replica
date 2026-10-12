@@ -32,7 +32,7 @@ export const PFA_2026_RELEASE: RuleRelease = {
   entityType: 'PFA',
   taxYear: 2026,
   lifecycle: 'ACTIVE',
-  version: 2,
+  version: 3,
   contentHash: ruleSetDigest(PFA_2026_SYSTEM_REAL_PACKAGE),
   ruleIds: [
     'PFA_2026_TAX_REFERENCE',
@@ -45,6 +45,10 @@ export const PFA_2026_RELEASE: RuleRelease = {
     // FY2026 incomes). Its own regime, so none of the three `taxRegime` lookups in tax.ts can see or be
     // shadowed by it. See docs/ai/phases/37_pg6h1_art68x3_arithmetic.md.
     'ACCOMMODATION_68X3_2026',
+    // PG-6e — the Titlul II amortisation figures a Titlul IV PFA inherits through art. 68 alin. (4) lit. d).
+    // Its own regime, so it is read only by `domain/fiscal/depreciation.ts` and cannot be mistaken for an
+    // art. 68 treatment or for a contribution rule. See docs/ai/phases/43_pg6e_fixed_assets.md.
+    'FISCAL_DEPRECIATION_2026',
     'VAT_THRESHOLD_2026',
     'PFA_DEADLINE_2026',
     'VAT_REGISTRATION_DEADLINE_2026',
@@ -95,7 +99,7 @@ export const PFA_2026_RELEASE: RuleRelease = {
   status: 'SAFE_ACTIVATION',
   effectiveFrom: '2026-01-01',
   effectiveTo: null,
-  createdAt: '2026-10-11T16:29:57+03:00',
+  createdAt: '2026-10-12T12:56:28+03:00',
   evidence: [
     // Cod fiscal, consolidated (Portal Legislativ doc 312601, consolidation history newest 08.08.2026)
     // — art. 68, 118, 122 alin. (3), 123 alin. (1), 135^1 alin. (3), 148 alin. (2), 170 alin. (1),

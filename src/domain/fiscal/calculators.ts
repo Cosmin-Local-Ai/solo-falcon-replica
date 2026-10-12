@@ -1,4 +1,5 @@
 import type { FiscalRule, FiscalParameter } from './rules';
+import { depreciationSchedule, type FixedAssetFacts } from './depreciation';
 import type { CassLadderCategory, FactState, PfaYesNo } from '../models';
 import { CASS_LADDER_CATEGORIES, CASS_LADDER_CATEGORY_NAMES } from '../models';
 import { applyRateDecimal, lei, leiText, roundArt66, subBani, sumBani, type Bani } from '../money';
@@ -168,6 +169,17 @@ export type CalculatorInput = {
    * itself) is the headline figure.
    */
   chosenBase?: Bani;
+  /**
+   * PG-6e — the declared facts of the one fixed asset whose depreciation is being asked about.
+   *
+   * It is a `FixedAssetFacts`, not a stored `FixedAsset`: the depreciation vocabulary lives in
+   * `./depreciation.ts` (the layer that reads it, the same reason `VehicleYearFacts` lives in
+   * `./deductibility.ts`), and `data/types.ts` builds the stored record on top of it by adding an `id`.
+   * Absent means no asset was supplied, and the calculator refuses rather than applying a rate to nothing.
+   */
+  fixedAsset?: FixedAssetFacts;
+  /** PG-6e — which fiscal year's line of the schedule is being asked for. */
+  fiscalYear?: number;
 };
 
 /**
@@ -871,6 +883,62 @@ function calcAccommodationFlatRatio(rule: FiscalRule, input?: CalculatorInput): 
   return { value: tax, determinedNet: net, breakdown };
 }
 
+/**
+ * PG-6e — the fiscal depreciation of one asset for one fiscal year.
+ *
+ * It is a thin wrapper over `depreciationSchedule`, and the reason it exists at all is the house rule that
+ * a fiscal figure lives in the rule store and nowhere else: every lei amount and every coefficient this
+ * arithmetic uses is a parameter on `FISCAL_DEPRECIATION_2026`, read through `depreciationSchedule`'s own
+ * unit-guarded reader. The calculator contributes no number of its own.
+ *
+ * It deliberately does NOT feed `computeTaxEstimate`. A depreciation is not a payment, so it must not enter
+ * the cash-basis register as one, and PG-5C's enforcement that the engine runs on recorded actuals is
+ * untouched by this phase. See `docs/ai/phases/43_pg6e_fixed_assets.md`.
+ */
+function calcFiscalDepreciation(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
+  const asset = input?.fixedAsset;
+  if (!asset) {
+    return {
+      reviewRequired: true,
+      reason:
+        'art. 28 alin. (12) lit. a): amortizarea se calculează pentru un mijloc fix determinat — cu data ' +
+        'intrării în patrimoniu, data punerii în funcțiune, valoarea fiscală și durata stabilită de ' +
+        'contribuabil. Fără activul declarat nu există cotă aplicată unei baze.',
+    };
+  }
+  const outcome = depreciationSchedule(rule, asset);
+  if (outcome.status === 'review_required') {
+    return { reviewRequired: true, reason: outcome.reason };
+  }
+  const year = input?.fiscalYear;
+  const line = year === undefined ? undefined : outcome.years.find((y) => y.fiscalYear === year);
+  if (year !== undefined && !line) {
+    return {
+      reviewRequired: true,
+      reason: `Planul de amortizare pentru „${asset.label}” nu are nicio amortizare în anul ${year}.`,
+    };
+  }
+  const target = line ?? outcome.years[0]!;
+  return {
+    value: target.deductible,
+    breakdown: [
+      `data intrării în patrimoniu: ${asset.entryDate} — art. 28 alin. (2) lit. b) măsoară pragul aici, nu la plată`,
+      `punerea în funcțiune: ${asset.putInFunctionDate ?? 'nu este înregistrată'}`,
+      `valoare fiscală de intrare: ${leiText(asset.fiscalValue)} lei${
+        asset.nonDeductibleVatIncluded === undefined
+          ? ''
+          : ` (include TVA devenită nedeductibilă: ${leiText(asset.nonDeductibleVatIncluded)} lei — normele Titlul II pct. 28 lit. b)`
+      }`,
+      `durata normală de funcționare stabilită de contribuabil: ${asset.normalLifeMonths} luni — normele pct. 27`,
+      `amortizare ${target.fiscalYear}: ${target.months} luni, deductibil ${leiText(target.deductible)} lei`,
+      ...(target.lost > 0
+        ? [`exces peste plafonul de 1.500 lei/lună: ${leiText(target.lost)} lei, pierdut definitiv — art. 28 alin. (14)`]
+        : []),
+      ...outcome.notes,
+    ],
+  };
+}
+
 function calcVatThreshold(rule: FiscalRule): CalculatorResult {
   const threshold = paramBani(rule, 'threshold');
   return { value: threshold, breakdown: [`VAT threshold: ${leiText(threshold)} lei`] };
@@ -906,6 +974,7 @@ export const calculatorRegistry: Record<string, CalculatorFunction> = {
   'calc-cass-ladder': calcCassLadder,
   'calc-income-tax': calcIncomeTax,
   'calc-accommodation-flat-ratio': calcAccommodationFlatRatio,
+  'calc-fiscal-depreciation': calcFiscalDepreciation,
   'calc-vat-threshold': calcVatThreshold,
   'calc-deadline': calcDeadline,
 };

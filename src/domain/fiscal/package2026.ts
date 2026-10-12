@@ -370,6 +370,192 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     // Re-verified 2026-10-11 against the 08.08.2026 consolidation and Legea 239/2025 in research/38.
     verifiedAt: '2026-10-11',
   },
+  // PG-6e (B-31, D-FA-1) — the Titlul II amortisation figures a Titlul IV PFA inherits through art. 68
+  // alin. (4) lit. d) („să respecte regulile privind amortizarea, prevăzute în titlul II, după caz”).
+  // Read only by `domain/fiscal/depreciation.ts`. It supplies no treatment and no rate: the treatments of a
+  // capital purchase and of depreciation stay exactly where they were, on `EXPENSE_DEPRECIABLE_ASSET_PURCHASE_2026`
+  // (art. 68 alin. (7) lit. h)) and `EXPENSE_DEPRECIATION_BUSINESS_ASSET_2026` (art. 68 alin. (4) lit. d)),
+  // and `EXPENSE_DEPRECIATION_PERSONAL_PATRIMONY_2026` keeps `non_deductible` under art. 68 alin. (7)
+  // lit. k^1) — the chapeau of alin. (7) is „Nu sunt cheltuieli deductibile:”, so k^1) is an exclusion and
+  // the code already had it right. `docs/ai/research/36_fixed_assets_and_depreciation_2026.md` §5.1.
+  {
+    ...PROVENANCE_2026,
+    ruleId: 'FISCAL_DEPRECIATION_2026',
+    name: 'Amortizarea fiscală — prag 5.000 lei, plafon M1 1.500 lei/lună, coeficienți de degresivitate',
+    taxRegime: 'fiscal-depreciation',
+    effectiveFrom: '2026-01-01',
+    effectiveTo: null,
+    parameters: [
+      {
+        id: 'expensing_threshold',
+        label: 'Pragul de la care un bun este mijloc fix amortizabil',
+        value: lei(5000),
+        unit: 'lei',
+        // OUG nr. 8 din 24.02.2026 (MO 147/25.02.2026) art. 6 pct. 7 rewrote art. 28 alin. (2) lit. b):
+        // „la data intrării în patrimoniul contribuabilului, are o valoare fiscală egală sau mai mare
+        // decât suma de 5.000 lei; această limită se actualizată anual, în funcție de indicele de
+        // inflație, prin hotărâre a Guvernului” (the official text really does read „se actualizată”).
+        // OUG 8/2026 art. 10 alin. (2) puts pct. 1-14 into force „începând cu anul fiscal 2026”, which
+        // covers January–February 2026 purchases too. Measured at entry into the patrimony, NOT at payment.
+        // `research/36` §15 is a documented negative: no indexation HG has been issued, so 5.000 lei is the
+        // operative FY2026 figure and the parameter stays overridable rather than being inlined.
+        description:
+          'art. 28 alin. (2) lit. b) modificat prin OUG 8/2026 art. 6 pct. 7 (MO 147/25.02.2026). Măsurat la data intrării în patrimoniu, nu la plată. Nicio HG de indexare emisă (research/36 §15) — parametrul rămâne supraponibil.',
+      },
+      {
+        id: 'm1_monthly_cap',
+        label: 'Plafon lunar de amortizare pentru vehicule M1',
+        value: lei(1500),
+        unit: 'lei',
+        // art. 28 alin. (14): pentru vehiculele din categoria M1 (maximum 9 scaune inclusiv conducătorul
+        // auto, RNTR 2 / OMMLTL 211/2003), „cheltuielile cu amortizarea sunt deductibile, pentru fiecare,
+        // în limita a 1.500 lei/lună”. **pentru fiecare** — the ceiling is per vehicle and carries no
+        // one-car limit, which is the asymmetry `docs/ai/research/40_vehicle_one_car_limit.md` §4 records
+        // against art. 68 alin. (5) lit. j), where running costs are limited to a single car. The two
+        // ceilings are different provisions and `VehicleCapStatus` is deliberately not reused.
+        description:
+          'art. 28 alin. (14). Excesul peste plafon este pierdut definitiv, nu reportat (research/36 §12.13, coroborare secundară).',
+      },
+      {
+        id: 'm1_disposal_monthly_cap',
+        label: 'Plafon lunar la scăderea din gestiune a unui M1',
+        value: lei(1500),
+        unit: 'lei',
+        // Normele HG 1/2016, Titlul II, Cap. II, Secțiunea a 8-a, pct. 27: „la momentul scăderii din
+        // gestiune a mijloacelor de transport din categoria M1, valoarea rămasă neamortizată este
+        // deductibilă în limita a 1.500 lei înmulțită cu numărul de luni rămase de amortizat din durata
+        // normală de funcționare stabilită de contribuabil”. The duration used is the taxpayer's declared
+        // one, not a Catalog default. Declared as its own parameter rather than reusing `m1_monthly_cap`,
+        // because they are two provisions that happen to state the same number today — if one is amended
+        // the other must not silently follow.
+        description:
+          'Normele Titlul II pct. 27. 1.500 lei × lunile rămase din durata stabilită de contribuabil.',
+      },
+      {
+        id: 'degresive_coefficient_2_5',
+        label: 'Coeficient de degresivitate pentru durata între 2 și 5 ani',
+        value: 1.5,
+        unit: 'count',
+        description: 'art. 28 alin. (7): „1,5 dacă durata normală de utilizare … este între 2 și 5 ani”.',
+      },
+      {
+        id: 'degresive_coefficient_6_10',
+        label: 'Coeficient de degresivitate pentru durata între 6 și 10 ani',
+        value: 2.0,
+        unit: 'count',
+        // The coefficient pct. 25's worked example uses: 350.000 lei, 10 ani, cota anuală 10 % × 2,0 = 20 %.
+        description: 'art. 28 alin. (7): „2,0 … între 6 și 10 ani”.',
+      },
+      {
+        id: 'degresive_coefficient_over_10',
+        label: 'Coeficient de degresivitate pentru durata mai mare de 10 ani',
+        value: 2.5,
+        unit: 'count',
+        description: 'art. 28 alin. (7): „2,5 … mai mare de 10 ani”.',
+      },
+      {
+        id: 'first_year_basis',
+        label: 'Temeiul de pornire a amortizării',
+        value: 'month_after_put_in_function',
+        unit: 'text',
+        // art. 28 alin. (12) lit. a): „începând cu luna următoare celei în care mijlocul fix amortizabil se
+        // pune în funcțiune”. There is no separate pro-rating formula in the law — §12.2 is a documented
+        // negative: no daily formula, no monthly table, no first-year fraction anywhere in the 624-page
+        // Partea I. The 1/12-per-month reading is this application's construction and is labelled as one.
+        description:
+          'art. 28 alin. (12) lit. a). Fracțiunea de 1/12 pe lună este construcția aplicației, nu o formulă citată (research/36 §12.2).',
+      },
+      {
+        id: 'non_deductible_vat_in_base',
+        label: 'TVA devenită nedeductibilă în valoarea fiscală',
+        value: 'included_at_entry',
+        unit: 'text',
+        // Normele Titlul II pct. 28 lit. b), verbatim: „în valoarea fiscală a mijloacelor fixe, la data
+        // intrării în patrimoniu, se include și taxa pe valoarea adăugată devenită nedeductibilă, potrivit
+        // prevederilor titlului VII „Taxa pe valoarea adăugată” din Codul fiscal.” This is the first
+        // affirmative non-recoverable-VAT rule in this repository, and it is scoped to the DEPRECIABLE
+        // BASE. It does not reopen the question for ordinary expenses, so B-87 stays open after this phase.
+        description:
+          'Normele Titlul II pct. 28 lit. b). Scoped la baza de amortizare — nu rezolvă B-87 pentru cheltuielile curente.',
+      },
+      {
+        id: 'sub_threshold_election_moment',
+        label: 'Momentul opțiunii din art. 28 alin. (21)',
+        value: 'entry_into_patrimony',
+        unit: 'text',
+        // Normele pct. 31: „opţiunea se efectuează la data intrării imobilizării corporale în patrimoniul
+        // contribuabilului … fie la data punerii în funcţiune prin deducerea întregii valori fiscale … fie
+        // începând cu luna următoare celei în care imobilizarea corporală este pusă în funcţiune, prin
+        // efectuarea de deduceri de amortizare fiscală”. Two consequences the entity encodes: the election
+        // is made at entry and cannot be flipped later, and even the full-expensing branch is timed at
+        // punerea în funcțiune, not at payment.
+        description:
+          'Normele Titlul II pct. 31. Opțiune la intrarea în patrimoniu, alternativă pe bun, ambele ramuri timbrate la punerea în funcțiune.',
+      },
+      {
+        id: 'payment_timing_open_question',
+        label: 'Întrebare deschisă: plata versus punerea în funcțiune',
+        value:
+          'art. 68 alin. (4) lit. b) face deductibile cheltuielile „cuprinse în cheltuielile exercițiului financiar al anului în cursul căruia au fost plătite”, iar normele Titlul IV pct. 7 alin. (5) lit. n) fac amortizarea deductibilă fără nicio condiție de plată. research/36 §4.3 și §11.1 sunt un negativ documentat: nicio normă Titlul IV și nicio prevedere REF nu spun nici că amortizarea e deductibilă indiferent de plată, nici că e condiționată de plată. Citirea pe care o aplică aplicația — un bun pus în funcțiune în 2026 și plătit în 2027 începe să se amortizeze în 2026 — este o citire, nu o regulă citată, și este marcată ca atare. Când faptele o fac relevantă (neachitat, în rate, plată într-un an ulterior), modulul refuză și numește ambele laturi.',
+        unit: 'text',
+        description:
+          'research/36 §4.3, §4.6, §11.1, §11.3. Fără nicio poziție ANAF primară; rămâne review_required când faptele fac coliziunea relevantă.',
+      },
+      {
+        id: 'aport_vs_k1_open_question',
+        label: 'Întrebare deschisă: aportul de bun amortizabil din patrimoniul personal',
+        value:
+          'art. 68 alin. (7) lit. k^1) — sub cuprinsul „Nu sunt cheltuieli deductibile:” — exclude „cheltuielile cu amortizarea bunurilor din patrimoniul personal afectate exercitării activității, potrivit legii”, fără excepție pentru aport. În sens contrar, art. 7 pct. 44 lit. c) definește valoarea fiscală a „mijloacelor fixe dobândite cu titlu gratuit ori constituite ca aport, la data intrării în patrimoniul contribuabilului, utilizată pentru calculul amortizării fiscale”. Normele pct. 7 dau o bază de amortizare pentru bunurile „care trec în patrimoniul altei afaceri” — doar afacerie→afacerie — și nu acoperă persoana fizică→PFA. research/36 §10.1: nicio răspuns ANAF, DGRFP sau Ministerul Finanțelor nu adresează bunurile amortizabile. Partea mai bine susținută este nedeductibilitatea (k^1) este absolută, deck-ul ANAF București o enunță pentru acest profil, consensul practicienilor este aici), dar textul de contrariu este viu. Modulul refuză și numește ambele texte.',
+        unit: 'text',
+        description:
+          'research/36 §5.5, §10.2, §10.4, §10.5, §16.3. Nu se alege nicio latură; aportul rămâne review_required.',
+      },
+      {
+        id: 'put_in_function_open_question',
+        label: 'Întrebare deschisă: ce este „punerea în funcțiune”',
+        value:
+          'Expresia nu este definită nicăieri în legea fiscală. research/36 §12.3: căutată în toată Partea I de 624 de pagini, singura apropiere de definiție este la case de marcat, în normele art. 25 — „în luna punerii în funcţiune. Punerea în funcţiune se face potrivit prevederilor legale” — adică termenul este lăsat altor legi. Ancorarea în procesul-verbal de dare în folosință este doctrină de practician, nu text. Aplicația întreabă data și citează doctrina drept doctrină; fără dată refuză, pentru că fără ea nu există prima lună de amortizare.',
+        unit: 'text',
+        description:
+          'research/36 §12.3, §16.4. Fără substituție de dată (factură, intrare în patrimoniu, plată).',
+      },
+      {
+        id: 'm1_exception_evidence_open_question',
+        label: 'Întrebare deschisă: cum se justifică excepțiile de la alin. (14)',
+        value:
+          'Normele nu spun nimic despre cum se justifică vreuna dintre cele patru categorii de excepție ale art. 28 alin. (14). research/36 §12.6: „M1” apare exact o dată în toată Partea I, la pct. 27. Singura cerință de justificare din normele Titlul IV este foaia de parcurs, și ea aparține regulii de 50 % a cheltuielilor de folosință — art. 68 alin. (7) lit. k) închide de altfel cu „Cheltuielile care intră sub incidența acestor prevederi nu includ cheltuielile privind amortizarea”. Aplicația nu inventează o cerință de justificare și nu tratează o foaie de parcurs ca probă a unei excepții M1.',
+        unit: 'text',
+        description:
+          'research/36 §12.6, §12.7. Categoria este revendiată de contribuabil; nu este dedusă și nu este dovedită de foaia de parcurs.',
+      },
+    ],
+    calculatorId: 'calc-fiscal-depreciation',
+    // The borrowing chain, in the order the texts state it: CF art. 68 alin. (4) lit. d) („să respecte
+    // regulile privind amortizarea, prevăzute în titlul II, după caz”), reinforced by alin. (4^1)
+    // („cu excepția cheltuielilor cu amortizarea care sunt deductibile potrivit prevederilor alin. (4) lit.
+    // d)”) and by Normele Titlul IV pct. 7 alin. (5) lit. n) („cheltuielile cu amortizarea, în conformitate
+    // cu prevederile art. 28 din Codul fiscal, după caz”). The 5.000-lei figure is the OUG 8/2026 text, not
+    // a consolidation — OUG 8/2026 art. 10 alin. (2) makes art. 6 pct. 1-14 applicable „începând cu anul
+    // fiscal 2026”, so it governs the whole of FY2026 including January–February purchases.
+    //
+    // NOT ENCODED, deliberately:
+    //  - The Catalog (HG 2.139/2004, MO 46/13.01.2005). Durations are „stabilită de contribuabil” per
+    //    Normele pct. 27 and Catalog Cap. I pct. 4 gives a range to choose inside. A lookup would be a
+    //    classification decision, and §16.1 records that even a mobile phone's class is a judgement.
+    //  - art. 28 alin. (8) accelerată and alin. (8^1) superaccelerată. The 65 % method is gated on Catalog
+    //    subgrupa 2.1 / 2.4, and §8.6 shows office IT sits in subgrupa 2.2 — encoding it would need the
+    //    Catalog. The asymmetry is recorded in `data/types.ts`: alin. (5) lit. b) is scoped by asset type,
+    //    alin. (8^1) by Catalog subgrupa, and one must not feed the other.
+    //  - art. 28 alin. (12) lit. i1) — the 50 % head-office rule. §12.12: 0 hits for `lit. i1)` and for
+    //    `sediu social` in the whole Partea I. Code-only, with no norm-level gloss; not modelled here.
+    //  - Any carry-forward of the 1.500 lei/lună excess. §12.13: the excess is definitively lost.
+    sourceAct: 'Cod fiscal — Legea nr. 227/2015 (MO 688/10.09.2015), art. 28 modificat prin OUG nr. 8/2026 (MO 147/25.02.2026), art. 6 pct. 7',
+    sourceArticle:
+      'art. 68 alin. (4) lit. d) și alin. (4^1) (trimitere la regulile amortizării din titlul II); art. 28 alin. (2) lit. b) (pragul de 5.000 lei la data intrării în patrimoniu, forma modificată prin OUG 8/2026 art. 6 pct. 7); art. 28 alin. (5) (metode); art. 28 alin. (6) (liniară); art. 28 alin. (7) (coeficienți 1,5 / 2,0 / 2,5); art. 28 alin. (12) lit. a) (amortizarea începe cu luna următoare punerii în funcțiune); art. 28 alin. (14) (M1, 1.500 lei/lună, „pentru fiecare”, patru categorii de excepție); art. 28 alin. (17) (fără amortizarea contabilă); art. 28 alin. (21) (opțiunea sub prag); Normele HG 1/2016 Titlul II Cap. II Secțiunea a 8-a pct. 25 (exemplul de calcul degresiv), pct. 27 (plafonul la scăderea din gestiune), pct. 28 lit. b) (TVA nedeductibilă în valoarea fiscală), pct. 29 (casarea), pct. 30 (investiții neterminate), pct. 31 (momentul opțiunii); Normele Titlul IV pct. 7 alin. (5) lit. n) și alin. (7)',
+    sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/312601',
+    // Read against `docs/ai/research/36_fixed_assets_and_depreciation_2026.md`, both passes, 2026-10-12.
+    verifiedAt: '2026-10-12',
+  },
   {
     ...PROVENANCE_2026,
     ruleId: 'VAT_THRESHOLD_2026',

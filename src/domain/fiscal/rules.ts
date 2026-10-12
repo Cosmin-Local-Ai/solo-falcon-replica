@@ -10,6 +10,13 @@
 // Titlul V rules those contributions are actually computed under. The 68^3 rule supplies neither a
 // contribution rule nor a rate for another regime; it supplies the flat-ratio METHOD, and tax.ts reads
 // it as a fourth, separate lookup.
+// 'fiscal-depreciation' (PG-6e) is a fresh string for the same reason and with the same hazard: the
+// figures it carries — the 5.000-lei threshold of art. 28 alin. (2) lit. b), the 1.500 lei/lună M1 ceiling
+// of alin. (14) and the three degresivity coefficients of alin. (7) — are Titlul II *method* figures, not
+// a fourth contribution or rate. Putting them under 'expense-deductibility' would have hidden them from
+// the depreciation module and put them where `classifyExpenseDeductibility` reads, which is exactly where
+// a per-vehicle ceiling could be mistaken for a per-expense rate. It is read by `domain/fiscal/
+// depreciation.ts`, never by `tax.ts`.
 export type FiscalRegime =
   | 'cass'
   | 'cas'
@@ -18,7 +25,8 @@ export type FiscalRegime =
   | 'deadlines'
   | 'wage-reference'
   | 'expense-deductibility'
-  | 'accommodation-flat-ratio';
+  | 'accommodation-flat-ratio'
+  | 'fiscal-depreciation';
 
 /**
  * TASK 6: the lifecycle ladder, stated once. Six states, one step forward at a time, and the ladder is
