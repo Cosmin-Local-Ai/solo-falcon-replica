@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fixedInstant } from '../src/test/fixedInstant';
 import { SYNTHETIC_CNP_A, SYNTHETIC_SHEET } from '../src/test/occupancyFixtures';
+import { SYNTHETIC_FIXED_ASSETS } from '../src/test/fixedAssetFixtures';
 import { seedBrowser, seedPayload } from './fixtures';
 
 /**
@@ -160,6 +161,28 @@ async function loadOccupancy(page: import('@playwright/test').Page): Promise<voi
   await expect(page.getByText(SYNTHETIC_CNP_A)).toBeVisible();
 }
 
+/**
+ * PG-6e — the two routes this task added.
+ *
+ * Same rule PG-5 and PG-6h-3 recorded: a new surface must not enter the tree unscanned. `/assets` is the
+ * first table in the app with a `<tfoot>` total row and a per-year amortisation grid, and
+ * `/documents#!/fixed-assets` is the second retained-document surface after the occupancy sheet. Both are
+ * scanned **populated** — an empty-state shell passes axe whether or not the table under it is accessible.
+ */
+async function loadAssets(page: import('@playwright/test').Page): Promise<void> {
+  await seedBrowser(page, { ...seedPayload(), fixedAssets: SYNTHETIC_FIXED_ASSETS });
+  await page.clock.setFixedTime(fixedInstant());
+  await page.goto('/assets');
+  await expect(page.getByTestId('asset-total-a1')).toBeVisible();
+}
+
+async function loadFixedAssetDocuments(page: import('@playwright/test').Page): Promise<void> {
+  await seedBrowser(page, { ...seedPayload(), fixedAssets: SYNTHETIC_FIXED_ASSETS });
+  await page.clock.setFixedTime(fixedInstant());
+  await page.goto('/documents#!/fixed-assets');
+  await expect(page.getByTestId('fa-download-register')).toBeVisible();
+}
+
 test.describe('PG-0 — axe-core accessibility gate on /dashboard', () => {
   test('the dashboard has no serious or critical axe violations', async ({ page }) => {
     const violations = await scanDashboard(page);
@@ -207,6 +230,43 @@ test.describe('PG-0 — axe-core accessibility gate on /dashboard', () => {
     if (noise.length > 0) console.log(`axe, non-blocking on /documents#!/occupancy:\n${describeViolations(noise)}`);
 
     expect(fatal, `axe found blocking violations on /documents#!/occupancy:\n\n${describeViolations(fatal)}`).toHaveLength(0);
+  });
+
+  test('the fixed-asset register has no serious or critical axe violations', async ({ page }) => {
+    await loadAssets(page);
+    const violations = await runAxe(page);
+    const fatal = blocking(violations);
+    const noise = violations.filter((v) => !BLOCKING_IMPACTS.includes(v.impact ?? ''));
+
+    test.info().annotations.push({
+      type: 'axe',
+      description: `${fatal.length} blocking (serious+critical), ${noise.length} non-blocking `
+        + `(minor+moderate) on /assets`,
+    });
+    if (noise.length > 0) console.log(`axe, non-blocking on /assets:\n${describeViolations(noise)}`);
+
+    expect(fatal, `axe found blocking violations on /assets:\n\n${describeViolations(fatal)}`).toHaveLength(0);
+  });
+
+  test('the fixed-asset retained documents have no serious or critical axe violations', async ({ page }) => {
+    await loadFixedAssetDocuments(page);
+    const violations = await runAxe(page);
+    const fatal = blocking(violations);
+    const noise = violations.filter((v) => !BLOCKING_IMPACTS.includes(v.impact ?? ''));
+
+    test.info().annotations.push({
+      type: 'axe',
+      description: `${fatal.length} blocking (serious+critical), ${noise.length} non-blocking `
+        + `(minor+moderate) on /documents#!/fixed-assets`,
+    });
+    if (noise.length > 0) {
+      console.log(`axe, non-blocking on /documents#!/fixed-assets:\n${describeViolations(noise)}`);
+    }
+
+    expect(
+      fatal,
+      `axe found blocking violations on /documents#!/fixed-assets:\n\n${describeViolations(fatal)}`,
+    ).toHaveLength(0);
   });
 
   // ── Negative controls ─────────────────────────────────────────────────────────

@@ -478,7 +478,13 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // verbatim 674.504 and `converted` is still 67450 bani. This step is one thing more than the previous
     // ones, though: it also DELETES a field the retired flag list used to occupy, and it converts no flag
     // into an amount.
-    expect(saved.version).toBe(16);
+    // Re-pinned 2026-10-12 (PG-6e): 16 → 17, because `fixed-assets` (16→17) follows it — the ninth time for
+    // the same reason, and the same kind of step again: it writes a version and mints no asset. What this
+    // test exists for is untouched: the notice is still one long, `original` is still the verbatim 674.504
+    // and `converted` is still 67450 bani. The step is stricter than the v14 one before it: v14 opened a
+    // collection, v17 opens none — the `fixedAssets` key that appears in the bytes below comes from the
+    // load path resolving an absent collection to empty, not from the migration writing one.
+    expect(saved.version).toBe(17);
     // The v16 step's own halves, on the same bytes. First the non-write: this profile never declared an
     // amount for any of the six art. 155 alin. (1) lit. c)-h) categories, so the step opened no ladder year
     // and above all invented no zero — six minted zeros would have moved this person between "no CASS at
@@ -504,6 +510,12 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // written here would have put a third party's name and identity number into a migration that was only
     // ever allowed to open a drawer. Absence is what comes back out.
     expect(saved.occupancySheets).toEqual([]);
+    // The v17 step's own half, on the same bytes: no asset, no entry into the patrimony, no *punerea în
+    // funcțiune*, no duration was invented for a payload that never named a good. An asset written here
+    // would start amortising something nobody bought. The empty array below is the load path's
+    // normalisation of an absent collection — the step itself leaves the key off entirely, which is what
+    // `store.migration.chain.test.tsx` asserts on the pure chain.
+    expect(saved.fixedAssets).toEqual([]);
     // And the half of the v11 step that is a NON-write, asserted on the bytes: this payload carried no
     // `declarations` collection, so nothing was moved and nothing was invented. PG-5b re-pin: the monthly
     // key is now absent from the written bytes rather than present and empty — the record type is gone, so
