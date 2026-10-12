@@ -35,6 +35,7 @@ function writePayload(overrides: Record<string, unknown> = {}) {
     clients: [],
     filings: [],
     occupancySheets: [],
+    vehicles: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],

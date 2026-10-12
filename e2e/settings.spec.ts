@@ -465,7 +465,12 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // for the same reason, and the same kind of step again: it opens a collection and backfills it empty, so
     // it writes a version and touches no value. What this test exists for is untouched: the notice is still
     // one long, `original` is still the verbatim 674.504 and `converted` is still 67450 bani.
-    expect(saved.version).toBe(14);
+    // Re-pinned 2026-10-12 (PG-6c): 14 → 15, because `vehicle-facts` (14→15) follows it — the seventh time
+    // for the same reason, and the same kind of step a third time: it opens the `vehicles` collection and
+    // backfills it empty, so it writes a version and touches no value. What this test exists for is
+    // untouched: the notice is still one long, `original` is still the verbatim 674.504 and `converted` is
+    // still 67450 bani. No vehicle fact is inferred for a profile that never declared a car.
+    expect(saved.version).toBe(15);
     // The v12 step's own half, asserted on the store's bytes: this legacy profile carried no activity
     // family, and the step did not give it one. `'other'` here would have been exactly the default the
     // brief forbids — it reads as "the ordinary rules apply", asserted by the migration rather than chosen

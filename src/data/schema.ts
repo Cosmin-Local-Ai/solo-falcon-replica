@@ -7,7 +7,8 @@ import { CURRENCY_CODES } from '../domain/money';
 import { fxRateRecordSchema, type FxRateRecord } from '../domain/fx/rates';
 import type { MoneyPrecisionNotice } from './migration';
 import type { RuleRelease } from '../domain/fiscal/rules';
-import { EXPENSE_CATEGORIES } from '../domain/fiscal/deductibility';
+import { EXPENSE_CATEGORIES, VEHICLE_EXCEPTION_CATEGORIES } from '../domain/fiscal/deductibility';
+import type { VehicleYearFacts } from '../domain/fiscal/deductibility';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import type {
   AnnualFiling,
@@ -21,6 +22,7 @@ import type {
   Revenue,
   SettingsState,
   TaxStatement,
+  Vehicle,
 } from './types';
 
 /**
@@ -131,6 +133,38 @@ export const expenseSchema = z.object({
   // v5→v6 step does not invent one. The vocabulary is `EXPENSE_CATEGORIES`, the same list the
   // classifier reads, so the persisted token space and the rule space cannot drift apart.
   category: z.enum(EXPENSE_CATEGORIES).optional(),
+  // PG-6c (D-VEH-3): which vehicle this running cost belongs to. Declared because **zod strips
+  // undeclared keys** — an undeclared link would be erased on the next load and the expense would
+  // silently become unattributed. Optional and never defaulted: the v14→v15 step invents no vehicle and
+  // attributes nothing, exactly as v6 did for `category`.
+  vehicleId: z.string().optional(),
+});
+
+/**
+ * PG-6c (D-VEH-3): one car's declared facts for one fiscal year.
+ *
+ * Every field is `.optional()` with **no `.default()` anywhere**, and the vocabulary is imported from
+ * `domain/fiscal/deductibility.ts` rather than restated here, so the persisted token space and the
+ * classifier cannot drift. A default on any of these would be a legal assertion, not a convenience: a
+ * `usedByPerson` default would move a car inside or outside art. 68 alin. (5) lit. j), and a
+ * `designatedForRunningCosts` default would pick the one car the allowance follows — the exact selection
+ * `docs/ai/research/40_vehicle_one_car_limit.md` §1 records that no primary source supports.
+ */
+export const vehicleYearFactsSchema = z.object({
+  fiscalYear: z.number().int().min(1990).max(2100),
+  use: z.enum(['exclusive', 'mixed', 'not_used', 'unknown']).optional(),
+  exceptionCategory: z.enum(VEHICLE_EXCEPTION_CATEGORIES).optional(),
+  usedByPerson: z.enum(['da', 'nu']).optional(),
+  designatedForRunningCosts: z.enum(['da', 'nu']).optional(),
+});
+
+export const vehicleSchema = z.object({
+  id: nonEmptyString,
+  // The person's own name for the car. Required because an unlabelled car cannot be designated, refused
+  // or recognised in a refusal sentence — every place the app names a car names this string.
+  label: nonEmptyString,
+  plate: z.string().optional(),
+  years: z.array(vehicleYearFactsSchema),
 });
 
 export const clientSchema = z.object({
@@ -396,6 +430,14 @@ export interface PersistedAppData {
    * keep. Absent means none recorded, and the v13→v14 step backfills nothing.
    */
   occupancySheets?: OccupancySheet[];
+  /**
+   * PG-6c (D-VEH-3): the vehicles this taxpayer owns or holds in use. Declared here rather than left off,
+   * for the standing reason in this file — **zod strips undeclared keys**, so an undeclared `vehicles`
+   * collection would be erased by the next save-and-load and every expense pointing at one of its cars
+   * would silently lose the attribution the person made. Absent means none recorded, and the v14→v15 step
+   * backfills nothing.
+   */
+  vehicles?: Vehicle[];
   documents?: DocumentItem[];
   companyDocs?: Record<DocTypeCode, CompanyDocument[]>;
   statements?: TaxStatement[];
@@ -448,6 +490,8 @@ export const persistedAppDataSchema = z.object({
   // PG-6h-3. Permissive on purpose — see `occupancyStaySchema`. A guest's mistyped CNP must not be able
   // to quarantine the taxpayer's whole dataset.
   occupancySheets: z.array(occupancySheetSchema).optional(),
+  // PG-6c. Permissive on the year facts by design — see `vehicleYearFactsSchema`.
+  vehicles: z.array(vehicleSchema).optional(),
   documents: z.array(documentItemSchema).optional(),
   companyDocs: z
     .record(z.enum(['im', 'cs', 'tva', 'facturi']), z.array(companyDocumentSchema))
@@ -637,6 +681,8 @@ export type _checks = [
   Expect<Equal<z.output<typeof annualFilingSchema>, AnnualFiling>>,
   Expect<Equal<z.output<typeof occupancyStaySchema>, OccupancyStay>>,
   Expect<Equal<z.output<typeof occupancySheetSchema>, OccupancySheet>>,
+  Expect<Equal<z.output<typeof vehicleYearFactsSchema>, VehicleYearFacts>>,
+  Expect<Equal<z.output<typeof vehicleSchema>, Vehicle>>,
   Expect<Equal<z.output<typeof documentItemSchema>, DocumentItem>>,
   Expect<Equal<z.output<typeof companyDocumentSchema>, CompanyDocument>>,
   Expect<Equal<z.output<typeof taxStatementSchema>, TaxStatement>>,

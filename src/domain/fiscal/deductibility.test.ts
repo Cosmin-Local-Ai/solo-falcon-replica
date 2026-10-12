@@ -7,10 +7,38 @@ import {
   expenseEngineRefusal,
   DEDUCTIBILITY_REGIME,
   type ExpenseCategory,
+  type VehicleCapStatus,
+  type VehicleExceptionCategory,
+  type VehicleExpenseResolution,
+  type VehicleUseFact,
 } from './deductibility';
 
 const RULES = PFA_2026_SYSTEM_REAL_PACKAGE;
 const q = (asOfDate = '2026-06-15') => ({ taxYear: 2026, asOfDate });
+
+/**
+ * PG-6c — the vehicle facts reach the classifier **per expense**, resolved from the car that expense is
+ * attributed to. They used to be fields on `ExpenseClassificationContext`, i.e. one value for a whole
+ * classification run, which cannot state that two cars differ in who uses them — the only distinction
+ * art. 68 alin. (5) lit. j) draws. This helper builds the resolved shape so the tests below read as facts
+ * about a car, not as a run-wide switch.
+ */
+function car(
+  facts: {
+    use?: VehicleUseFact;
+    exceptionCategory?: VehicleExceptionCategory;
+    capStatus?: VehicleCapStatus;
+  } = {},
+): VehicleExpenseResolution {
+  return {
+    kind: 'attributed',
+    vehicleId: 'masina-1',
+    label: 'Autoturism de test',
+    capStatus: facts.capStatus ?? 'sole_candidate',
+    ...(facts.use !== undefined ? { use: facts.use } : {}),
+    ...(facts.exceptionCategory !== undefined ? { exceptionCategory: facts.exceptionCategory } : {}),
+  };
+}
 
 const byId = (id: string) => {
   const r = DEDUCTIBILITY_RULES_2026.find((x) => x.ruleId === id);
@@ -227,7 +255,13 @@ describe('expense deductibility — the facts the law keys on', () => {
   });
 
   it('a vehicle with no usage record defaults to 50 %, per the statutory default', () => {
-    const r = classifyExpenseDeductibility({ category: 'vehicle_related' }, RULES, q());
+    // No vehicle is recorded for this register at all, so there is no per-car fact to consult and
+    // alin. (7) lit. k)'s default is the law's answer — not a gap, and not an `incomplete` (D-VEH-1).
+    const r = classifyExpenseDeductibility(
+      { category: 'vehicle_related', vehicle: { kind: 'no_vehicles' } },
+      RULES,
+      q(),
+    );
     expect(r.status === 'classified' && r.treatment).toBe('capped');
     if (r.status !== 'classified' || r.treatment !== 'capped') return;
     expect(r.rule.ruleId).toBe('EXPENSE_VEHICLE_MIXED_USE_2026');
@@ -235,12 +269,37 @@ describe('expense deductibility — the facts the law keys on', () => {
     expect(r.cap?.base).toBe('expense_itself');
   });
 
+  it('`unknown` and `mixed` are different facts that both compute at 50 % (D-VEH-1)', () => {
+    // They stay distinct because a *foaie de parcurs* changes one and not the other; they compute alike
+    // because the burden runs only towards full deductibility. Neither is `incomplete`.
+    for (const use of ['unknown', 'mixed'] as const) {
+      const r = classifyExpenseDeductibility(
+        { category: 'vehicle_related', vehicle: car({ use }) },
+        RULES,
+        q(),
+      );
+      expect(r.status === 'classified' && r.treatment).toBe('capped');
+      if (r.status !== 'classified' || r.treatment !== 'capped') return;
+      expect(r.rule.ruleId).toBe('EXPENSE_VEHICLE_MIXED_USE_2026');
+      expect(r.cap?.percent).toBe(50);
+      // D-VEH-1's other half: neither fact may leave the estimate as a gap. `undetermined` would be the
+      // app treating its own missing record as if the law were unresolved.
+      expect(r.status).not.toBe('undetermined');
+      // The rule's own words stay attached, so the 50 % is explainable at the record.
+      expect(r.condition).toContain('art. 68 alin. (7) lit. k)');
+    }
+  });
+
   it('exclusive use, or one of the five exception categories, deducts fully', () => {
-    for (const context of [
-      { vehicleUse: 'exclusive' as const },
-      { vehicleExceptionCategory: 'transport_persoane_cu_plata' as const },
+    for (const facts of [
+      { use: 'exclusive' as const },
+      { exceptionCategory: 'transport_persoane_cu_plata' as const },
     ]) {
-      const r = classifyExpenseDeductibility({ category: 'vehicle_related', context }, RULES, q());
+      const r = classifyExpenseDeductibility(
+        { category: 'vehicle_related', vehicle: car(facts) },
+        RULES,
+        q(),
+      );
       expect(r.status === 'classified' && r.treatment).toBe('deductible');
       if (r.status !== 'classified') return;
       expect(r.rule.ruleId).toBe('EXPENSE_VEHICLE_EXCLUSIVE_USE_2026');
@@ -249,7 +308,7 @@ describe('expense deductibility — the facts the law keys on', () => {
 
   it('a vehicle not used in the activity at all is fully non-deductible, not 50 %', () => {
     const r = classifyExpenseDeductibility(
-      { category: 'vehicle_related', context: { vehicleUse: 'not_used' } },
+      { category: 'vehicle_related', vehicle: car({ use: 'not_used' }) },
       RULES,
       q(),
     );

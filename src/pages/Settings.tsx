@@ -6,7 +6,24 @@ import { Disclosure } from '../components/ui/Disclosure';
 import { InterpretationNote } from '../components/ui/InterpretationNote';
 import { FxRateProvenance } from '../components/ui/FxRateProvenance';
 import { FxRateEntryForm } from '../components/ui/FxRateEntryForm';
-import { copy, fields, settings as settingsCopy, validation, occupancy as occupancyCopy } from '../ui/copy';
+import { copy, fields, settings as settingsCopy, validation, occupancy as occupancyCopy, vehicles as vehiclesCopy } from '../ui/copy';
+// PG-6c (D-VEH-3) — the vehicle facts are read and written through the same resolver the classifier runs,
+// so the screen and the calculation cannot disagree about which car the one-car allowance follows. The
+// option lists come from the rule vocabulary, not from a list written here.
+import {
+  VEHICLE_EXCEPTION_CATEGORIES,
+  VEHICLE_USE_VALUES,
+  vehicleCapStatuses,
+  vehicleYearFacts,
+  type VehicleExceptionCategory,
+  type VehicleUseFact,
+  type VehicleYearFacts,
+  type VehicleYesNo,
+} from '../domain/fiscal/deductibility';
+import type { Vehicle } from '../data/types';
+
+/** The four per-car facts the section can write. `fiscalYear` is never edited from a control. */
+type VehicleFactField = 'use' | 'exceptionCategory' | 'usedByPerson' | 'designatedForRunningCosts';
 import {
   isSelectableRegime,
   regimeRefusalReason,
@@ -31,6 +48,189 @@ import {
   profileHasTourismCaen,
   withAccommodationRoomCount,
 } from '../domain/models';
+
+/**
+ * PG-6c (D-VEH-3) — the vehicle facts, per car and per fiscal year.
+ *
+ * This section writes through the store directly rather than through the profile form's save button, for
+ * the same reason the FX-rate entry does: these are records in their own collection, not profile fields,
+ * and a pending edit that is never saved would leave a car half-declared — which for these facts is not
+ * untidiness but a legal state the screen would be inventing.
+ *
+ * Three things the controls must not do, and each is a control that is **absent** rather than a control
+ * that behaves well:
+ *  - no control pre-fills anything. Every select starts empty, and an empty select writes nothing back —
+ *    `setVehicleYearFacts` drops an all-empty year rather than storing a row of blanks.
+ *  - no control picks the deductible car for the person. The designation select records the person's own
+ *    choice under art. 68 alin. (5) lit. j); the app never sets it, copies it across years, or resolves a
+ *    tie (`docs/ai/research/40_vehicle_one_car_limit.md` §1).
+ *  - no control asks about depreciation. lit. k) excludes amortisation from these rules and the art. 28
+ *    alin. (14) ceiling belongs to the fixed-asset phase.
+ *
+ * The status line under each car is read from `vehicleCapStatuses` — the same resolver the classifier runs
+ * — so the screen and the calculation cannot state different things about which car the allowance follows.
+ */
+function VehicleSection() {
+  const { vehicles, profile, addVehicle, deleteVehicle, setVehicleYearFacts, toast } = useStore();
+  const fiscalYear = profile.fiscalYear;
+  const statuses = vehicleCapStatuses(vehicles, fiscalYear);
+  const [draft, setDraft] = useState({ label: '', plate: '' });
+
+  const patch = (vehicle: Vehicle, field: VehicleFactField, value: string) => {
+    const current = vehicleYearFacts(vehicle, fiscalYear) ?? { fiscalYear };
+    const cleared = value === '';
+    // One write per control. An empty select clears that fact rather than storing an empty string, and the
+    // store then drops the year entry entirely if nothing is left in it — so "answered with nothing" never
+    // becomes a second shape of "never answered".
+    const next: VehicleYearFacts = {
+      ...current,
+      fiscalYear,
+      ...(field === 'use' ? { use: cleared ? undefined : (value as VehicleUseFact) } : {}),
+      ...(field === 'exceptionCategory'
+        ? { exceptionCategory: cleared ? undefined : (value as VehicleExceptionCategory) }
+        : {}),
+      ...(field === 'usedByPerson'
+        ? { usedByPerson: cleared ? undefined : (value as VehicleYesNo) }
+        : {}),
+      ...(field === 'designatedForRunningCosts'
+        ? { designatedForRunningCosts: cleared ? undefined : (value as VehicleYesNo) }
+        : {}),
+    };
+    setVehicleYearFacts(vehicle.id, next);
+  };
+
+  return (
+    <div className="field" data-vehicle-block>
+      <label>{vehiclesCopy.block.label}</label>
+      <span className="hint">{vehiclesCopy.block.intro}</span>
+      <span className="hint">{vehiclesCopy.block.perPerson}</span>
+      <span className="hint">{vehiclesCopy.block.ownership}</span>
+
+      {vehicles.length === 0 && <span className="hint" data-vehicle-empty>{vehiclesCopy.block.empty}</span>}
+
+      {vehicles.map(v => {
+        const facts = vehicleYearFacts(v, fiscalYear);
+        const status = statuses.get(v.id);
+        return (
+          <div key={v.id} data-vehicle-row style={{ marginTop: 10, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+            <strong>{v.label}</strong>
+            {v.plate ? <span className="muted"> · {v.plate}</span> : null}
+            {status && (
+              <span className="hint" data-vehicle-status>
+                {vehiclesCopy.status[status]}
+              </span>
+            )}
+
+            <label htmlFor={`set-vehicle-used-by-person-${v.id}`}>{vehiclesCopy.facts.usedByPerson}</label>
+            <select
+              id={`set-vehicle-used-by-person-${v.id}`}
+              className="input"
+              data-vehicle-used-by-person
+              value={facts?.usedByPerson ?? ''}
+              onChange={e => patch(v, 'usedByPerson', e.target.value)}
+            >
+              <option value="">{copy.ui.answerUnrecorded}</option>
+              <option value="da">{vehiclesCopy.facts.yes}</option>
+              <option value="nu">{vehiclesCopy.facts.no}</option>
+            </select>
+            <span className="hint">{vehiclesCopy.facts.usedByPersonHint}</span>
+            {facts?.usedByPerson === undefined && (
+              <span className="hint">{vehiclesCopy.facts.usedByPersonUnanswered}</span>
+            )}
+
+            <label htmlFor={`set-vehicle-use-${v.id}`}>{vehiclesCopy.facts.use}</label>
+            <select
+              id={`set-vehicle-use-${v.id}`}
+              className="input"
+              data-vehicle-use
+              value={facts?.use ?? ''}
+              onChange={e => patch(v, 'use', e.target.value)}
+            >
+              <option value="">{copy.ui.answerUnrecorded}</option>
+              {VEHICLE_USE_VALUES.map(u => (
+                <option key={u} value={u}>{vehiclesCopy.facts.useOptions[u]}</option>
+              ))}
+            </select>
+            <span className="hint">{vehiclesCopy.facts.useHint}</span>
+            {(facts?.use === undefined || facts?.use === 'unknown') && (
+              <span className="hint" data-vehicle-use-default>{vehiclesCopy.facts.useUnanswered}</span>
+            )}
+
+            <label htmlFor={`set-vehicle-exception-${v.id}`}>{vehiclesCopy.facts.exception}</label>
+            <select
+              id={`set-vehicle-exception-${v.id}`}
+              className="input"
+              data-vehicle-exception
+              value={facts?.exceptionCategory ?? ''}
+              onChange={e => patch(v, 'exceptionCategory', e.target.value)}
+            >
+              <option value="">{vehiclesCopy.facts.exceptionOptions.none}</option>
+              {VEHICLE_EXCEPTION_CATEGORIES.map(c => (
+                <option key={c} value={c}>{vehiclesCopy.facts.exceptionOptions[c]}</option>
+              ))}
+            </select>
+            <span className="hint">{vehiclesCopy.facts.exceptionHint}</span>
+
+            <label htmlFor={`set-vehicle-designation-${v.id}`}>{vehiclesCopy.facts.designation}</label>
+            <select
+              id={`set-vehicle-designation-${v.id}`}
+              className="input"
+              data-vehicle-designation
+              value={facts?.designatedForRunningCosts ?? ''}
+              onChange={e => patch(v, 'designatedForRunningCosts', e.target.value)}
+            >
+              <option value="">{copy.ui.answerUnrecorded}</option>
+              <option value="da">{vehiclesCopy.facts.yes}</option>
+              <option value="nu">{vehiclesCopy.facts.no}</option>
+            </select>
+            <span className="hint">{vehiclesCopy.facts.designationHint}</span>
+
+            <button
+              className="btn btn-sm btn-ghost"
+              data-vehicle-remove
+              onClick={() => { deleteVehicle(v.id); toast('success', vehiclesCopy.block.remove); }}
+            >
+              {vehiclesCopy.block.remove}
+            </button>
+          </div>
+        );
+      })}
+
+      <label htmlFor="set-vehicle-label">{vehiclesCopy.block.labelField}</label>
+      <input
+        id="set-vehicle-label"
+        className="input"
+        data-vehicle-label
+        value={draft.label}
+        onChange={e => setDraft({ ...draft, label: e.target.value })}
+        placeholder={vehiclesCopy.block.labelPlaceholder}
+      />
+      <label htmlFor="set-vehicle-plate">
+        {vehiclesCopy.block.plateField} <span className="muted">{vehiclesCopy.block.plateOptional}</span>
+      </label>
+      <input
+        id="set-vehicle-plate"
+        className="input"
+        data-vehicle-plate
+        value={draft.plate}
+        onChange={e => setDraft({ ...draft, plate: e.target.value })}
+      />
+      <button
+        className="btn btn-sm"
+        data-vehicle-add
+        onClick={() => {
+          if (!addVehicle({ label: draft.label.trim(), plate: draft.plate.trim() || undefined, years: [] })) {
+            return;
+          }
+          setDraft({ label: '', plate: '' });
+        }}
+      >
+        {vehiclesCopy.block.add}
+      </button>
+      <span className="hint">{vehiclesCopy.block.yearNote}</span>
+    </div>
+  );
+}
 
 // Canonical route hash keys (must match VALID_TABS.settings in App.tsx).
 // Mirrors the live SOLO settings page (docs/reference/settings.md);
@@ -954,6 +1154,12 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                 </a>
                 <span className="hint">{occupancyCopy.entry.hint}</span>
               </div>
+
+              {/* PG-6c (D-VEH-3) — the vehicle facts. Shown unconditionally: whether a person has a car is
+                  not something the app may infer from a CAEN code, from an expense category or from a
+                  supplier name, and the 50 % default of art. 68 alin. (7) lit. k) applies to a register
+                  that declares no car at all. */}
+              <VehicleSection />
 
               <div className="field">
                 <label>{settingsCopy.fiscal.startYear} <span className="req">*</span></label>

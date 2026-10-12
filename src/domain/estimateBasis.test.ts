@@ -61,6 +61,7 @@ function makeData(overrides: Partial<AppData> = {}): AppData {
     reservedAmount: null,
     profile: profile(), revenues: [], expenses: [], clients: [], filings: [], documents: [],
     occupancySheets: [],
+    vehicles: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] }, statements: [], snapshots: [],
     settings: emptySettings, ...overrides,
   };

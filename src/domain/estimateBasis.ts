@@ -37,6 +37,7 @@ import {
   classifyExpenseDeductibility,
   expenseEngineRefusal,
   capAmount,
+  vehicleExpenseResolver,
   type DeductibilityCap,
   type ActivityFamily,
   type ExpenseCategory,
@@ -988,6 +989,16 @@ export function selectDeductibleExpenses(
     activityFamily: data.profile.activityFamily,
     ...context,
   };
+  // PG-6c (D-VEH-3) — THREADING, NOT MECHANISM, and this time per record rather than per run. The
+  // vehicle facts used to sit on the context: one value for a whole classification run, which cannot say
+  // "this car is used by the taxpayer, that one is not" — the only distinction art. 68 alin. (5) lit. j)
+  // itself draws. They are now resolved from the vehicle the expense names, through the resolver in the
+  // layer that owns the cap arithmetic. Nothing here reads a car list, compares a fact or picks a car:
+  // the resolver is bound once to this register and this fiscal year so a run does not re-walk the cars
+  // per record, and an expense that names no car arrives as `unattributed` rather than inheriting an
+  // answer. `data.vehicles` is empty for every profile that has never declared a car, which is what keeps
+  // those profiles on alin. (7) lit. k)'s statutory 50 % default instead of making their costs unattributable.
+  const resolveVehicle = vehicleExpenseResolver(data.vehicles ?? [], fiscalYear);
   const empty: DeductibleExpenseSet = {
     records: [],
     lines: [],
@@ -1053,7 +1064,7 @@ export function selectDeductibleExpenses(
     }
 
     const c = classifyExpenseDeductibility(
-      { category: e.category, context: ctx },
+      { category: e.category, context: ctx, vehicle: resolveVehicle(e.vehicleId) },
       rules,
       { taxYear: fiscalYear, asOfDate: fiscalDate },
     );

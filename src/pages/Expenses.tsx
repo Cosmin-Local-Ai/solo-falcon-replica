@@ -13,7 +13,8 @@ import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
 import { Disclosure } from '../components/ui/Disclosure';
 import { FiscalDateNote } from '../components/ui/FiscalDateNote';
 import { InterpretationNote } from '../components/ui/InterpretationNote';
-import { copy, empty, expenseCategoryLabels, expenses as expensesCopy, fields, moneyDate, recordStatus, validation } from '../ui/copy';
+import { copy, empty, expenseCategoryLabels, expenses as expensesCopy, fields, moneyDate, recordStatus, validation, vehicles as vehiclesCopy } from '../ui/copy';
+import type { Vehicle } from '../data/types';
 
 /**
  * TASK 6: the rules in force for the profile's fiscal year, selected rather than imported.
@@ -56,8 +57,10 @@ function OutOfEstimateNote({ reason }: { reason: CoverageReason | undefined }) {
   );
 }
 
-function ExpenseForm({ initial, onSave, onClose }: {
+function ExpenseForm({ initial, vehicles, onSave, onClose }: {
   initial?: Expense;
+  /** PG-6c (D-VEH-3): the cars this register declares. Empty list => no control at all. */
+  vehicles: Vehicle[];
   onSave: (e: Omit<Expense, 'id'>) => void;
   onClose: () => void;
 }) {
@@ -86,6 +89,10 @@ function ExpenseForm({ initial, onSave, onClose }: {
     // legal category belongs to the language layer (TASK 7), and inventing 35 legal labels here would
     // put unverified copy in front of a tax decision.
     category: initial?.category ?? '',
+    // PG-6c: '' means "attributed to no vehicle", which is a real state, not a half-filled field. It is
+    // stored as an ABSENT field, never as null. Nothing here guesses the car from the supplier, from the
+    // category token or from anything else — the link is written only by the person.
+    vehicleId: initial?.vehicleId ?? '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -113,6 +120,7 @@ function ExpenseForm({ initial, onSave, onClose }: {
       valoareFaraTva: v, tva: t, status: f.status as Expense['status'],
       statusDetail: f.statusDetail || undefined,
       category: f.category === '' ? undefined : (f.category as Expense['category']),
+      vehicleId: f.vehicleId === '' ? undefined : f.vehicleId,
     });
   };
 
@@ -199,6 +207,21 @@ function ExpenseForm({ initial, onSave, onClose }: {
           </select>
           <span className="text-sm muted">{expensesCopy.deductibilityNoneHint}</span>
         </div>
+        {/* PG-6c (D-VEH-3) — which car this running cost belongs to. The control appears only once the
+            register declares at least one vehicle: with no cars declared there is nothing to attribute
+            the cost to, and the expense keeps art. 68 alin. (7) lit. k)'s statutory 50 % default. Once a
+            car exists, an unattributed vehicle cost is refused rather than classified by another car's
+            facts, and this is the only place that link can be written. */}
+        {vehicles.length > 0 && (
+          <div className="field">
+            <label>{vehiclesCopy.expense.field}</label>
+            <select data-vehicle-select value={f.vehicleId} onChange={e => set('vehicleId', e.target.value)}>
+              <option value="">{vehiclesCopy.expense.none}</option>
+              {vehicles.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+            </select>
+            <span className="text-sm muted">{vehiclesCopy.expense.hint}</span>
+          </div>
+        )}
         {f.status !== 'inregistrata' && (
           <div className="field full">
             <label>{fields.statusDetail}</label>
@@ -219,7 +242,7 @@ interface ExpensesProps {
 
 export default function Expenses({ initialTab, onTabChange, focusRecord }: ExpensesProps) {
   const store = useStore();
-  const { expenses, addExpense, updateExpense, deleteExpense, toast } = store;
+  const { expenses, addExpense, updateExpense, deleteExpense, vehicles, toast } = store;
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>(
     initialTab && TABS.some(t => t.key === initialTab) ? initialTab : 'registered'
   );
@@ -276,6 +299,14 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
   // register says what left the deductible base — the same selector the estimate runs, so the count on this
   // screen and the total the engine used cannot disagree.
   const foreignBlocked = classification.excluded.filter(x => x.reason === 'foreign_currency');
+  // PG-6c — a vehicle cost the app could not decide is NOT a settled exclusion. Two situations put one
+  // here: the cost names no declared car, or the car is inside art. 68 alin. (5) lit. j) and the one-car
+  // allowance is not settled for it. In the second case the assembler's own detail carries BOTH readings of
+  // what happens to a second taxpayer-used car, and they are shown here verbatim — hiding the reading that
+  // was not applied would present an unresolved question as settled law (D-VEH-2).
+  const vehicleUnresolved = classification.excluded.filter(
+    x => x.reason === 'undetermined' && x.category === 'vehicle_related',
+  );
   // PG-1 — the same exclusion list, keyed by record, for the row note. One list, three surfaces (hero
   // count, banner, row), no second walk of the register.
   const excludedReasonById = useMemo(() => {
@@ -283,6 +314,12 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
     for (const x of classification.excluded) map.set(x.id, coverageReasonForExclusion(x));
     return map;
   }, [classification]);
+  // PG-6c: the car behind an attributed cost, for the row note. Read off the declared collection; nothing
+  // here infers a vehicle for a cost that has none.
+  const vehicleLabelById = useMemo(
+    () => new Map(vehicles.map(v => [v.id, v.label])),
+    [vehicles],
+  );
 
   // TASK 2d — a ceiling that WAS struck must be explained, not just applied. These are the numbers the
   // estimate itself produced: the SAME assembler the tax engine runs (`selectEstimateOperands`), so the
@@ -442,6 +479,18 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
         </div>
       )}
 
+      {vehicleUnresolved.length > 0 && (
+        <div className="banner banner-warn" role="status" data-vehicle-unresolved>
+          <strong>{vehicleUnresolved.length}</strong>{' '}
+          {vehicleUnresolved.length === 1 ? expensesCopy.capBlockedOne : expensesCopy.capBlockedMany(vehicleUnresolved.length)}{' '}
+          {vehiclesCopy.expense.bannerTitle}
+          <div className="text-sm muted" style={{ marginTop: 6 }}>{vehiclesCopy.expense.bannerTail}</div>
+          <div className="text-sm" style={{ marginTop: 6 }} data-vehicle-unresolved-detail>
+            {vehicleUnresolved[0].detail}
+          </div>
+        </div>
+      )}
+
       {capBlocked.length > 0 && (
         <div className="banner banner-warn" role="status">
           <strong>{capBlocked.length}</strong>
@@ -511,6 +560,14 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
                     <td>
                       <Badge kind={statusBadge(e.status)}>{recordStatus.expenseLabels[e.status]}</Badge>
                       {e.statusDetail && <div className="text-sm muted" style={{ marginTop: 3 }}>{e.statusDetail}</div>}
+                      {/* PG-6c: the car the person attributed this cost to, when they attributed one. It is
+                          shown because the car's own facts — who uses it, how it is used, whether it is the
+                          designated one — are what decided the treatment of the amount. */}
+                      {e.vehicleId && vehicleLabelById.get(e.vehicleId) && (
+                        <div className="text-sm muted" data-expense-vehicle style={{ marginTop: 3 }}>
+                          {vehiclesCopy.expense.rowLabel}: {vehicleLabelById.get(e.vehicleId)}
+                        </div>
+                      )}
                       <OutOfEstimateNote reason={excludedReasonById.get(e.id)} />
                     </td>
                     <td>
@@ -541,6 +598,7 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
       {editing && (
         <ExpenseForm
           initial={editing === 'new' ? undefined : editing}
+          vehicles={vehicles}
           onClose={() => setEditing(null)}
           onSave={e => {
             if (editing === 'new') { addExpense(e); toast('success', expensesCopy.added(e.nr)); }

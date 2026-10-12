@@ -96,6 +96,10 @@ export function emptyData(): AppData {
     // whose whole purpose is to record real ones, and the fixture ships inside the bundle. Absence here is
     // the same discipline as `filings: []` — the app never mints a document nobody made.
     occupancySheets: [],
+    // PG-6c (D-VEH-3): the empty dataset declares **no** vehicle. A seeded car would mint a fact the
+    // taxpayer never stated and would place a vehicle inside or outside art. 68 alin. (5) lit. j) by
+    // accident rather than by an answer.
+    vehicles: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],
@@ -251,6 +255,10 @@ export const seedData: AppData = {
   // inside the bundle and is loaded by e2e specs. Any fixture that needs a sheet builds its own, clearly
   // commented as synthetic.
   occupancySheets: [],
+  // PG-6c (D-VEH-3): the demo fixture declares **no** vehicle, so no expense in it is attributed to a car
+  // and no car sits inside or outside the one-car limit by our choice rather than the demo taxpayer's.
+  // A fixture that needs a vehicle builds its own.
+  vehicles: [],
   documents: [
     { id: 'doc1', nume: 'FCT-2026-001.pdf', data: '2026-02-02', categoria: 'Facturi' },
     { id: 'doc3', nume: 'Contract Presta Consulting.pdf', data: '2026-01-26', categoria: 'Contracte' },

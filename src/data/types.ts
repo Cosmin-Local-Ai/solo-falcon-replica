@@ -1,5 +1,5 @@
 import type { PfaProfile } from '../domain/models';
-import type { ExpenseCategory } from '../domain/fiscal/deductibility';
+import type { ExpenseCategory, VehicleYearFacts } from '../domain/fiscal/deductibility';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import type { MoneyPrecisionNotice } from './migration';
 import { localDateISO, now } from '../domain/date';
@@ -95,6 +95,52 @@ export interface Expense {
    * lit. l) is an open clause and an uncited category may never be treated as deductible.
    */
   category?: ExpenseCategory;
+  /**
+   * PG-6c (D-VEH-3) — the vehicle this expense belongs to, by id.
+   *
+   * **Optional, and never invented by a migration or by the app.** It is the only honest way to connect a
+   * running cost to a car: `category` is a cost-type token and is not a vehicle identity, and `research/40`
+   * §1 forbids deriving the link from anything else — not a supplier name, not a CAEN code, not a seed
+   * value. A cost the person has not attributed stays unattributed and is reported as such.
+   *
+   * An id that no longer names a vehicle (the car was deleted) is treated the same way, not repaired.
+   */
+  vehicleId?: string;
+}
+
+// ── Vehicule (PG-6c, D-VEH-3) ────────────────────────────
+/**
+ * A vehicle the taxpayer owns or holds in use, with its facts declared **per fiscal year**.
+ *
+ * The entity exists for one distinction and nothing else. art. 68 alin. (5) lit. j) caps deductible
+ * running costs at „cel mult un singur autoturism aferent **fiecărei persoane**”, but its own words limit
+ * it to „autoturismele **folosite de contribuabil** sau membru asociat”. A car used only for the activity,
+ * only by employees, or only inside one of the five exception categories is therefore **outside** the cap
+ * and keeps the general rule of alin. (4) + alin. (7) lit. k) — 100 % on evidenced exclusive use, 50 %
+ * otherwise — while a car the taxpayer personally uses is inside it. Two identical cars can sit on
+ * opposite sides of that line, which is exactly what a single per-register fact could not express
+ * (`docs/ai/research/40_vehicle_one_car_limit.md` §4; D-VEH-3).
+ *
+ * The per-year facts themselves are `VehicleYearFacts`, declared in `domain/fiscal/deductibility.ts` —
+ * the layer that reads them — so the stored shape and the classifier vocabulary are one spelling.
+ *
+ * **Leased and rented-in cars belong here too.** alin. (7) lit. k) covers vehicles „aflate în **proprietate
+ * sau în folosință**”; there is no income-tax carve-out for a leasing company's fleet (the six-category
+ * list at TVA art. 298 alin. (3) has no Titlul IV equivalent — the income-tax list has five).
+ *
+ * **What this entity is not.** It carries no depreciation data and no asset-register fields: lit. k)
+ * expressly excludes amortisation from the running-cost rules, and the art. 28 alin. (14) M1 ceiling of
+ * 1.500 lei/lună is stated **per vehicle** („pentru fiecare”) and belongs to the fixed-asset phase, not
+ * here. `label` is whatever the person uses to recognise the car; nothing reads it.
+ */
+export interface Vehicle {
+  id: string;
+  /** The person's own name for the car — an identity they recognise, not a code. */
+  label: string;
+  /** Optional: the registration number, so the person can tell two identical cars apart. */
+  plate?: string;
+  /** Declared facts, one per fiscal year. Absence of a year entry means that year was never answered. */
+  years: VehicleYearFacts[];
 }
 
 // ── Pre-v10 record shapes (migration tests only) ────────────────────────────
@@ -117,7 +163,7 @@ export type LegacyExpense = Omit<Expense, 'valoareFaraTva' | 'tva'> & { valoareF
  * at a `version` below 10, and assert what the chain produces — so the fixture must be typed as the shape
  * that arrives, not the shape that leaves.
  */
-export type LegacyAppData = Omit<AppData, 'revenues' | 'expenses' | 'filings' | 'occupancySheets'> & {
+export type LegacyAppData = Omit<AppData, 'revenues' | 'expenses' | 'filings' | 'occupancySheets' | 'vehicles'> & {
   revenues: LegacyRevenue[];
   expenses: LegacyExpense[];
   /**
@@ -418,6 +464,20 @@ export interface AppData {
    * the taxpayer never made cannot be minted by a migration. The load path resolves absence to `[]`.
    */
   occupancySheets: OccupancySheet[];
+  /**
+   * PG-6c (D-VEH-3): the vehicles this taxpayer owns or holds in use, with per-year declared facts.
+   *
+   * A top-level collection rather than a field on `profile`, for the reason `occupancySheets` above
+   * records: `snapshots/snapshot.ts` hashes `{ profile, revenues, expenses }`, so a collection placed on
+   * the profile would enter every stored `inputsHash`. For vehicles the direction of that consequence is
+   * the opposite of the occupancy one — a car's use fact *does* change the estimate, so it arguably should
+   * be in the digest — and the finding is recorded in `docs/ai/phases/41_pg6c_vehicle_facts.md` rather
+   * than fixed here, because the snapshot layer is not this task's to redraw.
+   *
+   * Required on the loaded object, never on the payload: the load path resolves an absent key to `[]`, and
+   * the v14→v15 step backfills nothing, because a car the taxpayer never had cannot be minted by a migration.
+   */
+  vehicles: Vehicle[];
   documents: DocumentItem[];
   companyDocs: Record<DocTypeCode, CompanyDocument[]>;
   statements: TaxStatement[];

@@ -3,7 +3,9 @@ import type { ReactNode } from 'react';
 import type {
   AnnualFiling, AppData, Client, CompanyDocument, DocTypeCode, DocumentItem,
   Expense, OccupancySheet, OccupancyStay, Revenue, SettingsState, TaxStatement, Toast, ToastKind,
+  Vehicle,
 } from './types';
+import type { VehicleYearFacts } from '../domain/fiscal/deductibility';
 import type { PfaProfile } from '../domain/models';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import { epochMs, isoCalendarDateProblemText, toInstantISO } from '../domain/date';
@@ -128,6 +130,23 @@ interface StoreValue extends AppData {
   deleteOccupancySheet: (id: string) => void;
   addOccupancyStay: (sheetId: string, stay: Omit<OccupancyStay, 'id'>) => boolean;
   deleteOccupancyStay: (sheetId: string, stayId: string) => void;
+  /**
+   * PG-6c (D-VEH-3) — the vehicle entity and its per-year declared facts.
+   *
+   * Three writes, and what is deliberately absent from them: there is **no write path that sets a default
+   * for any fact**, no path that copies facts from one year to another, and no path that attributes an
+   * expense to a car on the app's own initiative. Every one of those would mint a legal fact: `usedByPerson`
+   * decides whether a car is inside art. 68 alin. (5) lit. j) at all, and `designatedForRunningCosts`
+   * decides which car the single allowance follows — a choice `docs/ai/research/40_vehicle_one_car_limit.md`
+   * §1 records that no primary source makes for us.
+   *
+   * `deleteVehicle` leaves any expense still pointing at the id in place. Repairing that link silently
+   * would attribute a cost to a car by accident; the expense becomes unattributed and is reported.
+   */
+  addVehicle: (v: Omit<Vehicle, 'id'>) => boolean;
+  deleteVehicle: (id: string) => void;
+  /** Replace ONE year's facts for one vehicle without disturbing the other years. */
+  setVehicleYearFacts: (vehicleId: string, facts: VehicleYearFacts) => void;
   addSnapshot: (s: TaxCalculationSnapshot) => void;
   getSnapshot: (id: string) => TaxCalculationSnapshot | undefined;
   updateProfile: (patch: Partial<PfaProfile>) => void;
@@ -192,6 +211,11 @@ function toAppData(parsed: PersistedAppData): AppData {
     // deliberately leaves the key off, because „no sheet has been made” and „sheets were made and none
     // exist” are different claims about the taxpayer's own documents.
     occupancySheets: parsed.occupancySheets ?? [],
+    // PG-6c (D-VEH-3): the vehicles. Absent resolves to empty here and nowhere else — the v14→v15 step
+    // leaves the key off, because „no vehicle has been declared” and „vehicles were declared and none
+    // exist” are different claims, and an empty register is what keeps a `vehicle_related` expense on the
+    // statutory 50 % default instead of making it unattributable.
+    vehicles: parsed.vehicles ?? [],
     documents: parsed.documents ?? [],
     companyDocs: parsed.companyDocs ?? { im: [], cs: [], tva: [], facturi: [] },
     statements: parsed.statements ?? [],
@@ -454,6 +478,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       occupancySheets: d.occupancySheets.map(x =>
         x.id === sheetId ? { ...x, stays: x.stays.filter(s => s.id !== stayId) } : x,
       ),
+    })),
+    // PG-6c (D-VEH-3). The write surface is deliberately the smallest one that can state the facts: a car
+    // is added, one year's facts are replaced, and a car is deleted. Nothing here infers a fact, copies one
+    // across years, or links an expense to a car — see the interface note above for why each of those is
+    // a legal assertion rather than a convenience.
+    addVehicle: v => {
+      if (!v.label.trim()) return false;
+      setData(d => ({ ...d, vehicles: [...d.vehicles, { ...v, id: uid() }] }));
+      return true;
+    },
+    deleteVehicle: id => setData(d => ({ ...d, vehicles: d.vehicles.filter(x => x.id !== id) })),
+    setVehicleYearFacts: (vehicleId, facts) => setData(d => ({
+      ...d,
+      vehicles: d.vehicles.map(x => {
+        if (x.id !== vehicleId) return x;
+        const others = x.years.filter(y => y.fiscalYear !== facts.fiscalYear);
+        // An all-empty year is removed rather than stored as a row of blanks: „answered with nothing” and
+        // „never answered” must not become two shapes of the same claim.
+        const filled = Object.keys(facts).filter(k => k !== 'fiscalYear' && facts[k as keyof VehicleYearFacts] !== undefined);
+        return { ...x, years: filled.length > 0 ? [...others, facts] : others };
+      }),
     })),
     addSnapshot: s => setData(d => ({ ...d, snapshots: [...d.snapshots, s] })),
     getSnapshot: id => data.snapshots.find(x => x.calculationId === id),

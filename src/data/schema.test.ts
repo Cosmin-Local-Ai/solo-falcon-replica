@@ -27,6 +27,7 @@ function baseline(): AppData {
     clients: [],
     filings: [],
     occupancySheets: [],
+    vehicles: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],

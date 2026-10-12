@@ -239,8 +239,33 @@ export const DATA_VERSION_ACCOMMODATION_FACTS = 13;
  *    would be exactly that bridge.
  */
 export const DATA_VERSION_OCCUPANCY_SHEET = 14;
+/**
+ * PG-6c (D-VEH-3) — the dataset can now hold **vehicles**, with facts declared per car and per fiscal
+ * year: whether the taxpayer or an associate member personally uses the car, how it is actually used
+ * (`exclusive` / `mixed` / `not_used` / `unknown`), which of the five exception categories at art. 68
+ * alin. (7) lit. k) is claimed, and which single car the person designates to carry the running-cost
+ * allowance under art. 68 alin. (5) lit. j).
+ *
+ * The step **backfills nothing and attributes nothing**, and for this collection that is not a convention
+ * but the whole point. Every one of those fields is a legal assertion:
+ *
+ * - a default `usedByPerson` would move a car inside or outside lit. j), which is limited by its own words
+ *   to „autoturismele folosite de contribuabil sau membru asociat”;
+ * - a default `designatedForRunningCosts` would **pick the car**, and `docs/ai/research/40_vehicle_one_car_limit.md` §1
+ *   records that no primary source supplies any selection criterion at all — no „most expensive”, no
+ *   „first registered”, no free election;
+ * - a default `use` of `exclusive` would claim a deduction the taxpayer has not evidenced with documents
+ *   and a *foaie de parcurs*, and a default of `not_used` would deny a deduction the law gives at 50 %.
+ *
+ * The step also does not link any expense to any car. `Expense.vehicleId` is written only by the person;
+ * deriving it from a supplier name, from the `category` token or from a seed value is the inference
+ * D-VEH-3 forbids. A payload that never named a vehicle ends with **no `vehicles` key at all**, and every
+ * `vehicle_related` expense in it keeps behaving exactly as it did before this step: alin. (7) lit. k)’s
+ * 50 % default, because there is no per-car fact to consult and no cap to enforce.
+ */
+export const DATA_VERSION_VEHICLE_FACTS = 15;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_OCCUPANCY_SHEET;
+export const CURRENT_DATA_VERSION = DATA_VERSION_VEHICLE_FACTS;
 
 export interface MigrationStep {
   readonly from: number;
@@ -877,6 +902,19 @@ export function migrateOccupancySheetV14(data: PersistedAppData): PersistedAppDa
   return { ...data, version: DATA_VERSION_OCCUPANCY_SHEET };
 }
 
+/**
+ * v14 → v15 (`vehicle-facts`). Writes a version and touches no value.
+ *
+ * The forbidden version of this function is `vehicles: []` on every payload (which would turn „no vehicle
+ * has ever been declared” into „vehicles were declared and none exist”, and would make every existing
+ * `vehicle_related` expense *unattributable* rather than default-capped), and it is equally forbidden to
+ * copy a car from one fiscal year’s facts into another or to point an expense at a car. Idempotent-safe
+ * for the same reason v13 and v14 are: it writes a version and touches nothing.
+ */
+export function migrateVehicleFactsV15(data: PersistedAppData): PersistedAppData {
+  return { ...data, version: DATA_VERSION_VEHICLE_FACTS };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -989,6 +1027,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Datele pot reține acum fișa de ocupare a capacității de cazare, aprobată prin OPANAF nr. 381 din 24.03.2026 (MO I nr. 250 din 31.03.2026), care abrogă OPANAF nr. 398/2021. Fișa se completează per cameră, per an, și conține date cu caracter personal ale persoanelor cazate. Nimic nu a fost completat în acest pas și nimic nu putea fi completat: fișa este un document pe care persoana îl întocmește de mână, iar o șablonă sau o fișă derivată din numărul de camere ar pune nume și date de identitate ale unor persoane care nu au existat niciodată pe un document pe care contribuabilul are obligația legală să-l păstreze. Colecția rămâne absentă atâta timp cât n-a fost întocmită nicio fișă. Fișa este o obligație de păstrare, nu o declarație: „să completeze și să păstreze”, un exemplar, păstrat de contribuabil — nimic nu se trimite către ANAF, iar aplicația nu construiește nicio cale de trimitere. Datele despre cazați nu intră în niciun calcul: nu sunt sursă de venit, nu sunt număr de camere, nu sunt cifră de ocupare și nu pot ajunge în motorul fiscal.',
     apply: migrateOccupancySheetV14,
+  },
+  {
+    from: DATA_VERSION_OCCUPANCY_SHEET,
+    to: DATA_VERSION_VEHICLE_FACTS,
+    name: 'vehicle-facts',
+    summary:
+      'Datele pot înregistra acum vehiculele pe care contribuabilul le deține sau le are în folosință, cu faptele declarate pentru fiecare mașină și pentru fiecare an fiscal: dacă mașina este folosită personal de contribuabil sau de membrul asociat, cum este folosită de fapt (exclusiv în activitate, mixt, deloc, nesigur), care dintre cele cinci categorii de excepție de la art. 68 alin. (7) lit. k) este invocată și care este autoturismul pe care persoana îl desemnează pentru dreptul de deducere a cheltuielilor de funcționare. Nimic nu a fost completat și nicio cheltuială nu a fost atribuită vreunui vehicul în acest pas. Fiecare dintre aceste câmpuri este o afirmație juridică: un `usedByPerson` implicit ar muta o mașină înăuntru sau în afara art. 68 alin. (5) lit. j), care este limitată prin propriile cuvinte la „autoturismele folosite de contribuabil sau membru asociat”; un `designatedForRunningCosts` implicit ar alege el autoturismul, iar niciun text primar nu dă nicio regulă de selecție; o utilizare implicită „exclusiv” ar pretinde o deducere nejustificată prin documente și foaie de parcurs, iar una „deloc" ar refuza o deducere pe care legea o dă la 50 %. Un payload care nu a numit niciodată un vehicul rămâne fără cheia `vehicles`, iar cheltuielile `vehicle_related` din el se comportă exact ca înainte: limitarea de 50 % din alin. (7) lit. k), pentru că nu există nicio faptă per mașină de consultat și nicio limită de aplicat.',
+    apply: migrateVehicleFactsV15,
   },
 ];
 

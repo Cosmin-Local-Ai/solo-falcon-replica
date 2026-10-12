@@ -186,6 +186,7 @@ function makeData(overrides: Partial<AppData> = {}): AppData {
     clients: [makeClient()],
     filings: [makeFiling()],
     occupancySheets: [],
+    vehicles: [],
     documents: [makeDocument()],
     companyDocs: {
       im: [makeCompanyDocument()],
@@ -210,6 +211,7 @@ function makeEmptyData(): AppData {
     clients: [],
     filings: [],
     occupancySheets: [],
+    vehicles: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],

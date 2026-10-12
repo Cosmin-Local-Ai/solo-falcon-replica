@@ -103,6 +103,10 @@ describe('save effect — serialization contract', () => {
       'settings',
       'snapshots',
       'statements',
+      // PG-6c (D-VEH-3): the vehicles are part of AppData, so they are serialized with the rest of the
+      // dataset — and this key list is the evidence that a declared car, and every expense pointing at it,
+      // survives a save-and-load. Dropping the key would silently un-attribute costs the person attributed.
+      'vehicles',
       // Phase 7 (D-2): the payload declares its schema version so the migration
       // chain can tell a pre-Phase-7 write from a current one.
       'version',

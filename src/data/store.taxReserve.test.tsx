@@ -45,6 +45,7 @@ function basePayload(): AppData {
     clients: [],
     filings: [],
     occupancySheets: [],
+    vehicles: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],
@@ -162,6 +163,7 @@ describe('a payload with no reserve field loads as null, not 0', () => {
       'activity-family',
       'accommodation-facts',
       'occupancy-sheet',
+      'vehicle-facts',
     ]);
     expect(storeRef!.reservedAmount).toBeNull();
     // And the next write stamps the current version — the upgrade is one-way and additive.
