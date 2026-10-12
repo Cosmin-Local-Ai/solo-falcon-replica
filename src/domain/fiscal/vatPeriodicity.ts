@@ -400,6 +400,17 @@ export type VatPeriodicityOutcome =
       questions: PeriodicityQuestion[];
       /** Why the app stopped, in Romanian. Never „nu poate fi stabilită" on its own. */
       detail: string;
+      /**
+       * What the person owes **while the question is open**: the statutory default, CF art. 322 alin. (1)
+       * „perioada fiscală este luna calendaristică".
+       *
+       * This is not a guess and it is not the app answering its own question. Art. 322 states a default and
+       * then states exceptions to it; the quarter at alin. (2), (3) and (4) has to be **established**, and
+       * an unestablished exception leaves the default standing. Recording that is what removes the dead end
+       * the brief names — „Nu poate fi stabilită" with no next step — without inventing a cadence: the app
+       * says the default is monthly, says which fact would open the exception, and asks for it.
+       */
+      interim: { periodicity: VatPeriodicity; basis: string };
     };
 
 /**
@@ -459,7 +470,7 @@ export function deriveVatPeriodicity(
 
   if (!effectiveFrom && !route) {
     return {
-      kind: 'ask',
+      kind: 'ask', interim: ART322_DEFAULT,
       branch: null,
       cap: capOrNull,
       questions: [
@@ -521,11 +532,19 @@ export function deriveVatPeriodicity(
     };
   }
 
-  // 5. alin. (5) — the year after a mid-year registration, decided automatically by that year's actuals.
-  if (
-    effectiveFrom && isISOCalendarDate(effectiveFrom)
+  // 5. alin. (5) — the year after a MID-YEAR registration, decided automatically by that year's actuals.
+  //
+  // The mid-year condition is load-bearing. A person registered from 1 January of the previous year was
+  // never in a registration year at all, so alin. (5) has nothing to annualise for them and alin. (2) is
+  // the article that decides their current year. Dropping the `!== '01-01'` test here would send every
+  // long-standing registrant down the alin. (5) path and ask them for „cifra de afaceri a anului
+  // înregistrării" of a year in which they were registered the whole time.
+  const registeredInPreviousYear =
+    effectiveFrom !== undefined
+    && isISOCalendarDate(effectiveFrom)
     && Number(effectiveFrom.slice(0, 4)) === facts.year - 1
-  ) {
+    && effectiveFrom.slice(5, 10) !== '01-01';
+  if (registeredInPreviousYear) {
     if (capOrNull === null) return askForCap(capFailure);
     const months = monthsRemainingToYearEnd(effectiveFrom);
     if (
@@ -534,7 +553,7 @@ export function deriveVatPeriodicity(
       || months === null
     ) {
       return {
-        kind: 'ask',
+        kind: 'ask', interim: ART322_DEFAULT,
         branch: 'alin5',
         cap: capOrNull,
         questions: [
@@ -572,7 +591,7 @@ export function deriveVatPeriodicity(
     // 3. The branch selector itself is a fact, not an inference.
     if (facts.inArt310BeforeRegistration !== 'da' && facts.inArt310BeforeRegistration !== 'nu') {
       return {
-        kind: 'ask',
+        kind: 'ask', interim: ART322_DEFAULT,
         branch: null,
         cap: capOrNull,
         questions: [
@@ -610,6 +629,13 @@ export function deriveVatPeriodicity(
     };
   }
   if (facts.precedingYearTurnover === undefined || facts.precedingYearAicGoods !== 'nu') {
+    // The person may answer instead of supplying the figure — D-VAT-1's path. The answer is theirs, and the
+    // record says so; it is never rewritten into a derivation.
+    if (facts.userChoice) {
+      return confirmedOutcome(facts.userChoice, capOrNull, [
+        { label: 'De ce nu a putut fi derivat', value: `alin. (2) cere cifra de afaceri din ${facts.year - 1}, pe care registrul curent nu o conține` },
+      ]);
+    }
     const questions: PeriodicityQuestion[] = [];
     if (facts.precedingYearTurnover === undefined) {
       questions.push({
@@ -628,7 +654,7 @@ export function deriveVatPeriodicity(
       });
     }
     return {
-      kind: 'ask',
+      kind: 'ask', interim: ART322_DEFAULT,
       branch: 'alin2',
       cap: capOrNull,
       questions,
@@ -651,9 +677,14 @@ export function deriveVatPeriodicity(
   };
 }
 
+const ART322_DEFAULT: { periodicity: VatPeriodicity; basis: string } = {
+  periodicity: 'month',
+  basis: 'CF art. 322 alin. (1) — „perioada fiscală este luna calendaristică". Trimestrul este excepția și trebuie stabilit; cât timp excepția nu este stabilită, rămâne regula.',
+};
+
 function askForCap(cap: PeriodicityCapFailure | null, extra?: string): VatPeriodicityOutcome {
   return {
-    kind: 'ask',
+    kind: 'ask', interim: ART322_DEFAULT,
     branch: null,
     cap: null,
     questions: [
@@ -685,7 +716,7 @@ function deriveAlin3(
   const effectiveFrom = facts.registrationEffectiveFrom;
   if (!effectiveFrom || !isISOCalendarDate(effectiveFrom)) {
     return {
-      kind: 'ask', branch: 'alin3', cap,
+      kind: 'ask', interim: ART322_DEFAULT, branch: 'alin3', cap,
       questions: [{
         id: 'vat-registration-effective-from', rule: 'CF art. 316 alin. (1^1)',
         text: 'De la ce dată produce efecte înregistrarea? Lunile rămase până la sfârșitul anului se numără de acolo.',
@@ -703,7 +734,7 @@ function deriveAlin3(
       { label: 'Plafonul pro-rata', value: proRateCap(cap.capBani, months).proRated.toFixed(2) },
     ]);
     return {
-      kind: 'ask', branch: 'alin3', cap,
+      kind: 'ask', interim: ART322_DEFAULT, branch: 'alin3', cap,
       questions: [{
         id: 'vat-forecast-stub-turnover',
         rule: 'CF art. 322 alin. (3)',
@@ -792,7 +823,7 @@ function deriveAlin4(
     const confirmed = facts.userChoice;
     if (confirmed && questions.length === 0) return confirmedOutcome(confirmed, cap, []);
     return {
-      kind: 'ask', branch: 'alin4', cap, questions,
+      kind: 'ask', interim: ART322_DEFAULT, branch: 'alin4', cap, questions,
       detail: ART322_RULE_TEXT.alin4.rule,
     };
   }
