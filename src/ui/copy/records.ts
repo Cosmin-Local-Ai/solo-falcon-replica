@@ -6,8 +6,11 @@
  * modal captions, the same „Niciun rezultat pentru căutare." — and each copy used to keep its own
  * copy-paste of the sentence. One key now, shared.
  */
-import type { ExpenseStatus, FilingStatus, RevenueStatus, StoredStatusCode } from '../../data/types';
+import type { ExpenseStatus, FilingStatus, RevenueStatus, StoredStatusCode, VatReturnStatus } from '../../data/types';
 import type { ExpenseCategory } from '../../domain/fiscal/deductibility';
+// PG-6g — the parked-list reason labels are exhaustive over the three reason unions PG-6f defined. The
+// labels live here; the unions stay in `domain/fiscal/vat.ts`, which this phase may not edit.
+import type { InputVatDeferredReason, InputVatUnresolvedReason, InputVatZeroReason } from '../../domain/fiscal/vat';
 import type { FiscalDateField } from '../../domain/aggregation';
 import { validation } from './common';
 
@@ -279,6 +282,143 @@ export const declarations = {
    * annual return's.
    */
 } as const;
+
+/**
+ * PG-6g — the periodic VAT return (formular 300) and the CF art. 322 fiscal period.
+ *
+ * Three disciplines the wording has to keep, all of them enforced here rather than at the call site:
+ *
+ * - **Nothing says a return was or will be filed.** B-56 is open precisely because success messages
+ *   already promise operations that do not happen, and this panel sits next to one of them. No key here
+ *   reads as a confirmation of a submission; the closest is `recordFiled`, which says the app recorded
+ *   that *you* filed it.
+ * - **A derived answer and an answered question are different sentences.** `derivedLead` attributes the
+ *   conclusion to the article; `confirmedLead` attributes it to the person. Separate keys, so a call site
+ *   cannot collapse them into one wording.
+ * - **The statutory default is the law's, not the app's.** `interimLead` names art. 322 alin. (1) as the
+ *   source of the monthly default, which is what keeps „we do not guess a cadence" true while still
+ *   removing the dead end the brief names.
+ */
+export const vatReturn = {
+  sectionTitle: 'Deconturi TVA periodice (formular 300)',
+  sectionLead:
+    'Regimul periodic de TVA nu se alege: se derivă din art. 322 din Codul fiscal. Aplicația întreabă '
+    + 'faptele pe care legea le cere și arată calculul, nu o listă de opțiuni.',
+  notRegisteredLead:
+    'Regimul periodic se stabilește doar pentru o persoană înregistrată în scopuri de TVA. Completează '
+    + 'starea de înregistrare în Setări → Fiscal.',
+
+  // ── the fiscal period, in the states the derivation can be in ──
+  derivedLead: (citation: string): string => `Perioada fiscală rezultă din ${citation}.`,
+  confirmedLead: (confirmedOn: string): string =>
+    `Perioada fiscală este alegerea dumneavoastră, consemnată la ${confirmedOn}. Aplicația nu a putut-o deriva.`,
+  askLead: 'Aplicația nu poate stabili perioada fiscală din faptele înregistrate. Întreabă, nu ghicește.',
+  interimLead: (basis: string): string => `Până la răspuns, rămâne regula legală: ${basis}`,
+  whyAsked: 'De ce se întreabă în loc să se calculeze',
+  arithmetic: 'Calculul',
+  questions: 'Ce lipsește',
+  answerHeading: 'Sau confirmă dumneavoastră perioada',
+  answerLead: (rule: string): string =>
+    `Regula pe care se întreabă: ${rule} Dacă o confirmi, răspunsul rămâne al dumneavoastră.`,
+  chooseMonth: 'Depun lunar',
+  chooseQuarter: 'Depun trimestrial',
+  confirmedBadge: 'alegerea dumneavoastră',
+  derivedBadge: 'derivat din lege',
+
+  periodicityLabels: {
+    month: 'lună calendaristică',
+    quarter: 'trimestru calendaristic',
+  } as const,
+
+  capHeading: 'Plafonul de 100.000 euro în lei',
+  capRate: (rate: string, date: string): string => `Curs BNR ${rate} valabil pentru ${date}`,
+  capNotHardcoded:
+    'Echivalentul în lei nu este scris nicăieri în aplicație: se calculează prin stratul valutar din '
+    + 'cursul BNR valabil pentru 31 decembrie a anului precedent, potrivit pct. 103 alin. (2) din normele '
+    + 'HG 1/2016.',
+  capUnresolved: 'Plafonul nu poate fi exprimat în lei fără un curs BNR înregistrat.',
+
+  // ── the calendar ──
+  calendarHeading: 'Calendarul depunerilor pentru acest an',
+  calendarEmpty:
+    'Nicio obligație de depus care să poată fi datată: fără perioadă fiscală stabilită, un decont nu are '
+    + 'perioada acoperită, deci nu are termen. Aplicația nu inventează unul.',
+  columns: {
+    obligation: 'Obligație',
+    dueOn: 'Termen',
+    payment: 'Plată',
+    citation: 'Temei',
+    status: 'Înregistrare',
+  },
+  obligationKinds: {
+    decont: 'Decont de taxă',
+    mentiuni_annuale: 'Declarație de mențiuni (25 ianuarie)',
+    mentiuni_achizitie: 'Declarație de mențiuni (achiziție intracomunitară)',
+  } as const,
+  paymentSameDay: 'Plata se face în aceeași zi cu depunerea (art. 326 alin. (1) CF).',
+  recordFiling: 'Înregistrează depunerea',
+  recordFiled: (label: string): string => `Depunerea pentru ${label} a fost consemnată în aplicație`,
+  filedBadge: 'Depusă',
+  notFiledBadge: 'Neconsemnată',
+  filedOnField: 'Data depunerii',
+  referenceField: 'Număr de înregistrare / referință',
+  undoFiled: 'Anulează consemnarea',
+  noBackfill:
+    'Un termen care apare aici este o obligație stabilită de lege, nu o depunere. Lipsa unei consemnări '
+    + 'înseamnă că nimeni nu a înregistrat-o, nu că nu a existat.',
+
+  // ── where 6f's numbers land ──
+  d300Heading: 'Unde se așază cifra de TVA deductibilă în formularul 300',
+  d300Lead:
+    'Nu este un singur număr pe o singură rubrică. Totalul calculat de aplicație nu este egal cu rd. 30, '
+    + 'pentru că limitarea de 50 % și cota pro-rata cad parțial în afara rd. 20–28.',
+  d300Columns: { row: 'Rubrică', title: 'Denumire', treatment: 'Ce pune aplicația aici' },
+  d300NotAFacsimile: 'Aici este schema rubricilor, nu facsimilul formularului.',
+
+  // ── the three parked lists from 6f ──
+  parkedHeading: 'Linii excluse din total, cu motivul',
+  parkedLead:
+    'Aceste linii nu intră în niciun total. Motivele sunt cele pe care le-a stabilit decizia D-VAT-3, nu '
+    + 'o clasificare inventată aici.',
+  parkedColumns: { reason: 'Motiv', count: 'Linii', amount: 'Valoare TVA' },
+  parkedEmpty: 'Nicio linie parcată.',
+  unfiledFigure: 'Cifra de mai jos este calculată, nu depusă.',
+  /**
+   * Exhaustive over the three reason unions in `domain/fiscal/vat.ts`. `satisfies Record<…, string>` is
+   * what makes a new reason a compile error here rather than a raw token on screen — the same discipline
+   * `coverage.reasonLabels` uses on the dashboard side.
+   */
+  parkedReasonLabels: {
+    fara_drept_nicio_inregistrare: 'fără drept de deducere: nicio înregistrare în scopuri de TVA',
+    cod_anulat_perioada: 'cod de TVA anulat pentru perioada respectivă',
+    furnizor_cod_anulat: 'furnizor cu cod de TVA anulat sau inactiv la dată',
+    furnizor_art310: 'furnizor scutit de TVA conform art. 310 — remedierea e stornarea, nu deducerea',
+    destinatie_fara_drept: 'achiziția deservește o operațiune fără drept de deducere',
+    alcool_tutun_fara_revanzare: 'alcool și tutun fără revânzare',
+    vehicul_neutilizat: 'vehicul nefolosit deloc în activitate — zero, nu 50 %',
+    document_fara_e_factura: 'B2B intern fără document în RO e-Factura',
+    document_nedeclarat: 'tipul documentului nu a fost declarat',
+    document_simplificata_100_400_eur: 'factură simplificată 100–400 euro, fără ordin MF în vigoare',
+    document_simplificata_fara_cod_cumparator: 'factură simplificată sub 100 euro fără cod de TVA al cumpărătorului',
+    pro_rata_nedeclarat: 'cotă pro-rata nedeclarată — art. 300 CF nu are nicio excepție de prag',
+    destinatie_nedeclarata: 'destinația achiziției nu a fost declarată',
+    furnizor_nedeclarat: 'starea furnizorului nu a fost declarată',
+    record_neconvertit: 'înregistrare în valută fără curs BNR înregistrat',
+    plata_ammnata_regim_propriu: 'amânată de regimul propriu de TVA la încasare, până la plată',
+    plata_ammnata_furnizor: 'amânată de regimul de TVA la încasare al furnizorului, până la plată',
+  } satisfies Record<
+    InputVatZeroReason | InputVatUnresolvedReason | InputVatDeferredReason,
+    string
+  >,
+  parkedWhyMissing: 'motivul nu este descris în stratul de decizie',
+} as const;
+
+/** The three VAT return states. Deliberately not `recordStatus`: the monthly vocabulary is retired. */
+export const vatReturnStatusLabels = {
+  in_pregatire: 'În pregătire',
+  depusa: 'Depusă',
+  respinsa: 'Respinsă',
+} satisfies Record<VatReturnStatus, string>;
 
 /**
  * The four record states, in the words a person reads. The tabs use the plural, the select uses the

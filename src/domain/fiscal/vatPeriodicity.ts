@@ -368,11 +368,15 @@ export interface PeriodicityQuestion {
   fixTarget: string;
 }
 
+/**
+ * What the derivation concluded.
+ *
+ * There is deliberately **no `not_registered` member.** Whether a person is in the VAT register at all is
+ * `PfaProfile.vatRegistration`, decided by art. 310 and art. 316 and already answered there; a second
+ * place claiming to know it would be a second answer to one question, and the two could disagree. A
+ * variant nothing in this module can construct is a false state, so it is not in the union.
+ */
 export type VatPeriodicityOutcome =
-  | {
-      kind: 'not_registered';
-      detail: string;
-    }
   | {
       kind: 'derived';
       periodicity: VatPeriodicity;

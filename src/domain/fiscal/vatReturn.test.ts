@@ -188,7 +188,7 @@ describe('art. 322 alin. (8) — the 5-working-day mențiuni after an intra-comm
 
 describe('acceptance 5 — the filing record keeps the AnnualFiling discipline', () => {
   const filed: VatReturnRecord = {
-    id: 'decont-T2-2026', year: 2026, form: '300', periodKind: 'quarter', periodIndex: 2,
+    id: 'r-1', obligationId: 'decont-T2-2026', year: 2026, form: '300', periodKind: 'quarter', periodIndex: 2,
     status: 'depusa', filedOn: '2026-07-20', reference: 'RT2026072000123',
   };
 
@@ -208,7 +208,7 @@ describe('acceptance 5 — the filing record keeps the AnnualFiling discipline',
 
   it('a record is keyed by fiscal period, and a Q4 2026 record is keyed to 2026', () => {
     const q4: VatReturnRecord = {
-      id: 'decont-T4-2026', year: 2026, form: '300', periodKind: 'quarter', periodIndex: 4, status: 'depusa',
+      id: 'r-2', obligationId: 'decont-T4-2026', year: 2026, form: '300', periodKind: 'quarter', periodIndex: 4, status: 'depusa',
       filedOn: '2027-01-22',
     };
     expect(q4.year).toBe(2026);
@@ -218,7 +218,7 @@ describe('acceptance 5 — the filing record keeps the AnnualFiling discipline',
 
   it('the distinct alin. (7) period is representable, because `partial` exists', () => {
     const p: VatReturnRecord = {
-      id: 'decont-04-05-2026', year: 2026, form: '300', periodKind: 'partial',
+      id: 'r-3', obligationId: 'decont-04-05-2026', year: 2026, form: '300', periodKind: 'partial',
       periodIndex: 4, periodToMonth: 5, status: 'in_pregatire',
     };
     expect(p.periodKind).toBe('partial');

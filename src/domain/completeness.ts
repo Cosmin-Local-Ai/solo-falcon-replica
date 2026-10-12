@@ -28,6 +28,13 @@ import { expenseFiscalDate, inPeriod, revenueFiscalDate } from './aggregation';
 import { sumBani, type Bani } from './money';
 import { isGapReason, type EstimateCoverageGap } from './estimateBasis';
 import { formatRoCalendarDate, isoCalendarDateProblem } from './date';
+// PG-6g (D-VAT-1, B-35 residual) — the completeness channel is where the VAT filing period is stated, so
+// it has to read the SAME derivation the Form 300 panel reads. This file's header says „no fiscal rules”,
+// and that still holds: `vatPeriodicityForYear` runs CF art. 322 over declared facts, it does not consult a
+// rule package. What changed is that the check can now name the missing fact instead of reciting a
+// sentence that had no way forward.
+import { recordedRateProvider } from './fx/ledger';
+import { ART322_RULE_TEXT, vatPeriodicityForYear } from './fiscal/vatPeriodicity';
 
 /** One concrete, checkable fact about data completeness. */
 export interface CompletenessCheck {
@@ -270,24 +277,32 @@ function annualFilingCheck(
 }
 
 /**
- * B-35 — the VAT filing period, stated as the unknown it is.
+ * B-35 → PG-6g — the VAT filing period, derived, with a way forward on every branch.
  *
- * CF art. 322 alin. (1)-(4) makes the VAT fiscal period the quarter when the previous year's taxable
- * supplies stayed under the 100.000 € equivalent, and the month otherwise. Which of those a taxpayer
- * is turns on the VAT registration date and the prior-year taxable supplies. This dataset records
- * neither: `vatExempt` says only that the taxpayer is not exempt, and `vatExceedanceDate` is the date
- * the ceiling was crossed, which a taxpayer registered from the start never had. So the honest output
- * is the sentence the brief asks for, and the check asks for the fact.
+ * The old version of this check could only ever say „perioada de depunere nu poate fi stabilită”. That
+ * sentence was true and it was a dead end: it named no fact the person could give and no place to give it,
+ * so the one obligation the app was flagging stayed unresolvable from the screen that raised it. D-VAT-1
+ * is explicit that this is the failure mode PG-6g exists to remove — ask the two facts the person knows,
+ * derive where the facts and the recorded income give the answer, and where they do not, state the rule in
+ * plain Romanian and ask, marking the answer as theirs.
  *
- * A profile that IS exempt is a real satisfied state, not a dodge: scutirea de TVA removes the
- * periodic return, so there is no period to establish.
+ * So the check now reads the same `vatPeriodicityForYear` outcome the Form 300 panel reads, and reports:
+ * - `derived` / `user_confirmed` → satisfied, naming the branch and the rate the cap was struck at;
+ * - `ask` → not satisfied, naming the specific missing fact, the rule that asks for it, and the screen
+ *   where it is answered — and stating that the statutory default (alin. (1), luna calendaristică) stands
+ *   in the meantime, which is the law's answer rather than the app's guess;
+ * - art. 310 exempt → satisfied, because there is no periodic return to date. Whether the person is in the
+ *   register at all is answered once, by `vatRegistration`; this check does not answer it a second time.
  */
-function vatFilingPeriodCheck(profile: PfaProfile | null | undefined): CompletenessCheck {
+function vatFilingPeriodCheck(data: AppData): CompletenessCheck {
+  const profile = data.profile;
   if (profile == null) {
     return {
       key: 'vatFilingPeriod',
       satisfied: false,
-      detail: 'perioada de depunere pentru declarația de TVA nu poate fi stabilită — profil lipsă',
+      detail:
+        'perioada de depunere pentru decontul periodic de TVA nu poate fi stabilită — profil lipsă; '
+        + 'completează profilul ca să se poată stabili perioada (CF art. 322 alin. (1))',
     };
   }
   // PG-6f (B-30) — this branch used to read `profile.vatExempt`, a boolean that records no registration
@@ -298,7 +313,8 @@ function vatFilingPeriodCheck(profile: PfaProfile | null | undefined): Completen
       key: 'vatFilingPeriod',
       satisfied: false,
       detail:
-        'perioada de depunere nu poate fi stabilită — completează starea de înregistrare în scopuri de TVA (CF art. 316) și venitul de TVA pe anul precedent (art. 322 alin. (1)-(4))',
+        'perioada de depunere nu poate fi stabilită — completează starea de înregistrare în scopuri de TVA '
+        + '(CF art. 316) în Setări → Fiscal; fără ea art. 322 nu are de unde să pornească',
     };
   }
   if (registration.status === 'scutit_art310') {
@@ -308,11 +324,38 @@ function vatFilingPeriodCheck(profile: PfaProfile | null | undefined): Completen
       detail: 'scutit de TVA conform art. 310 — nicio declarație periodică de TVA de depus',
     };
   }
+  const outcome = vatPeriodicityForYear(
+    profile.vatPeriodicityYears,
+    profile.fiscalYear,
+    recordedRateProvider(data),
+  );
+  if (outcome.kind === 'derived') {
+    return {
+      key: 'vatFilingPeriod',
+      satisfied: true,
+      detail:
+        `perioada fiscală este ${outcome.periodicity === 'month' ? 'luna calendaristică' : 'trimestrul calendaristic'}`
+        + ` — derivat din ${ART322_RULE_TEXT[outcome.branch].citation}; plafonul de 100.000 euro în lei la `
+        + `cursul BNR ${outcome.cap.evidence.rate} valabil pentru ${outcome.cap.rateDate}`,
+    };
+  }
+  if (outcome.kind === 'user_confirmed') {
+    return {
+      key: 'vatFilingPeriod',
+      satisfied: true,
+      detail:
+        `perioada fiscală este ${outcome.periodicity === 'month' ? 'luna calendaristică' : 'trimestrul calendaristic'}`
+        + ` — răspunsul dumneavoastră din ${outcome.choice.confirmedOn}, după regula `
+        + `${ART322_RULE_TEXT[outcome.branch].citation}; aplicația nu a putut deriva răspunsul`,
+    };
+  }
+  const missing = outcome.questions.map((q) => q.text).join(' ');
   return {
     key: 'vatFilingPeriod',
     satisfied: false,
     detail:
-      'perioada de depunere nu poate fi stabilită — completează data înregistrării în TVA și venitul de TVA pe anul precedent (CF art. 322 alin. (1)-(4))',
+      `${outcome.detail} ${missing} Până răspunzi, rămâne regula din ${outcome.interim.basis} `
+      + 'Răspunde în Declaratii și rapoarte → Deconturi TVA periodice.',
   };
 }
 
@@ -416,7 +459,7 @@ export function assessCompleteness(
     documentCheck(data.documents),
     companyDocumentCheck(data.companyDocs),
     annualFilingCheck(data.filings, data.profile?.fiscalYear ?? 0, filingTerm, asOfDate ?? null),
-    vatFilingPeriodCheck(data.profile),
+    vatFilingPeriodCheck(data),
     statementCheck(data.statements),
   ];
   const satisfiedCount = checks.filter(c => c.satisfied).length;

@@ -357,14 +357,24 @@ describe('assessCompleteness', () => {
     const byKey = (report: ReturnType<typeof assessCompleteness>) =>
       Object.fromEntries(report.checks.map(c => [c.key, c]));
 
-    it('a non-exempt profile with no VAT registration date gets the admission, not a cadence', () => {
+    it('a non-exempt profile with no VAT registration date gets the admission plus a way forward', () => {
+      // PG-6g changed what „the admission" is. B-35's requirement — state the unknown, do not invent a
+      // cadence — still holds. What PG-6g removed is the dead end: the sentence used to stop at „nu poate
+      // fi stabilită”, which left the one obligation this check raises unresolvable from the screen that
+      // raised it. D-VAT-1 names that as the failure mode this phase exists to close.
       const check = byKey(assessCompleteness(makeData({ profile: { ...makeProfile(), vatRegistration: { status: 'inregistrat_art316' as const } } }))).vatFilingPeriod;
       expect(check.satisfied).toBe(false);
-      expect(check.detail).toContain('nu poate fi stabilită');
-      expect(check.detail).toContain('data înregistrării în TVA');
-      expect(check.detail).toContain('CF art. 322 alin. (1)-(4)');
-      // No asserted cadence, in either direction.
-      expect(check.detail).not.toMatch(/trimestrial|lunar|D300/);
+      expect(check.detail).toContain('nu poate fi stabilit');
+      // The specific facts, phrased as questions a person can answer, not as a category.
+      expect(check.detail).toContain('ruta de înregistrare');
+      expect(check.detail).toContain('De la ce dată produce efecte înregistrarea');
+      // And a route to answer them — the part that was missing before.
+      expect(check.detail).toContain('Declaratii și rapoarte');
+      // No cadence the APP concluded. The only monthly wording is the statutory default of art. 322 alin.
+      // (1), attributed to the article and framed as standing only until the exception is established.
+      expect(check.detail).not.toMatch(/trimestrial|D300/);
+      expect(check.detail).toContain('art. 322 alin. (1)');
+      expect(check.detail).toContain('rămâne regula');
     });
 
     it('an exempt profile has no periodic return, which is a real satisfied state', () => {
@@ -380,7 +390,38 @@ describe('assessCompleteness', () => {
         assessCompleteness(makeData({ profile: { ...makeProfile(), vatRegistration: { status: 'inregistrat_art316' as const }, vatExceedanceDate: '2026-04-01' } })),
       ).vatFilingPeriod;
       expect(check.satisfied).toBe(false);
-      expect(check.detail).toContain('nu poate fi stabilită');
+      expect(check.detail).toContain('nu poate fi stabilit');
+      // The exceedance date is not offered as an answer to art. 322, and no period is named as derived.
+      expect(check.detail).not.toContain('2026-04-01');
+      expect(check.detail).not.toMatch(/derivat din/);
+    });
+
+    it('a derived period says which branch decided and at which rate the cap was struck', () => {
+      // Acceptance 2 on the surface side: the lei cap is a derived figure with a date attached, and this
+      // channel shows the rate rather than a bare lei threshold a reader cannot check.
+      const check = byKey(assessCompleteness(makeData({
+        fxRates: [{
+          currency: 'EUR', rate: '5.0963', rateKind: 'daily_reference', rateDate: '2025-12-31',
+          seriesCode: 'CURSZ_EUR', sourceUrl: 'https://www.bnr.ro/', fetchedAt: '2026-01-02T08:00:00Z',
+          provisional: false, entryMode: 'fetched',
+        }],
+        profile: {
+          ...makeProfile(),
+          vatRegistration: { status: 'inregistrat_art316' as const, effectiveFrom: '2025-01-01' },
+          vatPeriodicityYears: [{
+            year: 2026,
+            registrationEffectiveFrom: '2025-01-01',
+            registrationRoute: 'b' as const,
+            precedingYearTurnover: lei(10_000),
+            precedingYearAicGoods: 'nu' as const,
+          }],
+        },
+      }))).vatFilingPeriod;
+      expect(check.satisfied).toBe(true);
+      expect(check.detail).toContain('trimestrul calendaristic');
+      expect(check.detail).toContain('art. 322 alin. (2)');
+      expect(check.detail).toContain('5.0963');
+      expect(check.detail).toContain('2025-12-31');
     });
   });
 

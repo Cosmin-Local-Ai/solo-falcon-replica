@@ -288,8 +288,8 @@ export interface DashboardData {
    *
    * Four states, and the fourth is the one the phase exists to make rare: `derived` (the facts and the
    * arithmetic give the answer), `user_confirmed` (they do not, and the person answered after the app
-   * stated the rule — labelled as their answer, never as the app's conclusion), `ask` (the app says which
-   * fact is missing and where to give it), and `not_registered`. **There is no state in which the app
+   * stated the rule — labelled as their answer, never as the app's conclusion), and `ask` (the app says
+   * which fact is missing and where to give it, and states the statutory default meanwhile). **There is no state in which the app
    * silently picks a cadence**, which is what the old monthly D300 cadence did.
    */
   vatPeriodicity: VatPeriodicityOutcome;

@@ -345,7 +345,7 @@ export function vatReturnForDeadline(
 ): VatReturnRecord | null {
   if (deadline.eventType !== 'vat_return' && deadline.eventType !== 'vat_mentiuni') return null;
   return (
-    vatReturns.find((r) => r.form === '300' && r.id === deadline.deadlineId && isFiledVatReturn(r)) ?? null
+    vatReturns.find((r) => r.form === '300' && r.obligationId === deadline.deadlineId && isFiledVatReturn(r)) ?? null
   );
 }
 

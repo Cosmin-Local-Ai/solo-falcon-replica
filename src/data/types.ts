@@ -328,6 +328,14 @@ export type VatReturnForm = '300';
 
 export interface VatReturnRecord {
   id: string;
+  /**
+   * The calendar row this record discharges — the `VatObligation.id` the art. 322/323 calendar generated.
+   *
+   * The join cannot be on `id`: the store mints that, and a decont has to be matched to the *period* it
+   * covers. Nor can it be on the year: a Q4 2026 decont is due 25 ianuarie 2027, so the term and the period
+   * sit in different calendar years. One field naming the obligation is the only join that survives both.
+   */
+  obligationId: string;
   /** The year the PERIOD belongs to — not the year the term falls in. A Q4 2026 decont has `year: 2026`. */
   year: number;
   form: VatReturnForm;

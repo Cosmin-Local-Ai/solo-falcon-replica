@@ -292,6 +292,9 @@ export const annualFilingSchema = z.object({
  */
 export const vatReturnSchema = z.object({
   id: nonEmptyString,
+  // The calendar row this record discharges. Required: a decont record that names no obligation could not
+  // be joined to a term, and the term would stay open forever however many times it was filed.
+  obligationId: nonEmptyString,
   year: z.number().int(),
   form: z.enum(['300']),
   periodKind: z.enum(['month', 'quarter', 'partial']),

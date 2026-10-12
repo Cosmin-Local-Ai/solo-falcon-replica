@@ -70,9 +70,12 @@ function renderFromPreV11Payload() {
   );
 }
 
-/** Rows of the annual register — the only table the page renders. */
+/** Rows of the annual register. */
 function filingRows() {
-  return document.querySelectorAll('table')[0]!.querySelectorAll('tbody tr');
+  // PG-6g: the page now also carries the VAT calendar, the D300 rubric layout and the parked-list tables,
+  // so „the first table on the page" is no longer the annual register. The selector names the register
+  // rather than its position — which is what this helper was always for.
+  return document.querySelectorAll('table[data-register="d212"] tbody tr');
 }
 
 describe('Declarations edit flow (regression)', () => {
@@ -147,8 +150,11 @@ describe('Declarations edit flow (regression)', () => {
     // `annual-filing` step drops those rows before the page can read them.
     renderFromPreV11Payload();
 
-    // One table — the annual register — and the annual row is in it.
-    expect(document.querySelectorAll('table')).toHaveLength(1);
+    // One annual register — and the annual row is in it. PG-6g added other tables to this page (the VAT
+    // calendar, the D300 rubric layout, the parked lists), so the pin is on the D212 register being single,
+    // not on the page holding exactly one table. What has not changed is that no monthly register is among
+    // them: the `annual-filing` step drops those rows before the page can read them.
+    expect(document.querySelectorAll('table[data-register="d212"]')).toHaveLength(1);
     expect(filingRows()).toHaveLength(1);
 
     // Nothing from the legacy key reached the screen: not the period, not the amounts, not the row id.

@@ -59,6 +59,8 @@ export {
   clients,
   declarations,
   recordStatus,
+  vatReturn,
+  vatReturnStatusLabels,
   moneyDate,
   fiscalDateSource,
   documents,
@@ -89,6 +91,7 @@ import { assets } from './assets';
 import { vehicles } from './vehicles';
 import {
   revenues, expenses, expenseCategoryLabels, clients, declarations, recordStatus,
+  vatReturn, vatReturnStatusLabels,
   moneyDate, fiscalDateSource, documents, eFactura,
 } from './records';
 
@@ -111,5 +114,6 @@ export const copy = {
   assets,
   vehicles,
   revenues, expenses, expenseCategoryLabels, clients, declarations, recordStatus,
+  vatReturn, vatReturnStatusLabels,
   moneyDate, fiscalDateSource, documents, eFactura,
 };
