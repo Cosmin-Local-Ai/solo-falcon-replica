@@ -59,7 +59,7 @@ const emptySettings: SettingsState = {
 function makeData(overrides: Partial<AppData> = {}): AppData {
   return {
     reservedAmount: null,
-    profile: profile(), revenues: [], expenses: [], clients: [], filings: [], documents: [],
+    profile: profile(), revenues: [], expenses: [], clients: [], filings: [], vatReturns: [], documents: [],
     occupancySheets: [],
     vehicles: [],
     // PG-6e (B-31, D-FA-1): an empty register — no asset has been declared. Required on the

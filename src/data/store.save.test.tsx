@@ -111,6 +111,14 @@ describe('save effect — serialization contract', () => {
       'settings',
       'snapshots',
       'statements',
+      // PG-6g (B-35 residual, D-VAT-1): the periodic VAT returns are part of AppData, so they are
+      // serialized with the rest of the dataset — and this key list is the evidence that a decont the
+      // taxpayer recorded as filed, with its date and its reference, survives a save-and-load. Dropping the
+      // key would erase the only proof they hold that a fiscal period was discharged, and the Termene limită
+      // card would silently reopen a term they had closed. `schema.ts` declares `vatReturns?` for exactly
+      // this reason: **zod strips undeclared keys**, so an undeclared collection would be erased by the next
+      // save and the taxpayer would lose it without an error.
+      'vatReturns',
       // PG-6c (D-VEH-3): the vehicles are part of AppData, so they are serialized with the rest of the
       // dataset — and this key list is the evidence that a declared car, and every expense pointing at it,
       // survives a save-and-load. Dropping the key would silently un-attribute costs the person attributed.

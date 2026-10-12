@@ -329,8 +329,26 @@ export const DATA_VERSION_FIXED_ASSETS = 17;
  * same reason v13-v17 are: it removes at most one key and writes a version.
  */
 export const DATA_VERSION_INPUT_VAT = 18;
+/**
+ * PG-6g (B-35 residual, D-VAT-1) — the `vatReturns` collection is opened, and it opens **empty**.
+ *
+ * This is the collection that records the periodic VAT returns (formular 300, OPANAF 174/2026, MO I
+ * 105/09.02.2026) this profile has actually filed. Nothing is backfilled, and nothing could be: a fiscal
+ * period existing is not evidence that a return for it was submitted, and the app has never submitted one.
+ * Minting a `depusa` row per period would manufacture the exact false proof PG-5b spent a whole step
+ * removing — it would let a deadline be marked done from a record nobody made.
+ *
+ * The profile's periodicity facts are opened absent for the same reason the v18 step opened
+ * `vatRegistration` absent. CF art. 322 alin. (3) asks for a figure the taxpayer **preconizes** — a
+ * forecast only they can state — and alin. (4) turns on whether they came from the art. 310 exemption, a
+ * legal status the register never recorded. A default periodicity would be the app answering a question
+ * the taxpayer has not been asked yet, which is what D-VAT-1 exists to stop.
+ *
+ * Idempotent-safe for the same reason v13-v18 are: it adds at most one key and writes a version.
+ */
+export const DATA_VERSION_VAT_RETURNS = 19;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_INPUT_VAT;
+export const CURRENT_DATA_VERSION = DATA_VERSION_VAT_RETURNS;
 
 export interface MigrationStep {
   readonly from: number;
@@ -1025,6 +1043,19 @@ export function migrateInputVatRegistrationV18(data: PersistedAppData): Persiste
   return { ...data, profile: profile as PfaProfile, version: DATA_VERSION_INPUT_VAT };
 }
 
+/**
+ * v18 → v19 (`vat-returns`). Opens `vatReturns` as an empty collection. See `DATA_VERSION_VAT_RETURNS`.
+ *
+ * A payload that already carries the key keeps it untouched: this step **opens** a collection, it does not
+ * rewrite one, which is what makes re-running it a no-op rather than a wipe. The forbidden version of this
+ * function is a `depusa` row per fiscal period — that would turn „no return has ever been recorded” into
+ * „every return was filed”, and would let a deadline be marked done from a record nobody made.
+ */
+export function migrateVatReturnsV19(data: PersistedAppData): PersistedAppData {
+  if (data.vatReturns !== undefined) return { ...data, version: DATA_VERSION_VAT_RETURNS };
+  return { ...data, vatReturns: [], version: DATA_VERSION_VAT_RETURNS };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -1169,6 +1200,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Cheia `vatExempt` a profilului a fost ștearsă. Nu a fost convertită în nicio stare de înregistrare: booleanul nu înregistra o astfel de stare, iar research/42 §11.2 arată că cele șase stări pe care legea le folosește (art. 310, art. 316, înregistrare voluntară, plafon depășit, anulare, reinregistrare) nu pot fi citite din el. O conversie ar fi inventat un fapt despre registrul ANAF care decide măsura banilor pentru fiecare înregistrare din registru. Starea de înregistrare este acum o faptă declarată, iar un payload fără ea rămâne fără cheia `vatRegistration`, iar aplicația spune că nu știe dacă persoana facturează TVA.',
     apply: migrateInputVatRegistrationV18,
+  },
+  {
+    from: DATA_VERSION_INPUT_VAT,
+    to: DATA_VERSION_VAT_RETURNS,
+    name: 'vat-returns',
+    summary:
+      'Datele pot înregistra acum deconturile periodice de TVA (formular 300, OPANAF nr. 174 din 05.02.2026, MO I nr. 105 din 09.02.2026), câte un record pentru fiecare perioadă fiscală. Colecția se deschide VIDĂ, și acesta este tot conținutul pasului. O perioadă fiscală care există nu este nicio dovadă că decontul pentru ea a fost depus, iar aplicația nu a depus niciodată vreunul: un record `depusa` inventat pentru fiecare lună sau trimestru ar fabrica tocmai dovada falsă pe care pasul v10→v11 a eliminat-o, și ar permite unui termen să fie marcat „Depusă” dintr-un record pe care nimeni nu l-a făcut. La fel rămân absente și faptele din profil pe care se decide art. 322: alin. (3) cere o cifră pe care contribuabilul o PRECONIZEAZĂ — o estimare pe care doar el o poate face — iar alin. (4) se aprinde doar dacă persoana venea de sub scutirea de la art. 310, un statut pe care registrul nu l-a înregistrat niciodată. O perioadă fiscală implicită ar însemna că aplicația a răspuns la o întrebare care nu a fost pusă încă; în schimb aplicația întreabă, spune regula în română și marchează răspunsul ca fiind al persoanei, nu concluzia ei. Un payload care are deja cheia `vatReturns` o păstrează neschimată: acest pas deschide o colecție, nu rescrie una.',
+    apply: migrateVatReturnsV19,
   },
 ];
 

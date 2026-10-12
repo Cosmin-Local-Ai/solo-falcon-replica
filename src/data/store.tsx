@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type {
   AnnualFiling, AppData, Client, CompanyDocument, DocTypeCode, DocumentItem,
   Expense, OccupancySheet, OccupancyStay, Revenue, SettingsState, TaxStatement, Toast, ToastKind,
-  Vehicle, FixedAsset,
+  Vehicle, FixedAsset, VatReturnRecord,
 } from './types';
 import type { VehicleYearFacts } from '../domain/fiscal/deductibility';
 import type { PfaProfile } from '../domain/models';
@@ -111,6 +111,17 @@ interface StoreValue extends AppData {
    */
   addFiling: (f: Omit<AnnualFiling, 'id'>) => boolean;
   updateFiling: (f: AnnualFiling) => boolean;
+  /**
+   * PG-6g — the periodic VAT return (formular 300, OPANAF 174/2026).
+   *
+   * A separate collection with its own status vocabulary, deliberately not `addFiling` under another form:
+   * a decont is keyed by a fiscal period rather than by the year it declares, and only `depusa` says one
+   * was filed. `deleteVatReturn` exists because a mis-recorded filing must be retractable — leaving it
+   * would mean a typo could permanently mark a legal term discharged.
+   */
+  addVatReturn: (r: Omit<VatReturnRecord, 'id'>) => boolean;
+  updateVatReturn: (r: VatReturnRecord) => boolean;
+  deleteVatReturn: (id: string) => void;
   uploadDocument: (code: DocTypeCode, doc: Omit<CompanyDocument, 'id'>) => boolean;
   deleteDocument: (code: DocTypeCode, id: string) => void;
   addStatement: (s: Omit<TaxStatement, 'id'>) => boolean;
@@ -222,6 +233,10 @@ function toAppData(parsed: PersistedAppData): AppData {
     // did not happen. PG-5b: the monthly rows a pre-v11 payload carried do not reach here at all; the
     // v10→v11 step drops them.
     filings: parsed.filings ?? [],
+    // PG-6g: the periodic VAT returns. Absent resolves to empty here and nowhere else — the v18→v19 step
+    // opens the collection, and an absent key on an older payload means „no decont was ever recorded”,
+    // which is a fact about the data and not a decont that was not filed.
+    vatReturns: parsed.vatReturns ?? [],
     // PG-6h-3: the occupancy sheets. Absent resolves to empty here and nowhere else — the v13→v14 step
     // deliberately leaves the key off, because „no sheet has been made” and „sheets were made and none
     // exist” are different claims about the taxpayer's own documents.
@@ -446,6 +461,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setData(prev => ({ ...prev, filings: prev.filings.map(x => (x.id === f.id ? f : x)) }));
       return true;
     },
+
+    addVatReturn: r => {
+      if (rejectInvalidDates('vatReturn', r, 'Decontul periodic de TVA')) return false;
+      setData(d => ({ ...d, vatReturns: [{ ...r, id: uid() }, ...d.vatReturns] }));
+      return true;
+    },
+    updateVatReturn: r => {
+      if (rejectInvalidDates('vatReturn', r, 'Decontul periodic de TVA', r.id)) return false;
+      setData(prev => ({ ...prev, vatReturns: prev.vatReturns.map(x => (x.id === r.id ? r : x)) }));
+      return true;
+    },
+    deleteVatReturn: id => setData(d => ({ ...d, vatReturns: d.vatReturns.filter(x => x.id !== id) })),
 
     uploadDocument: (code, doc) => {
       if (rejectInvalidDates('companyDocument', doc, 'Document')) return false;

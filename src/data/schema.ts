@@ -35,6 +35,7 @@ import type {
   TaxStatement,
   Vehicle,
   FixedAsset,
+  VatReturnRecord,
 } from './types';
 
 /**
@@ -267,6 +268,35 @@ export const annualFilingSchema = z.object({
   id: nonEmptyString,
   taxYear: z.number().int(),
   form: z.enum(['D212']),
+  status: z.enum(['in_pregatire', 'depusa', 'respinsa']),
+  filedOn: z.string().optional(),
+  reference: z.string().optional(),
+});
+
+/**
+ * PG-6g — the periodic VAT return (formular 300, OPANAF 174/2026, MO I 105/09.02.2026).
+ *
+ * `status` is deliberately **not** `FilingStatus` and not the retired monthly `DeclStatus`. The monthly
+ * enum values that still exist in the pre-v11 storage shape (`'inregistrata'`, `'in-asteptare'`,
+ * `'transmisa'`) must not be expressible on a decont, and `depusa` must remain the only value that says a
+ * return exists. Keeping the token spaces apart is what makes that a parse-time fact rather than a comment.
+ *
+ * The period is keyed as `year` + `periodKind` + `periodIndex` (+ `periodToMonth` for the distinct
+ * two-month period art. 322 alin. (7) lit. b) creates), **not** as the retired `{an, luna}` pair. `year`
+ * is the year of the PERIOD, so a Q4 2026 decont — due 25 ianuarie 2027 under art. 323 alin. (1) — is
+ * keyed to 2026 and its term lives elsewhere.
+ *
+ * `periodToMonth` is checked against `periodKind` by the store, not by zod: zod cannot express "required
+ * exactly when periodKind is partial" without a discriminated union, and a discriminated union here would
+ * reject a payload the migration chain must still be able to read. The surface flags the mismatch.
+ */
+export const vatReturnSchema = z.object({
+  id: nonEmptyString,
+  year: z.number().int(),
+  form: z.enum(['300']),
+  periodKind: z.enum(['month', 'quarter', 'partial']),
+  periodIndex: z.number().int().min(1).max(12),
+  periodToMonth: z.number().int().min(1).max(12).optional(),
   status: z.enum(['in_pregatire', 'depusa', 'respinsa']),
   filedOn: z.string().optional(),
   reference: z.string().optional(),
@@ -516,6 +546,13 @@ export interface PersistedAppData {
   /** PG-5: the annual returns. Absent means none recorded — never backfilled. */
   filings?: AnnualFiling[];
   /**
+   * PG-6g: the periodic VAT returns. Declared rather than left off, for the standing reason in this file —
+   * **zod strips undeclared keys**, so an undeclared `vatReturns` collection would be erased by the next
+   * save-and-load and the taxpayer would lose the only proof they hold that a decont was filed. Absent
+   * means none recorded, and the v18→v19 step backfills nothing.
+   */
+  vatReturns?: VatReturnRecord[];
+  /**
    * PG-6h-3: the occupancy sheets. Declared here rather than left off, for the standing reason in this
    * file: **zod strips undeclared keys**, so an undeclared `occupancySheets` would be erased by the next
    * save-and-load and the taxpayer would silently lose the very document they are legally required to
@@ -586,6 +623,7 @@ export const persistedAppDataSchema = z.object({
   // and drops it; it stays declared so the step, not the load gate, is what decides.
   declarations: z.array(declarationSchema).optional(),
   filings: z.array(annualFilingSchema).optional(),
+  vatReturns: z.array(vatReturnSchema).optional(),
   // PG-6h-3. Permissive on purpose — see `occupancyStaySchema`. A guest's mistyped CNP must not be able
   // to quarantine the taxpayer's whole dataset.
   occupancySheets: z.array(occupancySheetSchema).optional(),
@@ -679,7 +717,7 @@ export function parseAppData(raw: string): PersistedAppData | null {
 // `domain/aggregation.ts` → `auditFiscalDates` as `review_required`, never rewritten.
 // ---------------------------------------------------------------------------
 
-export type RecordKind = 'revenue' | 'expense' | 'filing' | 'companyDocument' | 'statement';
+export type RecordKind = 'revenue' | 'expense' | 'filing' | 'vatReturn' | 'companyDocument' | 'statement';
 
 interface DateFieldSpec {
   /** Property name on the record. */
@@ -716,6 +754,7 @@ const RECORD_DATE_FIELDS: Record<RecordKind, readonly DateFieldSpec[]> = {
     { field: 'paid', label: 'data plății', required: false },
   ],
   filing: [{ field: 'filedOn', label: 'data depunerii', required: false }],
+  vatReturn: [{ field: 'filedOn', label: 'data depunerii', required: false }],
   companyDocument: [
     { field: 'data', label: 'data', required: true },
     { field: 'dataDepunere', label: 'data depunerii', required: false },
@@ -735,6 +774,8 @@ export type DateBearingRecord =
   | Omit<Expense, 'id'>
   | AnnualFiling
   | Omit<AnnualFiling, 'id'>
+  | VatReturnRecord
+  | Omit<VatReturnRecord, 'id'>
   | CompanyDocument
   | Omit<CompanyDocument, 'id'>
   | TaxStatement
@@ -779,6 +820,7 @@ export type _checks = [
   Expect<Equal<z.output<typeof clientSchema>, Client>>,
   Expect<Equal<z.output<typeof declarationSchema>, LegacyMonthlyDeclaration>>,
   Expect<Equal<z.output<typeof annualFilingSchema>, AnnualFiling>>,
+  Expect<Equal<z.output<typeof vatReturnSchema>, VatReturnRecord>>,
   Expect<Equal<z.output<typeof occupancyStaySchema>, OccupancyStay>>,
   Expect<Equal<z.output<typeof occupancySheetSchema>, OccupancySheet>>,
   Expect<Equal<z.output<typeof vehicleYearFactsSchema>, VehicleYearFacts>>,

@@ -221,7 +221,10 @@ export type LegacyExpense = Omit<Expense, 'valoareFaraTva' | 'tva'> & { valoareF
  * at a `version` below 10, and assert what the chain produces — so the fixture must be typed as the shape
  * that arrives, not the shape that leaves.
  */
-export type LegacyAppData = Omit<AppData, 'revenues' | 'expenses' | 'filings' | 'occupancySheets' | 'vehicles' | 'fixedAssets'> & {
+export type LegacyAppData = Omit<
+  AppData,
+  'revenues' | 'expenses' | 'filings' | 'occupancySheets' | 'vehicles' | 'fixedAssets' | 'vatReturns'
+> & {
   revenues: LegacyRevenue[];
   expenses: LegacyExpense[];
   /**
@@ -297,6 +300,58 @@ export interface AnnualFiling {
  * hand to it.
  */
 export const isFiledFiling = (f: Pick<AnnualFiling, 'status'>): boolean => f.status === 'depusa';
+
+// ── Decontul periodic de TVA (PG-6g) ────────────────────────────────────
+/**
+ * PG-6g — the record of a **periodic** VAT return (formular 300, OPANAF 174/2026, MO I 105/09.02.2026).
+ *
+ * **Why this is a second record type and not `AnnualFiling` with a different `form`.** `AnnualFiling` is
+ * keyed by `taxYear`, the year the return *declares*. A decont is keyed by a **fiscal period** — a month, a
+ * quarter, or the distinct two-month period art. 322 alin. (7) lit. b) creates — and that period can start
+ * and end inside one year while its term falls in the next. Forcing a Q4 2026 decont into `{taxYear}` would
+ * lose which quarter it was, and forcing it into the retired monthly `{an, luna}` shape would resurrect
+ * exactly the record type PG-5b deleted, which this brief forbids.
+ *
+ * **The status vocabulary is deliberately its own.** It mirrors `FilingStatus`'s discipline — only `depusa`
+ * says a return exists — but it is a separate union, so the monthly enum values that still live in the
+ * storage shape (`'inregistrata'`, `'in-asteptare'`, `'transmisa'`) can never be handed to a decont, and a
+ * decont's status can never be read as proof of a D212. `isFiledVatReturn` is the only test that says one
+ * was filed, exactly as `isFiledFiling` is for the annual return.
+ *
+ * **Absent means none recorded.** Nothing here is backfilled: no period implies a filing, and the v18→v19
+ * chain step opens the collection empty.
+ */
+export type VatReturnStatus = 'in_pregatire' | 'depusa' | 'respinsa';
+
+/** The only periodic return form this application models for a registered PFA. */
+export type VatReturnForm = '300';
+
+export interface VatReturnRecord {
+  id: string;
+  /** The year the PERIOD belongs to — not the year the term falls in. A Q4 2026 decont has `year: 2026`. */
+  year: number;
+  form: VatReturnForm;
+  /** `month` | `quarter` | `partial`, mirroring `VatFiscalPeriod` in `domain/fiscal/vatReturn.ts`. */
+  periodKind: 'month' | 'quarter' | 'partial';
+  /** 1-12 for `month`; 1-4 for `quarter`; the first month of the span for `partial`. */
+  periodIndex: number;
+  /** Only set for `partial` — the last month of the distinct period (art. 322 alin. (7) lit. b)). */
+  periodToMonth?: number;
+  status: VatReturnStatus;
+  /** The date the return was actually filed. Meaningful only with `depusa`; absent means not recorded. */
+  filedOn?: string;
+  /** The registration number or proof reference the tax office gave, when the user recorded one. */
+  reference?: string;
+}
+
+/**
+ * The ONE test that says "this record proves a VAT return was filed".
+ *
+ * It takes a `VatReturnRecord` and nothing else, for the same reason `isFiledFiling` takes an
+ * `AnnualFiling`: a monthly row's `'inregistrata'` must never pass for proof of a submission, and an annual
+ * D212 filing does not discharge a decont either.
+ */
+export const isFiledVatReturn = (r: Pick<VatReturnRecord, 'status'>): boolean => r.status === 'depusa';
 
 // ── Fișa de ocupare a capacității de cazare (PG-6h-3) ────
 /**
@@ -505,6 +560,16 @@ export interface AppData {
    * nobody made.
    */
   filings: AnnualFiling[];
+  /**
+   * PG-6g — the periodic VAT returns (formular 300) this profile has filed or is preparing, one record per
+   * fiscal period.
+   *
+   * Required on `AppData` and optional on `PersistedAppData`, exactly like `filings`: **absent means none
+   * recorded**, and the v18→v19 step opens it as `[]` without minting anything. A calendar row is not a
+   * filing — the calendar says an obligation exists, this collection says the person recorded discharging
+   * it, and only the second one can mark a term done.
+   */
+  vatReturns: VatReturnRecord[];
   /**
    * PG-6h-3 (D-OCC-1): the occupancy sheets this taxpayer keeps, per room, per year.
    *

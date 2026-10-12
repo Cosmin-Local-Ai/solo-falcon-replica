@@ -26,6 +26,9 @@ function baseline(): AppData {
     expenses: [],
     clients: [],
     filings: [],
+    // PG-6g: a fixture with no periodic VAT return recorded. Absent would be a different
+    // claim, and `[]` here is what `emptyData()` and the v18→v19 step produce.
+    vatReturns: [],
     occupancySheets: [],
     vehicles: [],
     // PG-6e (B-31, D-FA-1): an empty register — no asset has been declared. Required on the

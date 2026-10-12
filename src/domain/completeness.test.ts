@@ -184,6 +184,9 @@ function makeData(overrides: Partial<AppData> = {}): AppData {
     expenses: [makeExpense()],
     clients: [makeClient()],
     filings: [makeFiling()],
+    // PG-6g: no periodic VAT return recorded — the D212 filing above does not discharge a
+    // decont, and nothing here may imply one that nobody made.
+    vatReturns: [],
     occupancySheets: [],
     vehicles: [],
     // PG-6e (B-31, D-FA-1): an empty register — no asset has been declared. Required on the
@@ -212,6 +215,9 @@ function makeEmptyData(): AppData {
     expenses: [],
     clients: [],
     filings: [],
+    // PG-6g: a fixture with no periodic VAT return recorded. Absent would be a different
+    // claim, and `[]` here is what `emptyData()` and the v18→v19 step produce.
+    vatReturns: [],
     occupancySheets: [],
     vehicles: [],
     fixedAssets: [],
@@ -308,6 +314,9 @@ describe('assessCompleteness', () => {
       // complete the register looks, and the v10→v11 step drops them before the app ever sees them.
       const data = makeData({
         filings: [],
+        // PG-6g: a fixture with no periodic VAT return recorded. Absent would be a different
+        // claim, and `[]` here is what `emptyData()` and the v18→v19 step produce.
+        vatReturns: [],
         declarations: [
           { id: 'd1', an: 2026, luna: 3, venituri: lei(1000), cheltuieli: lei(100), status: 'inregistrata', dataInregistrare: '2026-04-10' },
           { id: 'd2', an: 2026, luna: 6, venituri: lei(1000), cheltuieli: lei(100), status: 'transmisa', dataInregistrare: '2026-07-08', dataTrimitere: '2026-07-15' },

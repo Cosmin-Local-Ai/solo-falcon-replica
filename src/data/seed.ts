@@ -104,6 +104,11 @@ export function emptyData(): AppData {
     // entry into the patrimony, a *punerea în funcțiune* and a duration nobody chose, and would start
     // amortising an asset the taxpayer never bought.
     fixedAssets: [],
+    // PG-6g (B-35 residual, D-VAT-1): the empty dataset records **no** periodic VAT return. A seeded
+    // `depusa` row would put a filed decont on the record for a return nobody filed, and the deadline
+    // surface would then mark a term „Depusă” from a fixture. Absence is the same discipline as
+    // `filings: []` — the app never mints a document nobody made.
+    vatReturns: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],
@@ -264,6 +269,10 @@ export const seedData: AppData = {
   // so `filings` is empty and the deadline says so. Seeding a filing would be seeding a fact the demo
   // cannot support — the same mistake TASK 9 removed, in a tidier shape.
   filings: [],
+  // PG-6g: the demo fixture records **no** periodic VAT return, for the same reason it records no filing.
+  // A seeded `depusa` decont would be a submission the demo cannot support, and the Termene limită card
+  // would badge a term „Depusă” on the strength of a fixture.
+  vatReturns: [],
   // PG-6h-3 (D-OCC-1): the demo fixture holds **no** occupancy sheet, so it carries no data about any
   // person who is not the demo taxpayer. A fixture guest with a name and a CNP would be an invented
   // identity written onto a document whose only purpose is to record real ones — and this object ships
