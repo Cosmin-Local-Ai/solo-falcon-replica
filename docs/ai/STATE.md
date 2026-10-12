@@ -30,7 +30,9 @@ are untouched, and 48,600 / 97,200 / 291,600 are unchanged.
 
 ## Verification summary (counts from the **Phase 11 / PG-3 handoff, 2026-10-10**: 85 test files / 1409 unit tests, e2e 49; environment figures from 2026-10-05, all exit 0)
 
-**Current figures — 121 test files / 1817 unit tests, all passing; `tsc` 0; `build` 0; `e2e` 108 passed (103 functional + 5 axe); copy-guard allow-list empty**
+**Current figures — 123 test files / 1842 unit tests, all passing; `tsc` 0; `build` 0; `e2e` 112 passed (107 functional + 5 axe); copy-guard allow-list empty**
+
+Re-measured after the **PG-6d other-income / CASS-ladder pass** (brief `briefs/45_pg6d_other_income.md`; `domain/models.ts` (`CassLadderCategory`, `CassLadderYear`; **`PfaOtherIncomeFlag` and `otherIncome` deleted**), `domain/schema.ts`, `data/migration.ts` (new **v15 → v16** `other-income-ladder`, which **deletes** the retired key and backfills nothing), `data/seed.ts`, `domain/fiscal/package2026.ts` (`ladder_tier2_base`, `ladder_tier3_base`, `ladder_condition_precedent`, each cited; rung 1 reuses the existing `min_base`), `domain/fiscal/calculators.ts` (`calcCassLadder`), `domain/tax.ts` / `derived.ts` / `profile.ts` / `thresholds.ts` (threading), `pages/Settings.tsx`, `pages/Onboarding.tsx`, `ui/copy/settings.ts`, `ui/copy/onboarding.ts`): **123 files / 1842 tests** (+2 files, +80 tests), **e2e 108 → 112**, `tsc` 0, `build` 0, copy-guard `ALLOW_LIST` empty, **seed estimate still 311.200 bani**.
 
 Re-measured after the **PG-6c vehicle-facts pass** (brief `briefs/44_pg6c_vehicle_facts.md`; `data/types.ts` (`Vehicle`, `vehicleId?` on `Expense`), `data/schema.ts`, `data/migration.ts` (new v14→v15 `vehicle-facts` step, key left **absent**, not `[]`), `data/seed.ts`, `data/store.tsx`, `domain/fiscal/deductibility.ts` (`vehicleUse` and `vehicleExceptionCategory` **removed from `ExpenseClassificationContext`**), `domain/estimateBasis.ts` (threading only), `pages/Settings.tsx`, `pages/Expenses.tsx`, `ui/copy/vehicles.ts`): **121 files / 1817 tests** (+3 files, +55 tests), **e2e 102 → 108**, `tsc` 0, `build` 0, copy-guard `ALLOW_LIST` empty, **seed estimate still 311.200 bani**.
 
