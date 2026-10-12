@@ -46,7 +46,7 @@ const APPLICABLE_PROFILE: PfaProfile = createDefaultProfile({
   pensionerStatus: 'nu',
   salaryStatus: 'nu',
   socialInsuranceStatus: 'obligatoriu',
-  vatExempt: true,
+  vatRegistration: { status: 'scutit_art310' as const },
 });
 
 const QUERY: ThresholdQuery = {
@@ -826,7 +826,7 @@ describe('TASK 4 — severity, applicability and the measured basis', () => {
   });
 
   it('VAT_REGISTRATION applies only while the profile is inside the VAT scutire (art. 310 alin. (1))', () => {
-    const registered = byId(rowsFor({ ...APPLICABLE_PROFILE, vatExempt: false }, lei(100000)), 'VAT_REGISTRATION');
+    const registered = byId(rowsFor({ ...APPLICABLE_PROFILE, vatRegistration: { status: 'inregistrat_art316' as const } }, lei(100000)), 'VAT_REGISTRATION');
     expect(registered.applicability).toBe('not_applicable');
     expect(registered.applicabilityReason ?? '').toContain('art. 310 alin. (1)');
     expect(registered.severity).toBe('none');
@@ -840,7 +840,7 @@ describe('TASK 4 — severity, applicability and the measured basis', () => {
   it('an inapplicable row cannot render as a breach even when its level is engaged', () => {
     // The VAT profile is already registered (row not applicable) while the turnover is far above the
     // plafon: the status may say the level was passed, the severity must still be none.
-    const row = byId(rowsFor({ ...APPLICABLE_PROFILE, vatExempt: false }, lei(900000)), 'VAT_REGISTRATION');
+    const row = byId(rowsFor({ ...APPLICABLE_PROFILE, vatRegistration: { status: 'inregistrat_art316' as const } }, lei(900000)), 'VAT_REGISTRATION');
     expect(row.engaged).toBe(true);
     expect(row.applicability).toBe('not_applicable');
     expect(row.severity).toBe('none');

@@ -31,6 +31,7 @@ import {
   type ContributionLeg,
 } from './tax';
 import type { TaxInputsReference } from './derived';
+import type { ExpenseBaseWithVat } from './fiscal/vat';
 import type { PfaProfile } from './models';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal/package2026';
 import { PFA_2026_RELEASE } from './fiscal/release2026';
@@ -84,7 +85,7 @@ function inputs(over: Partial<TaxInputsReference> = {}): TaxInputsReference {
     foreignSicknessInsurance: null,
     cassLadderYears: [],
     socialInsuranceStatus: 'obligatoriu',
-    vatExempt: false,
+    vatRegistration: { status: 'inregistrat_art316' as const },
     cashFloorLei: lei(0),
     fiscalYear: 2026,
     pfaStartDate: null,
@@ -107,14 +108,21 @@ function engine(over: {
   revenuesNet?: Bani;
   expensesNet?: Bani;
   flatRatioGross?: Bani | null;
+  /** PG-6f (D-VAT-2) — pass a divergent pair to reach the ordering refusal instead of a figure. */
+  expenseBase?: ExpenseBaseWithVat;
 }) {
+  const expensesNet = over.expensesNet ?? RECORDED_EXPENSES;
   return computeTaxEstimate({
     inputs: inputs(),
     profile: profile(),
     revenues: over.revenues ?? RECEIPTS,
     expenses: over.expenses ?? RECORDED_EXPENSES,
     revenuesNet: over.revenuesNet ?? RECEIPTS,
-    expensesNet: over.expensesNet ?? RECORDED_EXPENSES,
+    expensesNet,
+    // PG-6f — the base is an operand, not a profile inference. Defaulting it here to the net figure keeps
+    // every existing single-leg case about the CASS leg, not about the VAT ordering; a test that wants the
+    // ordering question passes `expenseBase` with the two figures apart.
+    expenseBase: over.expenseBase ?? { netFirst: expensesNet, grossFirst: expensesNet, divergent: false },
     flatRatioGross: over.flatRatioGross ?? null,
     ruleRelease: PFA_2026_RELEASE,
     rules: PFA_2026_SYSTEM_REAL_PACKAGE,

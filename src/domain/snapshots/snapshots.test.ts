@@ -35,7 +35,7 @@ const profile: PfaProfile = {
   salaryStatus: 'nu',
   pensionerStatus: 'nu',
   socialInsuranceStatus: 'obligatoriu',
-  vatExempt: true,
+  vatRegistration: { status: 'scutit_art310' as const },
   cashFloorLei: lei(0),
   identity,
   updatedAt: '2025-01-01T00:00:00.000Z',
@@ -284,7 +284,9 @@ describe('computeInputsHash — equivalent inputs → same hash', () => {
       salaryStatus: profile.salaryStatus,
       pensionerStatus: profile.pensionerStatus,
       socialInsuranceStatus: profile.socialInsuranceStatus,
-      vatExempt: profile.vatExempt,
+      // PG-6f — the registration state is a rule-selecting input in place of the retired boolean, so a
+      // reordering of the profile must not change the digest while a change of state must.
+      vatRegistration: profile.vatRegistration ?? undefined,
       cashFloorLei: profile.cashFloorLei,
       updatedAt: profile.updatedAt,
     };

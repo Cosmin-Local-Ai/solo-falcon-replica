@@ -834,7 +834,10 @@ describe('stored snapshots survive the migration (F-1, acceptance criterion 3)',
         salaryStatus: p.salaryStatus,
         pensionStatus: p.pensionStatus,
         socialInsuranceStatus: p.socialInsuranceStatus,
-        vatExempt: p.vatExempt,
+        // PG-6f (B-30) — the registration state joins the policy inputs in place of the retired boolean.
+        // The migration does not backfill it, so both sides are absent and this still asserts the real
+        // thing: whatever registration fact the snapshot carried, the chain did not move it.
+        vatRegistration: p.vatRegistration ?? null,
         fiscalYear: p.fiscalYear,
         pfaStartDate: p.pfaStartDate ?? null,
       });

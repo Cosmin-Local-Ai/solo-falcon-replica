@@ -61,7 +61,7 @@ function TaxProbe() {
       <span data-testid="tax-inputs-key">{view.inputs.inputsKey}</span>
       <span data-testid="tax-rule-count">{view.activeRelease.ruleCount}</span>
       <span data-testid="identity-nume">{store.profile.identity.nume}</span>
-      <button onClick={() => store.updateProfile({ vatExempt: true, cashFloorLei: lei(7500) })}>change-tax-inputs</button>
+      <button onClick={() => store.updateProfile({ vatRegistration: { status: 'scutit_art310' as const }, cashFloorLei: lei(7500) })}>change-tax-inputs</button>
       {/* Phase 7 (F-2): every identity field, including the three absorbed in D-1. */}
       <button
         onClick={() =>

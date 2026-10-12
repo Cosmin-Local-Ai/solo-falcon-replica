@@ -48,7 +48,7 @@ function makeInputs(): TaxInputsReference {
     foreignSicknessInsurance: null,
     cassLadderYears: [],
     socialInsuranceStatus: 'obligatoriu',
-    vatExempt: false,
+    vatRegistration: { status: 'inregistrat_art316' as const },
     cashFloorLei: lei(0),
     fiscalYear: 2026,
     salaryIncomeLei: null,
@@ -109,6 +109,10 @@ describe('TASK 6 fixture — R1 ACTIVE, then R2, and R1 still reproduces', () =>
       expenses: lei(10_000),
       revenuesNet: lei(50_000),
       expensesNet: lei(10_000),
+      // PG-6f (B-30) — the expense base is an operand the caller supplies from the per-line VAT
+      // decision, not something the engine infers from a profile flag. No line here is both
+      // half-count-limited and carrying non-recoverable VAT, so the two candidates coincide.
+      expenseBase: { netFirst: lei(10_000), grossFirst: lei(10_000), divergent: false },
       ruleRelease: r1.release,
       rules: [...r1.rules],
     });
@@ -146,6 +150,10 @@ describe('TASK 6 fixture — R1 ACTIVE, then R2, and R1 still reproduces', () =>
       expenses: lei(10_000),
       revenuesNet: lei(50_000),
       expensesNet: lei(10_000),
+      // PG-6f (B-30) — the expense base is an operand the caller supplies from the per-line VAT
+      // decision, not something the engine infers from a profile flag. No line here is both
+      // half-count-limited and carrying non-recoverable VAT, so the two candidates coincide.
+      expenseBase: { netFirst: lei(10_000), grossFirst: lei(10_000), divergent: false },
       ruleRelease: r1.release,
       rules: [...r1.rules],
     });
@@ -172,6 +180,10 @@ describe('TASK 6 fixture — R1 ACTIVE, then R2, and R1 still reproduces', () =>
       expenses: lei(10_000),
       revenuesNet: lei(50_000),
       expensesNet: lei(10_000),
+      // PG-6f (B-30) — the expense base is an operand the caller supplies from the per-line VAT
+      // decision, not something the engine infers from a profile flag. No line here is both
+      // half-count-limited and carrying non-recoverable VAT, so the two candidates coincide.
+      expenseBase: { netFirst: lei(10_000), grossFirst: lei(10_000), divergent: false },
       ruleRelease: historical!.release,
       rules: replayRules,
     });
@@ -193,6 +205,10 @@ describe('TASK 6 fixture — R1 ACTIVE, then R2, and R1 still reproduces', () =>
       expenses: lei(10_000),
       revenuesNet: lei(50_000),
       expensesNet: lei(10_000),
+      // PG-6f (B-30) — the expense base is an operand the caller supplies from the per-line VAT
+      // decision, not something the engine infers from a profile flag. No line here is both
+      // half-count-limited and carrying non-recoverable VAT, so the two candidates coincide.
+      expenseBase: { netFirst: lei(10_000), grossFirst: lei(10_000), divergent: false },
       ruleRelease: inForce!.release,
       rules: [...inForce!.rules],
     });
@@ -212,6 +228,10 @@ describe('TASK 6 fixture — R1 ACTIVE, then R2, and R1 still reproduces', () =>
       expenses: lei(10_000),
       revenuesNet: lei(50_000),
       expensesNet: lei(10_000),
+      // PG-6f (B-30) — the expense base is an operand the caller supplies from the per-line VAT
+      // decision, not something the engine infers from a profile flag. No line here is both
+      // half-count-limited and carrying non-recoverable VAT, so the two candidates coincide.
+      expenseBase: { netFirst: lei(10_000), grossFirst: lei(10_000), divergent: false },
     };
     const a = await computeTaxEstimate({ ...common, ruleRelease: r1.release, rules: [...r1.rules] });
     const b = await computeTaxEstimate({ ...common, ruleRelease: r2.release, rules: [...r2.rules] });

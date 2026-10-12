@@ -345,7 +345,8 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
   // PG-6f (B-30) — the engine picks the money measure from the **declared VAT registration state**, not
   // from the retired `vatExempt` boolean, and the page shows the one that actually moved the deductible
   // total. When the state is undeclared the app does not silently adopt a measure: the index still has to
-  // name the number that is on screen, and the label says plainly that the choice is not established.
+  // name the number that is on screen, so the label says plainly that the choice is not established and
+  // which of the two figures is the one being displayed.
   const registration = store.profile.vatRegistration;
   const chargesVat = registration !== undefined && registrationChargesVat(registration.status);
   const measure: keyof MeasurePair = registration === undefined ? 'exclVat' : chargesVat ? 'exclVat' : 'inclVat';

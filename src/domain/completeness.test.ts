@@ -50,7 +50,7 @@ function makeProfile(): PfaProfile {
     // PG-5: the fully-populated fixture is VAT-exempt, because that is the one VAT state the app can
     // call complete — a scutire de TVA removes the periodic return, so there is no filing period to
     // establish. The non-exempt case is tested on its own below, and it is NOT satisfied.
-    vatExempt: true,
+    vatRegistration: { status: 'scutit_art310' as const },
     cashFloorLei: lei(0),
     identity: {
       nume: 'Test Person',
@@ -349,7 +349,7 @@ describe('assessCompleteness', () => {
       Object.fromEntries(report.checks.map(c => [c.key, c]));
 
     it('a non-exempt profile with no VAT registration date gets the admission, not a cadence', () => {
-      const check = byKey(assessCompleteness(makeData({ profile: { ...makeProfile(), vatExempt: false } }))).vatFilingPeriod;
+      const check = byKey(assessCompleteness(makeData({ profile: { ...makeProfile(), vatRegistration: { status: 'inregistrat_art316' as const } } }))).vatFilingPeriod;
       expect(check.satisfied).toBe(false);
       expect(check.detail).toContain('nu poate fi stabilită');
       expect(check.detail).toContain('data înregistrării în TVA');
@@ -368,7 +368,7 @@ describe('assessCompleteness', () => {
       // `vatExceedanceDate` is the date the ceiling was crossed; a taxpayer registered from the start
       // never had that event, so it still does not fix the period.
       const check = byKey(
-        assessCompleteness(makeData({ profile: { ...makeProfile(), vatExempt: false, vatExceedanceDate: '2026-04-01' } })),
+        assessCompleteness(makeData({ profile: { ...makeProfile(), vatRegistration: { status: 'inregistrat_art316' as const }, vatExceedanceDate: '2026-04-01' } })),
       ).vatFilingPeriod;
       expect(check.satisfied).toBe(false);
       expect(check.detail).toContain('nu poate fi stabilită');

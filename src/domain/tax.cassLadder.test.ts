@@ -49,7 +49,7 @@ function inputs(over: Partial<TaxInputsReference> = {}): TaxInputsReference {
     foreignSicknessInsurance: null,
     cassLadderYears: [],
     socialInsuranceStatus: 'obligatoriu',
-    vatExempt: false,
+    vatRegistration: { status: 'inregistrat_art316' as const },
     cashFloorLei: lei(0),
     fiscalYear: 2026,
     pfaStartDate: null,
@@ -85,6 +85,9 @@ function engine(over: { revenues?: Bani; ladderYears?: CassLadderYear[] } = {}) 
     expenses: lei(0),
     revenuesNet: over.revenues ?? RECEIPTS,
     expensesNet: lei(0),
+    // PG-6f — a zero expense base cannot diverge: no line is both half-count-limited and carrying
+    // non-recoverable VAT, so the two candidate bases coincide.
+    expenseBase: { netFirst: lei(0), grossFirst: lei(0), divergent: false },
     flatRatioGross: over.revenues ?? RECEIPTS,
     ruleRelease: PFA_2026_RELEASE,
     rules: PFA_2026_SYSTEM_REAL_PACKAGE,

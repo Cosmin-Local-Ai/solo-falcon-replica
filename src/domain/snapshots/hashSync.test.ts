@@ -50,7 +50,7 @@ describe('computeInputsHashSync is the exact sync twin of computeInputsHash', ()
     salaryStatus: 'nu' as const,
     pensionerStatus: 'nu' as const,
     socialInsuranceStatus: 'neplata' as const,
-    vatExempt: false,
+    vatRegistration: { status: 'inregistrat_art316' as const },
     cashFloorLei: lei(0),
     identity: {
       nume: 'Popescu Andrei',

@@ -87,7 +87,7 @@ function inputs(over: Partial<TaxInputsReference> = {}): TaxInputsReference {
     foreignSicknessInsurance: null,
     cassLadderYears: [],
     socialInsuranceStatus: 'obligatoriu',
-    vatExempt: false,
+    vatRegistration: { status: 'inregistrat_art316' as const },
     cashFloorLei: lei(0),
     fiscalYear: 2026,
     pfaStartDate: null,
@@ -115,6 +115,13 @@ function run(over: {
     expenses: over.expenses ?? lei(0),
     revenuesNet: over.revenuesNet ?? lei(0),
     expensesNet: over.expensesNet ?? lei(0),
+    // PG-6f — the art. 68^3 tests are about the flat-rate gross, not about the VAT ordering, so the two
+    // candidate expense bases are declared equal and the engine runs on the single figure.
+    expenseBase: {
+      netFirst: over.expensesNet ?? lei(0),
+      grossFirst: over.expensesNet ?? lei(0),
+      divergent: false,
+    },
     flatRatioGross: over.flatRatioGross ?? null,
     ruleRelease: PFA_2026_RELEASE,
     rules: over.rules ?? PFA_2026_SYSTEM_REAL_PACKAGE,

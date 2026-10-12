@@ -63,7 +63,7 @@ function profile(overrides: Partial<PfaProfile> = {}): PfaProfile {
     salaryStatus: 'nu',
     pensionerStatus: 'nu',
     socialInsuranceStatus: 'obligatoriu',
-    vatExempt: false,
+    vatRegistration: { status: 'inregistrat_art316' as const },
     cashFloorLei: lei(0),
     identity: identity(),
     updatedAt: '2026-01-01T00:00:00.000Z',

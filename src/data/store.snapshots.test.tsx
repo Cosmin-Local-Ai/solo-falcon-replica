@@ -40,7 +40,7 @@ const profile: PfaProfile = {
   salaryStatus: 'nu',
   pensionerStatus: 'nu',
   socialInsuranceStatus: 'obligatoriu',
-  vatExempt: true,
+  vatRegistration: { status: 'scutit_art310' as const },
   cashFloorLei: lei(0),
   identity,
   updatedAt: '2025-01-01T00:00:00.000Z',

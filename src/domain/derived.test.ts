@@ -38,7 +38,7 @@ function profile(overrides: Partial<PfaProfile> = {}): PfaProfile {
     salaryStatus: 'nu',
     pensionerStatus: 'nu',
     socialInsuranceStatus: 'obligatoriu',
-    vatExempt: false,
+    vatRegistration: { status: 'inregistrat_art316' as const },
     cashFloorLei: lei(0),
     identity: identity(),
     updatedAt: '2026-01-01T00:00:00.000Z',
@@ -280,7 +280,7 @@ describe('selectTaxDerived (Step 14, structural — no formula)', () => {
     expect(view.fiscalYear).toBe(2026);
     expect(view.inputs.regime).toBe('impozit_pe_venit');
     expect(view.inputs.cashFloorLei).toBe(0);
-    expect(view.inputs.vatExempt).toBe(false);
+    expect(view.inputs.vatRegistration).toEqual({ status: 'inregistrat_art316' });
     expect(view.activeRelease.ruleIds.length).toBeGreaterThan(0);
     expect(view.activeRelease.ruleIds).toEqual([...view.activeRelease.ruleIds].sort());
     expect(view.activeRelease.ruleCount).toBe(view.activeRelease.ruleIds.length);
@@ -289,12 +289,12 @@ describe('selectTaxDerived (Step 14, structural — no formula)', () => {
   it('case 6: profile tax input changed → inputs reference changes', () => {
     const before = selectTaxDerived(makeData(), activeRules2026());
     const after = selectTaxDerived(
-      makeData({ profile: profile({ cashFloorLei: lei(5000), vatExempt: true, salaryStatus: 'da', cassLadderYears: [{ fiscalYear: 2026, proprietateIntelectuala: lei(1000) }] }) }),
+      makeData({ profile: profile({ cashFloorLei: lei(5000), vatRegistration: { status: 'scutit_art310' as const }, salaryStatus: 'da', cassLadderYears: [{ fiscalYear: 2026, proprietateIntelectuala: lei(1000) }] }) }),
       activeRules2026(),
     );
     expect(after.inputs.inputsKey).not.toBe(before.inputs.inputsKey);
     expect(after.inputs.cashFloorLei).toBe(lei(5000));
-    expect(after.inputs.vatExempt).toBe(true);
+    expect(after.inputs.vatRegistration).toEqual({ status: 'scutit_art310' });
     expect(after.inputs.salaryStatus).toBe('da');
     // Release provenance is untouched by a profile change.
     expect(after.activeRelease).toEqual(before.activeRelease);

@@ -97,7 +97,11 @@ describe('legacyProfileFromSettings (profile migration)', () => {
     // minted here. A legacy payload ends with neither key present — the chain may not invent an amount
     // that decides a CASS rung.
     expect(p.cassLadderYears).toBeUndefined();
-    expect(p.vatExempt).toBe(false);
+    // PG-6f (D-LEG-1, B-30): the retired `vatExempt` boolean is not replaced by a minted registration
+    // state. A legacy payload never declared one, and guessing `scutit_art310` would decide, for every
+    // record in the register, both the money measure and whether any input VAT may be claimed. Absence is
+    // the honest state; the readers report it as unanswered and the engine refuses rather than picks.
+    expect(p.vatRegistration).toBeUndefined();
     expect(p.cashFloorLei).toBe(0);
     // No CAEN source at all in this payload ⇒ the field stays absent. The chain
     // never invents a code the user never entered.

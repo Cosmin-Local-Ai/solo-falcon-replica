@@ -14,7 +14,7 @@ const validProfile: PfaProfile = {
   salaryStatus: 'nu',
   pensionerStatus: 'nu',
   socialInsuranceStatus: 'obligatoriu',
-  vatExempt: false,
+  vatRegistration: { status: 'inregistrat_art316' as const },
   cashFloorLei: lei(0),
   identity: {
     nume: 'Popescu Andrei',
@@ -57,7 +57,10 @@ describe('createDefaultProfile', () => {
     // this person had no income in any art. 155 alin. (1) lit. c)-h) category, and a fresh profile has
     // simply never been asked.
     expect(p.cassLadderYears).toBeUndefined();
-    expect(p.vatExempt).toBe(false);
+    // PG-6f (D-LEG-1, B-30): a fresh profile is not stamped with a registration state either. The
+    // retired boolean used to answer, by default, a question nobody asked; absence is what a profile
+    // that has never been asked holds, and the readers say so.
+    expect(p.vatRegistration).toBeUndefined();
     expect(p.cashFloorLei).toBe(0);
     // Deterministic only because `instant` is pinned above. This is the assertion B-23 exists to protect.
     expect(p.fiscalYear).toBe(2026);
