@@ -329,6 +329,27 @@ describe('alin. (3) versus alin. (4) — the landmine, on one set of numbers', (
     expect(outcome.detail).toContain('alin. (4)');
   });
 
+  it('a confirmed answer stands even on the branch where the app cannot say which alineat applies', () => {
+    // D-VAT-1's path has to work on EVERY unanswered branch, and the branch-selector case is the one a new
+    // PFA lands on. Gating the confirm path on a known branch would leave that user with a question and no
+    // way to answer it — the dead end this phase exists to remove.
+    const outcome = deriveVatPeriodicity(
+      {
+        year: 2026,
+        registrationEffectiveFrom: '2026-03-01',
+        registrationRoute: 'b',
+        userChoice: { periodicity: 'quarter', branch: 'alin3', confirmedBy: 'user', confirmedOn: '2026-04-11' },
+      },
+      cap,
+    );
+    expect(outcome.kind).toBe('user_confirmed');
+    if (outcome.kind !== 'user_confirmed') return;
+    expect(outcome.periodicity).toBe('quarter');
+    expect(outcome.choice.confirmedBy).toBe('user');
+    // The reason the app stopped travels with the answer, so the record says what was never established.
+    expect(outcome.steps.some((s) => s.value.includes('alin. (3)'))).toBe(true);
+  });
+
   it('alin. (4) exception: intra-community goods BEFORE registration removes the quarter whatever the figure', () => {
     const outcome = deriveVatPeriodicity(
       {

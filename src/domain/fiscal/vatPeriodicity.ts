@@ -468,7 +468,23 @@ export function deriveVatPeriodicity(
 ): VatPeriodicityOutcome {
   const capOrNull = 'ok' in cap && cap.ok === false ? null : (cap as PeriodicityCap);
   const capFailure = 'ok' in cap && cap.ok === false ? cap : null;
+  const outcome = deriveBranch(facts, capOrNull, capFailure);
+  // D-VAT-1's second half, applied once so it cannot be forgotten on a branch. Where the article asks for a
+  // figure the app does not have and the person has answered instead, the answer stands — as theirs, with
+  // the rule they were shown, and never rewritten into a derivation the facts do not support.
+  if (outcome.kind === 'ask' && facts.userChoice) {
+    return confirmedOutcome(facts.userChoice, capOrNull, [
+      { label: 'De ce nu a putut fi derivat', value: outcome.detail },
+    ]);
+  }
+  return outcome;
+}
 
+function deriveBranch(
+  facts: VatPeriodicityFacts,
+  capOrNull: PeriodicityCap | null,
+  capFailure: PeriodicityCapFailure | null,
+): VatPeriodicityOutcome {
   const effectiveFrom = facts.registrationEffectiveFrom;
   const route = facts.registrationRoute;
 

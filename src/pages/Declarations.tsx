@@ -291,21 +291,25 @@ function VatPeriodicityPanel() {
                 ))}
               </ul>
             </details>
-            {outcome.branch !== null && (
-              <div>
-                <div className="hint">
-                  {vatReturnCopy.answerLead(ART322_RULE_TEXT[outcome.branch].rule)}
-                </div>
-                <div className="row-actions">
-                  <button className="btn btn-sm btn-primary" onClick={() => recordChoice('month')}>
-                    {vatReturnCopy.chooseMonth}
-                  </button>
-                  <button className="btn btn-sm btn-ghost" onClick={() => recordChoice('quarter')}>
-                    {vatReturnCopy.chooseQuarter}
-                  </button>
-                </div>
+            {/* The confirm path is offered on EVERY unanswered branch, including the one where the app
+                cannot yet say which alineat applies. Gating it on a known branch would leave the
+                mid-year registration case — the likeliest user of this screen — with a question and no
+                way to answer it, which is the dead end D-VAT-1 exists to remove. */}
+            <div>
+              <div className="hint">
+                {vatReturnCopy.answerLead(
+                  outcome.branch !== null ? ART322_RULE_TEXT[outcome.branch].rule : outcome.detail,
+                )}
               </div>
-            )}
+              <div className="row-actions">
+                <button className="btn btn-sm btn-primary" onClick={() => recordChoice('month')}>
+                  {vatReturnCopy.chooseMonth}
+                </button>
+                <button className="btn btn-sm btn-ghost" onClick={() => recordChoice('quarter')}>
+                  {vatReturnCopy.chooseQuarter}
+                </button>
+              </div>
+            </div>
           </>
         )}
       </div>
