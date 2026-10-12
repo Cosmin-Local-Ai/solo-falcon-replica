@@ -29,7 +29,7 @@ import {
   regimeRefusalReason,
   selectableRegimes,
 } from '../domain/regimes';
-import { epochMs, isoCalendarDateProblem, isoCalendarDateProblemText } from '../domain/date';
+import { epochMs, formatRoCalendarDate, isoCalendarDateProblem, isoCalendarDateProblemText, localDateISO } from '../domain/date';
 import type { Bani } from '../domain/money';
 // PG-6b (B-29) — the declared activity family. The type comes from the classifier that reads the fact, so
 // the option list on this form and the rule condition cannot drift into two vocabularies.
@@ -41,6 +41,20 @@ import {
   VAT_REGISTRATION_VALUES,
   type VatRegistrationStatus,
 } from '../domain/fiscal/vat';
+// B-97 (D-AIC-1, D-AIC-2) — the art. 322 alin. (7)-(8) facts. The derivation and the calendar are imported,
+// never reimplemented: `vatPeriodicityForYear` answers whether a quarter exists to flip, `aicFlipForQuarter`
+// says which litera applies and which periods replace the quarter, and `aicMentiuniObligation` counts the
+// five working days of alin. (8). This file writes facts; it computes nothing fiscal.
+import {
+  vatPeriodicityForYear,
+  type VatPeriodicityFacts,
+} from '../domain/fiscal/vatPeriodicity';
+import {
+  aicFlipForQuarter,
+  aicMentiuniObligation,
+  periodLabel,
+} from '../domain/fiscal/vatReturn';
+import { recordedRateProvider } from '../domain/fx/ledger';
 import type {
   AccommodationCommissionReading,
   PfaProfile,
@@ -99,6 +113,45 @@ type LadderAmountField = (typeof LADDER_AMOUNT_FIELDS)[number];
 function ladderAmountInput(profile: PfaProfile, key: LadderAmountField): string {
   const value = cassLadderForYear(profile.cassLadderYears, profile.fiscalYear)?.[key];
   return typeof value === 'number' ? leiInputValue(value) : '';
+}
+
+/**
+ * B-97 (D-AIC-2) — the three consequences of answering „da”, computed rather than typed.
+ *
+ * `aicFlipForQuarter` decides which litera of art. 322 alin. (7) applies and which fiscal periods replace
+ * the quarter; `aicMentiuniObligation` counts the five working days of alin. (8) and returns the term. The
+ * split and the date are **not** written out in this file: a hand-counted working-day term here would be a
+ * second calendar, and the second calendar is always the one that drifts from the first.
+ *
+ * The quarter is derived from the month, exactly as the calendar in `data/dashboard.ts` derives it. Asking a
+ * person for the quarter would let them type an answer off by one month that no arithmetic downstream could
+ * detect.
+ */
+function aicEffectLines(year: number, month: number): string[] {
+  const a = settingsCopy.fiscal.aic;
+  const quarter = Math.ceil(month / 3);
+  const flip = aicFlipForQuarter(year, quarter, month);
+  const lines: string[] = [];
+  if (flip) lines.push(`${a.effectMonthly} ${flip.note}`);
+  lines.push(
+    flip && flip.periods.length > 1
+      ? a.effectReturnsSplit(
+          flip.quarter,
+          flip.periods.length,
+          flip.periods.map(periodLabel).join(', '),
+        )
+      : a.effectReturnsOne(quarter),
+  );
+  const mentiuni = aicMentiuniObligation({ year, monthOfExigibility: month });
+  if (mentiuni) {
+    lines.push(a.effectMentiuni(formatRoCalendarDate(mentiuni.dueOn), a.monthNames[month - 1], year));
+  }
+  return lines;
+}
+
+/** The quarter a month of exigibility falls in — derived, shown, never asked. */
+function aicQuarterOf(month: number): number {
+  return Math.ceil(month / 3);
 }
 
 /**
@@ -368,7 +421,8 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
   // all — they are frozen legacy data, read only by the migration chain.
   // `settings` itself stays live for what is genuinely settings: e-Factura
   // behaviour and the bank-account list.
-  const { settings, updateSettings, profile, updateProfile, toast, fxRates, dataOrigin, sandboxActive, loadSandbox, unloadSandbox, resetAllData } = useStore();
+  const store = useStore();
+  const { settings, updateSettings, profile, updateProfile, toast, fxRates, dataOrigin, sandboxActive, loadSandbox, unloadSandbox, resetAllData } = store;
   const identity = profile.identity;
   const [wipeOpen, setWipeOpen] = useState(false);
   const [tab, setTab] = useState<TabKey>(
@@ -510,6 +564,99 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const regimeOptions = selectableRegimes();
+
+  // ── B-97 (D-AIC-1, D-AIC-2) — art. 322 alin. (7)-(8), collected per fiscal year ──────
+  //
+  // The two facts live in `PfaProfile.vatPeriodicityYears`, which is a record **per calendar year**, and
+  // `getVatObligations` in `data/dashboard.ts` reads them for `profile.fiscalYear`. A profile-level toggle
+  // would therefore be a different model from the one the arithmetic already reads: it could not answer
+  // „was the period a quarter in 2026, and is it one in 2027?” separately, which is what alin. (7) turns
+  // on. So this block is keyed to the year the tab already declares, exactly like the room count, the
+  // pension facts and the ladder amounts above it.
+  //
+  // It writes through the store on its own rather than waiting for „Salvează”, for the same reason the
+  // vehicle facts and the FX form do: the confirmation *is* the save action, and a pending alin. (7)
+  // answer sitting in a form nobody re-saves would be a fiscal state the screen invented.
+  const aicYear = profile.fiscalYear;
+  const aicStored = (profile.vatPeriodicityYears ?? []).find((y) => y.year === aicYear);
+  const [aic, setAic] = useState<{ answer: '' | 'da' | 'nu'; month: string }>({
+    answer:
+      aicStored?.aicGoodsWhileQuarterly === 'da' || aicStored?.aicGoodsWhileQuarterly === 'nu'
+        ? aicStored.aicGoodsWhileQuarterly
+        : '',
+    month: aicStored?.aicGoodsExigibilityMonth ? String(aicStored.aicGoodsExigibilityMonth) : '',
+  });
+  const [aicConfirmOpen, setAicConfirmOpen] = useState(false);
+
+  /*
+   * The block is keyed to the year the profile declares, so it has to re-seed when that year changes.
+   *
+   * This is not tidiness. The other per-year fields on this tab are staged in the form and written by
+   * „Salvează”, so a stale value is at worst an edit the person can still see and correct. This block
+   * writes on its own, the moment the confirmation is pressed — so a control still showing 2026's answer
+   * after the profile moved to 2027 would record last year's fact against this year, which is exactly the
+   * kind of fiscal statement this app must not make by accident.
+   */
+  useEffect(() => {
+    setAic({
+      answer:
+        aicStored?.aicGoodsWhileQuarterly === 'da' || aicStored?.aicGoodsWhileQuarterly === 'nu'
+          ? aicStored.aicGoodsWhileQuarterly
+          : '',
+      month: aicStored?.aicGoodsExigibilityMonth ? String(aicStored.aicGoodsExigibilityMonth) : '',
+    });
+    setAicConfirmOpen(false);
+    // Keyed to the year and to the two stored facts, not to the whole record: a pending „da” plus a month
+    // changes neither, so the person's unconfirmed answer survives while they read the consequences.
+  }, [aicYear, aicStored?.aicGoodsWhileQuarterly, aicStored?.aicGoodsExigibilityMonth]);
+
+  /*
+   * Can this answer change anything, and if it cannot — why not, said out loud?
+   *
+   * The derivation is run over the year's facts **with the two alin. (7) facts removed**. That is not a
+   * second rule and not a re-derivation: it is the same `vatPeriodicityForYear` asked the question art.
+   * 322 alin. (7) itself asks — what would the period be *but for* this exception? Asking it against the
+   * full fact set would make the question vanish the moment it is answered, because the answer is precisely
+   * what makes the period monthly, and an answered fact that becomes invisible is a fact nobody can check
+   * or correct.
+   */
+  const aicFactsWithoutFlip = (profile.vatPeriodicityYears ?? []).map((y) => {
+    if (y.year !== aicYear) return y;
+    const without: VatPeriodicityFacts = { ...y };
+    delete without.aicGoodsWhileQuarterly;
+    delete without.aicGoodsExigibilityMonth;
+    return without;
+  });
+  const aicPeriodWithoutFlip = vatPeriodicityForYear(
+    aicFactsWithoutFlip,
+    aicYear,
+    recordedRateProvider(store),
+    profile.vatRegistration,
+  );
+  const aicPeriodButForFlip =
+    aicPeriodWithoutFlip.kind === 'ask' ? null : aicPeriodWithoutFlip.periodicity;
+  const aicRegistrationStatus = profile.vatRegistration?.status;
+  const aicRecorded =
+    aicStored?.aicGoodsWhileQuarterly === 'da' || aicStored?.aicGoodsWhileQuarterly === 'nu';
+  /** `null` means the question is worth asking. Every other value is the reason it is not, and is shown. */
+  let aicNotAsked:
+    | null
+    | 'registration_unknown'
+    | 'not_registered'
+    | 'monthly'
+    | 'monthly_by_user' = null;
+  if (aicRegistrationStatus === undefined) {
+    aicNotAsked = 'registration_unknown';
+  } else if (aicRegistrationStatus === 'scutit_art310') {
+    aicNotAsked = 'not_registered';
+  } else if (aicPeriodButForFlip === 'month') {
+    aicNotAsked = aicPeriodWithoutFlip.kind === 'user_confirmed' ? 'monthly_by_user' : 'monthly';
+  }
+  const aicMonthNumber = aic.month === '' ? null : Number(aic.month);
+  const aicEffectsPending = aic.answer === 'da' && aicMonthNumber !== null;
+  const aicEffectLinesForYear = aicEffectsPending
+    ? aicEffectLines(aicYear, aicMonthNumber as number)
+    : [];
 
   // PG-6h-2 (B-82) — which income TITLE the accommodation block currently describes.
   //
@@ -776,6 +923,54 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       },
     });
     toast('success', settingsCopy.toasts.fiscalProfileSaved);
+  }
+
+  /**
+   * B-97 — write the two art. 322 alin. (7)-(8) facts for the year this tab declares.
+   *
+   * Per year, and merged rather than replaced: the record for that year also carries the registration route,
+   * the turnover figures and the periodicity answer collected on the Declarații page, and a form that saves
+   * one fact must not erase the others.
+   *
+   * `confirmed` writes the provenance PG-6g established — `confirmedBy: 'user'` is a **literal** in the
+   * schema precisely so there is no way to record that the app decided. That confirmation is dropped when
+   * the answer it belongs to goes away or the month moves, but only when its branch is `alin7`: a
+   * periodicity answer the person gave on the Declarații page is a different answer and stays put.
+   */
+  function saveAicFacts(answer: '' | 'da' | 'nu', month: number | null, confirmed: boolean): void {
+    const years = profile.vatPeriodicityYears ?? [];
+    const current = years.find((y) => y.year === aicYear);
+    const next: VatPeriodicityFacts = { year: aicYear };
+    if (current) {
+      const withoutAic: VatPeriodicityFacts = { ...current };
+      delete withoutAic.aicGoodsWhileQuarterly;
+      delete withoutAic.aicGoodsExigibilityMonth;
+      Object.assign(next, withoutAic);
+    }
+    // An unanswered select writes absence, never `nu`. A checked negative is a fact the person stated; an
+    // empty field is the app still not knowing, and the two lead the derivation to different places.
+    if (answer !== '') {
+      next.aicGoodsWhileQuarterly = answer;
+      if (answer === 'da' && month !== null) next.aicGoodsExigibilityMonth = month;
+    }
+    const confirmationStillFits =
+      answer === 'da'
+      && month !== null
+      && current?.aicGoodsWhileQuarterly === 'da'
+      && current?.aicGoodsExigibilityMonth === month;
+    if (confirmed) {
+      next.userChoice = {
+        periodicity: 'month',
+        branch: 'alin7',
+        confirmedBy: 'user',
+        confirmedOn: localDateISO(),
+      };
+    } else if (!confirmationStillFits && current?.userChoice?.branch === 'alin7') {
+      delete next.userChoice;
+    }
+    updateProfile({
+      vatPeriodicityYears: [...years.filter((y) => y.year !== aicYear), next],
+    });
   }
 
   function copyAdresa() {
@@ -1503,9 +1698,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label htmlFor="set-establishment-date">{settingsCopy.fiscal.establishmentDate}</label>
+                <label htmlFor="set-establishment">{settingsCopy.fiscal.establishmentDate}</label>
                 <input
-                  id="set-establishment-date"
+                  id="set-establishment"
                   className="input"
                   type="date"
                   value={fiscal.pfaStartDate}
@@ -1751,9 +1946,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label htmlFor="set-vat-exceedance-date">{settingsCopy.fiscal.vatExceedanceDate}</label>
+                <label htmlFor="set-vat-exceedance">{settingsCopy.fiscal.vatExceedanceDate}</label>
                 <input
-                  id="set-vat-exceedance-date"
+                  id="set-vat-exceedance"
                   className="input"
                   type="date"
                   value={fiscal.vatExceedanceDate}
@@ -1765,6 +1960,134 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                 />
                 {errors.vatExceedanceDate && <span className="error">{errors.vatExceedanceDate}</span>}
               </div>
+
+              {/*
+                B-97 (D-AIC-1, D-AIC-2) — art. 322 alin. (7)-(8), asked in the VAT area because that is
+                where the registration state that makes the question possible is already answered.
+
+                The question is asked about goods bought in another EU country, not about an „achiziție
+                intracomunitară de bunuri”: the code's term is not vocabulary a PFA owns, and a person who
+                cannot parse the question cannot answer it. The term and the citation stay attached beside the
+                answer, so the fact remains traceable to the article that asks for it.
+
+                The **month** is collected, never the quarter — the model derives the quarter from the month,
+                and a quarter typed by hand can be off by one month in a way no downstream arithmetic notices.
+
+                Answering „da” shows the three consequences and opens a confirmation before anything is
+                written (D-AIC-2): a single click must not apply a legal change, and the saved record carries
+                `confirmedBy: 'user'` so it can never read as the app's own conclusion.
+              */}
+              {(aicNotAsked === null || aicRecorded) && (
+                <div className="field" data-aic-block>
+                  <label htmlFor="set-aic-goods">{settingsCopy.fiscal.aic.title}</label>
+                  <span className="hint" data-aic-question>
+                    {settingsCopy.fiscal.aic.question(aicYear)}
+                  </span>
+                  <select
+                    id="set-aic-goods"
+                    className="input"
+                    data-aic-answer
+                    value={aic.answer}
+                    onChange={ev => {
+                      const v = ev.target.value as '' | 'da' | 'nu';
+                      setAic({ answer: v, month: v === 'da' ? aic.month : '' });
+                      // Only „da” moves a fiscal period, so only „da” waits for a confirmation. „nu” and
+                      // clearing the answer change nothing about the calendar and write straight away.
+                      if (v !== 'da') saveAicFacts(v, null, false);
+                    }}
+                  >
+                    <option value="">{settingsCopy.fiscal.aic.answerUnanswered}</option>
+                    <option value="da">{settingsCopy.fiscal.aic.answerDa}</option>
+                    <option value="nu">{settingsCopy.fiscal.aic.answerNu}</option>
+                  </select>
+                  <span className="hint" data-aic-term>
+                    {settingsCopy.fiscal.aic.termNote} {settingsCopy.fiscal.aic.citation}
+                  </span>
+
+                  {aic.answer === 'da' && (
+                    <>
+                      <label htmlFor="set-aic-month">{settingsCopy.fiscal.aic.monthLabel(aicYear)}</label>
+                      <select
+                        id="set-aic-month"
+                        className="input"
+                        data-aic-month
+                        value={aic.month}
+                        onChange={ev => setAic({ ...aic, month: ev.target.value })}
+                      >
+                        <option value="">{settingsCopy.fiscal.aic.monthPlaceholder}</option>
+                        {settingsCopy.fiscal.aic.monthNames.map((name, i) => (
+                          <option key={name} value={String(i + 1)}>{name}</option>
+                        ))}
+                      </select>
+                      {aicMonthNumber !== null && (
+                        <span className="hint" data-aic-quarter>
+                          {settingsCopy.fiscal.aic.quarterDerived(aicQuarterOf(aicMonthNumber))}
+                        </span>
+                      )}
+                    </>
+                  )}
+
+                  {aicEffectsPending && (
+                    <>
+                      <div className="hint" data-aic-effects>
+                        <div>{settingsCopy.fiscal.aic.effectsTitle}</div>
+                        <ul>
+                          {aicEffectLinesForYear.map(line => (
+                            <li key={line}>{line}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="row-actions">
+                        <button
+                          className="btn btn-sm btn-primary"
+                          data-aic-review
+                          onClick={() => setAicConfirmOpen(true)}
+                        >
+                          {settingsCopy.fiscal.aic.review}
+                        </button>
+                      </div>
+                      <span className="hint" data-aic-pending>
+                        {settingsCopy.fiscal.aic.pendingNote}
+                      </span>
+                    </>
+                  )}
+
+                  {aicRecorded && (
+                    <span className="hint" data-aic-recorded>
+                      {settingsCopy.fiscal.aic.recordedForYear(aicYear)}
+                    </span>
+                  )}
+                  {/* The consequence is shown where PG-6g already shows it — the Form 300 panel on
+                      Declarații, with the split calendar and the mențiuni row. Linking to that panel is the
+                      whole point: a second calendar rendered here would be the B-70 defect class, two
+                      producers for one series. */}
+                  {aicStored?.aicGoodsWhileQuarterly === 'da' && (
+                    <span className="hint" data-aic-saved>
+                      {settingsCopy.fiscal.aic.savedNote(aicYear)}{' '}
+                      <a href="/declarations" data-aic-calendar-link>
+                        {settingsCopy.fiscal.aic.calendarLink}
+                      </a>
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* The question is conditional, and the refusal is spoken. Silence here would hide art. 322
+                  alin. (7) from exactly the person who may be in it, so each case says why it is not
+                  asking instead of rendering nothing. */}
+              {aicNotAsked !== null && !aicRecorded && (
+                <div className="field" data-aic-not-asked>
+                  <span className="hint">
+                    {aicNotAsked === 'registration_unknown'
+                      ? settingsCopy.fiscal.aic.notAskedRegistrationUnknown
+                      : aicNotAsked === 'not_registered'
+                        ? settingsCopy.fiscal.aic.notAskedNotRegistered
+                        : aicNotAsked === 'monthly_by_user'
+                          ? settingsCopy.fiscal.aic.notAskedMonthlyByUser(aicYear)
+                          : settingsCopy.fiscal.aic.notAskedMonthly(aicYear)}
+                  </span>
+                </div>
+              )}
 
               <div className="field">
                 <label htmlFor="set-cash-floor">{settingsCopy.fiscal.cashFloor}</label>
@@ -1860,6 +2183,46 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
             </div>
           </Card>
         </div>
+      )}
+
+      {/* B-97 (D-AIC-2) — the confirmation is a legal consequence, not a „are you sure”. It names the three
+          changes the answer produces, in the order the article produces them, and nothing is written until
+          the person presses „Confirm și salvez”. */}
+      {aicConfirmOpen && aicMonthNumber !== null && (
+        <Modal
+          title={settingsCopy.fiscal.aic.confirmTitle}
+          onClose={() => setAicConfirmOpen(false)}
+          footer={
+            <>
+              <button
+                className="btn btn-ghost"
+                data-aic-confirm-cancel
+                onClick={() => setAicConfirmOpen(false)}
+              >
+                {settingsCopy.fiscal.aic.confirmCancel}
+              </button>
+              <button
+                className="btn btn-primary"
+                data-aic-confirm-go
+                onClick={() => {
+                  saveAicFacts('da', aicMonthNumber, true);
+                  setAicConfirmOpen(false);
+                  toast('success', settingsCopy.fiscal.aic.toastSaved);
+                }}
+              >
+                {settingsCopy.fiscal.aic.confirmGo}
+              </button>
+            </>
+          }
+        >
+          <p>{settingsCopy.fiscal.aic.effectsIntro(aicYear)}</p>
+          <ul>
+            {aicEffectLines(aicYear, aicMonthNumber).map(line => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+          <p className="hint">{settingsCopy.fiscal.aic.confirmWarning}</p>
+        </Modal>
       )}
 
       {wipeOpen && (

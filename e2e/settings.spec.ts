@@ -110,7 +110,8 @@ function seed(page: Page, dataset: unknown) {
   );
 }
 
-/** A Settings `.field` block addressed by its label text (labels have no htmlFor). */
+/** A Settings `.field` block addressed by its label text. (Since B-91 the labels carry `htmlFor`, but these
+ *  specs were written against the text and the text is the accessible name either way, so they still work.) */
 function field(page: Page, label: string) {
   return page.locator('.field').filter({ hasText: label });
 }
@@ -698,5 +699,81 @@ test.describe('B-51 — the scope statement is reachable in Settings', () => {
     // Reachable again after a reload, from the same route — it is a durable statement, not a first-run toast.
     await page.reload();
     await expect(page.locator('[data-scope-statement]')).toContainText('consultanța fiscală');
+  });
+});
+
+test.describe('B-97 — art. 322 alin. (7)-(8): bunuri cumpărate dintr-un alt stat UE', () => {
+  /**
+   * D-AIC-2 end to end. The point of this spec is the middle of it: after „da” and a month are chosen, the
+   * three consequences are on screen and **the profile still holds nothing** — a reload brings back an
+   * unanswered year. Only the confirmation writes, and what it writes carries `confirmedBy: 'user'`.
+   *
+   * `seedBrowserOnce` rather than `seedBrowser`, for the reason the tests above record: an unconditional
+   * init script re-runs on reload and would overwrite what the UI just saved, turning the persistence
+   * assertion into a tautology.
+   */
+  test('the three consequences show before saving, nothing persists until confirmed, and the answer survives a reload', async ({ page }) => {
+    await fixClock(page);
+    await seedBrowserOnce(page);
+    await page.goto('/settings#!/fiscal');
+    await expect(page.locator('[data-cass-ladder]')).toBeVisible();
+
+    // The seed profile is registered under art. 316 and its period is not already the month, so the
+    // question applies to it — and it is asked in human terms, with the citation attached.
+    await expect(page.locator('[data-aic-question]')).toContainText('alt stat al Uniunii Europene');
+    await expect(page.locator('[data-aic-term]')).toContainText('achiziție intracomunitară de bunuri');
+
+    await page.selectOption('[data-aic-answer]', 'da');
+    await page.selectOption('[data-aic-month]', '5');
+
+    const effects = page.locator('[data-aic-effects]');
+    await expect(effects).toContainText('luna calendaristică');
+    await expect(effects).toContainText('deconturi');
+    await expect(effects).toContainText('declarație de mențiuni');
+    await expect(effects).toContainText('5 zile lucrătoare');
+    // The quarter is derived from the month that was chosen, never asked for.
+    await expect(page.locator('[data-aic-quarter]')).toContainText('T2');
+
+    // Nothing was saved. A reload therefore returns an unanswered year, not „da”.
+    await page.reload();
+    await expect(page.locator('[data-aic-answer]')).toHaveValue('');
+    expect((await storedProfile(page)).vatPeriodicityYears).toBeUndefined();
+
+    // Now confirm — two deliberate actions, and only the second one writes.
+    await page.selectOption('[data-aic-answer]', 'da');
+    await page.selectOption('[data-aic-month]', '5');
+    await page.locator('[data-aic-review]').click();
+    await expect(page.locator('[data-aic-confirm-go]')).toBeVisible();
+    await page.locator('[data-aic-confirm-go]').click();
+
+    await expect.poll(async () => {
+      const years = ((await storedProfile(page)).vatPeriodicityYears ?? []) as Array<Record<string, unknown>>;
+      const record = years.find((y) => y.year === 2026);
+      return `${record?.aicGoodsWhileQuarterly ?? '-'}/${record?.aicGoodsExigibilityMonth ?? '-'}/${
+        (record?.userChoice as Record<string, unknown> | undefined)?.confirmedBy ?? '-'
+      }`;
+    }).toBe('da/5/user');
+
+    // The consequence is shown where PG-6g already shows it — a link to the Form 300 panel, not a second
+    // calendar on this tab.
+    await page.reload();
+    await expect(page.locator('[data-aic-answer]')).toHaveValue('da');
+    await expect(page.locator('[data-aic-month]')).toHaveValue('5');
+    await expect(page.locator('[data-aic-saved]')).toContainText('al dumneavoastră');
+    await expect(page.locator('[data-aic-calendar-link]')).toHaveAttribute('href', '/declarations');
+    await expect(page.locator('[data-obligation-id]')).toHaveCount(0);
+  });
+
+  test('a person outside the VAT register is not asked, and the tab says why', async ({ page }) => {
+    await fixClock(page);
+    await seedBrowserOnce(page);
+    await page.goto('/settings#!/fiscal');
+    await expect(page.locator('[data-cass-ladder]')).toBeVisible();
+
+    await page.selectOption('#set-vat-registration', 'scutit_art310');
+    await page.getByRole('button', { name: 'Salvează' }).click();
+
+    await expect(page.locator('[data-aic-answer]')).toHaveCount(0);
+    await expect(page.locator('[data-aic-not-asked]')).toContainText('nu ești înregistrat(ă) în scopuri de TVA');
   });
 });

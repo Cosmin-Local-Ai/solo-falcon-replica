@@ -325,6 +325,83 @@ export const settings = {
     vatExceedanceDateHint:
       'Necompletat înseamnă că aplicația nu cunoaște data și nu afișează niciun termen de înregistrare.',
     cashFloor: 'Prag plăți în numerar (lei)',
+
+    /**
+     * B-97 (D-AIC-1, D-AIC-2) — the two art. 322 alin. (7)-(8) facts, collected on this tab.
+     *
+     * WHY IT IS ASKED IN PLAIN WORDS. „achiziție intracomunitară de bunuri” is the term the code and the
+     * decont use; it is not vocabulary a PFA owns. The person who has to answer this knows only that they
+     * bought goods in another EU country and brought them in. So the question is put in those words and the
+     * technical term is kept beside it, with the citation attached to the answer rather than substituted
+     * for the question.
+     *
+     * WHY THE MONTH AND NEVER THE QUARTER. The model derives the quarter from the month
+     * (`Math.ceil(month / 3)`). A quarter typed by hand can be wrong by one month in a way no arithmetic
+     * downstream can detect — the number would still be a valid quarter. The month is the fact the person
+     * actually knows, and the quarter is shown as what the app derived from it.
+     *
+     * WHY THE QUESTION IS CONDITIONAL, AND WHY THE REFUSAL IS SPOKEN. Art. 322 alin. (7) turns a quarter
+     * into months. Someone outside the VAT register has no decont to split, and someone already monthly has
+     * nothing to flip — asking them is noise. But silence would hide the law from exactly the person who
+     * may be affected, so each case says why it is not asking instead of rendering nothing.
+     *
+     * WHY THE CONFIRMATION EXISTS (D-AIC-2). A „da” here is not a preference; it moves a fiscal period and
+     * adds a filing duty. The three consequences are shown before anything is written, and the record says
+     * `confirmedBy: 'user'` so it can never read as the app's own conclusion.
+     */
+    aic: {
+      title: 'Bunuri cumpărate dintr-un alt stat al Uniunii Europene',
+      citation: 'CF art. 322 alin. (7) și (8)',
+      question: (year: number): string =>
+        `În ${year}, ai cumpărat bunuri dintr-un alt stat al Uniunii Europene — de exemplu marfă adusă în România — și taxa pe valoarea adăugată pentru acea achiziție s-a datorat în România?`,
+      termNote:
+        'În Codul fiscal operațiunea se numește „achiziție intracomunitară de bunuri”. Întrebarea de mai sus este pusă în cuvinte simple, pentru că termenul tehnic nu este unul pe care un PFA să îl folosească în mod curent; citația rămâne atașată de răspuns.',
+      answerUnanswered: 'Nu este înregistrat — aplicația nu a întrebat',
+      answerDa: 'Da',
+      answerNu: 'Nu',
+      monthLabel: (year: number): string =>
+        `În ce lună a anului ${year} a intervenit exigibilitatea, adică momentul în care taxa s-a datorat în România?`,
+      monthPlaceholder: 'Alege luna',
+      monthNames: [
+        'ianuarie', 'februarie', 'martie', 'aprilie', 'mai', 'iunie',
+        'iulie', 'august', 'septembrie', 'octombrie', 'noiembrie', 'decembrie',
+      ],
+      quarterDerived: (quarter: number): string =>
+        `Trimestrul rezultă din lună: T${quarter}. Aplicația nu întreabă trimestrul, pentru că se calculează din lună, iar un trimestru tastat poate greși o lună fără ca nicio verificare să observe.`,
+      // Why the question is not asked. Each branch names its own reason; none of them is a blank space.
+      notAskedNotRegistered:
+        'Întrebarea nu se pune pentru că registrul arată că nu ești înregistrat(ă) în scopuri de TVA. Fără cod de TVA nu se depun deconturi, deci nu există nicio perioadă de schimbat.',
+      notAskedRegistrationUnknown:
+        'Întrebarea nu se pune încă: aplicația nu cunoaște starea ta de înregistrare în scopuri de TVA și nu știe nici dacă ai deconturi de depus. Completează mai întâi „Starea de înregistrare în scopuri de TVA”.',
+      notAskedMonthly: (year: number): string =>
+        `Întrebarea nu se pune pentru că pe ${year} perioada fiscală este deja luna calendaristică. Art. 322 alin. (7) transformă trimestrul în luni; acolo unde luna se aplică deja, nu este nimic de schimbat.`,
+      notAskedMonthlyByUser: (year: number): string =>
+        `Întrebarea nu se pune pentru că pe ${year} ai declarat deja că depui lunar. Art. 322 alin. (7) transformă trimestrul în luni; acolo unde luna se aplică deja, nu este nimic de schimbat.`,
+      recordedForYear: (year: number): string =>
+        `Fapta este înregistrată pentru ${year}. O poți modifica de aici.`,
+      // The three consequences of D-AIC-2, shown before anything is saved.
+      effectsTitle: 'Ce schimbă acest răspuns',
+      effectsIntro: (year: number): string =>
+        `Răspunsul „da” pentru ${year} nu este o simplă bifă: schimbă perioada fiscală și adaugă o obligație de depunere. Citește cele trei efecte și confirmă. Nimic nu este salvat până la „Confirm și salvez”.`,
+      effectMonthly: 'Perioada fiscală devine luna calendaristică.',
+      effectReturnsOne: (quarter: number): string =>
+        `Trimestrul T${quarter} rămâne neatins și se declară într-un singur decont; luna calendaristică începe cu trimestrul următor.`,
+      effectReturnsSplit: (quarter: number, count: number, periods: string): string =>
+        `În loc de un singur decont pe trimestrul T${quarter}, se depun ${count} deconturi pentru aceeași perioadă: ${periods}.`,
+      effectMentiuni: (dueOn: string, monthName: string, year: number): string =>
+        `Se adaugă o declarație de mențiuni, separată de deconturi, până la ${dueOn} — maximum 5 zile lucrătoare de la finele lunii ${monthName} ${year}.`,
+      review: 'Verific și confirm schimbarea',
+      confirmTitle: 'Confirmi schimbarea perioadei fiscale',
+      confirmWarning:
+        'Schimbarea se aplică în registrul aplicației și în calendarul de depunere. Ea nu constituie nicio declarație transmisă către ANAF.',
+      confirmCancel: 'Nu confirm',
+      confirmGo: 'Confirm și salvez',
+      pendingNote: 'Răspunsul nu este salvat încă. Alege „Verific și confirm schimbarea”.',
+      savedNote: (year: number): string =>
+        `Răspunsul pentru ${year} este înregistrat ca al dumneavoastră, nu ca o concluzie a aplicației.`,
+      calendarLink: 'Calendarul de depunere și declarația de mențiuni le găsești pe pagina Declarații.',
+      toastSaved: 'Răspunsul despre achiziția din alt stat UE a fost confirmat și salvat',
+    },
   },
   vatModal: {
     title: 'Cod TVA intracomunitar',
