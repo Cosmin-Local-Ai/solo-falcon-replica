@@ -284,6 +284,45 @@ export default function DashboardPage() {
                   <RuleProvenance view={data.provenance} />
                 </Disclosure>
               ) : null}
+              {/* PG-6f (D-VAT-3) — the claimable input-VAT figure, mounted only when a decision actually
+                  ran. It sits beside the tax figure and is never added to it: this is a different claim
+                  about a different tax, and the copy says before anything else that it is unfiled. The
+                  three lists below are the lines the decision could not put in the total — each stays
+                  visible rather than vanishing, which is the PG-1 rule this surface already follows. */}
+              {data.inputVat ? (
+                <Disclosure label={dashboardCopy.estimate.inputVat.label} className="estimate-input-vat">
+                  <p className="hint">{dashboardCopy.estimate.inputVat.unfiled}</p>
+                  {data.inputVat.registrationDeclared ? (
+                    <>
+                      <p className="hint">{dashboardCopy.estimate.inputVat.claimable}</p>
+                      <p className="mono">
+                        <strong>{formatBaniRON(data.inputVat.claimableTotal)}</strong>
+                      </p>
+                      <p className="hint">{dashboardCopy.estimate.inputVat.notOneFormLine}</p>
+                      {data.inputVat.unresolved.length > 0 ? (
+                        <p className="hint">
+                          {dashboardCopy.estimate.inputVat.unresolvedLead}{' '}
+                          {dashboardCopy.estimate.inputVat.lineCount(data.inputVat.unresolved.length)}
+                        </p>
+                      ) : null}
+                      {data.inputVat.deferred.length > 0 ? (
+                        <p className="hint">
+                          {dashboardCopy.estimate.inputVat.deferredLead}{' '}
+                          {dashboardCopy.estimate.inputVat.lineCount(data.inputVat.deferred.length)}
+                        </p>
+                      ) : null}
+                      {data.inputVat.zero.length > 0 ? (
+                        <p className="hint">
+                          {dashboardCopy.estimate.inputVat.zeroLead}{' '}
+                          {dashboardCopy.estimate.inputVat.lineCount(data.inputVat.zero.length)}
+                        </p>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="hint">{dashboardCopy.estimate.inputVat.registrationMissing}</p>
+                  )}
+                </Disclosure>
+              ) : null}
             </div>
           </SectionCard>
 

@@ -1749,16 +1749,27 @@ export function selectEstimateOperands(
 export type TaxEstimateWithBasis = TaxEstimateResult & {
   basis: TaxEstimateBasis;
   scenarios?: ScenarioOutcome[];
+  /**
+   * PG-6f (D-VAT-3) — the per-line input-VAT decision that produced the expense base, carried rather than
+   * re-derived so a surface can show the claimable total without running a second pass over the ledger.
+   *
+   * Optional for the same reason `scenarios` is: a result that never went through `selectEstimateOperands`
+   * (a hand-built fixture, a stored snapshot) genuinely has no VAT answer rather than an empty one. A
+   * refused estimate has none either — the refusal happened before the decision ran.
+   */
+  inputVat?: InputVatDecision;
 };
 
 export function attachEstimateBasis(
   result: TaxEstimateResult,
   basis: TaxEstimateBasis,
   scenarios?: readonly ScenarioOutcome[],
+  inputVat?: InputVatDecision,
 ): TaxEstimateWithBasis {
-  return scenarios === undefined
+  const attached: TaxEstimateWithBasis = scenarios === undefined
     ? { ...result, basis }
     : { ...result, basis, scenarios: [...scenarios] };
+  return inputVat === undefined ? attached : { ...attached, inputVat };
 }
 
 /** The recorded basis, or `null` when this result never had one. */

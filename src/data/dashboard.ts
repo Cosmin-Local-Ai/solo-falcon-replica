@@ -25,6 +25,9 @@ import {
   type TaxEstimateWithBasis,
 } from '../domain/estimateBasis';
 import { computeTaxEstimate, type TaxEstimateResult } from '../domain/tax';
+// PG-6f (D-VAT-3) — the decision type only. The decision itself is produced once, in the assembler, and
+// carried here; re-running it over the ledger would be a second producer of one legal figure.
+import type { InputVatDecision } from '../domain/fiscal/vat';
 import {
   computeThresholds,
   readMinimumWageVintages,
@@ -254,6 +257,17 @@ export interface DashboardData {
   tax: TaxEstimateWithBasis | null;
   estimateState: TaxEstimateState;
   /**
+   * PG-6f (D-VAT-3) — the per-line input-VAT decision for this period, carried from the single assembler
+   * pass rather than recomputed here. `null` when no estimate was produced at all, which is a different
+   * state from a decision that found nothing claimable.
+   *
+   * The claimable total it carries is **not a return figure**. `research/42` §7 records that the amount
+   * lands on D300 rd. 30 *plus* the corrections on rd. 33/34, because the 50 % vehicle cut and the pro
+   * rata fall partly inside rd. 20-28 and partly outside it. PG-6g owns the form; nothing here may
+   * present this as a filed or filable number.
+   */
+  inputVat: InputVatDecision | null;
+  /**
    * PG-4 — which fiscal year this view is about, whether it is closed, and whether this build has the
    * rules for it. The banner and the hero label both read this instead of re-deriving a year from the
    * clock, which is how a stale year could previously be presented as the current one.
@@ -400,7 +414,7 @@ export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEsti
     flatRatioGross: amounts.flatRatioGross ?? null,
     ruleRelease: selection ? selection.release : null,
     rules,
-  }).then((result) => attachEstimateBasis(result, basis, operands.scenarios));
+  }).then((result) => attachEstimateBasis(result, basis, operands.scenarios, operands.inputVat));
 }
 
 /**
@@ -892,6 +906,7 @@ export function buildDashboardData(
     snapshot,
     tax: estimate,
     estimateState: estimateStateOf(estimate, coverage),
+    inputVat: estimate?.inputVat ?? null,
     year: fiscalYearView(data, asOfDate, instant),
     coverage,
     thresholds: getThresholdStatuses(data, asOfDate, estimate),

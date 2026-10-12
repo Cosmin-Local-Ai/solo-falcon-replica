@@ -65,6 +65,30 @@ export const dashboard = {
     completeProfileBody:
       'Profilul încă nu are faptele obligatorii. Fără ele estimarea rămâne neîndeplinită în loc să fie aproximată.',
     /**
+     * PG-6f (D-VAT-3) — the claimable input-VAT figure, and the words that keep it from being read as a
+     * return. `research/42` §7 records that this amount does not land on one line of the decont: part of
+     * it is declared at the deductible-VAT total and part at the regularisation lines, because the 50 %
+     * vehicle cut and the pro rata fall on both sides of that split. PG-6g owns the form. Nothing here
+     * completes one, and nothing here may call this number a declared one.
+     */
+    inputVat: {
+      label: 'TVA deductibilă din achiziții',
+      /** The unfiled warning, first rather than last. */
+      unfiled:
+        'Această sumă este calculată din înregistrările tale și nu a fost verificată cu nicio declarație depusă. Aplicația nu completează și nu depune niciun decont de TVA.',
+      /** Why one number is not one form line — the reason the figure is never labelled as a rubric. */
+      notOneFormLine:
+        'Suma nu corespunde unei singure rubrici din decontul de TVA: o parte din ea se declară la totalul taxei deductibile și o parte la rubricile de regularizări, pentru că limitarea de 50 % pentru vehicule și cota de deducere se aplică parțial în interiorul și parțial în afara rubricilor de bază.',
+      claimable: 'TVA pe care o poți deduce în perioada afișată',
+      unresolvedLead: 'Rămân afara sumei, pentru că deductibilitatea nu este stabilită:',
+      deferredLead: 'Amânate de regimul TVA la încasare până la plată:',
+      zeroLead: 'Taxe pe care legea nu îți permite să le deduci:',
+      /** The state where no amount at all is asserted. */
+      registrationMissing:
+        'Starea de înregistrare în scopuri de TVA lipsește din profil. Câtă vreme nu este declarată, aplicația nu stabilește nicio sumă deductibilă: un PFA în scutirea de TVA nu are niciun drept de deducere, iar unul înregistrat are, și cele două dau rezultate diferite pentru fiecare înregistrare.',
+      lineCount: (n: number): string => `${n} ${n === 1 ? 'înregistrare' : 'înregistrări'}`,
+    },
+    /**
      * PG-1 — the coverage rows under the hero figure. One row per reason group, never one row per
      * record: a profile with nine uncategorised invoices has one thing to fix, not nine screens of
      * noise. The count, the amount that left the figure and the link to the first record of the group

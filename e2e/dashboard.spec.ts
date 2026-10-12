@@ -107,7 +107,7 @@ test.describe('Dashboard — cockpit cards (seed data)', () => {
     // seed PFA started on 2026-01-19 (PG-4, B-44) — but it now feeds the chart's forecast series and the
     // forecast card, not the assessment. CF art. 118 alin. (3) makes the amount realized in a fraction of
     // a year the annual amount, so no grossing-up stands between the register and the engine. The pair
-    // the engine selects for a non-`vatExempt` profile is still the VAT-exclusive one.
+    // the engine selects for a VAT-registered profile is still the VAT-exclusive one.
     //
     // TASK 2b changed WHICH expenses reach that operand: only the confirmed-deductible subset. Of the
     // two 'inregistrata' seed expenses, e1 (CloudHost, 120,00 lei, `postal_and_telecom`) is deductibilă
@@ -332,7 +332,7 @@ test.describe('Dashboard — section content (seed data)', () => {
     // reader is not left to infer that the year is already settled.
     await expect(thresholds.getByText('Valoare măsurată la data de 31.10.2026.')).toBeVisible();
 
-    // TASK 4: the seed profile already applies VAT (`vatExempt: false`), so the art. 310 alin. (1)
+    // TASK 4: the seed profile declares a VAT registration, so the art. 310 alin. (1)
     // registration test has been decided — the row renders as not applicable, not as a breach.
     await expect(thresholds.getByText(/Nu se aplică:/)).toHaveCount(1);
   });
@@ -737,7 +737,7 @@ test.describe('Dashboard — a PFA start date resolves no deadline', () => {
             salaryStatus: 'nu',
             pensionerStatus: 'nu',
             socialInsuranceStatus: 'obligatoriu',
-            vatExempt: false,
+            vatRegistration: { status: 'inregistrat_art316' },
             cashFloorLei: 0,
             identity: {
               nume: 'Popescu Andrei',
@@ -821,7 +821,7 @@ test.describe('Dashboard — Grafic financiar & KPI table (seeded FY2025)', () =
       salaryStatus: 'nu',
       pensionerStatus: 'nu',
       socialInsuranceStatus: 'obligatoriu',
-      vatExempt: false,
+      vatRegistration: { status: 'inregistrat_art316' },
       cashFloorLei: 0,
       identity: {
         nume: 'Popescu Andrei',
@@ -1033,7 +1033,7 @@ const computedDataset = () => ({
     salaryStatus: 'nu',
     pensionerStatus: 'nu',
     socialInsuranceStatus: 'obligatoriu',
-    vatExempt: false,
+    vatRegistration: { status: 'inregistrat_art316' },
     cashFloorLei: 0,
     identity: {
       nume: 'Popescu Andrei',

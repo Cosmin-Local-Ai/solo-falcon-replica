@@ -37,6 +37,10 @@ import { parseLeiInput } from '../domain/money';
 import { PFA_REGIME_DESCRIPTORS, PFA_REGIME_VALUES, isComputableRegime } from '../domain/regimes';
 // PG-6b (B-29) — the declared activity family, typed from the classifier that reads it.
 import type { ActivityFamily } from '../domain/fiscal/deductibility';
+// PG-6f (B-30) — the onboarding question asks the question the law asks. The retired yes/no could only
+// ever answer „not exempt”, which is not the same claim as „registered under art. 316”, and the
+// difference decides both the money measure and whether any input VAT can be claimed at all.
+import { VAT_REGISTRATION_VALUES, type VatRegistrationStatus } from '../domain/fiscal/vat';
 import type {
   AccommodationCommissionReading,
   PfaPensionStatus,
@@ -102,7 +106,7 @@ export default function OnboardingPage() {
   const [accommodationEligibility, setAccommodationEligibility] = useState<TriState>('');
   const [accommodationCommission, setAccommodationCommission] = useState<AccommodationCommissionReading | ''>('');
   const [startDate, setStartDate] = useState('');
-  const [vatRegistered, setVatRegistered] = useState<TriState>('');
+  const [vatRegistration, setVatRegistration] = useState<VatRegistrationStatus | ''>('');
   const [vatDate, setVatDate] = useState('');
   const [salaryStatus, setSalaryStatus] = useState<TriState>('');
   const [salaryAmount, setSalaryAmount] = useState('');
@@ -164,9 +168,10 @@ export default function OnboardingPage() {
         numarRegComert: regCom.trim(),
         denumire: nume.trim(),
       },
-      // `vatExempt` is a required boolean in the model, so an unanswered question keeps the value the
-      // default profile already carries rather than asserting a third state the type cannot hold.
-      ...(vatRegistered === '' ? {} : { vatExempt: vatRegistered === 'nu' }),
+      // PG-6f — an unanswered question writes nothing at all, so the profile keeps the third state and
+      // the estimate says it does not know the money measure. There is no default here: the retired
+      // boolean used to answer this by existing.
+      ...(vatRegistration === '' ? {} : { vatRegistration: { status: vatRegistration } }),
       ...(vatDate.trim() === '' ? {} : { vatExceedanceDate: vatDate.trim() }),
       ...(recorded<PfaSalaryStatus>(salaryStatus) === undefined
         ? {}
@@ -434,18 +439,24 @@ export default function OnboardingPage() {
       <Card title={copy_.sections.vat}>
         <div className="form-grid">
           <div className="field">
-            <label htmlFor="ob-vat">{copy_.fields.vatRegistered}</label>
+            {/* PG-6f — the six states come from `VAT_REGISTRATION_VALUES`, and the labels come from the
+                same copy map the Settings screen reads, so the two forms cannot offer different answers
+                to one question. */}
+            <label htmlFor="ob-vat">{copy_.fields.vatRegistration}</label>
             <select
               id="ob-vat"
               className="input"
-              value={vatRegistered}
-              onChange={e => setVatRegistered(e.target.value as TriState)}
+              value={vatRegistration}
+              onChange={e => setVatRegistration(e.target.value as VatRegistrationStatus | '')}
             >
               <option value="">{copy_.notRecorded}</option>
-              <option value="da">{copy_.yes}</option>
-              <option value="nu">{copy_.no}</option>
+              {VAT_REGISTRATION_VALUES.map(status => (
+                <option key={status} value={status}>
+                  {settingsCopy.fiscal.vatRegistrationOptions[status]}
+                </option>
+              ))}
             </select>
-            <span className="hint">{copy_.fields.vatRegisteredHint}</span>
+            <span className="hint">{copy_.fields.vatRegistrationHint}</span>
           </div>
           <div className="field">
             <label htmlFor="ob-vat-exceedance">{copy_.fields.vatExceedanceDate}</label>

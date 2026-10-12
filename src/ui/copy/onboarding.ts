@@ -103,9 +103,12 @@ export const onboarding = {
     startDateHint:
       'Obligatorie. Format an-lună-zi, exemplu 2026-03-01. Fără această dată aplicația nu știe de când ești PFA.',
 
-    vatRegistered: 'Ești înregistrat în scopuri de TVA?',
-    vatRegisteredHint:
-      'Scutirea de TVA și înregistrarea sunt două stări diferite; aplicația le tratează separat.',
+    // PG-6f (B-30) — the question the law asks, not the yes/no that stood in for it. Answering „nu” to
+    // „ești înregistrat?” and being „scutit de TVA conform art. 310” are different states with different
+    // consequences, and the old control could not tell them apart.
+    vatRegistration: 'Care este starea ta de înregistrare în scopuri de TVA?',
+    vatRegistrationHint:
+      'Nu completa dacă nu știi. Fără această stare aplicația nu alege măsura banilor pe care o calculează și nu stabilește dacă poți deduce taxa pe valoarea adăugată din achiziții. Nu o ghici din cifra de afaceri pe care o ai înregistrată: plafonul se măsoară pe un venit restrâns la operațiunile cu locul în România, pe care aplicația nu îl calculează.',
     vatExceedanceDate: 'Data la care ai depășit pragul de TVA',
     vatExceedanceDateHint:
       'Opțional. Fără această dată aplicația nu afișează niciun termen de înregistrare și nu inventează unul.',

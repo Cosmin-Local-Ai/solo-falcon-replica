@@ -4,6 +4,7 @@ import type { TaxInputsReference } from './derived';
 import { computeTaxEstimate } from './tax';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal/package2026';
 import { PFA_2026_RELEASE } from './fiscal/release2026';
+import { TITLUL_II_VAT_ORDERING_RULE } from './fiscal/vat';
 import { lei } from './money';
 
 // B-14: the fixtures used to default to `impozit_pe_cit`, which is the regime a PFA can NEVER have in
@@ -502,12 +503,13 @@ describe('computeTaxEstimate', () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(55_000), expenses: lei(11_000), revenuesNet: lei(50_000), expensesNet: lei(10_000), expenseBase: { netFirst: lei(10_000), grossFirst: lei(10_000), divergent: false }, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
-    // Non-exempt: base is the net figure (VAT excluded), gross 55000 → net 50000.
+    // A VAT-registered person's TVA is not their income, so the base is the VAT-exclusive figure:
+    // gross 55.000 → net 50.000.
     const gross = res.lines.find((l) => l.label === 'Venit brut')?.value;
     expect(gross).toBe(lei(50_000));
   });
 
-  it('keeps the gross base for vatExempt profiles (Area 6)', async () => {
+  it('keeps the gross base for a profile in the art. 310 exemption (Area 6)', async () => {
     const res = await computeTaxEstimate({ inputs: makeInputs({ vatRegistration: { status: 'scutit_art310' as const } }), profile: makeProfile(), revenues: lei(55_000), expenses: lei(11_000), revenuesNet: lei(50_000), expensesNet: lei(10_000), expenseBase: { netFirst: lei(10_000), grossFirst: lei(10_000), divergent: false }, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('computed');
     if (res.status !== 'computed') return;
@@ -778,5 +780,97 @@ describe('mid-year start date (art. 118 alin. (3))', () => {
     expect(
       res.lines.find((l) => l.label === 'Fracțiune de an (art. 118 alin. (3)): venit anual'),
     ).toBeUndefined();
+  });
+});
+
+/**
+ * PG-6f (B-30, D-VAT-2) — the expense base is an operand the caller supplies from the per-line input-VAT
+ * decision, and the engine refuses rather than choose where the choice is not settled.
+ *
+ * The two Area 6 cases above pin the money MEASURE; these pin what happens when the measure is unknown,
+ * and what happens when a half-count rule meets VAT the taxpayer could not claim back and the ordering of
+ * the two changes the figure.
+ */
+describe('PG-6f — the expense base as an operand, and the two refusals', () => {
+  it('an undeclared registration refuses instead of picking a money measure', async () => {
+    const res = await computeTaxEstimate({
+      inputs: makeInputs({ vatRegistration: null }),
+      profile: makeProfile(),
+      revenues: lei(55_000),
+      expenses: lei(11_000),
+      revenuesNet: lei(50_000),
+      expensesNet: lei(10_000),
+      expenseBase: { netFirst: lei(10_000), grossFirst: lei(10_000), divergent: false },
+      ruleRelease: PFA_2026_RELEASE,
+      rules: PFA_2026_SYSTEM_REAL_PACKAGE,
+    });
+    expect(res.status).toBe('review_required');
+    if (res.status !== 'review_required') return;
+    // The reason must name what is missing and what each answer would have changed, so the refusal is
+    // readable as a question and not as a fault.
+    expect(res.reason).toContain('Starea de înregistrare în scopuri de TVA nu este declarată');
+    expect(res.reason).toContain('art. 310 alin. (10) lit. a)');
+  });
+
+  it('acceptance 8: a divergent base refuses, shows BOTH figures, and quotes the Titlul II rule as corporate-only', async () => {
+    const res = await computeTaxEstimate({
+      inputs: makeInputs(),
+      profile: makeProfile(),
+      revenues: lei(50_000),
+      expenses: lei(10_000),
+      revenuesNet: lei(50_000),
+      expensesNet: lei(10_000),
+      // A half-count rule met non-recoverable VAT: measuring it on the net base gives 10.000 lei, on the
+      // base that also carries the VAT the PFA could not claim back it gives 10.950 lei.
+      expenseBase: { netFirst: lei(10_000), grossFirst: lei(10_950), divergent: true },
+      ruleRelease: PFA_2026_RELEASE,
+      rules: PFA_2026_SYSTEM_REAL_PACKAGE,
+    });
+    expect(res.status).toBe('review_required');
+    if (res.status !== 'review_required') return;
+    // Both numbers are on the record, neither presented as the answer.
+    expect(res.lines.find((l) => l.label === 'Cheltuieli deductibile — jumătate din baza fără TVA')?.value).toBe(lei(10_000));
+    expect(res.lines.find((l) => l.label === 'Cheltuieli deductibile — jumătate din baza cu TVA nedeductibilă')?.value).toBe(lei(10_950));
+    // The only ordering text that exists anywhere is quoted — and labelled for what it is, so it can
+    // never be read as a rule that governs this PFA.
+    expect(res.reason).toContain(TITLUL_II_VAT_ORDERING_RULE.quote);
+    expect(res.reason).toContain('Titlului II');
+    expect(res.reason).toContain('Nicio regulă echivalentă nu există pentru un PFA');
+  });
+
+  it('a convergent base computes on the single figure the decision produced', async () => {
+    const res = await computeTaxEstimate({
+      inputs: makeInputs({ salaryStatus: 'nu' }),
+      profile: makeProfile({ salaryStatus: 'nu' }),
+      revenues: lei(30_000),
+      expenses: lei(10_000),
+      revenuesNet: lei(30_000),
+      expensesNet: lei(10_000),
+      expenseBase: { netFirst: lei(10_000), grossFirst: lei(10_000), divergent: false },
+      ruleRelease: PFA_2026_RELEASE,
+      rules: PFA_2026_SYSTEM_REAL_PACKAGE,
+    });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    expect(res.lines.find((l) => l.label === 'Cheltuieli deductibile')?.value).toBe(lei(10_000));
+  });
+
+  it('the base the caller supplies is the one the engine uses, not a re-derivation of it', async () => {
+    // Same profile, same recorded totals, a different base: the figure moves. This is what makes the
+    // operand load-bearing — the engine cannot quietly fall back to `expenses` or `expensesNet`.
+    const res = await computeTaxEstimate({
+      inputs: makeInputs({ salaryStatus: 'nu' }),
+      profile: makeProfile({ salaryStatus: 'nu' }),
+      revenues: lei(30_000),
+      expenses: lei(10_000),
+      revenuesNet: lei(30_000),
+      expensesNet: lei(10_000),
+      expenseBase: { netFirst: lei(10_950), grossFirst: lei(10_950), divergent: false },
+      ruleRelease: PFA_2026_RELEASE,
+      rules: PFA_2026_SYSTEM_REAL_PACKAGE,
+    });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    expect(res.lines.find((l) => l.label === 'Cheltuieli deductibile')?.value).toBe(lei(10_950));
   });
 });

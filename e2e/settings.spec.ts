@@ -79,7 +79,7 @@ const legacyProfile = (overrides: Record<string, unknown> = {}) => ({
   salaryStatus: 'nu',
   pensionStatus: 'nu',
   socialInsuranceStatus: 'obligatoriu',
-  vatExempt: false,
+  vatRegistration: { status: 'inregistrat_art316' },
   cashFloorLei: 0,
   identity: IDENTITY,
   updatedAt: '2026-01-01T10:00:00.000Z',

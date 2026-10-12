@@ -118,7 +118,7 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
       rules,
     }).then((result) => {
       if (!cancelled) {
-        setEstimate(attachEstimateBasis(result, basis, operands.scenarios));
+        setEstimate(attachEstimateBasis(result, basis, operands.scenarios, operands.inputVat));
         setLoading(false);
       }
     });
