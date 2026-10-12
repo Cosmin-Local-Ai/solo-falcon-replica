@@ -1132,6 +1132,15 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       )}
 
       {tab === 'fiscal' && (
+        /*
+         * B-91 — every control on this tab carries `<label htmlFor>` plus a matching `id` on the control.
+         *
+         * This tab is now scanned by the axe gate (`e2e/a11y.spec.ts`). It got into B-91 because most of its
+         * fields rendered a bare `<label>` as a *sibling* of a control with no `id`: the text was visible but
+         * was never the control's accessible name, and axe reported it as critical `label` / `select-name`.
+         * A `placeholder` does not close that gap either — it is not a label, and it disappears the moment
+         * the person types. Any control added here inherits the scan, so it must carry the association too.
+         */
         <div style={{ display: 'grid', gap: 16, maxWidth: 720 }}>
           {!isSelectableRegime(fiscal.regime) && (
             <Card title={settingsCopy.fiscal.unsupported}>
@@ -1144,8 +1153,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
           <Card title={settingsCopy.fiscal.profile}>
             <div className="form-grid">
               <div className="field">
-                <label>{settingsCopy.fiscal.regime} <span className="req">*</span></label>
+                <label htmlFor="set-regime">{settingsCopy.fiscal.regime} <span className="req">*</span></label>
                 <select
+                  id="set-regime"
                   className="input"
                   value={fiscal.regime}
                   onChange={e => setFiscal({ ...fiscal, regime: e.target.value as PfaRegime })}
@@ -1167,8 +1177,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.caen}</label>
+                <label htmlFor="set-caen">{settingsCopy.fiscal.caen}</label>
                 <input
+                  id="set-caen"
                   className="input"
                   value={fiscal.caen}
                   onChange={e => setFiscal({ ...fiscal, caen: e.target.value })}
@@ -1470,8 +1481,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.startYear} <span className="req">*</span></label>
+                <label htmlFor="set-start-year">{settingsCopy.fiscal.startYear} <span className="req">*</span></label>
                 <input
+                  id="set-start-year"
                   className="input"
                   value={fiscal.pfaStartYear}
                   onChange={e => setFiscal({ ...fiscal, pfaStartYear: e.target.value })}
@@ -1480,8 +1492,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.fiscalYear} <span className="req">*</span></label>
+                <label htmlFor="set-fiscal-year">{settingsCopy.fiscal.fiscalYear} <span className="req">*</span></label>
                 <input
+                  id="set-fiscal-year"
                   className="input"
                   value={fiscal.fiscalYear}
                   onChange={e => setFiscal({ ...fiscal, fiscalYear: e.target.value })}
@@ -1490,8 +1503,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.establishmentDate}</label>
+                <label htmlFor="set-establishment-date">{settingsCopy.fiscal.establishmentDate}</label>
                 <input
+                  id="set-establishment-date"
                   className="input"
                   type="date"
                   value={fiscal.pfaStartDate}
@@ -1505,8 +1519,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.salaryStatus}</label>
+                <label htmlFor="set-salary-status">{settingsCopy.fiscal.salaryStatus}</label>
                 <select
+                  id="set-salary-status"
                   className="input"
                   value={fiscal.salaryStatus}
                   onChange={e => setFiscal({ ...fiscal, salaryStatus: e.target.value as PfaSalaryStatus })}
@@ -1518,8 +1533,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.salaryAmount}</label>
+                <label htmlFor="set-salary-amount">{settingsCopy.fiscal.salaryAmount}</label>
                 <input
+                  id="set-salary-amount"
                   className="input"
                   value={fiscal.salaryIncomeLei}
                   disabled={fiscal.salaryStatus !== 'da'}
@@ -1538,8 +1554,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.pensionerStatus}</label>
+                <label htmlFor="set-pensioner-status">{settingsCopy.fiscal.pensionerStatus}</label>
                 <select
+                  id="set-pensioner-status"
                   className="input"
                   value={fiscal.pensionerStatus}
                   onChange={e => setFiscal({ ...fiscal, pensionerStatus: e.target.value as TriState })}
@@ -1555,8 +1572,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.pensionReceipt}</label>
+                <label htmlFor="set-pension-receipt">{settingsCopy.fiscal.pensionReceipt}</label>
                 <select
+                  id="set-pension-receipt"
                   className="input"
                   value={fiscal.pensionReceipt}
                   onChange={e => setFiscal({ ...fiscal, pensionReceipt: e.target.value as TriState })}
@@ -1573,8 +1591,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.suspensionMonths}</label>
+                <label htmlFor="set-suspension-months">{settingsCopy.fiscal.suspensionMonths}</label>
                 <input
+                  id="set-suspension-months"
                   className="input"
                   value={fiscal.pensionSuspensionMonths}
                   placeholder={settingsCopy.fiscal.suspensionPlaceholder}
@@ -1589,8 +1608,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.previousYearException}</label>
+                <label htmlFor="set-previous-year-exception">{settingsCopy.fiscal.previousYearException}</label>
                 <select
+                  id="set-previous-year-exception"
                   className="input"
                   value={fiscal.previousYearExcepted}
                   onChange={e => setFiscal({ ...fiscal, previousYearExcepted: e.target.value as TriState })}
@@ -1607,8 +1627,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.previousYearOption}</label>
+                <label htmlFor="set-previous-year-option">{settingsCopy.fiscal.previousYearOption}</label>
                 <select
+                  id="set-previous-year-option"
                   className="input"
                   value={fiscal.previousYearOption}
                   onChange={e => setFiscal({ ...fiscal, previousYearOption: e.target.value as TriState })}
@@ -1625,8 +1646,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.foreignInsurance}</label>
+                <label htmlFor="set-foreign-insurance">{settingsCopy.fiscal.foreignInsurance}</label>
                 <select
+                  id="set-foreign-insurance"
                   className="input"
                   value={fiscal.foreignInsuranceHeld}
                   onChange={e => setFiscal({ ...fiscal, foreignInsuranceHeld: e.target.value as TriState })}
@@ -1642,8 +1664,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.foreignInsuranceProof}</label>
+                <label htmlFor="set-foreign-insurance-proof">{settingsCopy.fiscal.foreignInsuranceProof}</label>
                 <select
+                  id="set-foreign-insurance-proof"
                   className="input"
                   value={fiscal.foreignInsuranceProved}
                   onChange={e => setFiscal({ ...fiscal, foreignInsuranceProved: e.target.value as TriState })}
@@ -1660,8 +1683,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.cassStatus}</label>
+                <label htmlFor="set-cass-status">{settingsCopy.fiscal.cassStatus}</label>
                 <select
+                  id="set-cass-status"
                   className="input"
                   value={fiscal.socialInsuranceStatus}
                   onChange={e =>
@@ -1685,8 +1709,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.vatRegistration}</label>
+                <label htmlFor="set-vat-registration">{settingsCopy.fiscal.vatRegistration}</label>
                 <select
+                  id="set-vat-registration"
                   className="input"
                   value={fiscal.vatRegistration}
                   onChange={e =>
@@ -1708,8 +1733,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.vatCashAccounting}</label>
+                <label htmlFor="set-vat-cash-accounting">{settingsCopy.fiscal.vatCashAccounting}</label>
                 <select
+                  id="set-vat-cash-accounting"
                   className="input"
                   value={fiscal.vatCashAccounting}
                   onChange={e => setFiscal({ ...fiscal, vatCashAccounting: e.target.value as TriState })}
@@ -1725,8 +1751,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.vatExceedanceDate}</label>
+                <label htmlFor="set-vat-exceedance-date">{settingsCopy.fiscal.vatExceedanceDate}</label>
                 <input
+                  id="set-vat-exceedance-date"
                   className="input"
                   type="date"
                   value={fiscal.vatExceedanceDate}
@@ -1740,8 +1767,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label>{settingsCopy.fiscal.cashFloor}</label>
+                <label htmlFor="set-cash-floor">{settingsCopy.fiscal.cashFloor}</label>
                 <input
+                  id="set-cash-floor"
                   className="input"
                   value={fiscal.cashFloorLei}
                   onChange={e => setFiscal({ ...fiscal, cashFloorLei: e.target.value })}

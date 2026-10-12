@@ -116,27 +116,40 @@ async function loadDeclarations(page: import('@playwright/test').Page): Promise<
   await expect(page.getByText('D212.2026.000042')).toBeVisible();
 }
 
-/*
- * PG-6d — the fiscal settings tab, where the six art. 155 alin. (1) lit. c)-h) amounts are collected.
+/**
+ * B-91 — the fiscal settings tab, **back in the gate and live**.
  *
- * SCANNED, AND DELIBERATELY NOT IN THE GATE YET. This tab was run through axe during PG-6d because PG-6d
- * added a form section to it — six amount inputs and four selects, each with an explicit `<label htmlFor>`.
- * The scan came back with **critical `label` violations on controls this phase did not touch and was not
- * scoped to fix**: the regime select, the CAEN input, the start-year and fiscal-year inputs, the
- * establishment-date input and the two vehicle inputs all render a `<label>` with no `htmlFor` and an
- * `<input>` with no `id`. That is pre-existing debt on a route the gate had never looked at, and clearing it
- * is a dozen fields in another phase's section, several of which other specs address by label text.
+ * WHAT WAS WRONG. PG-6d scanned this tab, found critical `label` violations on controls outside its own
+ * section, and commented the scan out rather than clear them. The note that replaced the test named the debt
+ * and stated that clearing it was the precondition for putting the scan back — that precondition is what
+ * B-91 was, and it is now cleared. The full list of what axe actually reported, control by control, is in
+ * `docs/ai/phases/47_b91_b97_aic_facts.md`; in short, every `<div className="field">` outside the ladder
+ * section rendered a bare `<label>` with no `htmlFor` next to a control with no `id`, so the label was a
+ * sibling of the control rather than its name. The ladder section PG-6d added was already correct —
+ * `<label htmlFor>` plus a matching `id` — which is why the section itself passed and the fields around it
+ * did not.
  *
- * It is recorded here rather than dropped, for two reasons: the tab must not stay unscanned by accident, and
- * the next person to widen this gate should find the debt already named instead of rediscovering it as a
- * surprise failure. The ladder section itself is clean; the fields around it are not. Clearing that debt is
- * the precondition for adding this scan back — the loader below is what the scan will need when it returns:
+ * WHAT FIXED IT. Each of those fields now carries the same association PG-6d used: an `id` on the control
+ * and `htmlFor` on the label. Nothing else about the fields moved — same copy, same order, same three-state
+ * selects — so the specs that address these controls by label text keep working, because the visible text is
+ * the accessible name in both cases.
  *
- *   await seedBrowser(page);
- *   await page.clock.setFixedTime(fixedInstant());
- *   await page.goto('/settings#!/fiscal');
- *   await expect(page.locator('[data-cass-ladder]')).toBeVisible();
+ * WHY THE SCAN STAYS. D-AIC-1 put the art. 322 alin. (7)-(8) facts on this tab, the app's busiest
+ * fact-entry route. A control added to an unscanned route inherits the blindness, so the route is scanned
+ * from now on and any future control on it is covered. Re-commenting this test is the anti-fix: it is how
+ * B-91 got here, and a green gate obtained by deleting a scan proves nothing.
+ *
+ * The loader is the one the old note prescribed: seeded browser (a fresh context opens on onboarding, so an
+ * unseeded scan would audit the first-run screen while believing it audited the fiscal tab), the shared
+ * pinned clock, and `[data-cass-ladder]` as the settle locator — the ladder section renders unconditionally
+ * on this tab, so its presence means the tab is painted and axe never scans a half-built form.
  */
+async function loadFiscalSettings(page: import('@playwright/test').Page): Promise<void> {
+  await seedBrowser(page);
+  await page.clock.setFixedTime(fixedInstant());
+  await page.goto('/settings#!/fiscal');
+  await expect(page.locator('[data-cass-ladder]')).toBeVisible();
+}
 
 /**
  * PG-6h-3 — the route this task added.
@@ -214,6 +227,27 @@ test.describe('PG-0 — axe-core accessibility gate on /dashboard', () => {
     if (noise.length > 0) console.log(`axe, non-blocking on /declarations:\n${describeViolations(noise)}`);
 
     expect(fatal, `axe found blocking violations on /declarations:\n\n${describeViolations(fatal)}`).toHaveLength(0);
+  });
+
+  test('the fiscal settings tab has no serious or critical axe violations', async ({ page }) => {
+    await loadFiscalSettings(page);
+    const violations = await runAxe(page);
+    const fatal = blocking(violations);
+    const noise = violations.filter((v) => !BLOCKING_IMPACTS.includes(v.impact ?? ''));
+
+    test.info().annotations.push({
+      type: 'axe',
+      description: `${fatal.length} blocking (serious+critical), ${noise.length} non-blocking `
+        + `(minor+moderate) on /settings#!/fiscal`,
+    });
+    if (noise.length > 0) {
+      console.log(`axe, non-blocking on /settings#!/fiscal:\n${describeViolations(noise)}`);
+    }
+
+    expect(
+      fatal,
+      `axe found blocking violations on /settings#!/fiscal:\n\n${describeViolations(fatal)}`,
+    ).toHaveLength(0);
   });
 
   test('the occupancy sheet has no serious or critical axe violations', async ({ page }) => {

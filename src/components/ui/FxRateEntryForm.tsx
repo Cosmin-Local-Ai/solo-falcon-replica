@@ -133,8 +133,9 @@ export function FxRateEntryForm({ id }: FxRateEntryFormProps) {
 
       <div className="grid grid-2">
         <div className="field">
-          <label>{e.fields.currency}</label>
+          <label htmlFor="fx-currency">{e.fields.currency}</label>
           <select
+            id="fx-currency"
             className="input"
             name="fx-currency"
             value={form.currency}
@@ -149,8 +150,9 @@ export function FxRateEntryForm({ id }: FxRateEntryFormProps) {
         </div>
 
         <div className="field">
-          <label>{e.fields.rate}</label>
+          <label htmlFor="fx-rate">{e.fields.rate}</label>
           <input
+            id="fx-rate"
             className="input"
             name="fx-rate"
             value={form.rate}
@@ -160,8 +162,9 @@ export function FxRateEntryForm({ id }: FxRateEntryFormProps) {
         </div>
 
         <div className="field">
-          <label>{e.fields.rateKind}</label>
+          <label htmlFor="fx-kind">{e.fields.rateKind}</label>
           <select
+            id="fx-kind"
             className="input"
             name="fx-kind"
             value={form.rateKind}
@@ -177,8 +180,9 @@ export function FxRateEntryForm({ id }: FxRateEntryFormProps) {
 
         {form.rateKind === 'daily_reference' ? (
           <div className="field">
-            <label>{e.fields.rateDate}</label>
+            <label htmlFor="fx-date">{e.fields.rateDate}</label>
             <input
+              id="fx-date"
               className="input"
               type="date"
               name="fx-date"
@@ -188,8 +192,9 @@ export function FxRateEntryForm({ id }: FxRateEntryFormProps) {
           </div>
         ) : (
           <div className="field">
-            <label>{e.fields.rateYear}</label>
+            <label htmlFor="fx-year">{e.fields.rateYear}</label>
             <input
+              id="fx-year"
               className="input"
               name="fx-year"
               value={form.rateYear}
@@ -199,8 +204,9 @@ export function FxRateEntryForm({ id }: FxRateEntryFormProps) {
         )}
 
         <div className="field">
-          <label>{e.fields.seriesCode}</label>
+          <label htmlFor="fx-series">{e.fields.seriesCode}</label>
           <input
+            id="fx-series"
             className="input"
             name="fx-series"
             value={form.seriesCode}
@@ -210,8 +216,9 @@ export function FxRateEntryForm({ id }: FxRateEntryFormProps) {
         </div>
 
         <div className="field">
-          <label>{e.fields.sourceUrl}</label>
+          <label htmlFor="fx-source">{e.fields.sourceUrl}</label>
           <input
+            id="fx-source"
             className="input"
             name="fx-source"
             value={form.sourceUrl}
@@ -220,8 +227,9 @@ export function FxRateEntryForm({ id }: FxRateEntryFormProps) {
         </div>
 
         <div className="field">
-          <label>{e.fields.status}</label>
+          <label htmlFor="fx-provisional">{e.fields.status}</label>
           <select
+            id="fx-provisional"
             className="input"
             name="fx-provisional"
             value={provisional}
