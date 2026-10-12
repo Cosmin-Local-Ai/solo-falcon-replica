@@ -559,6 +559,7 @@ export function getVatPeriodicity(data: AppData): VatPeriodicityOutcome {
     data.profile.vatPeriodicityYears,
     data.profile.fiscalYear,
     recordedRateProvider(data),
+    data.profile.vatRegistration,
   );
 }
 

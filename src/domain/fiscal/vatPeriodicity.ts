@@ -51,6 +51,7 @@ import { Decimal } from 'decimal.js-light';
 import type { Bani } from '../money';
 import { capMoney, capCeilingAtPaymentDate, type CapRateEvidence } from '../fx/capCeiling';
 import type { FxRateProvider } from '../fx/provider';
+import type { VatRegistration } from './vat';
 import { isISOCalendarDate } from '../date';
 
 // ── 1. The periodicity itself ────────────────────────────────────────────────────
@@ -886,11 +887,22 @@ export function vatPeriodicityForYear(
   years: readonly VatPeriodicityFacts[] | undefined,
   year: number,
   provider: FxRateProvider,
+  registration?: VatRegistration | null,
 ): VatPeriodicityOutcome {
   const cap = periodicityCapForYear(year, provider);
   const facts = (years ?? []).find((y) => y.year === year);
-  if (!facts) return deriveVatPeriodicity({ year }, cap);
-  return deriveVatPeriodicity(facts, cap);
+  // The registration date is asked ONCE, by PG-6f's `vatRegistration` field (CF art. 316 alin. (1^1)).
+  // Requiring the same date again on the art. 322 record would be a second question with one answer, and a
+  // person who had already given it would be told the app does not know it. This copies an already
+  // declared fact into the facts the article needs; it infers nothing. The registration ROUTE is not
+  // copied, because `VatRegistrationStatus` and the art. 316 litera are different questions —
+  // `inregistrat_art316` does not say whether the person came from the art. 310 exemption, and that is
+  // exactly the fact that decides alin. (3) versus alin. (4).
+  const effectiveFrom = facts?.registrationEffectiveFrom ?? registration?.effectiveFrom;
+  return deriveVatPeriodicity(
+    { year, ...(facts ?? {}), ...(effectiveFrom ? { registrationEffectiveFrom: effectiveFrom } : {}) },
+    cap,
+  );
 }
 
 function confirmedOutcome(

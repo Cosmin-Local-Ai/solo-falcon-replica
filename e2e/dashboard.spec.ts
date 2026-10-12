@@ -427,9 +427,16 @@ test.describe('Dashboard — section content (seed data)', () => {
     // The rows below state the two absences that are real: no tax statements, and a VAT period the
     // recorded facts cannot establish (B-35 — the app asks for the fact instead of naming a cadence).
     await expect(completeness.getByText('nu există situații de taxe')).toBeVisible();
-    await expect(completeness.getByText(/perioada de depunere nu poate fi stabilită/)).toBeVisible();
-    await expect(completeness.getByText(/completează data înregistrării în TVA/)).toBeVisible();
-    // No asserted D300 cadence anywhere on this card (acceptance 4).
+    // PG-6g re-pin (replaced, not deleted): B-35's admission is still there, and it is no longer a dead
+    // end. The row now names the two facts that would decide which alineat of art. 322 applies, says where
+    // to give them, and states the statutory default of art. 322 alin. (1) as the LAW's answer in the
+    // meantime — which is what removes „nu poate fi stabilită” with nowhere to go without the app guessing
+    // a cadence (D-VAT-1).
+    await expect(completeness.getByText(/nu poate fi stabilit încă/)).toBeVisible();
+    await expect(completeness.getByText(/De la ce dată produce efecte înregistrarea/)).toBeVisible();
+    await expect(completeness.getByText(/rămâne regula/)).toBeVisible();
+    // No cadence the app concluded (acceptance 4). The monthly wording present is the art. 322 alin. (1)
+    // default, attributed to the article.
     await expect(completeness.getByText(/trimestrial|D300/)).toHaveCount(0);
     // The annual filing is NOT a gap at this clock: the term has not arrived.
     await expect(completeness.getByText(/nu se datorează încă/)).toBeVisible();

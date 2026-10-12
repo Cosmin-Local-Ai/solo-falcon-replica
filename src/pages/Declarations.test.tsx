@@ -315,6 +315,18 @@ describe('PG-6g — the periodicity is asked, never guessed (acceptance 7)', () 
     expect(mentiuni.querySelector('button')).toBeNull();
   });
 
+  it('lays out the D300 lines without placing a single amount on them', () => {
+    // Acceptance 6, at the surface. `claimableTotal` is not a form line (landmine 8), and the parked sums
+    // must not leak into one either — so the strongest pin available here is that the rubric table carries
+    // no currency at all. It states where figures may go; it does not fill the form.
+    renderNewPfa({ inArt310BeforeRegistration: 'nu', forecastStubTurnover: 1_000_000 });
+    const rows = [...document.querySelectorAll('tr')].filter((r) => /^rd\. \d/.test(r.querySelector('td')?.textContent ?? ''));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const r of rows) expect(r.textContent).not.toMatch(/\d[\d.]*,\d{2} lei/);
+    // rd. 30, rd. 33 and rd. 34 are three separate rows, not one total under one label.
+    expect(rows.map((r) => r.querySelector('td')!.textContent)).toEqual(['rd. 20–28', 'rd. 30', 'rd. 33', 'rd. 34']);
+  });
+
   it('records a filing against the calendar row, and says the app recorded it rather than that it filed it', () => {
     renderNewPfa({ inArt310BeforeRegistration: 'nu', forecastStubTurnover: 1_000_000 });
     const row = document.querySelector('[data-obligation-id^="decont-"]')!;

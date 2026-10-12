@@ -328,6 +328,7 @@ function vatFilingPeriodCheck(data: AppData): CompletenessCheck {
     profile.vatPeriodicityYears,
     profile.fiscalYear,
     recordedRateProvider(data),
+    registration,
   );
   if (outcome.kind === 'derived') {
     return {

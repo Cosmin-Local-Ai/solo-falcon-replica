@@ -148,7 +148,11 @@ test.describe('PG-5 — the D212 term, resolved from the filing rather than the 
     await page.goto('/declarations');
     await expect(page.getByRole('heading', { name: 'Declarația unică (D212)' })).toBeVisible();
     await expect(page.getByText('Nicio declarație anuală înregistrată')).toBeVisible();
-    await expect(page.locator('table')).toHaveCount(0);
+    // PG-6g re-pin (replaced, not deleted): the page now also carries the VAT calendar, the D300 rubric
+    // layout and the parked-list tables, so "no table on the page" is no longer the assertion. What it has
+    // always guarded is that no second REGISTER exists — the monthly one — and that is now pinned on the
+    // D212 register itself, which the chain left empty.
+    await expect(page.locator('table[data-register="d212"]')).toHaveCount(0);
     await expect(page.getByText('2026-03')).toHaveCount(0);
     await expect(page.getByText('2026-06')).toHaveCount(0);
     await expect(page.getByText('2026-12')).toHaveCount(0);

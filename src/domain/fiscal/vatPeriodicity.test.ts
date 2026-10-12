@@ -559,4 +559,33 @@ describe('vatPeriodicityForYear', () => {
     const outcome = vatPeriodicityForYear(facts, 2026, provider);
     expect(outcome.kind === 'derived' && outcome.periodicity).toBe('quarter');
   });
+
+  it('reuses the registration date PG-6f already asked for, instead of asking twice', () => {
+    // `vatRegistration.effectiveFrom` is the answer to CF art. 316 alin. (1^1). Making the art. 322 record
+    // demand the same date again would be a second question with one answer, and would tell a person who
+    // had answered it that the app does not know it. This copies a declared fact; it infers nothing.
+    const outcome = vatPeriodicityForYear(undefined, 2026, provider, {
+      status: 'inregistrat_art316',
+      effectiveFrom: '2025-01-01',
+    });
+    expect(outcome.kind).toBe('ask');
+    if (outcome.kind !== 'ask') return;
+    // The date is no longer among the questions; the preceding-year figure still is.
+    expect(outcome.questions.map((q) => q.id)).not.toContain('vat-registration-effective-from');
+    expect(outcome.branch).toBe('alin2');
+    expect(outcome.questions.map((q) => q.id)).toContain('vat-preceding-turnover');
+  });
+
+  it('does NOT copy a registration status into an art. 316 route', () => {
+    // `inregistrat_art316` says the person is registered. It does not say they came from the art. 310
+    // exemption, and that is the fact that decides alin. (3) versus alin. (4) — landmine 1. Carrying the
+    // status across as a route would be the app choosing a branch it was never told.
+    const outcome = vatPeriodicityForYear(undefined, 2026, provider, {
+      status: 'inregistrat_art316',
+      effectiveFrom: '2026-03-01',
+    });
+    expect(outcome.kind).toBe('ask');
+    if (outcome.kind !== 'ask') return;
+    expect(outcome.questions.map((q) => q.id)).toContain('vat-in-art310-before');
+  });
 });

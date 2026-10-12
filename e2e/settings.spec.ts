@@ -492,9 +492,11 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // load path resolving an absent collection to empty, not from the migration writing one.
     // Re-pinned 2026-10-12 (PG-6f): 17 → 18, because `input-vat-registration` (17→18) follows it — the
     // tenth time for the same reason, and the same kind of step as v16: it DELETES a retired field and
-    // mints nothing in its place. What this test exists for is untouched: the notice is still one long,
-    // `original` is still the verbatim 674.504 and `converted` is still 67450 bani.
-    expect(saved.version).toBe(18);
+    // mints nothing in its place. Re-pinned again by PG-6g: 18 → 19, because `vat-returns` (18→19) follows
+    // it — an eleventh time for the same reason, and the same kind of step as v13-v17: it OPENS a
+    // collection and mints nothing in it. What this test exists for is untouched: the notice is still one
+    // long, `original` is still the verbatim 674.504 and `converted` is still 67450 bani.
+    expect(saved.version).toBe(19);
     // The v16 step's own halves, on the same bytes. First the non-write: this profile never declared an
     // amount for any of the six art. 155 alin. (1) lit. c)-h) categories, so the step opened no ladder year
     // and above all invented no zero — six minted zeros would have moved this person between "no CASS at
