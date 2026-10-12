@@ -78,7 +78,6 @@ describe('Onboarding — required facts', () => {
     fireEvent.change(screen.getByLabelText(t.fields.startDate), { target: { value: '2026-03-01' } });
     fireEvent.change(screen.getByLabelText(t.fields.salaryStatus), { target: { value: 'da' } });
     fireEvent.change(screen.getByLabelText(t.fields.salaryAmount), { target: { value: '30000' } });
-    fireEvent.click(document.querySelector('[data-other-income="imobiliare"] input') as HTMLInputElement);
     fireEvent.click(screen.getByText(t.actions.finish));
 
     expect(store!.profile.pfaStartDate).toBe('2026-03-01');
@@ -88,7 +87,11 @@ describe('Onboarding — required facts', () => {
     expect(store!.profile.salaryStatus).toBe('da');
     // `salaryIncomeLei` keeps its stale suffix on purpose and holds integer BANI (landmine 5).
     expect(store!.profile.salaryIncomeLei).toBe(3_000_000);
-    expect(store!.profile.otherIncome).toEqual(['imobiliare']);
+    // PG-6d (D-OTH-2, D-LEG-1): onboarding no longer offers the other-income checkboxes, and it does not
+    // mint the per-year art. 155 alin. (1) lit. c)-h) amounts that replaced them. The substance this
+    // assertion carried — „the screen writes only what the person actually answered” — is still what is
+    // being checked, now by way of the field that is absent because it was never asked about.
+    expect(store!.profile.cassLadderYears).toBeUndefined();
     // The first run is over: the store now holds facts the person entered.
     expect(store!.dataOrigin).toBe('persisted');
     expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull();

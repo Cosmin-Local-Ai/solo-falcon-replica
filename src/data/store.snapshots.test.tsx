@@ -39,7 +39,6 @@ const profile: PfaProfile = {
   caen: '6201',
   salaryStatus: 'nu',
   pensionerStatus: 'nu',
-  otherIncome: [],
   socialInsuranceStatus: 'obligatoriu',
   vatExempt: true,
   cashFloorLei: lei(0),

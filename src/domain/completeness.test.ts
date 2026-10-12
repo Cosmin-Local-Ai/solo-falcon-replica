@@ -46,7 +46,6 @@ function makeProfile(): PfaProfile {
     caen: '6201',
     salaryStatus: 'nu',
     pensionerStatus: 'nu',
-    otherIncome: [],
     socialInsuranceStatus: 'obligatoriu',
     // PG-5: the fully-populated fixture is VAT-exempt, because that is the one VAT state the app can
     // call complete — a scutire de TVA removes the periodic return, so there is no filing period to

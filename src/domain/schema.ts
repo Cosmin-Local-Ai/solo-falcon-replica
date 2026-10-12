@@ -117,7 +117,35 @@ export const pfaProfileSchema: z.ZodType<PfaProfile> = z.object({
       proved: z.enum(['da', 'nu']).optional(),
     })
     .optional(),
-  otherIncome: z.array(z.enum(['imobiliare', 'autovehicule', 'dividende', 'concesiune', 'alte'])),
+  // PG-6d (D-OTH-2, D-LEG-1, B-41): the `otherIncome` flag array is REMOVED, not deprecated — see the note
+  // on `PfaProfile.cassLadderYears` and `docs/ai/research/41_other_income_flags_and_cass_ladder.md` §5.
+  // Migration step v15→v16 drops the stored key. Nothing tolerates it any more: D-LEG-1 is a standing
+  // decision that there is no stored data to protect, so a retired shape is deleted rather than carried.
+  cassLadderYears: z
+    .array(
+      z.object({
+        fiscalYear: z.number().int().min(1990).max(2100),
+        // Every amount is OPTIONAL and none has a `.default()`. This is the persisted gate: a required
+        // field here would reset every existing payload to seed, and a default would mint a declared
+        // amount the person never gave — which for a ladder that sums across all six litera is the
+        // difference between an unknown sum and a wrong one (B-41).
+        proprietateIntelectuala: z.number().min(0).finite().transform((n) => n as Bani).optional(),
+        asocierePersoanaJuridica: z.number().min(0).finite().transform((n) => n as Bani).optional(),
+        cedareaFolosinteiBunurilor: z.number().min(0).finite().transform((n) => n as Bani).optional(),
+        cedareaSursa: z.enum(['activitate_proprie_a_pfa', 'patrimoniu_personal']).optional(),
+        activitatiAgricole: z.number().min(0).finite().transform((n) => n as Bani).optional(),
+        activitatiAgricoleBaza: z.enum(['venit_net', 'norma_de_venit']).optional(),
+        investitii: z.number().min(0).finite().transform((n) => n as Bani).optional(),
+        investitiiBaza: z
+          .enum(['castig_net', 'dividende_platite_diminuate_cu_impozitul_retinut'])
+          .optional(),
+        alteSurse: z.number().min(0).finite().transform((n) => n as Bani).optional(),
+        alteSurseArt114: z.enum(['da', 'nu']).optional(),
+        neimpozabil: z.number().min(0).finite().transform((n) => n as Bani).optional(),
+        cassRetinutLaSursa: z.number().min(0).finite().transform((n) => n as Bani).optional(),
+      }),
+    )
+    .optional(),
   // PG-6b (B-29) — the declared activity family. OPTIONAL, and deliberately without `.default()`:
   // absence means the person was never asked, and defaulting it to `'other'` would assert that the
   // ordinary sistem real rules apply to somebody who has not said so. The values come from

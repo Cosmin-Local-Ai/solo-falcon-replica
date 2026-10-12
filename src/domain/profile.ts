@@ -49,7 +49,10 @@ export function createDefaultProfile(
     // that CF art. 174 alin. (7) lit. c) keys on are NOT defaulted here: a fresh profile has not recorded
     // them, and defaulting one would state a fact the user never entered.
     pensionerStatus: 'nu',
-    otherIncome: [],
+    // PG-6d (D-LEG-1, B-41): the other-income flag list is gone, and nothing replaces it here. What
+    // replaces it is a per-year AMOUNT for each art. 155 alin. (1) lit. c)-h) category, and a fresh
+    // profile has answered none of them. Writing an empty array would say „asked, and none”; absence
+    // says „not asked yet”, and only the second one is true.
     socialInsuranceStatus: 'neplata',
     vatExempt: false,
     // Phase 10: money is integer bani. `lei(0)` rather than a bare `0` keeps the unit explicit at the

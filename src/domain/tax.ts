@@ -4,6 +4,7 @@
  * Domain purity: no React, DOM, localStorage, or store imports.
  */
 import type { PfaProfile } from './models';
+import { cassLadderForYear } from './models';
 import type { FiscalRule, RuleRelease } from './fiscal/rules';
 import type { TaxInputsReference } from './derived';
 import type { CalculationLine, CalculationOutput, TaxCalculationSnapshot } from './snapshots/types';
@@ -94,6 +95,16 @@ export interface TaxAmountBases {
    * two methods over one source, not two sources, and cumulating them produced 1,7 × the receipts.
    */
   venitulNetCumulatPentruContributii?: Bani;
+  /**
+   * PG-6d — the annual CASS base the art. 155 alin. (1) lit. c)-h) ladder chose for this person, per
+   * art. 170 alin. (3). Present only when that ladder actually ran.
+   *
+   * It is a SEPARATE field from the two above because it is a separate basin: art. 170 alin. (1) measures
+   * the lit. b) net (capped at 72 SM), art. 170 alin. (2)-(4) measures the lit. c)-h) cumulation (no cap,
+   * and a 6-SM condition precedent). A surface that reads one of these as the other is the B-71 defect
+   * class — a figure and a percentage disagreeing about the same money.
+   */
+  bazaDeCalculCassArt155LitCH?: Bani;
 }
 
 /**
@@ -414,6 +425,31 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
 
   let cassValue: Bani = lei(0);
   let cassNonDeductibila: Bani = lei(0);
+  // ── PG-6d (D-OTH-1, B-41): the SECOND CASS track — art. 155 alin. (1) lit. c)-h) ──────────
+  //
+  // This is a different contribution route, not a second opinion about the first one:
+  //
+  //   art. 170 alin. (1) — the cumulated **lit. b)** net IS the base, floored at 6 SM by the art. 174
+  //     alin. (6) difference and capped at 72 SM. That is `calcCass` above.
+  //   art. 170 alin. (2)-(4) + art. 174¹ alin. (1) — the amount cumulated across lit. c)-h) only SELECTS
+  //     one of three bases (6 / 12 / 24 SM); below 6 SM cumulated nothing is owed at all, and the 72-SM
+  //     cap does not reach this basin. That is `calc-cass-ladder` here.
+  //
+  // The two never merge: the PFA's own net never enters the 6/12/24 test, and the ladder never enters the
+  // 72-SM cap — the same discipline `research/38` §1.5 applies to art. 68^3, and the reason the ladder gets
+  // its own operand instead of a bigger `base`.
+  //
+  // What the ladder DOES feed is the art. 174 alin. (7) lit. b) test inside `calcCass`: that litera waives
+  // the alin. (6) difference where the person owes CASS on lit. c)-h) income „la un nivel cel puțin egal
+  // cu 6 salarii minime brute”, and until now the app had only a flag to answer with.
+  //
+  // The ladder's own contribution is deliberately NOT routed into the art. 118 alin. (2) deduction
+  // composition below: alin. (2^3) prorates „contribuția … calculată potrivit art. 174 alin. (1)”, and the
+  // ladder contribution is calculated under art. 174¹ alin. (1). Deducting it from the Titlul IV base
+  // would borrow a deduction from a provision that does not grant it.
+  let cassLadderValue: Bani = lei(0);
+  let cassLadderBase: Bani | undefined;
+  let cassLadderDivergence: string | undefined;
   // CASS AND CAS TREAT PENSIONERS DIFFERENTLY — and TASK 5 split the fact that used to serve both.
   //   CAS:  CF art. 150 alin. (1) — a pensioner owes NO CAS at all on art. 137 alin. (1) lit. b)/b^1)
   //         income (the call above). Key: pensioner STATUS.
@@ -428,6 +464,42 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // `taxable` and the lines unchanged; the reviewRequired case aborts with the reason and the partial
   // lines rather than reporting a wrong number.
   if (inputs.socialInsuranceStatus === 'obligatoriu') {
+    const ladderYear = cassLadderForYear(inputs.cassLadderYears, inputs.fiscalYear);
+    if (ladderYear !== undefined) {
+      const ladderRes = calculatorRegistry['calc-cass-ladder'](cassRule, {
+        cassLadder: {
+          amounts: {
+            proprietate_intelectuala: ladderYear.proprietateIntelectuala,
+            asociere_persoana_juridica: ladderYear.asocierePersoanaJuridica,
+            cedarea_folosintei_bunurilor: ladderYear.cedareaFolosinteiBunurilor,
+            activitati_agricole: ladderYear.activitatiAgricole,
+            investitii: ladderYear.investitii,
+            alte_surse: ladderYear.alteSurse,
+          },
+          neimpozabil: ladderYear.neimpozabil,
+          cassRetinutLaSursa: ladderYear.cassRetinutLaSursa,
+          alteSurseArt114: ladderYear.alteSurseArt114,
+          cedareaSursa: ladderYear.cedareaSursa,
+        },
+      });
+      if ('reviewRequired' in ladderRes) return rr(ladderRes.reason, lines);
+      if (typeof ladderRes.determinedNet !== 'number') {
+        // Defensive, and reported rather than assumed: the art. 174 alin. (7) lit. b) test compares the
+        // base the ladder chose, and re-deriving it here would be a second calculation of a legal figure.
+        return rr(
+          'Scara de la art. 170 alin. (2)-(4) nu a raportat baza anuală de calcul aleasă; compoziția nu o ' +
+            'recalculează pe cont propriu.',
+          lines,
+        );
+      }
+      cassLadderValue = ladderRes.value;
+      cassLadderBase = ladderRes.determinedNet;
+      cassLadderDivergence = ladderRes.readingDivergence;
+      lines.push({
+        label: 'CASS pe veniturile din art. 155 alin. (1) lit. c)-h) (10 %, art. 174¹ alin. (1))',
+        value: cassLadderValue,
+      });
+    }
     const cassRes = calculatorRegistry['calc-cass'](cassRule, {
       // PG-6h-1: the CUMULATED lit. b) amount, per art. 170 alin. (1) — which names art. 68^3 expressly
       // (Legea 239/2025 art. XII pct. 19). Here the amount IS the base, floored at 6 SM by art. 174 alin.
@@ -443,8 +515,13 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
       previousYearArt180Option: cassFacts.previousYearArt180Option,
       foreignSicknessInsuranceProved: cassFacts.foreignSicknessInsuranceProved,
       pensionSuspensionMonths: readPensionSuspension(inputs, inputs.fiscalYear)?.months,
-      otherIncomeArt155LitCH: inputs.otherIncome.length > 0,
       salaryStatus: inputs.salaryStatus,
+      // PG-6d: what the art. 174 alin. (7) lit. b) test compares with 6 SM. `undefined` means the ladder
+      // never ran (the person was never asked), which `calcCass` reports as an unevaluated condition
+      // rather than resolving in either direction. A `lei(0)` is the opposite: the ladder ran and found
+      // the cumulation below the art. 170 alin. (2) threshold, so the test fails on its merits.
+      ladderBase: cassLadderBase,
+      ladderReadingDivergence: cassLadderDivergence,
       // Phase 6: the amount CF art. 174 alin. (7) lit. a) compares to the 6 SM floor. With it both
       // branches compute; without it (a pre-Phase-6 payload) calcCass still refuses rather than guess.
       salaryIncomeLei: inputs.salaryIncomeLei ?? undefined,
@@ -485,7 +562,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // merely true of the arithmetic — a reader who deletes the gate above still cannot reach a 1,7 × base,
   // because there is no place left for a second leg to be added.
   if (legs[0].method === 'accommodation-flat-ratio') {
-    const total = sumBani([casRes.value, cassValue, flatTax]);
+    const total = sumBani([casRes.value, cassValue, cassLadderValue, flatTax]);
     lines.push({ label: 'Impozit art. 68^3 (10 %, impozitul fiind final)', value: flatTax });
     lines.push({ label: 'Total taxe', value: total });
     const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, rules: applicable, calculationLines: lines, output: { total } });
@@ -494,7 +571,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
       lines,
       output: { total },
       snapshot: snap,
-      bases: contributionBases(gross, deductibleBase, net, legs),
+      bases: contributionBases(gross, deductibleBase, net, legs, cassLadderBase),
     };
   }
 
@@ -577,7 +654,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
         rule: 'CF art. 118 alin. (4): „Pierderea fiscală anuală înregistrată pe fiecare sursă din activități independente … determinată în sistem real, se reportează și se compensează de către contribuabil în limita a 70% din veniturile nete anuale, obținute din aceeași sursă de venit în următorii 5 ani fiscali consecutivi.” Alin. (5): reportul se face cronologic pe 5 ani consecutivi, dreptul este personal și netransmisibil, iar pierderea necompensată la expirarea perioadei este pierdere definitivă.',
       };
     }
-    const total = sumBani([casRes.value, cassValue, flatTax]);
+    const total = sumBani([casRes.value, cassValue, cassLadderValue, flatTax]);
     lines.push({ label: 'Impozit pe venit (fără bază impozabilă)', value: lei(0) });
     if (flatLeg !== null) {
       lines.push({ label: 'Impozit art. 68^3 (10 %, impozitul fiind final)', value: flatTax });
@@ -589,7 +666,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
       lines,
       output: { total },
       snapshot: snap,
-      bases: contributionBases(gross, deductibleBase, net, legs),
+      bases: contributionBases(gross, deductibleBase, net, legs, cassLadderBase),
     };
     if (lossCarryForward) computed.lossCarryForward = lossCarryForward;
     return computed;
@@ -607,7 +684,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   }
   // Art. 66 was already applied to each of the three sums, inside their calculators. Summing the rounded
   // integers is exact, and it is why no second rounding can happen anywhere downstream.
-  const total = sumBani([casRes.value, cassValue, incomeTaxRes.value, flatTax]);
+  const total = sumBani([casRes.value, cassValue, cassLadderValue, incomeTaxRes.value, flatTax]);
   lines.push({ label: 'Total taxe', value: total });
   const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, rules: applicable, calculationLines: lines, output: { total } });
   return {
@@ -615,7 +692,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     lines,
     output: { total },
     snapshot: snap,
-    bases: contributionBases(gross, deductibleBase, net, legs),
+    bases: contributionBases(gross, deductibleBase, net, legs, cassLadderBase),
   };
 }
 
@@ -633,8 +710,10 @@ function contributionBases(
   cheltuieliDeductibile: Bani,
   venitulNetDinActivitate: Bani,
   legs: readonly ContributionLeg[],
+  cassLadderBase?: Bani,
 ): TaxAmountBases {
   const bases: TaxAmountBases = { venitulBrut, cheltuieliDeductibile, venitulNetDinActivitate };
   if (legs.length > 1) bases.venitulNetCumulatPentruContributii = cumulateContributionBase(legs);
+  if (cassLadderBase !== undefined) bases.bazaDeCalculCassArt155LitCH = cassLadderBase;
   return bases;
 }

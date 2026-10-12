@@ -228,7 +228,6 @@ describe('Dashboard page', () => {
         fiscalYear: 2026,
         regime: 'impozit_pe_venit',
         pensionerStatus: 'nu',
-        otherIncome: [],
         socialInsuranceStatus: 'obligatoriu',
       },
       revenues: [

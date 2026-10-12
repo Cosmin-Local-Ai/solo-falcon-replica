@@ -13,7 +13,6 @@ const validProfile: PfaProfile = {
   caen: '6201',
   salaryStatus: 'nu',
   pensionerStatus: 'nu',
-  otherIncome: [],
   socialInsuranceStatus: 'obligatoriu',
   vatExempt: false,
   cashFloorLei: lei(0),
@@ -54,7 +53,10 @@ describe('createDefaultProfile', () => {
     expect(p.pensionSuspensionYears).toBeUndefined();
     expect(p.cassPreviousYearContext).toBeUndefined();
     expect(p.foreignSicknessInsurance).toBeUndefined();
-    expect(p.otherIncome).toEqual([]);
+    // PG-6d (D-LEG-1, B-41): no ladder amounts are minted either. Six zeros would be a declaration that
+    // this person had no income in any art. 155 alin. (1) lit. c)-h) category, and a fresh profile has
+    // simply never been asked.
+    expect(p.cassLadderYears).toBeUndefined();
     expect(p.vatExempt).toBe(false);
     expect(p.cashFloorLei).toBe(0);
     // Deterministic only because `instant` is pinned above. This is the assertion B-23 exists to protect.
@@ -71,7 +73,7 @@ describe('createDefaultProfile', () => {
     expect(p.cashFloorLei).toBe(lei(5000));
     // untouched fields keep their defaults
     expect(p.salaryStatus).toBe('nu');
-    expect(p.otherIncome).toEqual([]);
+    expect(p.cassLadderYears).toBeUndefined();
   });
 });
 
@@ -101,9 +103,27 @@ describe('parsePfaProfile', () => {
     expect(parsePfaProfile(validProfile)).toEqual(validProfile);
   });
 
-  it('accepts a profile with other-income flags', () => {
-    const p = parsePfaProfile({ ...validProfile, otherIncome: ['imobiliare', 'dividende'] });
-    expect(p?.otherIncome).toEqual(['imobiliare', 'dividende']);
+  it('accepts a profile with declared art. 155 alin. (1) lit. c)-h) amounts', () => {
+    const p = parsePfaProfile({
+      ...validProfile,
+      cassLadderYears: [
+        {
+          fiscalYear: 2026,
+          proprietateIntelectuala: lei(30000),
+          investitii: lei(20000),
+          investitiiBaza: 'dividende_platite_diminuate_cu_impozitul_retinut',
+          alteSurse: lei(5000),
+          alteSurseArt114: 'da',
+        },
+      ],
+    });
+    expect(p?.cassLadderYears?.[0]?.proprietateIntelectuala).toBe(lei(30000));
+    // A declared zero is a fact and survives; absence is a different state and must not be coerced into it.
+    const zero = parsePfaProfile({
+      ...validProfile,
+      cassLadderYears: [{ fiscalYear: 2026, activitatiAgricole: lei(0), activitatiAgricoleBaza: 'norma_de_venit' }],
+    });
+    expect(zero?.cassLadderYears?.[0]?.activitatiAgricole).toBe(lei(0));
   });
 
   it('rejects an invalid regime', () => {
@@ -128,8 +148,11 @@ describe('parsePfaProfile', () => {
     expect(parsePfaProfile(partial)).toBeNull();
   });
 
-  it('rejects a profile with an unknown other-income flag', () => {
-    expect(parsePfaProfile({ ...validProfile, otherIncome: ['loterie'] })).toBeNull();
+  it('rejects a ladder amount that is not a non-negative number of bani', () => {
+    expect(parsePfaProfile({ ...validProfile, cassLadderYears: [{ fiscalYear: 2026, investitii: -1 }] })).toBeNull();
+    expect(
+      parsePfaProfile({ ...validProfile, cassLadderYears: [{ fiscalYear: 2026, activitatiAgricoleBaza: 'norma' }] }),
+    ).toBeNull();
   });
 
   it('rejects null / undefined / non-object input', () => {

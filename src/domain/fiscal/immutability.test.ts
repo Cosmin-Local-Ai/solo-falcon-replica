@@ -46,7 +46,7 @@ function makeInputs(): TaxInputsReference {
     pensionSuspensionYears: [],
     cassPreviousYearContext: null,
     foreignSicknessInsurance: null,
-    otherIncome: [],
+    cassLadderYears: [],
     socialInsuranceStatus: 'obligatoriu',
     vatExempt: false,
     cashFloorLei: lei(0),

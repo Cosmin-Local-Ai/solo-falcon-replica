@@ -32,7 +32,6 @@ function profile(fiscalYear = 2026): PfaProfile {
     caen: '6201',
     salaryStatus: 'nu',
     pensionerStatus: 'nu',
-    otherIncome: [],
     socialInsuranceStatus: 'obligatoriu',
     vatExempt: false,
     cashFloorLei: lei(0),

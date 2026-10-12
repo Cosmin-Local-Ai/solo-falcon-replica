@@ -264,8 +264,29 @@ export const DATA_VERSION_OCCUPANCY_SHEET = 14;
  * 50 % default, because there is no per-car fact to consult and no cap to enforce.
  */
 export const DATA_VERSION_VEHICLE_FACTS = 15;
+/**
+ * PG-6d (D-OTH-1, D-OTH-2, D-LEG-1, B-41) — the profile can now record the **amounts** behind CF art.
+ * 155 alin. (1) lit. c)-h), per fiscal year, and the old other-income **flags** are gone.
+ *
+ * Two things happen in this step, and neither invents a fact:
+ *
+ * 1. `profile.otherIncome` is **deleted**. `docs/ai/research/41_other_income_flags_and_cass_ladder.md` §5
+ *    records why the list cannot be kept: it omits three of the six ladder categories, `concesiune` has
+ *    **no referent at all** in the Cod fiscal, and `alte` is wider than art. 114 — wide enough to sweep in
+ *    art. 61 lit. g) *jocuri de noroc* and lit. h) *transferul proprietăților imobiliare*, which never
+ *    attract CASS. A flag that cannot be mapped to a litera cannot be converted into an amount, so there
+ *    is nothing to carry forward. D-LEG-1 is the standing decision that retired shapes are deleted rather
+ *    than preserved — there are no users, and no backfilling of facts nobody declared.
+ * 2. `profile.cassLadderYears` opens **absent**. No pre-v16 field holds any of these amounts, and writing
+ *    six zeros would not be a convenience but a legal assertion: art. 170 alin. (4) sums across all six
+ *    litera, so a minted zero moves a person between the „no CASS at all” state and a 6 / 12 / 24-SM base.
+ *    That is exactly defect B-41, and a migration must not commit it.
+ *
+ * The step is idempotent-safe: deleting an absent key is a no-op, and it writes the version unconditionally.
+ */
+export const DATA_VERSION_OTHER_INCOME_LADDER = 16;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_VEHICLE_FACTS;
+export const CURRENT_DATA_VERSION = DATA_VERSION_OTHER_INCOME_LADDER;
 
 export interface MigrationStep {
   readonly from: number;
@@ -325,7 +346,8 @@ export function legacyProfileFromSettings(s: SettingsState, instant: Date = now(
     // TASK 5: no pension fact is minted here. The legacy `settings` block never recorded a pension
     // status, and minting `pensionerStatus: 'nu'` would assert a checked negative the source never
     // held. Absence is the honest state, and `readPensionerStatus` reports it as `unknown`.
-    otherIncome: [],
+    // PG-6d (D-LEG-1): no `otherIncome: []` either — that flag list is retired outright, and minting an
+    // empty one here would assert that somebody was asked about other income and had none.
     socialInsuranceStatus: 'neplata',
     vatExempt: false,
     cashFloorLei: lei(0),
@@ -915,6 +937,23 @@ export function migrateVehicleFactsV15(data: PersistedAppData): PersistedAppData
   return { ...data, version: DATA_VERSION_VEHICLE_FACTS };
 }
 
+/**
+ * v15 → v16 (`other-income-ladder`). Drops the retired `profile.otherIncome` flag list and opens the
+ * per-year ladder amounts as absent.
+ *
+ * This is the one step in the chain that **removes** stored data, and it does so under D-LEG-1 („we do not
+ * need legacy data. we have no users yet. We should generally clean legacy stuff”). What it does not do is
+ * convert a flag into an amount: a checked `dividende` box records that a source exists, not how much it
+ * paid, and art. 170 alin. (4) and art. 174 alin. (7) lit. b) both compare amounts to SM multiples. Any
+ * conversion would have to invent one, and inventing an amount here invents a CASS liability — the defect
+ * this phase exists to close. So the flags are dropped and the amounts are asked.
+ */
+export function migrateOtherIncomeLadderV16(data: PersistedAppData): PersistedAppData {
+  if (!data.profile) return { ...data, version: DATA_VERSION_OTHER_INCOME_LADDER };
+  const { otherIncome: _dropped, ...profile } = data.profile as PfaProfile & { otherIncome?: unknown };
+  return { ...data, profile: profile as PfaProfile, version: DATA_VERSION_OTHER_INCOME_LADDER };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -1035,6 +1074,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Datele pot înregistra acum vehiculele pe care contribuabilul le deține sau le are în folosință, cu faptele declarate pentru fiecare mașină și pentru fiecare an fiscal: dacă mașina este folosită personal de contribuabil sau de membrul asociat, cum este folosită de fapt (exclusiv în activitate, mixt, deloc, nesigur), care dintre cele cinci categorii de excepție de la art. 68 alin. (7) lit. k) este invocată și care este autoturismul pe care persoana îl desemnează pentru dreptul de deducere a cheltuielilor de funcționare. Nimic nu a fost completat și nicio cheltuială nu a fost atribuită vreunui vehicul în acest pas. Fiecare dintre aceste câmpuri este o afirmație juridică: un `usedByPerson` implicit ar muta o mașină înăuntru sau în afara art. 68 alin. (5) lit. j), care este limitată prin propriile cuvinte la „autoturismele folosite de contribuabil sau membru asociat”; un `designatedForRunningCosts` implicit ar alege el autoturismul, iar niciun text primar nu dă nicio regulă de selecție; o utilizare implicită „exclusiv” ar pretinde o deducere nejustificată prin documente și foaie de parcurs, iar una „deloc" ar refuza o deducere pe care legea o dă la 50 %. Un payload care nu a numit niciodată un vehicul rămâne fără cheia `vehicles`, iar cheltuielile `vehicle_related` din el se comportă exact ca înainte: limitarea de 50 % din alin. (7) lit. k), pentru că nu există nicio faptă per mașină de consultat și nicio limită de aplicat.',
     apply: migrateVehicleFactsV15,
+  },
+  {
+    from: DATA_VERSION_VEHICLE_FACTS,
+    to: DATA_VERSION_OTHER_INCOME_LADDER,
+    name: 'other-income-ladder',
+    summary:
+      'Profilul poate înregistra acum SUMELE pe care persoana le-a declarat pentru fiecare dintre cele șase categorii de venituri de la art. 155 alin. (1) lit. c)-h) din Codul fiscal, pe an fiscal: proprietate intelectuală, asocierea cu o persoană juridică, cedarea folosinței bunurilor, activități agricole/silvicultură/piscicultură, investiții și alte surse. Listele de bifă „imobiliare / autovehicule / dividende / concesiune / alte” au fost eliminate, nu botezate altfel: ele omiteau trei dintre cele șase categorii, „concesiune” nu are niciun corespondent în Codul fiscal, iar „alte” este mai larg decât art. 114 — ar fi putut cuprinde jocuri de noroc sau transferul proprietăților imobiliare, care nu atrag niciodată CASS. Nicio bifă nu a fost transformată într-o sumă: o bifă spune că o sursă există, nu cât a plătit, iar art. 170 alin. (4) și art. 174 alin. (7) lit. b) compară sume cu salariile minime. Nici cele șase sume nu au fost completate: șase zerouri inventate ar muta o persoană de la „nu datorează deloc CASS” la o bază de 6, 12 sau 24 de salarii minime — exact defectul pe care acest pas îl închide.',
+    apply: migrateOtherIncomeLadderV16,
   },
 ];
 

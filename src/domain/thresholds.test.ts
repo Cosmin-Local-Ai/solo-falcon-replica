@@ -785,10 +785,17 @@ describe('TASK 4 — severity, applicability and the measured basis', () => {
     expect(byId(rows, 'CASS_MAX_BASE').applicability).toBe('applicable');
   });
 
-  // CF art. 174 alin. (7) lit. b): other art. 155 alin. (1) lit. c)-h) income at least 6 SM. The profile
-  // declares such incomes but the app holds no amount, so the condition is undecided — never assumed.
-  it('declared other income leaves the top-up row unknown: art. 174 alin. (7) lit. b) cannot be tested', () => {
-    const rows = rowsFor({ ...APPLICABLE_PROFILE, otherIncome: ['imobiliare'] }, lei(10000));
+  // CF art. 174 alin. (7) lit. b): other art. 155 alin. (1) lit. c)-h) income also removes the top-up, but
+  // only where the person owes CASS on it at a level of at least 6 SM. PG-6d replaced the flag list with
+  // declared per-category amounts, and the base those amounts produce is determined once, by the ladder in
+  // the engine. This row deliberately does not re-derive it — two derivations of one legal figure is the
+  // B-70 defect class — so what it reports is that the inputs now exist and the answer belongs to the
+  // estimate rather than to this row.
+  it('declared art. 155 alin. (1) lit. c)-h) amounts leave the top-up row unknown: lit. b) is decided in the engine', () => {
+    const rows = rowsFor(
+      { ...APPLICABLE_PROFILE, cassLadderYears: [{ fiscalYear: 2026, investitii: lei(30000) }] },
+      lei(10000),
+    );
     const row = byId(rows, 'CASS_MIN_BASE');
     expect(row.applicability).toBe('unknown');
     expect(row.applicabilityReason ?? '').toContain('art. 174 alin. (7) lit. b)');

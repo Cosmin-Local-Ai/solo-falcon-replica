@@ -62,7 +62,6 @@ function profile(overrides: Partial<PfaProfile> = {}): PfaProfile {
     caen: '6201',
     salaryStatus: 'nu',
     pensionerStatus: 'nu',
-    otherIncome: [],
     socialInsuranceStatus: 'obligatoriu',
     vatExempt: false,
     cashFloorLei: lei(0),

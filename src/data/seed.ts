@@ -144,7 +144,11 @@ export const seedData: AppData = {
     // something this demo user never stated, and inventing it would either grant or refuse the art. 174
     // alin. (7) lit. c) relief out of nothing.
     pensionerStatus: 'nu',
-    otherIncome: [],
+    // PG-6d (D-LEG-1, B-41): the demo profile records NO amounts for the art. 155 alin. (1) lit. c)-h)
+    // categories. The old `otherIncome: []` said only that the demo user had no boxes ticked, which is not
+    // a fact the engine can use; six declared zeros would say something far stronger — that this person had
+    // no income in any of the six categories — and nobody said it. Leaving the year unanswered keeps the
+    // ladder unasked, which is the state the seed estimate has always computed under.
     // PG-6b (B-29): the demo profile DECLARES its activity family. This is a fixture answering a question,
     // not a default — `domain/profile.ts createDefaultProfile` deliberately leaves the field absent, and an
     // absent field stays an unanswered question (`scenarios.ts activity-family-undeclared` → a

@@ -37,7 +37,6 @@ function profile(overrides: Partial<PfaProfile> = {}): PfaProfile {
     caen: '6201',
     salaryStatus: 'nu',
     pensionerStatus: 'nu',
-    otherIncome: [],
     socialInsuranceStatus: 'obligatoriu',
     vatExempt: false,
     cashFloorLei: lei(0),
@@ -287,7 +286,7 @@ describe('selectTaxDerived (Step 14, structural — no formula)', () => {
   it('case 6: profile tax input changed → inputs reference changes', () => {
     const before = selectTaxDerived(makeData(), activeRules2026());
     const after = selectTaxDerived(
-      makeData({ profile: profile({ cashFloorLei: lei(5000), vatExempt: true, salaryStatus: 'da', otherIncome: ['alte'] }) }),
+      makeData({ profile: profile({ cashFloorLei: lei(5000), vatExempt: true, salaryStatus: 'da', cassLadderYears: [{ fiscalYear: 2026, proprietateIntelectuala: lei(1000) }] }) }),
       activeRules2026(),
     );
     expect(after.inputs.inputsKey).not.toBe(before.inputs.inputsKey);

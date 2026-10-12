@@ -13,11 +13,11 @@ import { selectProjectionV1, type ProjectionV1 } from './projection';
 import type { FiscalRule } from './fiscal/rules';
 import { sumMoney, type Bani, type Money } from './money';
 import type {
+  CassLadderYear,
   CassPreviousYearContext,
   ForeignSicknessInsurance,
   PensionReceiptYear,
   PensionSuspensionYear,
-  PfaOtherIncomeFlag,
   PfaPensionStatus,
   PfaProfile,
   PfaRegime,
@@ -139,7 +139,16 @@ export interface TaxInputsReference {
   cassPreviousYearContext: CassPreviousYearContext | null;
   /** TASK 5 — CF art. 153 alin. (2), held AND proved; the only ground that removes CASS quality outright. */
   foreignSicknessInsurance: ForeignSicknessInsurance | null;
-  otherIncome: PfaOtherIncomeFlag[];
+  /**
+   * PG-6d (D-OTH-1, B-41) — the amounts declared for the six CF art. 155 alin. (1) lit. c)-h) categories,
+   * for every year the person has answered. The engine reads the record for `fiscalYear` only; the other
+   * years travel so the key cannot silently treat a two-year payload as a one-year one.
+   *
+   * This replaces `otherIncome: PfaOtherIncomeFlag[]`, which the engine could not use at all: art. 170
+   * alin. (4) and art. 174 alin. (7) lit. b) both compare AMOUNTS to SM multiples, and a flag carries
+   * none. Absence of a year is not zero — it is the state where the ladder has nothing to sum.
+   */
+  cassLadderYears: CassLadderYear[];
   socialInsuranceStatus: PfaSocialInsuranceStatus;
   vatExempt: boolean;
   cashFloorLei: Bani;
@@ -188,7 +197,7 @@ export function selectTaxDerived(data: AppData, activeRules: FiscalRule[]): TaxD
     pensionSuspensionYears: [...(profile.pensionSuspensionYears ?? [])].sort((a, b) => a.fiscalYear - b.fiscalYear),
     cassPreviousYearContext: profile.cassPreviousYearContext ?? null,
     foreignSicknessInsurance: profile.foreignSicknessInsurance ?? null,
-    otherIncome: [...profile.otherIncome].sort(),
+    cassLadderYears: [...(profile.cassLadderYears ?? [])].sort((a, b) => a.fiscalYear - b.fiscalYear),
     socialInsuranceStatus: profile.socialInsuranceStatus,
     vatExempt: profile.vatExempt,
     cashFloorLei: profile.cashFloorLei,

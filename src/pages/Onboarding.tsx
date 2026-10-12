@@ -16,7 +16,10 @@
  *   attempt to derive it: no CAEN code is read as an answer, because OMFP 925/2017 art. 2 alin. (4) keys
  *   the determination method to the activity description „independent de codurile CAEN menționate cu titlu
  *   exemplificativ” (research 30 §3); the CAEN list itself stays an identity field, not a fiscal input;
- *   other-income AMOUNTS — 12F owns them, and `otherIncome: PfaOtherIncomeFlag[]` models the flag only.
+ *   the other-income AMOUNTS for the six CF art. 155 alin. (1) lit. c)-h) categories are collected per
+ *   fiscal year in Settings (PG-6d); onboarding asks nothing about them, because a category with no answer
+ *   makes the art. 170 alin. (4) cumulation unknown and the ladder refuses — an empty onboarding answer set
+ *   is therefore left as „not asked”, never written as six zeros.
  *
  * And what it refuses: `norma_venit`. D-NORMA-2 gates the regime, not the research, and the requirement is
  * an explicit "nu este suportat" screen with **no estimate** — which is what `refusal` below renders.
@@ -36,7 +39,6 @@ import { PFA_REGIME_DESCRIPTORS, PFA_REGIME_VALUES, isComputableRegime } from '.
 import type { ActivityFamily } from '../domain/fiscal/deductibility';
 import type {
   AccommodationCommissionReading,
-  PfaOtherIncomeFlag,
   PfaPensionStatus,
   PfaRegime,
   PfaSalaryStatus,
@@ -53,7 +55,16 @@ function recorded<T extends string>(value: TriState): T | undefined {
   return value === '' ? undefined : (value as T);
 }
 
-const OTHER_INCOME_KEYS: PfaOtherIncomeFlag[] = ['imobiliare', 'autovehicule', 'dividende', 'concesiune', 'alte'];
+/**
+ * PG-6d (D-OTH-2, D-LEG-1, B-41): the other-income flag list is GONE from this screen.
+ *
+ * It used to offer five checkboxes — `imobiliare`, `autovehicule`, `dividende`, `concesiune`, `alte`. None
+ * of them is a category of CF art. 155 alin. (1): three of the six ladder categories were missing
+ * altogether, `concesiune` has no referent in the Cod fiscal, and `alte` is wider than art. 114. A checkbox
+ * also cannot answer the question the law asks, which is *how much*, and `calcCass` said so: art. 174 alin.
+ * (7) lit. b) „nu a putut fi evaluat — nu a fost nici predat”. What replaces it is a per-year amount per
+ * category, collected in Settings; onboarding asks nothing, and absence stays absence.
+ */
 
 /**
  * The regime a first run starts on, derived rather than spelled out: the one regime in the package that
@@ -97,18 +108,11 @@ export default function OnboardingPage() {
   const [salaryAmount, setSalaryAmount] = useState('');
   const [pensionerStatus, setPensionerStatus] = useState<TriState>('');
   const [pensionReceipt, setPensionReceipt] = useState<TriState>('');
-  const [otherIncome, setOtherIncome] = useState<PfaOtherIncomeFlag[]>([]);
   const [errors, setErrors] = useState<FormErrors>({});
 
   // The refusal is a screen, not a validation message: choosing the regime routes to it immediately, so a
   // person never has to fill the rest of the form to discover the app cannot compute their case.
   const refused = isComputableRegime(regime) ? null : PFA_REGIME_DESCRIPTORS[regime];
-
-  function toggleOther(flag: PfaOtherIncomeFlag) {
-    setOtherIncome(current =>
-      current.includes(flag) ? current.filter(x => x !== flag) : [...current, flag],
-    );
-  }
 
   function finish() {
     const next: FormErrors = {};
@@ -194,7 +198,6 @@ export default function OnboardingPage() {
       ...(activityFamily !== 'cazare' || accommodationCommission === ''
         ? {}
         : { accommodationCommissionReading: accommodationCommission }),
-      otherIncome,
     });
 
     toast('success', copy_.toasts.profileSaved);
@@ -521,17 +524,8 @@ export default function OnboardingPage() {
 
       <Card title={copy_.sections.other}>
         <div className="stack">
-          <span className="hint">{copy_.fields.otherIncomeHint}</span>
-          {OTHER_INCOME_KEYS.map(flag => (
-            <label key={flag} className="row" data-other-income={flag}>
-              <input
-                type="checkbox"
-                checked={otherIncome.includes(flag)}
-                onChange={() => toggleOther(flag)}
-              />
-              {copy_.fields.otherIncomeOptions[flag]}
-            </label>
-          ))}
+          <p>{copy_.fields.otherIncomeIntro}</p>
+          <p className="hint">{copy_.fields.otherIncomeHint}</p>
         </div>
       </Card>
 

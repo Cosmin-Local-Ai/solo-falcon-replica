@@ -135,6 +135,42 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
       { id: 'rate', label: 'CASS rate', value: 10, unit: 'percent' },
       { id: 'min_base', label: 'Top-up floor (6 SM annual) — CF art. 174 alin. (6); conditional, not an unconditional minimum', value: lei(24300), unit: 'lei' },
       { id: 'max_annual_base', label: 'Max annual base (72 SM)', value: lei(291600), unit: 'lei' },
+      // ── PG-6d (D-OTH-1, B-41): the CF art. 170 alin. (2)-(4) ladder for art. 155 alin. (1) lit. c)-h) ──
+      // These are NEW parameters on the existing CASS rule; no existing value or citation moved. They live
+      // here rather than on a rule of their own because the ladder is not a second contribution: art. 174¹
+      // alin. (1) applies „cota de 10% … la baza anuală de calcul menționată la art. 170 alin. (3)”, i.e.
+      // the same 10 % CASS rate on a different base, and `rate` and the 6-SM anchor are already on this
+      // rule. Duplicating 24.300 as a second „6 SM” parameter would be the drift this file's own history
+      // records (Phase 4 deleted `min_cass`/`max_cass`, Phase 5 deleted `multiple_6x`…`multiple_72x` for
+      // exactly that reason), so rung 1 IS `min_base` and only rungs 2 and 3 are added.
+      //
+      // The rungs are a CLIFF, not a marginal rate: at 48.599 lei cumulated the base is 6 SM, at 48.600 it
+      // is 12 SM. `calcCassLadder` reads them from here and never hard-codes a multiple.
+      {
+        id: 'ladder_tier2_base',
+        label: 'Rung 2 of the art. 170 alin. (4) ladder (12 SM annual) — not a marginal rate',
+        value: lei(48600),
+        unit: 'lei',
+        description:
+          'art. 170 alin. (4) coroborat cu alin. (3): venit cumulatum din art. 155 alin. (1) lit. c)-h) de cel puțin 12 salarii minime brute alege baza de calcul de 12 SM. 12 × 4.050 = 48.600 lei, ancoră 1 ianuarie (art. 135¹ alin. (3)). Intervalurile sunt inclusive la limita de jos.',
+      },
+      {
+        id: 'ladder_tier3_base',
+        label: 'Rung 3 of the art. 170 alin. (4) ladder (24 SM annual) — the top rung',
+        value: lei(97200),
+        unit: 'lei',
+        description:
+          'art. 170 alin. (4) coroborat cu alin. (3): venit cumulatum de cel puțin 24 de salarii minime brute alege baza de calcul de 24 SM. 24 × 4.050 = 97.200 lei. Aceasta este ultima treaptă — art. 170 alin. (3) nu prevede o treaptă deasupra, spre deosebire de plafonul de 72 SM din art. 170 alin. (1), care privește venitul din art. 155 alin. (1) lit. b) și nu se aplică acestui bazin.',
+      },
+      {
+        id: 'ladder_condition_precedent',
+        label: 'Condiția de aplicabilitate a întregii trepte (art. 170 alin. (2))',
+        value:
+          'art. 170 alin. (2): „…datorează contribuția de asigurări sociale de sănătate la o bază de calcul stabilită potrivit alin. (3), dacă în anul de realizare a veniturilor valoarea cumulată a acestora este cel puțin egală cu 6 salarii minime brute pe țară.” Sub acest prag nu se datorează DELOC CASS pentru veniturile din art. 155 alin. (1) lit. c)-h): alin. (2) este o condiție prealabilă, nu o cotă. art. 170 alin. (5): „La încadrarea în plafonul prevăzut la alin. (4) nu se iau în calcul veniturile neimpozabile, prevăzute la art. 93 și 105.”',
+        unit: 'text',
+        description:
+          'PG-6d. Cuantumul sub 6 SM nu se rotunjește la o bază de 6 SM — spre deosebire de art. 174 alin. (6), care este o diferență de contribuție pentru lit. b) și stă pe altă regulă.',
+      },
       // REMOVED in Phase 4: `min_cass` (2,430) and `max_cass` (29,160) were independent parameters
       // encoding figures that are fully DERIVABLE as rate × min_base and rate × max_annual_base.
       // Two sources of truth for one legal number is the defect — `max_cass` was in fact read by
@@ -172,7 +208,7 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     // OPEN RISK U-8: it is NOT established that OUG 89/2025 (MO 1203/24.12.2025) and OUG 8/2026
     // (MO 147/25.02.2026) leave art. 170 / 174 / 154 / 180 untouched — see docs/ai/phases/04_cass.md.
     sourceAct: 'Cod fiscal — OUG nr. 128/2024, Art. I pct. 22-23 (MO 1125/11.11.2024); Legea 239/2025, Art. XII pct. 19 (MO 1160/15.12.2025); Legea 141/2025, Art. I pct. 34 (MO 699/25.07.2025)',
-    sourceArticle: 'art. 170 alin. (1) (cotă 10%, plafon 72 SM); art. 174 alin. (6) (prag de 6 SM prin diferență de contribuție); art. 174 alin. (2) (VNA zero / pierdere fiscală); excepție art. 174 alin. (7) lit. c); ancoră SM art. 135^1 alin. (3)',
+    sourceArticle: 'art. 170 alin. (1) (cotă 10%, plafon 72 SM); art. 170 alin. (2)-(4) (scara de 6 / 12 / 24 SM pentru art. 155 alin. (1) lit. c)-h), citită în research/41 §2-§3); art. 170 alin. (5) (veniturile neimpozabile de la art. 93 și 105 nu se cumulează); art. 174¹ alin. (1) (cota de 10% se aplică bazei anuale de la art. 170 alin. (3)); art. 174 alin. (6) (prag de 6 SM prin diferență de contribuție); art. 174 alin. (2) (VNA zero / pierdere fiscală); excepție art. 174 alin. (7) lit. c); ancoră SM art. 135^1 alin. (3)',
     sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/305208',
   },
   {

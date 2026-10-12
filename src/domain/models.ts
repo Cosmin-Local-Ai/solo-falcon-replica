@@ -336,13 +336,189 @@ export function profileHasTourismCaen(identity: PfaIdentity | undefined): boolea
   return codes.some((c) => listed.has(c.cod));
 }
 
-/** Flags for other relevant income sources (plural — a profile can have several). */
-export type PfaOtherIncomeFlag =
-  | 'imobiliare'    // rental income
-  | 'autovehicule'  // vehicle rental
-  | 'dividende'
-  | 'concesiune'
-  | 'alte';
+/**
+ * PG-6d (D-OTH-1, B-41) — the six categories of CF art. 155 alin. (1) lit. c)-h) whose incomes cumulate
+ * into ONE CASS base under art. 170 alin. (2)-(4).
+ *
+ * **These are the law's letters, not the app's labels.** `docs/ai/research/41_other_income_flags_and_cass_ladder.md`
+ * §5 is the finding that forced this list: the five flags this app used to carry (`imobiliare`,
+ * `autovehicule`, `dividende`, `concesiune`, `alte`) are NOT these categories. They omitted three of the
+ * six — lit. c) proprietate intelectuală, lit. d) asocierea cu o persoană juridică, lit. f) agricole —
+ * and a ladder that sums across all six cannot be computed honestly from three inputs. `concesiune` has
+ * **no referent at all** in the Cod fiscal (a whole-code search returns zero matches for „venituri din
+ * concesiune”), and `alte` as a free-form catch-all is wider than art. 114: art. 61 lit. g) *premii și
+ * jocuri de noroc* and lit. h) *transferul proprietăților imobiliare* never appear in art. 155 alin. (1)
+ * and never attract CASS, so a free-form „other” can manufacture a liability. Both are retired under
+ * D-OTH-2 and D-LEG-1, not deprecated.
+ *
+ * The letters are named in the law's own order so a reader can put each one against its litera.
+ */
+export type CassLadderCategory =
+  /** lit. c) venituri din drepturi de proprietate intelectuale, definite conform art. 70. */
+  | 'proprietate_intelectuala'
+  /** lit. d) venituri din asocierea cu o persoană juridică, art. 125. */
+  | 'asociere_persoana_juridica'
+  /** lit. e) venituri din cedarea folosinței bunurilor, definite conform art. 83. */
+  | 'cedarea_folosintei_bunurilor'
+  /** lit. f) venituri din activități agricole, silvicultură și piscicultură, definite conform art. 103. */
+  | 'activitati_agricole'
+  /** lit. g) venituri din investiții, definite conform art. 91 — dividends reach CASS only through here. */
+  | 'investitii'
+  /** lit. h) venituri din alte surse, definite conform art. 114. */
+  | 'alte_surse';
+
+/** The six categories, in the order art. 155 alin. (1) lists them and DU 212 subsecțiunea 2.2 numbers them. */
+export const CASS_LADDER_CATEGORIES: readonly CassLadderCategory[] = [
+  'proprietate_intelectuala',
+  'asociere_persoana_juridica',
+  'cedarea_folosintei_bunurilor',
+  'activitati_agricole',
+  'investitii',
+  'alte_surse',
+];
+
+/**
+ * PG-6d (D-OTH-1) — the amounts the person **declared** for ONE fiscal year, one per ladder category.
+ *
+ * This is the shape DU 212 subsecțiunea 2.2 has: six per-category lines feeding one cumulated total
+ * feeding one base. It is one record per fiscal year, optional and never defaulted, for the reason every
+ * other per-year fact on this profile gives — `PensionReceiptYear`, `AccommodationRoomCountYear`,
+ * `VehicleYearFacts` — a ladder rung is chosen per year, and a scalar on the profile would assert one
+ * answer across every year the app can be asked about.
+ *
+ * **Each field holds the amount art. 170 alin. (4) actually measures, not gross receipts.** That article
+ * measures per category, by that category's own rule: net for lit. c), d), e) and g); **venitul brut**
+ * for lit. h) and for lit. h) only; dividends as „dividendele plătite, diminuate cu impozitul reținut”;
+ * agricultural as „venitul net **sau** norma de venit, după caz” — the normă survives only there, having
+ * been deleted for rentals from 2026 by Legea 239/2025 art. XII pct. 19. Applying one measurement to all
+ * six is the easy wrong answer, which is why each field says which figure belongs in it.
+ *
+ * **Absence is not zero.** A field that is absent was never answered, and art. 170 alin. (4) sums across
+ * **all** of lit. c)-h): with one category unanswered the sum is unknown, so the ladder must refuse.
+ * Zero is a *declared* amount and is stored as `lei(0)`, which is a different fact and is honoured. That
+ * distinction is defect B-41 — defaulting a category manufactures or erases a liability depending on the
+ * rung the missing amount would have moved the person to.
+ */
+export interface CassLadderYear {
+  /** The fiscal year these amounts were realised in — art. 170 alin. (2) speaks of „anul fiscal”. */
+  fiscalYear: number;
+  /** lit. c) venitul net after the art. 72 / 72¹ forfetar, or net per art. 73. */
+  proprietateIntelectuala?: Bani;
+  /** lit. d) venitul net distribuit din asocieri cu persoane juridice — art. 125 alin. (8)-(9). */
+  asocierePersoanaJuridica?: Bani;
+  /**
+   * lit. e) venitul net din cedarea folosinței bunurilor — brut minus cheltuiala forfetară de 20 %
+   * (art. 84 alin. (3)), or 30 % for the short-term 1–7 rooms of art. 85 alin. (2). **No normă de venit
+   * for rentals from 2026**: the words „sau norma de venit, după caz” were deleted by Legea 239/2025
+   * art. XII pct. 19.
+   */
+  cedareaFolosinteiBunurilor?: Bani;
+  /**
+   * lit. e) — the fact that decides whether letting income is lit. e) at all (D-OTH-2).
+   *
+   * art. 83 alin. (1) expressly excludes income from an independent activity, so receipts from letting a
+   * good **from personal patrimony** are lit. e) and join the ladder, while letting that *is* the PFA's
+   * own activity is art. 67 alin. (1) income — lit. b), which never joins the ladder. The app asks; it
+   * does not read a CAEN code, and it does not store `concesiune` as a category, because that word has no
+   * referent in the Cod fiscal and the contract type does not decide the letter either.
+   */
+  cedareaSursa?: 'activitate_proprie_a_pfa' | 'patrimoniu_personal';
+  /** lit. f) venitul net **sau** norma de venit, după caz — art. 104-106. The normă survives only here. */
+  activitatiAgricole?: Bani;
+  /** Which of the two art. 170 alin. (4) lit. e) measurements the declared agricol figure is. */
+  activitatiAgricoleBaza?: 'venit_net' | 'norma_de_venit';
+  /**
+   * lit. g) venitul și/sau câștigul/câștigul net per art. 94-97. For dividends this is **not** the gross
+   * distribution: art. 170 alin. (4) lit. d) takes „dividendele plătite, diminuate cu impozitul reținut”.
+   */
+  investitii?: Bani;
+  /** Which of the two art. 94-97 measurements the declared investitii figure is. */
+  investitiiBaza?: 'castig_net' | 'dividende_platite_diminuate_cu_impozitul_retinut';
+  /**
+   * lit. h) **venitul brut**, câștigul și/sau venitul impozabil din alte surse, stabilit potrivit
+   * art. 114-116. Gross — and gross only for this category.
+   */
+  alteSurse?: Bani;
+  /**
+   * D-OTH-2 — is the declared „alte surse” amount income defined at art. 114? Required before the amount
+   * is cumulated. A free-form other can sweep in art. 61 lit. g) *premii și jocuri de noroc* or lit. h)
+   * *transferul proprietăților imobiliare*, neither of which appears in art. 155 alin. (1) and neither of
+   * which ever attracts CASS, so an unqualified „other” manufactures a liability.
+   */
+  alteSurseArt114?: PfaYesNo;
+  /**
+   * CF art. 170 alin. (5): „La încadrarea în plafonul prevăzut la alin. (4) nu se iau în calcul
+   * veniturile neimpozabile, prevăzute la art. 93 și 105.” Stored so the app can *see* the amount it must
+   * not add, and so the two readings of art. 174 alin. (7) lit. b) can be told apart — see
+   * `calcCassLadder`.
+   */
+  neimpozabil?: Bani;
+  /**
+   * CF art. 174¹ alin. (3)-(6): CASS already reținută la sursă on these same incomes. It is a **credit**
+   * against the contribution due (DU 212 subsecțiunea 2.2 rd. 6), not a second charge. This app does not
+   * model the credit, so a recorded amount makes the ladder refuse rather than double-charge.
+   */
+  cassRetinutLaSursa?: Bani;
+}
+
+/** The ladder amounts declared for one fiscal year, or `undefined` when that year was never answered. */
+export function cassLadderForYear(
+  years: readonly CassLadderYear[] | undefined,
+  fiscalYear: number,
+): CassLadderYear | undefined {
+  return years?.find((y) => y.fiscalYear === fiscalYear);
+}
+
+/**
+ * Which of the six ladder categories this year has NOT answered.
+ *
+ * The ladder sums across all six (art. 170 alin. (4)), so a partial answer set is not a smaller sum — it
+ * is an unknown sum. This function is what lets the refusal name the missing litera instead of defaulting
+ * them, and it is deliberately a list rather than a boolean: „three of six missing” and „one of six
+ * missing” need different fixes.
+ *
+ * A category counts as answered only when an amount is stored. `lei(0)` answers it — a declared zero is a
+ * fact; absence is not.
+ */
+export function cassLadderMissingCategories(
+  year: CassLadderYear | undefined,
+): CassLadderCategory[] {
+  if (!year) return [...CASS_LADDER_CATEGORIES];
+  return CASS_LADDER_CATEGORIES.filter((c) => ladderAmountFor(year, c) === undefined);
+}
+
+/** The declared amount for one ladder category, or `undefined` when that category was never answered. */
+export function ladderAmountFor(year: CassLadderYear | undefined, category: CassLadderCategory): Bani | undefined {
+  if (!year) return undefined;
+  switch (category) {
+    case 'proprietate_intelectuala':
+      return year.proprietateIntelectuala;
+    case 'asociere_persoana_juridica':
+      return year.asocierePersoanaJuridica;
+    case 'cedarea_folosintei_bunurilor':
+      return year.cedareaFolosinteiBunurilor;
+    case 'activitati_agricole':
+      return year.activitatiAgricole;
+    case 'investitii':
+      return year.investitii;
+    case 'alte_surse':
+      return year.alteSurse;
+  }
+}
+
+/**
+ * Replace or remove ONE year's ladder amounts without disturbing the other years — the same discipline as
+ * `withAccommodationRoomCount`. `amounts === undefined` makes that year unanswered again; it does not
+ * write six zeros, because six zeros is a declaration that the person had no income in any category.
+ */
+export function withCassLadderYear(
+  years: readonly CassLadderYear[] | undefined,
+  year: CassLadderYear | undefined,
+): CassLadderYear[] | undefined {
+  const others = (years ?? []).filter((y) => y.fiscalYear !== year?.fiscalYear);
+  if (year === undefined) return others.length > 0 ? others : undefined;
+  return [...others, year];
+}
 
 /**
  * CASS status for the profile. The three stored strings are PERSISTED DATA — renaming a value would
@@ -516,8 +692,21 @@ export interface PfaProfile {
    * entirely, and the only one whose proof is recorded as a separate half.
    */
   foreignSicknessInsurance?: ForeignSicknessInsurance;
-  /** Other relevant income flags. */
-  otherIncome: PfaOtherIncomeFlag[];
+  /**
+   * PG-6d (D-OTH-2, D-LEG-1, B-41) — the amounts declared per fiscal year for the six CF art. 155 alin.
+   * (1) lit. c)-h) categories, which cumulate into ONE CASS base under art. 170 alin. (2)-(4).
+   *
+   * What replaced the old `otherIncome` flag list is **amounts, plus the facts that decide the letter**
+   * (`cedareaSursa`, `alteSurseArt114`). A flag could not be used by the engine at all: art. 174 alin.
+   * (7) lit. b) and art. 170 alin. (4) both compare amounts to 6 / 12 / 24 SM, and `calcCass` said so in
+   * its own words — „nu a putut fi evaluat — nu a fost nici predat”. The flag vocabulary itself is gone,
+   * not deprecated: `concesiune` has no referent in the Cod fiscal and `alte` is wider than art. 114.
+   *
+   * OPTIONAL, with no `.default()` and no backfill anywhere. Absence of the whole array means the question
+   * was never asked; absence of one category inside a year that was asked means the sum is unknown and the
+   * ladder refuses. Neither is read as zero.
+   */
+  cassLadderYears?: CassLadderYear[];
   /**
    * PG-6b (B-29) — the activity family the person **declared**. `cazare` is `prestarea de servicii de
    * cazare`, which from FY2026 is taxed under CF art. 68^3 on a flat 30 % expense ratio and has no

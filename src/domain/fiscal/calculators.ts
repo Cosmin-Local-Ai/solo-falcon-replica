@@ -1,6 +1,7 @@
 import type { FiscalRule, FiscalParameter } from './rules';
-import type { FactState } from '../models';
-import { applyRateDecimal, lei, leiText, roundArt66, subBani, type Bani } from '../money';
+import type { CassLadderCategory, FactState, PfaYesNo } from '../models';
+import { CASS_LADDER_CATEGORIES } from '../models';
+import { applyRateDecimal, lei, leiText, roundArt66, subBani, sumBani, type Bani } from '../money';
 
 export type ReviewRequired = { reviewRequired: true; reason: string };
 
@@ -34,6 +35,20 @@ export type CalculatorResult =
        * here is the only way those three numbers are guaranteed to be about the same money.
        */
       determinedNet?: Bani;
+      /**
+       * PG-6d — the two readings of CF art. 174 alin. (7) lit. b) do not agree on this fact set, and this
+       * is the case where the app must not pick one.
+       *
+       * The provision exempts the art. 174 alin. (6) difference where the person had art. 155 alin. (1)
+       * lit. c)-h) income „pentru care datorează contribuția de asigurări sociale de sănătate la un nivel
+       * cel puțin egal cu 6 salarii minime brute”. **Reading A** asks whether the *income* reaches 6 SM;
+       * **Reading B** asks whether the *calculation base* is at least 6 SM. `docs/ai/research/41_other_income_flags_and_cass_ladder.md`
+       * §7.6 records that **no official interpretation resolving A against B exists**. Where the two
+       * readings converge the ladder computes with B; where they diverge it reports the divergence here and
+       * the caller refuses rather than choosing. They diverge in exactly three situations — neimpozabile
+       * income, an art. 154 alin. (1) exemption, and CASS withheld at source.
+       */
+      readingDivergence?: string;
     }
   | ReviewRequired;
 
@@ -84,12 +99,6 @@ export type CalculatorInput = {
    */
   pensionSuspensionMonths?: number[];
   /**
-   * CASS — whether the profile declares any art. 155 alin. (1) lit. c)-h) income at all. CF art. 174
-   * alin. (7) lit. b) relieves only when such income is at least 6 SM, and the app holds no amount for
-   * those categories, so the branch is reported as unevaluated rather than assumed either way.
-   */
-  otherIncomeArt155LitCH?: boolean;
-  /**
    * CASS only — CF art. 174 alin. (7) lit. a): the art. 174 alin. (6) top-up is not
    * owed where salary and assimilated income realised in that fiscal year is "cel puțin
    * egal cu 6 salarii minime brute".
@@ -125,6 +134,32 @@ export type CalculatorInput = {
    */
   gross?: Bani;
   /**
+   * CASS — CF art. 174 alin. (7) lit. b): the base the person's OWN art. 155 alin. (1) lit. c)-h) CASS is
+   * owed on, as determined by `calcCassLadder`. This is what makes that litera evaluable for the first
+   * time: it used to be fed a boolean flag, and `calcCass` correctly reported that a flag cannot be
+   * compared to 6 SM („nu a putut fi evaluat — nu a fost nici predat”).
+   *
+   * `undefined` means the ladder was never evaluated — the person has not been asked, or the answer set is
+   * incomplete — and the branch stays reported rather than assumed. A `lei(0)` here is NOT absence: it is
+   * the ladder having computed that the cumulated amount is below 6 SM, so no CASS is owed on it and the
+   * lit. b) test fails on its merits.
+   */
+  ladderBase?: Bani;
+  /**
+   * CASS — the divergence between the two readings of art. 174 alin. (7) lit. b), reported by
+   * `calcCassLadder` as `readingDivergence`. Present means the alin. (6) difference cannot be decided
+   * without choosing a reading, and this calculator refuses instead of choosing.
+   */
+  ladderReadingDivergence?: string;
+  /**
+   * PG-6d — the input for `calcCassLadder`, the art. 155 alin. (1) lit. c)-h) track. Deliberately its own
+   * field and never folded into `base`: `base` on this calculator is the art. 170 alin. (1) amount, i.e.
+   * the cumulated **lit. b)** net capped at 72 SM, and the ladder is a different basins with a different
+   * ceiling (art. 170 alin. (3), no 72-SM cap). One variable carrying both is how the two tracks would get
+   * merged.
+   */
+  cassLadder?: CassLadderInput;
+  /**
    * CF art. 148 alin. (2): the CAS base is "venitul ales de contribuabil". An
    * explicitly chosen base is honoured, but never below the applicable statutory
    * floor. Wired to no persisted field and no UI input; when the election is
@@ -133,6 +168,31 @@ export type CalculatorInput = {
    * itself) is the headline figure.
    */
   chosenBase?: Bani;
+};
+
+/**
+ * PG-6d (D-OTH-1, B-41) — what the art. 155 alin. (1) lit. c)-h) CASS ladder is measured on.
+ *
+ * The amounts are the ones CF art. 170 alin. (4) measures **per category, by that category's own rule** —
+ * net for lit. c), d), e) and g); **venitul brut** for lit. h) and for lit. h) only; dividends as
+ * „dividendele plătite, diminuate cu impozitul reținut”; agricultural as „venitul net **sau** norma de
+ * venit, după caz”, which survives only there. The caller assembles them from the declared per-year facts;
+ * this calculator does not know what a profile is.
+ *
+ * **A missing key is not a zero.** art. 170 alin. (4) sums across **all** of lit. c)-h), so one missing
+ * category makes the sum unknown and the ladder must refuse. A declared `lei(0)` is a different input and
+ * is added as zero.
+ */
+export type CassLadderInput = {
+  amounts?: Partial<Record<CassLadderCategory, Bani>>;
+  /** CF art. 170 alin. (5): art. 93 / art. 105 neimpozabile income — recorded, never cumulated. */
+  neimpozabil?: Bani;
+  /** CF art. 174¹ alin. (3)-(6): CASS already reținută la sursă — a credit, not a second charge. */
+  cassRetinutLaSursa?: Bani;
+  /** D-OTH-2 — whether the declared „alte surse” amount is art. 114 income at all. */
+  alteSurseArt114?: PfaYesNo;
+  /** D-OTH-2 — whether letting receipts come from the PFA's own activity or from personal patrimony. */
+  cedareaSursa?: 'activitate_proprie_a_pfa' | 'patrimoniu_personal';
 };
 
 export type CalculatorFunction = (
@@ -406,6 +466,39 @@ function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
       // salary < 6 SM: the condition in alin. (7) lit. a) is not met, so the top-up stands.
       // Falls through to the art. 174 alin. (6) branch below.
     }
+    // CF art. 174 alin. (7) lit. b): the top-up is likewise not owed where the person realised art. 155
+    // alin. (1) lit. c)-h) income „pentru care datorează contribuția de asigurări sociale de sănătate la un
+    // nivel cel puțin egal cu 6 salarii minime brute”. Until PG-6d this litera could not be evaluated at
+    // all — the profile carried flags, and a flag has no level to compare with 6 SM, which is what the
+    // note at the bottom of this branch used to say. `calcCassLadder` now supplies the base, so the test
+    // runs.
+    //
+    // It runs on **Reading B** (the calculation base), which is the reading the words support: a 10 %
+    // contribution can never itself equal 6 SM, so „nivel” must denote the base. That is safe only where
+    // Reading A would decide the same way. Where the two part, the ladder reports `readingDivergence` and
+    // this calculator refuses rather than picking — see the note on `CalculatorResult.readingDivergence`
+    // and `docs/ai/research/41_other_income_flags_and_cass_ladder.md` §7.6, which records that no official
+    // interpretation of this litera exists.
+    //
+    // Checked AFTER lit. c), alin. (8) and lit. a) on purpose: those grant the relief on their own facts,
+    // so once one of them holds the lit. b) question decides nothing and refusing would be over-refusal.
+    if (input?.ladderReadingDivergence) {
+      return { reviewRequired: true, reason: input.ladderReadingDivergence };
+    }
+    if (input?.ladderBase !== undefined && input.ladderBase >= floorBase) {
+      const cass = roundArt66(applyRateDecimal(vna, ratePercent));
+      return {
+        value: cass,
+        breakdown: [
+          `venit net anual (VNA): ${leiText(vna)} lei`,
+          `VNA sub pragul de 6 SM (${leiText(floorBase)} lei): art. 174 alin. (6) ar cere o diferenta de contributie pana la ${leiText(floorCass)} lei`,
+          `exceptie: persoana datoreaza CASS pe veniturile din art. 155 alin. (1) lit. c)-h) la o baza de ${leiText(input.ladderBase)} lei, cel putin egala cu 6 salarii minime brute (${leiText(floorBase)} lei) — CF art. 174 alin. (7) lit. b)`,
+          'testul se face la nivelul BAZEI de calcul (Citește B), nu la nivelul venitului realizat: o contributie de 10 % nu poate egala niciodată 6 salarii minime, deci „nivel” semneifică baza. Citește A ar număra și veniturile neimpozabile excluse de art. 170 alin. (5); acolo unde cele două lecturi nu cad la fel, calculatorul refuză în loc să aleagă.',
+          'lit. b) elimina DOAR diferenta de la art. 174 alin. (6) — contributia de 10% pe VNA ramane datorata (art. 174 alin. (1), art. 170 alin. (1))',
+          `CASS = ${leiText(vna)} x ${ratePercent / 100} = ${leiText(cass)} lei (fara diferenta de contributie; intreaga contributie este deductibila per art. 118 alin. (2) lit. b))`,
+        ],
+      };
+    }
     // B-13: the top-up is OWED but NOT DEDUCTIBLE. art. 174 alin. (6) creates a „diferență de
     // contribuție” up to a 6 SM base when the art. 68 net income is positive but smaller than 6 SM; the
     // art. 174 alin. (1) / art. 170 alin. (1) contribution itself stays 10% × net income. Art. 118 alin.
@@ -444,9 +537,13 @@ function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
         ...(input?.pensionSuspensionMonths && input.pensionSuspensionMonths.length > 0
           ? [`NOTA (FAPTA, NU CONCLUZIE): pensia a fost suspendata in lunile ${input.pensionSuspensionMonths.join(',')}; efectul asupra art. 174 alin. (7) lit. c) nu este verificat (research 25, gap 1)`]
           : []),
-        ...(input?.otherIncomeArt155LitCH
-          ? ['NOTA: profilul declara venituri din art. 155 alin. (1) lit. c)-h), dar aplicatia nu detine cuantumul lor, deci art. 174 alin. (7) lit. b) (acele venituri cel putin egale cu 6 salarii minime brute) nu a putut fi evaluat — nu a fost nici presupus indeplinit, nici presupus neindeplinit.']
-          : []),
+        ...(input?.ladderBase !== undefined
+          ? [
+              `conditia din art. 174 alin. (7) lit. b) nu este indeplinita: baza de calcul a CASS pe veniturile din art. 155 alin. (1) lit. c)-h) este ${leiText(input.ladderBase)} lei, sub 6 salarii minime brute (${leiText(floorBase)} lei), deci persoana nu „datorează contribuția la un nivel cel puțin egal cu 6 salarii minime brute” — diferenta ramane datorata`,
+            ]
+          : [
+              'NOTA (CONDITIE NEVALUATA): persoana nu a fost intrebanda despre veniturile din art. 155 alin. (1) lit. c)-h), sau raspunsurile sunt incomplete, deci art. 174 alin. (7) lit. b) nu a putut fi evaluat — nu a fost nici presupus indeplinit, nici presupus neindeplinit.',
+            ]),
       ],
     };
   }
@@ -466,6 +563,199 @@ function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
     );
   }
   return { value: cass, breakdown };
+}
+
+/**
+ * PG-6d (D-OTH-1, B-41) — the CASS ladder for CF art. 155 alin. (1) lit. c)-h).
+ *
+ * This is a **separate track** from the `calcCass` branch above, and keeping them apart is the whole
+ * discipline of the phase:
+ *
+ * - `calcCass` runs on art. 170 alin. (1): the cumulated **lit. b)** net, which IS the base, floored at
+ *   6 SM by the art. 174 alin. (6) difference and capped at 72 SM.
+ * - this calculator runs on art. 170 alin. (2)-(4) + art. 174¹ alin. (1): the amount cumulated across
+ *   lit. c)-h), which only SELECTS one of three bases (6 / 12 / 24 SM). There is **no 72-SM cap here** —
+ *   that cap belongs to art. 170 alin. (1) and does not reach this basin — and the PFA's own net never
+ *   enters the 6/12/24 test, exactly as `research/38` §1.5 keeps art. 68^3 out of it.
+ *
+ * Three properties the arithmetic must have and the easy way each one gets broken:
+ *
+ * 1. **A condition precedent, not a rate.** Below 6 SM cumulated there is no CASS at all for these
+ *    categories (art. 170 alin. (2): „…datorează contribuția … dacă … valoarea cumulată a acestora este
+ *    cel puțin egală cu 6 salarii minime brute”). Returning the 6-SM contribution for a 20.000 lei year is
+ *    the `calcCass` art. 174 alin. (6) rule imported into a provision that does not contain it.
+ * 2. **A cliff, one base per person.** art. 170 alin. (3) fixes „baza anuală de calcul” for „persoanele”
+ *    and art. 174¹ alin. (1) applies the 10 % to that single base, so six categories feed ONE total feeding
+ *    ONE base. A marginal-rate implementation understates at 48.599 lei and overstates at 48.600; a
+ *    per-category ladder manufactures six contributions where the law states one. Ranges are inclusive at
+ *    the lower bound.
+ * 3. **An unanswered category is not zero.** art. 170 alin. (4) sums across all six litera, so a partial
+ *    answer set makes the sum unknown. Defaulting the gap is defect B-41: depending on the rung it can
+ *    invent a liability or erase one.
+ *
+ * Every figure comes from the CASS rule's parameters — `rate`, `min_base` (rung 1 = 6 SM),
+ * `ladder_tier2_base` (12 SM), `ladder_tier3_base` (24 SM) — never from a literal, so a year with no
+ * verified minimum wage cannot quietly inherit 2026's.
+ */
+function calcCassLadder(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
+  const ladder = input?.cassLadder;
+  const ratePercent = paramNumber(rule, 'rate');
+  const tier1 = paramBani(rule, 'min_base'); // 6 SM — art. 170 alin. (2) threshold and alin. (3) rung 1
+  const tier2 = paramBani(rule, 'ladder_tier2_base'); // 12 SM
+  const tier3 = paramBani(rule, 'ladder_tier3_base'); // 24 SM
+  const conditionPrecedent = paramValue(rule, 'ladder_condition_precedent');
+  const amounts = ladder?.amounts ?? {};
+
+  // ── The refusal that is the whole point of the phase: a partial answer set is an unknown sum ──
+  const missing = CASS_LADDER_CATEGORIES.filter((c) => amounts[c] === undefined);
+  if (missing.length > 0 && missing.length < CASS_LADDER_CATEGORIES.length) {
+    return {
+      reviewRequired: true,
+      reason:
+        `Baza de calcul CASS pentru veniturile din art. 155 alin. (1) lit. c)-h) nu poate fi stabilită: ` +
+        `din cele șase categorii prevăzute de art. 170 alin. (4) lipsesc ${missing.length} ` +
+        `(${missing.join(', ')}). Cumularea se face peste TOATE cele șase, deci o categorie fără răspuns ` +
+        'face suma necunoscută — nu o sumă mai mică. Aplicația nu completează zero: un zero declarat este ' +
+        'o faptă înregistrată de persoana fizică, un zero inventat este o datorie sau o scutire care nu ' +
+        'există (art. 170 alin. (2)-(4) din Codul fiscal).',
+    };
+  }
+  if (missing.length === CASS_LADDER_CATEGORIES.length) {
+    return {
+      reviewRequired: true,
+      reason:
+        'Niciun venit din art. 155 alin. (1) lit. c)-h) nu a fost declarat pentru acest an fiscal, deci ' +
+        'aplicația nu are ce cumula. Aceasta nu este o afirmație că persoana nu a avut astfel de venituri.',
+    };
+  }
+
+  // ── D-OTH-2: the two facts that decide whether an amount belongs in this basin at all ──
+  if (amounts.alte_surse !== undefined && amounts.alte_surse > 0 && ladder?.alteSurseArt114 !== 'da') {
+    return {
+      reviewRequired: true,
+      reason:
+        'Suma declarată la „alte surse” nu poate fi cumulatã: art. 155 alin. (1) lit. h) trimite la art. 114, ' +
+        'iar art. 114 alin. (1) cuprinde numai veniturile care NU se încadrează în art. 61 lit. a)-h). ' +
+        'Premiile și jocurile de noroc (art. 61 lit. g)) și transferul proprietăților imobiliare (art. 61 ' +
+        'lit. h)) nu apar în art. 155 alin. (1) deloc și nu atrag niciodată CASS, deci un „alte” fără ' +
+        'calificarea art. 114 ar fabrica o contribuție. Aplicația refuză cumlarea până când persoana ' +
+        'declară că suma este un venit definit la art. 114.',
+    };
+  }
+  if (
+    amounts.cedarea_folosintei_bunurilor !== undefined &&
+    amounts.cedarea_folosintei_bunurilor > 0 &&
+    ladder?.cedareaSursa === 'activitate_proprie_a_pfa'
+  ) {
+    return {
+      reviewRequired: true,
+      reason:
+        'Veniturile din închiriere declarate ca provenind din activitatea proprie a PFA nu pot intra în ' +
+        'cumularea de la art. 170 alin. (4): art. 83 alin. (1) exclude în mod expres veniturile din ' +
+        'activități independente, iar astfel de încasări sunt veniturile art. 67 alin. (1) — art. 155 alin. ' +
+        '(1) lit. b), care se impun și se contribuie pe altă cale (art. 170 alin. (1), cu plafon de 72 SM). ' +
+        'Nu există nicio categorie „concesiune” în Codul fiscal care să le așeze altundeva.',
+    };
+  }
+
+  // ── art. 170 alin. (5): neimpozabile income is seen, never added ──
+  const neimpozabil = ladder?.neimpozabil ?? lei(0);
+  let cumulated = lei(0);
+  for (const category of CASS_LADDER_CATEGORIES) {
+    const amount = amounts[category];
+    if (amount === undefined) continue; // unreachable: the completeness check above already refused
+    if (amount < 0) {
+      return {
+        reviewRequired: true,
+        reason: `Un venit declarat la art. 155 alin. (1) lit. c)-h) este negativ (${leiText(amount)} lei); art. 170 alin. (4) cumulează venituri, nu pierderi.`,
+      };
+    }
+    cumulated = sumBani([cumulated, amount]);
+  }
+
+  // ── The cliff. Inclusive at the lower bound of each rung, exactly as art. 170 alin. (4) words it. ──
+  let base: Bani;
+  let rung: string;
+  if (cumulated < tier1) {
+    base = lei(0);
+    rung = 'sub 6 salarii minime brute — condiția prealabilă din art. 170 alin. (2) nu este îndeplinită';
+  } else if (cumulated < tier2) {
+    base = tier1;
+    rung = '6 salarii minime brute';
+  } else if (cumulated < tier3) {
+    base = tier2;
+    rung = '12 salarii minime brute';
+  } else {
+    base = tier3;
+    rung = '24 salarii minime brute';
+  }
+  const value = base === lei(0) ? lei(0) : roundArt66(applyRateDecimal(base, ratePercent));
+
+  // ── The two readings of art. 174 alin. (7) lit. b), and the one case here where they part ──
+  // Reading A looks at the income realised; Reading B at the base the contribution is owed on. They agree
+  // whenever the measured cumulated amount itself reaches 6 SM, because the first rung triggers there. They
+  // part when neimpozabile income (art. 170 alin. (5), excluded from the cumulation) is what carries the
+  // gross over 6 SM: Reading A would grant the art. 174 alin. (6) relief, Reading B would not. No primary
+  // source settles which is right (research/41 §7.6), so the divergence is reported, not resolved.
+  let readingDivergence: string | undefined;
+  if (cumulated < tier1 && cumulated + neimpozabil >= tier1) {
+    readingDivergence =
+      `art. 174 alin. (7) lit. b) nu poate fi evaluat fără să se aleagă între două lecturi. ` +
+      `Venitul cumulatum măsurat potrivit art. 170 alin. (4) este ${leiText(cumulated)} lei, sub 6 salarii ` +
+      `minime brute (${leiText(tier1)} lei), dar cu veniturile neimpozabile de la art. 93 și 105 ` +
+      `(${leiText(neimpozabil)} lei, excluse din cumulare de art. 170 alin. (5)) totalul realizat atinge ` +
+      '6 salarii minime brute. Citește A: testul se face la nivelul VENITULUI realizat, deci diferența de ' +
+      'la art. 174 alin. (6) nu se datorează. Citește B: testul se face la nivelul BAZEI de calcul al ' +
+      'contribuției („pentru care datorează contribuția … la un nivel cel puțin egal cu 6 salarii minime ' +
+      'brute”), iar o contribuție de 10 % nu poate egala niciodată 6 salarii minime, deci „nivelul” ' +
+      'semnifică baza — iar baza aici lipsește, pentru că art. 170 alin. (2) nu se aplică deloc. Nicio ' +
+      'interpretare oficială nu hotărăște între cele două (research/41 §7.6).';
+  }
+  if (ladder?.cassRetinutLaSursa !== undefined && ladder.cassRetinutLaSursa > 0 && value > 0) {
+    return {
+      reviewRequired: true,
+      reason:
+        `Persoana declară CASS de ${leiText(ladder.cassRetinutLaSursa)} lei reținută la sursă potrivit art. 174¹ ` +
+        `alin. (3)-(4) din Codul fiscal, iar aplicația calculează CASS de ${leiText(value)} lei pe baza de ${leiText(base)} lei. ` +
+        'Contribuția reținută la sursă se deduce din cea datorată (art. 174¹ alin. (6), rd. 6 din ' +
+        'subsecțiunea 2.2 a Declarației Unice), nu se adaugă la ea. Aplicația nu modelează încă deductionea, ' +
+        'deci refuză în loc să factureze de două ori aceeași contribuție.',
+    };
+  }
+
+  const breakdown = [
+    `venit cumulatum din art. 155 alin. (1) lit. c)-h), măsurat potrivit art. 170 alin. (4): ${leiText(cumulated)} lei`,
+    ...CASS_LADDER_CATEGORIES.map((c) => `${c}: ${leiText(amounts[c] as Bani)} lei`),
+    `treapta aleasă: ${rung} — art. 170 alin. (2)-(4); intervalele sunt inclusive la limita de jos`,
+    base === lei(0)
+      ? typeof conditionPrecedent === 'string'
+        ? `${conditionPrecedent}`
+        : 'sub 6 salarii minime brute cumulate nu se datorează deloc CASS pentru aceste categorii — art. 170 alin. (2) este o condiție prealabilă, nu o cotă'
+      : `baza anuală de calcul: ${leiText(base)} lei — art. 170 alin. (3); CASS = ${leiText(base)} × ${ratePercent / 100} = ${leiText(value)} lei — art. 174¹ alin. (1)`,
+    'un SINGUR bazine pentru întreaga persoană, nu câte unul per categorie: art. 170 alin. (3) vorbește despre „baza anuală de calcul” a „persoanelor”, iar art. 174¹ alin. (1) aplică 10 % la acea bază — la fel cum subsecțiunea 2.2 din Declarația Unică are șase rânduri care alimentează un singur total',
+    'plafonul de 72 SM din art. 170 alin. (1) NU se aplică acestui bazine: el mărginește venitul din art. 155 alin. (1) lit. b), nu cumularea de la lit. c)-h)',
+    'venitul net al PFA nu intră în acest cumul, iar acest cumul nu intră în plafonul de 72 SM — cele două căi nu se întâlnesc nicăieri',
+  ];
+  if (neimpozabil > 0) {
+    breakdown.push(
+      `venituri neimpozabile consemnate (art. 93 și 105): ${leiText(neimpozabil)} lei — art. 170 alin. (5): „La încadrarea în plafonul prevăzut la alin. (4) nu se iau în calcul veniturile neimpozabile, prevăzute la art. 93 și 105.” Consemnate, nu adunate.`,
+    );
+  }
+  if (ladder?.cassRetinutLaSursa !== undefined && ladder.cassRetinutLaSursa > 0) {
+    breakdown.push(
+      `CASS reținută la sursă (art. 174¹ alin. (3)-(4)): ${leiText(ladder.cassRetinutLaSursa)} lei — se deduce din contribuția datorată (alin. (6)), nu se adaugă.`,
+    );
+  }
+
+  return {
+    value,
+    // The base travels rather than being re-derived by the caller: the art. 174 alin. (7) lit. b) test
+    // compares THIS number to 6 SM, and a quantity recomputed at the call site is a quantity that can
+    // disagree with the figure it sits beside.
+    determinedNet: base,
+    ...(readingDivergence ? { readingDivergence } : {}),
+    breakdown,
+  };
 }
 
 function calcIncomeTax(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
@@ -613,6 +903,7 @@ export const calculatorRegistry: Record<string, CalculatorFunction> = {
   'calc-wage-reference': calcWageReference,
   'calc-cas': calcCas,
   'calc-cass': calcCass,
+  'calc-cass-ladder': calcCassLadder,
   'calc-income-tax': calcIncomeTax,
   'calc-accommodation-flat-ratio': calcAccommodationFlatRatio,
   'calc-vat-threshold': calcVatThreshold,

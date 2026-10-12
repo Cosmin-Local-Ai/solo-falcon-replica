@@ -120,16 +120,14 @@ export const onboarding = {
     pensionReceiptHint:
       'Calitatea de pensionar și sumele primite sunt fapte diferite; excepția de la CASS se decide după sumele primite.',
 
-    otherIncome: 'Ai și alte surse de venit relevante?',
+    // PG-6d (D-OTH-2, D-LEG-1): the five-checkbox list (`imobiliare`, `autovehicule`, `dividende`,
+    // `concesiune`, `alte`) is gone, and with it the `otherIncomeOptions` copy keys. What is said here is
+    // what the law actually asks — an amount per art. 155 alin. (1) lit. c)-h) category, per year.
+    otherIncome: 'Celelalte venituri ale persoanei fizice',
+    otherIncomeIntro:
+      'Legea nu întreabă dacă „ai alte venituri”, ci cât ai din fiecare categorie de la art. 155 alin. (1) lit. c)-h) din Codul fiscal: proprietate intelectuală, asocierea cu o persoană juridică, cedarea folosinței bunurilor, activități agricole, investiții și alte surse. Cei șase se adună într-un singur total, care alege o singură bază de calcul pentru CASS (art. 170 alin. (2)-(4)).',
     otherIncomeHint:
-      'Bifează ce ai. Se înregistrează doar faptul că sursa există — sumele nu se întreabă în acest pas.',
-    otherIncomeOptions: {
-      imobiliare: 'Venituri din chirii',
-      autovehicule: 'Închiriere de autovehicule',
-      dividende: 'Dividende',
-      concesiune: 'Bunuri de concesiune',
-      alte: 'Alte venituri',
-    },
+      'Sumele se completează pe an fiscal, în Setări. Nu le întrebăm aici și nu le completăm noi: o categorie fără răspuns face suma necunoscută, iar aplicația refuză calculul în loc să pună zero. Fosta listă de bifă („chirii”, „autovehicule”, „dividende”, „concesiune”, „alte”) a fost eliminată — nu corespunde categoriilor legii, iar „concesiune” nu există în Codul fiscal.',
   },
 
   yes: 'Da',
@@ -138,11 +136,10 @@ export const onboarding = {
 
   deferred: {
     // PG-6b removed the activity declaration from this list: the family is asked now, on the screen above.
-    // What stays deferred is the money behind the other-income flags — a flag without an amount is a fact
-    // the engine cannot use, and 12F owns the amounts.
+    // PG-6d removed the other-income flags: a checkbox cannot answer a question the law states in lei.
     intro: 'Un lucru nu se întreabă în acest pas, și nu este omis din greșeală:',
     otherAmounts:
-      'Sumele pentru celelalte surse de venit nu se colectează aici. Se înregistrează doar că sursa există; câtă vreme lipsește cuantumul, calculul la care ar conta rămâne de verificat.',
+      'Sumele pentru categoriile art. 155 alin. (1) lit. c)-h) din Codul fiscal se completează pe an fiscal, în Setări. Câtă vreme o categorie rămâne fără răspuns, cumularea de la art. 170 alin. (4) este necunoscută, iar aplicația refuză atât stabilirea bazei de CASS cât și exceptionea de la art. 174 alin. (7) lit. b) — nu completează zero.',
   },
 
   errors: {

@@ -16,7 +16,7 @@ function makeProfile(overrides: Partial<PfaProfile> = {}): PfaProfile {
 }
 
 function makeInputs(overrides: Partial<TaxInputsReference> = {}): TaxInputsReference {
-  return { regime: 'impozit_pe_venit', salaryStatus: 'da', pensionerStatus: 'nu', pensionReceiptYears: [], pensionSuspensionYears: [], cassPreviousYearContext: null, foreignSicknessInsurance: null, otherIncome: [], socialInsuranceStatus: 'obligatoriu', vatExempt: false, cashFloorLei: lei(0), fiscalYear: 2026, salaryIncomeLei: null, pfaStartDate: null, inputsKey: 'p1:2026:impozit_pe_venit:obligatoriu', ...overrides };
+  return { regime: 'impozit_pe_venit', salaryStatus: 'da', pensionerStatus: 'nu', pensionReceiptYears: [], pensionSuspensionYears: [], cassPreviousYearContext: null, foreignSicknessInsurance: null, cassLadderYears: [], socialInsuranceStatus: 'obligatoriu', vatExempt: false, cashFloorLei: lei(0), fiscalYear: 2026, salaryIncomeLei: null, pfaStartDate: null, inputsKey: 'p1:2026:impozit_pe_venit:obligatoriu', ...overrides };
 }
 
 describe('computeTaxEstimate', () => {

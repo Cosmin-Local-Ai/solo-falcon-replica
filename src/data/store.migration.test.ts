@@ -93,7 +93,10 @@ describe('legacyProfileFromSettings (profile migration)', () => {
     expect(p.pensionerStatus).toBeUndefined();
     expect(p.pensionStatus).toBeUndefined();
     expect(p.pensionReceiptYears).toBeUndefined();
-    expect(p.otherIncome).toEqual([]);
+    // PG-6d (D-LEG-1, B-41): neither the retired flag list nor the ladder amounts that replace it are
+    // minted here. A legacy payload ends with neither key present — the chain may not invent an amount
+    // that decides a CASS rung.
+    expect(p.cassLadderYears).toBeUndefined();
     expect(p.vatExempt).toBe(false);
     expect(p.cashFloorLei).toBe(0);
     // No CAEN source at all in this payload ⇒ the field stays absent. The chain

@@ -632,15 +632,20 @@ export function applicabilityFor(
             'Venituri din salarii și asimilate realizate în anul fiscal cel puțin egale cu 6 salarii minime brute: diferența de contribuție până la baza de 6 salarii minime brute nu se datorează (art. 174 alin. (7) lit. a) din Codul fiscal). Contribuția de 10 % pe venitul net rămâne datorată.',
         };
       }
-      // CF art. 174 alin. (7) lit. b): other art. 155 alin. (1) lit. c)-h) income at least equal to
-      // 6 SM also removes the top-up. The profile records WHICH such incomes exist but the app holds no
-      // amount for any of them, so the condition cannot be tested. It is reported as undecided —
-      // assuming it satisfied would invent a relief, assuming it failed would invent a liability.
-      if (profile.otherIncome.length > 0) {
+      // CF art. 174 alin. (7) lit. b): other art. 155 alin. (1) lit. c)-h) income also removes the
+      // top-up, but only where the person owes CASS on it „la un nivel cel puțin egal cu 6 salarii minime
+      // brute”. PG-6d replaced the flag list that used to drive this branch with declared per-category
+      // amounts, and the ladder of art. 170 alin. (2)-(4) is what turns those amounts into a base.
+      //
+      // This row does NOT re-run that ladder. One arithmetic, one producer: `calcCassLadder` computes the
+      // base, `calcCass` applies the litera, and a threshold row that re-derived the base would be the
+      // B-70 defect class — two derivations of one legal figure, free to drift. What this row can say
+      // truthfully is whether the inputs for that test exist at all.
+      if ((profile.cassLadderYears ?? []).some((y) => y.fiscalYear === profile.fiscalYear)) {
         return {
           applicability: 'unknown',
           reason:
-            'Profilul declară și alte venituri din art. 155 alin. (1) lit. c)-h), iar art. 174 alin. (7) lit. b) din Codul fiscal elimină diferența de la alin. (6) doar dacă acele venituri sunt cel puțin egale cu 6 salarii minime brute pe țară. Aplicația nu deține cuantumul lor, deci nu poate stabili condiția — nu o presupune nici îndeplinită, nici neîndeplinită.',
+            'Profilul declară și sume din categoriile art. 155 alin. (1) lit. c)-h) din Codul fiscal, iar art. 174 alin. (7) lit. b) elimină diferența de la alin. (6) numai dacă persoana datorează CASS pe acele venituri „la un nivel cel puțin egal cu 6 salarii minime brute”. Baza aceea se stabilește o singură dată, în motor, prin scara de la art. 170 alin. (2)-(4); acest rând nu o recalculează, ca să nu existe două derivări ale aceleiași cifre. Randul rămâne nehotărât aici și se citește împreună cu rezultatul estimării.',
         };
       }
       // The state every payload written before TASK 5 lands in: a pensioner status is recorded, but the
