@@ -173,6 +173,87 @@ export const settings = {
     },
     accommodationCommissionUnanswered:
       'Fără răspuns. Aplicația nu alege nicio citire: niciuna nu este stabilită de Codul fiscal, iar a alege una ar mișca venitul brut, impozitul, baza de CASS și pragul de CAS.',
+
+    /**
+     * PG-6d (D-OTH-1, D-OTH-2, B-41) — the six CF art. 155 alin. (1) lit. c)-h) categories, per fiscal
+     * year. Three things every sentence here has to carry, and the old flag UI carried none of them: the
+     * figure asked for is the one art. 170 alin. (4) measures (net for four of the six, BRUT for „alte
+     * surse”), an empty box is not zero, and the six sum into ONE base for the whole person, not into six
+     * contributions.
+     */
+    ladderSection: 'Celelalte venituri ale persoanei fizice: șase sume, pe anul fiscal de mai sus',
+    ladderIntro:
+      'Sunt categoriile art. 155 alin. (1) lit. c)-h) din Codul fiscal. Cele șase sume se adună într-un singur total, iar totalul alege o singură bază de calcul pentru CASS: sub 6 salarii minime brute cumulate nu se datorează deloc CASS pe aceste venituri, la 6 SM baza este 6 SM, la 12 SM sare la 12 SM, la 24 SM sare la 24 SM (art. 170 alin. (2)-(4), art. 174¹ alin. (1)). Este o prăpastie, nu o cotă progresivă, și este o singură bază pentru toată persoana, nu câte una per categorie — la fel cum subsecțiunea 2.2 din Declarația Unică are șase rânduri și un singur total.',
+    ladderAmounts: {
+      proprietateIntelectuala: 'Drepturi de proprietate intelectuală — venitul net (art. 155 alin. (1) lit. c))',
+      asocierePersoanaJuridica: 'Asocierea cu o persoană juridică — venitul net distribuit (lit. d), art. 125 alin. (8)-(9))',
+      cedareaFolosinteiBunurilor: 'Cedarea folosinței bunurilor — venitul net (lit. e), art. 84-85)',
+      activitatiAgricole: 'Activități agricole, silvicultură și piscicultură — venitul net SAU norma de venit (lit. f), art. 104-106)',
+      investitii: 'Investiții — venitul și/sau câștigul net (lit. g), art. 94-97)',
+      alteSurse: 'Alte surse — VENITUL BRUT (lit. h), art. 114-116)',
+    },
+    ladderAmountHints: {
+      proprietateIntelectuala:
+        'Suma pe care o cere legea este venitul NET, după cheltuiala forfetară de la art. 72 / 72¹ sau venitul net potrivit art. 73 — nu încasarea brută. Aplicația nu calcă forfetarul în locul tău: întreabă suma pe care legea o măsoară.',
+      asocierePersoanaJuridica:
+        'Venitul net distribuit din asocierea cu o persoană juridică, potrivit art. 125 alin. (8)-(9) din Codul fiscal.',
+      cedareaFolosinteiBunurilor:
+        'Venitul NET: brut minus cheltuiala forfetară de 20 % (art. 84 alin. (3)), sau de 30 % pentru camerele 1–7 închiriate pe termen scurt (art. 85 alin. (2), nou din 2026). Din 2026 nu mai există normă de venit pentru închirieri — sintagmele „sau norma de venit, după caz” au fost șterse prin Legea 239/2025 art. XII pct. 19.',
+      activitatiAgricole:
+        'Aici, și numai aici, mai supraviețuiește norma de venit: art. 170 alin. (4) lit. e) spune „venitul net sau norma de venit, după caz”. Spune ce fel de sumă ai scris.',
+      investitii:
+        'Venitul sau câștigul net potrivit art. 94-97. Pentru dividende suma nu este distribuția brută: art. 170 alin. (4) lit. d) ia în calcul „dividendele plătite, diminuate cu impozitul reținut”. Dividendele ajung la CASS numai pe această cale — nu există o literă proprie pentru ele la art. 155 alin. (1).',
+      alteSurse:
+        'Singularitatea acestei categorii: art. 170 alin. (4) lit. f) măsoară aici VENITUL BRUT, nu netul. Și numai aici. Mai important: „alte surse” înseamnă art. 114, adică veniturile care nu se încadrează în art. 61 lit. a)-h). Premiile și jocurile de noroc (art. 61 lit. g)) și transferul proprietăților imobiliare (art. 61 lit. h)) nu apar în art. 155 alin. (1) și nu atrag niciodată CASS — o categorie „alte” nesemnalată ar fabrica o datorie.',
+    },
+    ladderAgricoleBaza: 'Suma de la activități agricole este…',
+    ladderAgricoleBazaOptions: {
+      venit_net: '…venit net (art. 104-106)',
+      norma_de_venit: '…normă de venit — art. 170 alin. (4) lit. e): „venitul net sau norma de venit, după caz”',
+    },
+    ladderInvestitiiBaza: 'Suma de la investiții este…',
+    ladderInvestitiiBazaOptions: {
+      castig_net: '…câștig / venit net potrivit art. 94-97',
+      dividende_platite_diminuate_cu_impozitul_retinut: '…dividende plătite, diminuate cu impozitul reținut',
+    },
+    ladderCedareSursa: 'De unde vin veniturile din închiriere?',
+    ladderCedareSursaHint:
+      'Aceasta este întrebarea care decide litera, nu o etichetă de contract. art. 83 alin. (1) exclude în mod expres veniturile din activități independente: dacă închirierea este activitatea proprie a PFA, încasările sunt art. 67 alin. (1) — art. 155 alin. (1) lit. b), care au altă cale de contribuție (art. 170 alin. (1), cu plafon de 72 SM) și NU intră în cumularea de aici. Dacă dai în folosință un bun din patrimoniul personal, sunt lit. e). Nu există o categorie „concesiune” în Codul fiscal: căutată în tot codul, „venituri din concesiune” nu are nicio apariție.',
+    ladderCedareSursaOptions: {
+      activitate_proprie_a_pfa: 'Din activitatea proprie a PFA (art. 67 alin. (1))',
+      patrimoniu_personal: 'Din cedarea unui bun din patrimoniul personal (art. 83 alin. (1))',
+    },
+    ladderAlteSurseArt114: 'Suma de la „alte surse” este un venit definit la art. 114?',
+    ladderAlteSurseArt114Options: {
+      da: 'Da — este un venit care nu se încadrează în art. 61 lit. a)-h)',
+      nu: 'Nu — este din jocuri de noroc sau din transferul proprietăților imobiliare',
+    },
+    ladderAlteSurseArt114Hint:
+      'Fără acest răspuns aplicația nu cumulează suma: art. 155 alin. (1) lit. h) trimite la art. 114, iar art. 61 lit. g) și lit. h) nu atrag CASS deloc. Un „alte” fără calificare fabrică o contribuție.',
+    ladderNeimpozabil: 'Sume neimpozabile consemnate (art. 93 și 105)',
+    ladderNeimpozabilHint:
+      'art. 170 alin. (5): „La încadrarea în plafonul prevăzut la alin. (4) nu se iau în calcul veniturile neimpozabile, prevăzute la art. 93 și 105.” Aplicația le înregistrează ca sumă pe care NU o adună — și le arată tocmai pentru că ele despart cele două lecturi ale art. 174 alin. (7) lit. b).',
+    ladderCassRetinut: 'CASS reținută la sursă de plătitorii tăi (art. 174¹ alin. (3)-(4))',
+    ladderCassRetinutHint:
+      'Se deduce din contribuția datorată (art. 174¹ alin. (6), rd. 6 din subsecțiunea 2.2 a Declarației Unice), nu se adaugă la ea. Aplicația nu modelează încă deductionea: dacă există și o sumă reținută și o contribuție calculată, refuză în loc să factureze de două ori.',
+    ladderShortNames: {
+      proprietateIntelectuala: 'proprietate intelectuală',
+      asocierePersoanaJuridica: 'asocierea cu o persoană juridică',
+      cedareaFolosinteiBunurilor: 'cedarea folosinței bunurilor',
+      activitatiAgricole: 'activități agricole',
+      investitii: 'investiții',
+      alteSurse: 'alte surse',
+    },
+    ladderAnswered: (answered: number, missing: string) =>
+      `Ai răspuns la ${answered} din cele șase categorii. ${
+        answered === 6
+          ? 'Cumularea de la art. 170 alin. (4) se poate face.'
+          : `Lipsesc: ${missing}. Cumularea se face peste TOATE șase, deci câtă vreme una lipsește, baza nu se calculează — aplicația nu completează zero.`
+      }`,
+    ladderUnasked:
+      'Niciuna dintre cele șase categorii nu este completată pentru acest an. Aplicația nu calculează nicio bază și nu susține că nu ai avut astfel de venituri: întrebarea pur și simplu nu a primit răspuns.',
+    ladderZeroIsAFact:
+      'O categorie lăsată liberă nu este zero. Zero este o sumă declarată — scrie 0 dacă așa stau lucrurile. Diferența este tocmai defectul pe care această secțiune îl închide: o categorie fără răspuns face suma necunoscută, iar o sumă necunoscută poate însemna fie o datorie inventată, fie una ștearsă.',
     /**
      * The title the recorded count puts this year's income under. One sentence per state, including the
      * state where nothing is recorded — the third one is the one acceptance 1 asks for, and a form that

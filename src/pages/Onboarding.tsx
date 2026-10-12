@@ -524,7 +524,6 @@ export default function OnboardingPage() {
 
       <Card title={copy_.sections.other}>
         <div className="stack">
-          <p>{copy_.fields.otherIncomeIntro}</p>
           <p className="hint">{copy_.fields.otherIncomeHint}</p>
         </div>
       </Card>

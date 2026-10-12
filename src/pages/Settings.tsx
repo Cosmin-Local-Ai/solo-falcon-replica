@@ -30,11 +30,13 @@ import {
   selectableRegimes,
 } from '../domain/regimes';
 import { epochMs, isoCalendarDateProblem, isoCalendarDateProblemText } from '../domain/date';
+import type { Bani } from '../domain/money';
 // PG-6b (B-29) — the declared activity family. The type comes from the classifier that reads the fact, so
 // the option list on this form and the rule condition cannot drift into two vocabularies.
 import type { ActivityFamily } from '../domain/fiscal/deductibility';
 import type {
   AccommodationCommissionReading,
+  PfaProfile,
   PfaRegime,
   PfaSalaryStatus,
   PfaSocialInsuranceStatus,
@@ -48,6 +50,49 @@ import {
   profileHasTourismCaen,
   withAccommodationRoomCount,
 } from '../domain/models';
+// PG-6d (D-OTH-1, D-OTH-2, B-41) — the six art. 155 alin. (1) lit. c)-h) amounts, read and written per
+// fiscal year. `withCassLadderYear` is used rather than a wholesale replace so editing 2026 cannot erase a
+// year the profile already holds for 2027.
+import {
+  CASS_AGRI_BAZA_VALUES,
+  CASS_CEDARE_SURSA_VALUES,
+  CASS_INVEST_BAZA_VALUES,
+  cassLadderForYear,
+  withCassLadderYear,
+  type CassAgriBaza,
+  type CassCedareSursa,
+  type CassInvestBaza,
+  type CassLadderYear,
+} from '../domain/models';
+
+/**
+ * PG-6d — the six amount fields of the ladder section, in the order art. 155 alin. (1) lists them.
+ *
+ * A list rather than six hand-written blocks, so the order the law uses is the order the screen uses and a
+ * category cannot be dropped from the form without being dropped from the list. The list is also what the
+ * "answered N of six" note counts — the same six the engine sums.
+ */
+const LADDER_AMOUNT_FIELDS = [
+  'proprietateIntelectuala',
+  'asocierePersoanaJuridica',
+  'cedareaFolosinteiBunurilor',
+  'activitatiAgricole',
+  'investitii',
+  'alteSurse',
+] as const;
+type LadderAmountField = (typeof LADDER_AMOUNT_FIELDS)[number];
+
+/**
+ * The stored amount for one ladder category, rendered back into an input.
+ *
+ * `''` when the category was never answered. That is not the same string as `'0'`, and the difference is
+ * the whole content of B-41: an empty box writes absence, a `0` writes a declared zero. `leiInputValue`,
+ * not `String(...)` — the stored value is integer bani and an input is a screen.
+ */
+function ladderAmountInput(profile: PfaProfile, key: LadderAmountField): string {
+  const value = cassLadderForYear(profile.cassLadderYears, profile.fiscalYear)?.[key];
+  return typeof value === 'number' ? leiInputValue(value) : '';
+}
 
 /**
  * PG-6c (D-VEH-3) — the vehicle facts, per car and per fiscal year.
@@ -377,6 +422,37 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       | AccommodationCommissionReading
       | '',
     accommodationEligibility: (profile.accommodationTourismEligibility ?? '') as TriState,
+    // PG-6d (D-OTH-1, B-41) — the six art. 155 alin. (1) lit. c)-h) amounts, read back for the fiscal year
+    // the profile declares. Every one has a THIRD state: an empty box means "never answered", which is not
+    // 0 lei and not "no income". The engine refuses to sum a partial answer set, so the form must be able
+    // to express a hole rather than fill it in.
+    ladderAmounts: {
+      proprietateIntelectuala: ladderAmountInput(profile, 'proprietateIntelectuala'),
+      asocierePersoanaJuridica: ladderAmountInput(profile, 'asocierePersoanaJuridica'),
+      cedareaFolosinteiBunurilor: ladderAmountInput(profile, 'cedareaFolosinteiBunurilor'),
+      activitatiAgricole: ladderAmountInput(profile, 'activitatiAgricole'),
+      investitii: ladderAmountInput(profile, 'investitii'),
+      alteSurse: ladderAmountInput(profile, 'alteSurse'),
+    } as Record<LadderAmountField, string>,
+    // Which of the two measurements the law offers for that category the typed figure actually is.
+    ladderAgricoleBaza: (cassLadderForYear(profile.cassLadderYears, profile.fiscalYear)
+      ?.activitatiAgricoleBaza ?? '') as CassAgriBaza | '',
+    ladderInvestitiiBaza: (cassLadderForYear(profile.cassLadderYears, profile.fiscalYear)
+      ?.investitiiBaza ?? '') as CassInvestBaza | '',
+    // D-OTH-2 — the two facts that decide whether an amount belongs in this basin at all.
+    ladderCedareSursa: (cassLadderForYear(profile.cassLadderYears, profile.fiscalYear)
+      ?.cedareaSursa ?? '') as CassCedareSursa | '',
+    ladderAlteSurseArt114: (cassLadderForYear(profile.cassLadderYears, profile.fiscalYear)
+      ?.alteSurseArt114 ?? '') as TriState,
+    // Stored, never added (art. 170 alin. (5)); and the credit this app does not model (art. 174¹).
+    ladderNeimpozabil: (() => {
+      const v = cassLadderForYear(profile.cassLadderYears, profile.fiscalYear)?.neimpozabil;
+      return typeof v === 'number' ? leiInputValue(v) : '';
+    })(),
+    ladderCassRetinut: (() => {
+      const v = cassLadderForYear(profile.cassLadderYears, profile.fiscalYear)?.cassRetinutLaSursa;
+      return typeof v === 'number' ? leiInputValue(v) : '';
+    })(),
     pfaStartYear: String(profile.pfaStartYear),
     fiscalYear: String(profile.fiscalYear),
     pfaStartDate: profile.pfaStartDate ?? '',
@@ -432,6 +508,13 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
   // and the refusal cannot state different titles for one profile. An unparseable or empty field resolves
   // to `null`, which renders the "the app does not know the title" line rather than a default.
   const accommodationRoomsTyped = fiscal.accommodationRooms.trim();
+
+  // PG-6d — how many of the six categories the form currently answers, and which ones are still open. The
+  // sum at art. 170 alin. (4) runs over ALL six, so a hole is not a small gap: it is the reason no base
+  // exists at all. Naming the missing categories is what turns "no estimate" into something the person can
+  // close, and it is the same six the engine sums — one list, used by both.
+  const ladderMissing = LADDER_AMOUNT_FIELDS.filter((k) => fiscal.ladderAmounts[k].trim() === '');
+  const ladderAnsweredCount = LADDER_AMOUNT_FIELDS.length - ladderMissing.length;
   const accommodationRoomsParsed =
     accommodationRoomsTyped === '' ? Number.NaN : Number(accommodationRoomsTyped);
   const accommodationTitle = Number.isInteger(accommodationRoomsParsed) && accommodationRoomsParsed >= 0
@@ -544,6 +627,25 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
         rooms = typed;
       }
     }
+    // PG-6d (D-OTH-1, B-41) — the six amounts, each three-state: an empty box writes absence, a typed `0`
+    // writes a declared zero, and anything unparseable is an error rather than a silently dropped input.
+    // The form does NOT demand all six: a partial answer set is a state the person may genuinely be in,
+    // and it is the engine that refuses to sum it — on the calculation screen, with the missing
+    // categories named — not a form that blocks a save.
+    const ladderAmounts: Partial<Record<LadderAmountField, Bani>> = {};
+    for (const key of LADDER_AMOUNT_FIELDS) {
+      const typed = fiscal.ladderAmounts[key].trim();
+      if (typed === '') continue;
+      const parsed = parseLeiInput(typed);
+      if (parsed === null || parsed < 0) e[`ladder.${key}`] = validation.leiInvalid;
+      else ladderAmounts[key] = parsed;
+    }
+    const ladderNeimpozabil =
+      fiscal.ladderNeimpozabil.trim() === '' ? undefined : parseLeiInput(fiscal.ladderNeimpozabil);
+    if (ladderNeimpozabil === null) e.ladderNeimpozabil = validation.leiInvalid;
+    const ladderCassRetinut =
+      fiscal.ladderCassRetinut.trim() === '' ? undefined : parseLeiInput(fiscal.ladderCassRetinut);
+    if (ladderCassRetinut === null) e.ladderCassRetinut = validation.leiInvalid;
     setErrors(e);
     if (Object.keys(e).length > 0) {
       toast('error', validation.checkForm);
@@ -554,6 +656,30 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     // future edit adds a path that skips validation, this stops compiling rather than writing
     // `null` into a `Bani` field.
     if (salary === null || cash === null || suspensionMonths === null) return;
+    if (ladderNeimpozabil === null || ladderCassRetinut === null) return;
+    // PG-6d — the year is replaced, not merged, so clearing every box makes that year unanswered again
+    // rather than leaving six zeros standing; other years are untouched, exactly as the room counts above.
+    const ladderOthers = (profile.cassLadderYears ?? []).filter((y) => y.fiscalYear !== fy);
+    const ladderDeclared =
+      Object.keys(ladderAmounts).length > 0 ||
+      fiscal.ladderAgricoleBaza !== '' ||
+      fiscal.ladderInvestitiiBaza !== '' ||
+      fiscal.ladderCedareSursa !== '' ||
+      fiscal.ladderAlteSurseArt114 !== '' ||
+      ladderNeimpozabil !== undefined ||
+      ladderCassRetinut !== undefined;
+    const ladderYear: CassLadderYear | undefined = ladderDeclared
+      ? {
+          fiscalYear: fy,
+          ...ladderAmounts,
+          ...(fiscal.ladderAgricoleBaza ? { activitatiAgricoleBaza: fiscal.ladderAgricoleBaza } : {}),
+          ...(fiscal.ladderInvestitiiBaza ? { investitiiBaza: fiscal.ladderInvestitiiBaza } : {}),
+          ...(fiscal.ladderCedareSursa ? { cedareaSursa: fiscal.ladderCedareSursa } : {}),
+          ...(fiscal.ladderAlteSurseArt114 ? { alteSurseArt114: fiscal.ladderAlteSurseArt114 } : {}),
+          ...(ladderNeimpozabil !== undefined ? { neimpozabil: ladderNeimpozabil } : {}),
+          ...(ladderCassRetinut !== undefined ? { cassRetinutLaSursa: ladderCassRetinut } : {}),
+        }
+      : undefined;
     updateProfile({
       regime: fiscal.regime,
       pfaStartYear: year,
@@ -573,6 +699,13 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       accommodationCommissionReading: fiscal.accommodationCommission || undefined,
       accommodationTourismEligibility:
         fiscal.accommodationEligibility === '' ? undefined : fiscal.accommodationEligibility,
+      // PG-6d — written per fiscal year, and only when the person actually declared something. An untouched
+      // section writes the year list back unchanged; a cleared one writes absence, never six zeros.
+      cassLadderYears: ladderYear
+        ? withCassLadderYear(ladderOthers, ladderYear)
+        : ladderOthers.length > 0
+          ? ladderOthers
+          : undefined,
       salaryStatus: fiscal.salaryStatus,
       // No salary ⇒ no art. 174 alin. (7) lit. a) relief, and no stale amount left behind.
       salaryIncomeLei: fiscal.salaryStatus === 'da' ? salary : undefined,
@@ -1160,6 +1293,158 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                   supplier name, and the 50 % default of art. 68 alin. (7) lit. k) applies to a register
                   that declares no car at all. */}
               <VehicleSection />
+
+              {/* PG-6d (D-OTH-1, D-OTH-2, B-41) — the six CF art. 155 alin. (1) lit. c)-h) amounts.
+
+                  Shown unconditionally and never pre-filled. Whether a person has any of these six kinds of
+                  income is not something the app may infer from a CAEN code, from the register, or from a
+                  default, and the ladder below them is a cliff: the difference between an unanswered
+                  category and a declared `0` is the difference between "no base can be computed" and "no
+                  CASS is owed". So every box starts empty, an empty box writes absence, and the note counts
+                  the six out loud instead of hiding the gap. */}
+              <div className="field" data-cass-ladder>
+                <label>{settingsCopy.fiscal.ladderSection}</label>
+                <span className="hint">{settingsCopy.fiscal.ladderIntro}</span>
+                <span className="hint" data-ladder-answered>
+                  {ladderAnsweredCount === 0
+                    ? settingsCopy.fiscal.ladderUnasked
+                    : settingsCopy.fiscal.ladderAnswered(
+                        ladderAnsweredCount,
+                        ladderMissing.map(k => settingsCopy.fiscal.ladderShortNames[k]).join(', '),
+                      )}
+                </span>
+
+                {LADDER_AMOUNT_FIELDS.map(key => (
+                  <div className="field" key={key} data-ladder-field={key}>
+                    <label htmlFor={`set-ladder-${key}`}>{settingsCopy.fiscal.ladderAmounts[key]}</label>
+                    <input
+                      className="input"
+                      id={`set-ladder-${key}`}
+                      inputMode="decimal"
+                      data-ladder-amount={key}
+                      value={fiscal.ladderAmounts[key]}
+                      onChange={ev =>
+                        setFiscal({
+                          ...fiscal,
+                          ladderAmounts: { ...fiscal.ladderAmounts, [key]: ev.target.value },
+                        })
+                      }
+                    />
+                    <span className="hint">{settingsCopy.fiscal.ladderAmountHints[key]}</span>
+                    {errors[`ladder.${key}`] && <span className="error">{errors[`ladder.${key}`]}</span>}
+                  </div>
+                ))}
+
+                {/* The measurement, per category — because art. 170 alin. (4) does not measure one thing.
+                    Net for four of the six, BRUT for „alte surse”, and „venitul net SAU norma de venit” for
+                    agriculture, where the normă survives and nowhere else in this basin from 2026. */}
+                <label htmlFor="set-ladder-agricole-baza">{settingsCopy.fiscal.ladderAgricoleBaza}</label>
+                <select
+                  className="input"
+                  id="set-ladder-agricole-baza"
+                  data-ladder-agricole-baza
+                  value={fiscal.ladderAgricoleBaza}
+                  onChange={ev =>
+                    setFiscal({ ...fiscal, ladderAgricoleBaza: ev.target.value as typeof fiscal.ladderAgricoleBaza })
+                  }
+                >
+                  <option value="">{copy.ui.answerUnrecorded}</option>
+                  {CASS_AGRI_BAZA_VALUES.map(v => (
+                    <option key={v} value={v}>
+                      {settingsCopy.fiscal.ladderAgricoleBazaOptions[v]}
+                    </option>
+                  ))}
+                </select>
+
+                <label htmlFor="set-ladder-investitii-baza">{settingsCopy.fiscal.ladderInvestitiiBaza}</label>
+                <select
+                  className="input"
+                  id="set-ladder-investitii-baza"
+                  data-ladder-investitii-baza
+                  value={fiscal.ladderInvestitiiBaza}
+                  onChange={ev =>
+                    setFiscal({
+                      ...fiscal,
+                      ladderInvestitiiBaza: ev.target.value as typeof fiscal.ladderInvestitiiBaza,
+                    })
+                  }
+                >
+                  <option value="">{copy.ui.answerUnrecorded}</option>
+                  {CASS_INVEST_BAZA_VALUES.map(v => (
+                    <option key={v} value={v}>
+                      {settingsCopy.fiscal.ladderInvestitiiBazaOptions[v]}
+                    </option>
+                  ))}
+                </select>
+
+                {/* D-OTH-2 — the question that decides the LETTER. A lease taken out by the PFA as its own
+                    activity is art. 67 alin. (1) / art. 155 alin. (1) lit. b) and travels a different
+                    contribution path; a good of the personal patrimony is lit. e) and belongs in this sum. */}
+                <label htmlFor="set-ladder-cedare-sursa">{settingsCopy.fiscal.ladderCedareSursa}</label>
+                <select
+                  className="input"
+                  id="set-ladder-cedare-sursa"
+                  data-ladder-cedare-sursa
+                  value={fiscal.ladderCedareSursa}
+                  onChange={ev =>
+                    setFiscal({ ...fiscal, ladderCedareSursa: ev.target.value as typeof fiscal.ladderCedareSursa })
+                  }
+                >
+                  <option value="">{copy.ui.answerUnrecorded}</option>
+                  {CASS_CEDARE_SURSA_VALUES.map(v => (
+                    <option key={v} value={v}>
+                      {settingsCopy.fiscal.ladderCedareSursaOptions[v]}
+                    </option>
+                  ))}
+                </select>
+                <span className="hint">{settingsCopy.fiscal.ladderCedareSursaHint}</span>
+
+                <label htmlFor="set-ladder-alte-surse-art114">{settingsCopy.fiscal.ladderAlteSurseArt114}</label>
+                <select
+                  className="input"
+                  id="set-ladder-alte-surse-art114"
+                  data-ladder-alte-surse-art114
+                  value={fiscal.ladderAlteSurseArt114}
+                  onChange={ev =>
+                    setFiscal({ ...fiscal, ladderAlteSurseArt114: ev.target.value as TriState })
+                  }
+                >
+                  <option value="">{copy.ui.answerUnrecorded}</option>
+                  <option value="da">{settingsCopy.fiscal.ladderAlteSurseArt114Options.da}</option>
+                  <option value="nu">{settingsCopy.fiscal.ladderAlteSurseArt114Options.nu}</option>
+                </select>
+                <span className="hint">{settingsCopy.fiscal.ladderAlteSurseArt114Hint}</span>
+
+                <div className="field" data-ladder-field="neimpozabil">
+                  <label htmlFor="set-ladder-neimpozabil">{settingsCopy.fiscal.ladderNeimpozabil}</label>
+                  <input
+                    className="input"
+                    id="set-ladder-neimpozabil"
+                    inputMode="decimal"
+                    data-ladder-amount="neimpozabil"
+                    value={fiscal.ladderNeimpozabil}
+                    onChange={ev => setFiscal({ ...fiscal, ladderNeimpozabil: ev.target.value })}
+                  />
+                  <span className="hint">{settingsCopy.fiscal.ladderNeimpozabilHint}</span>
+                  {errors.ladderNeimpozabil && <span className="error">{errors.ladderNeimpozabil}</span>}
+                </div>
+
+                <div className="field" data-ladder-field="cassRetinut">
+                  <label htmlFor="set-ladder-cass-retinut">{settingsCopy.fiscal.ladderCassRetinut}</label>
+                  <input
+                    className="input"
+                    id="set-ladder-cass-retinut"
+                    inputMode="decimal"
+                    data-ladder-amount="cassRetinut"
+                    value={fiscal.ladderCassRetinut}
+                    onChange={ev => setFiscal({ ...fiscal, ladderCassRetinut: ev.target.value })}
+                  />
+                  <span className="hint">{settingsCopy.fiscal.ladderCassRetinutHint}</span>
+                  {errors.ladderCassRetinut && <span className="error">{errors.ladderCassRetinut}</span>}
+                </div>
+
+                <span className="hint">{settingsCopy.fiscal.ladderZeroIsAFact}</span>
+              </div>
 
               <div className="field">
                 <label>{settingsCopy.fiscal.startYear} <span className="req">*</span></label>

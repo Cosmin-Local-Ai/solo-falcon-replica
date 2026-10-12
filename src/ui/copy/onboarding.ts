@@ -124,10 +124,8 @@ export const onboarding = {
     // `concesiune`, `alte`) is gone, and with it the `otherIncomeOptions` copy keys. What is said here is
     // what the law actually asks — an amount per art. 155 alin. (1) lit. c)-h) category, per year.
     otherIncome: 'Celelalte venituri ale persoanei fizice',
-    otherIncomeIntro:
-      'Legea nu întreabă dacă „ai alte venituri”, ci cât ai din fiecare categorie de la art. 155 alin. (1) lit. c)-h) din Codul fiscal: proprietate intelectuală, asocierea cu o persoană juridică, cedarea folosinței bunurilor, activități agricole, investiții și alte surse. Cei șase se adună într-un singur total, care alege o singură bază de calcul pentru CASS (art. 170 alin. (2)-(4)).',
     otherIncomeHint:
-      'Sumele se completează pe an fiscal, în Setări. Nu le întrebăm aici și nu le completăm noi: o categorie fără răspuns face suma necunoscută, iar aplicația refuză calculul în loc să pună zero. Fosta listă de bifă („chirii”, „autovehicule”, „dividende”, „concesiune”, „alte”) a fost eliminată — nu corespunde categoriilor legii, iar „concesiune” nu există în Codul fiscal.',
+      'Legea nu întreabă dacă „ai alte venituri”, ci cât ai din fiecare categorie de la art. 155 alin. (1) lit. c)-h) din Codul fiscal: proprietate intelectuală, asocierea cu o persoană juridică, cedarea folosinței bunurilor, activități agricole, investiții și alte surse. Cei șase se adună într-un singur total, care alege o singură bază de calcul pentru CASS (art. 170 alin. (2)-(4)). Sumele se completează pe an fiscal, în Setări. Nu le întrebăm aici și nu le completăm noi: o categorie fără răspuns face suma necunoscută, iar aplicația refuză calculul în loc să pună zero. Fosta listă de bifă („chirii”, „autovehicule”, „dividende”, „concesiune”, „alte”) a fost eliminată — nu corespunde categoriilor legii, iar „concesiune” nu există în Codul fiscal.',
   },
 
   yes: 'Da',

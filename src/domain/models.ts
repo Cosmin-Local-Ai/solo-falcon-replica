@@ -399,6 +399,16 @@ export const CASS_LADDER_CATEGORIES: readonly CassLadderCategory[] = [
  * distinction is defect B-41 — defaulting a category manufactures or erases a liability depending on the
  * rung the missing amount would have moved the person to.
  */
+export const CASS_AGRI_BAZA_VALUES = ['venit_net', 'norma_de_venit'] as const;
+export type CassAgriBaza = (typeof CASS_AGRI_BAZA_VALUES)[number];
+export const CASS_INVEST_BAZA_VALUES = [
+  'castig_net',
+  'dividende_platite_diminuate_cu_impozitul_retinut',
+] as const;
+export type CassInvestBaza = (typeof CASS_INVEST_BAZA_VALUES)[number];
+export const CASS_CEDARE_SURSA_VALUES = ['activitate_proprie_a_pfa', 'patrimoniu_personal'] as const;
+export type CassCedareSursa = (typeof CASS_CEDARE_SURSA_VALUES)[number];
+
 export interface CassLadderYear {
   /** The fiscal year these amounts were realised in — art. 170 alin. (2) speaks of „anul fiscal”. */
   fiscalYear: number;
@@ -422,18 +432,18 @@ export interface CassLadderYear {
    * does not read a CAEN code, and it does not store `concesiune` as a category, because that word has no
    * referent in the Cod fiscal and the contract type does not decide the letter either.
    */
-  cedareaSursa?: 'activitate_proprie_a_pfa' | 'patrimoniu_personal';
+  cedareaSursa?: CassCedareSursa;
   /** lit. f) venitul net **sau** norma de venit, după caz — art. 104-106. The normă survives only here. */
   activitatiAgricole?: Bani;
   /** Which of the two art. 170 alin. (4) lit. e) measurements the declared agricol figure is. */
-  activitatiAgricoleBaza?: 'venit_net' | 'norma_de_venit';
+  activitatiAgricoleBaza?: CassAgriBaza;
   /**
    * lit. g) venitul și/sau câștigul/câștigul net per art. 94-97. For dividends this is **not** the gross
    * distribution: art. 170 alin. (4) lit. d) takes „dividendele plătite, diminuate cu impozitul reținut”.
    */
   investitii?: Bani;
   /** Which of the two art. 94-97 measurements the declared investitii figure is. */
-  investitiiBaza?: 'castig_net' | 'dividende_platite_diminuate_cu_impozitul_retinut';
+  investitiiBaza?: CassInvestBaza;
   /**
    * lit. h) **venitul brut**, câștigul și/sau venitul impozabil din alte surse, stabilit potrivit
    * art. 114-116. Gross — and gross only for this category.
