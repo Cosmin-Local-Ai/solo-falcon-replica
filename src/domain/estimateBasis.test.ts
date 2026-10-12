@@ -62,6 +62,9 @@ function makeData(overrides: Partial<AppData> = {}): AppData {
     profile: profile(), revenues: [], expenses: [], clients: [], filings: [], documents: [],
     occupancySheets: [],
     vehicles: [],
+    // PG-6e (B-31, D-FA-1): an empty register — no asset has been declared. Required on the
+    // loaded object, resolved from an absent key by the load path, never defaulted by a step.
+    fixedAssets: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] }, statements: [], snapshots: [],
     settings: emptySettings, ...overrides,
   };

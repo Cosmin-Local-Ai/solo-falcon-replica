@@ -46,6 +46,9 @@ function basePayload(): AppData {
     filings: [],
     occupancySheets: [],
     vehicles: [],
+    // PG-6e (B-31, D-FA-1): an empty register — no asset has been declared. Required on the
+    // loaded object, resolved from an absent key by the load path, never defaulted by a step.
+    fixedAssets: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],
@@ -165,6 +168,7 @@ describe('a payload with no reserve field loads as null, not 0', () => {
       'occupancy-sheet',
       'vehicle-facts',
       'other-income-ladder',
+      'fixed-assets',
     ]);
     expect(storeRef!.reservedAmount).toBeNull();
     // And the next write stamps the current version — the upgrade is one-way and additive.

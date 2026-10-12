@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type {
   AnnualFiling, AppData, Client, CompanyDocument, DocTypeCode, DocumentItem,
   Expense, OccupancySheet, OccupancyStay, Revenue, SettingsState, TaxStatement, Toast, ToastKind,
-  Vehicle,
+  Vehicle, FixedAsset,
 } from './types';
 import type { VehicleYearFacts } from '../domain/fiscal/deductibility';
 import type { PfaProfile } from '../domain/models';
@@ -147,6 +147,21 @@ interface StoreValue extends AppData {
   deleteVehicle: (id: string) => void;
   /** Replace ONE year's facts for one vehicle without disturbing the other years. */
   setVehicleYearFacts: (vehicleId: string, facts: VehicleYearFacts) => void;
+  /**
+   * PG-6e (B-31, D-FA-1) — the fixed-asset register.
+   *
+   * Three writes. What is deliberately absent: **no write path defaults any fact.** An asset arrives with
+   * whatever the person declared and nothing more, because every one of those facts is a legal assertion —
+   * a defaulted *punerea în funcțiune* picks the year depreciation starts in, a defaulted duration picks
+   * both the cota and the pct. 27 disposal ceiling, and a defaulted alin. (21) election picks between two
+   * branches pct. 31 says are chosen at entry into the patrimony and cannot be flipped afterwards.
+   *
+   * `updateFixedAsset` patches only the keys it is handed, so clearing a fact back to „never asked” is
+   * possible and is not the same as leaving it alone.
+   */
+  addFixedAsset: (a: Omit<FixedAsset, 'id'>) => boolean;
+  deleteFixedAsset: (id: string) => void;
+  updateFixedAsset: (id: string, patch: Partial<Omit<FixedAsset, 'id'>>) => void;
   addSnapshot: (s: TaxCalculationSnapshot) => void;
   getSnapshot: (id: string) => TaxCalculationSnapshot | undefined;
   updateProfile: (patch: Partial<PfaProfile>) => void;
@@ -216,6 +231,10 @@ function toAppData(parsed: PersistedAppData): AppData {
     // exist” are different claims, and an empty register is what keeps a `vehicle_related` expense on the
     // statutory 50 % default instead of making it unattributable.
     vehicles: parsed.vehicles ?? [],
+    // PG-6e (B-31, D-FA-1): the fixed-asset register. Absent resolves to empty here and nowhere else — the
+    // v16→v17 step leaves the key off, because „no asset has ever been declared” and „assets were declared
+    // and none exist” are different claims.
+    fixedAssets: parsed.fixedAssets ?? [],
     documents: parsed.documents ?? [],
     companyDocs: parsed.companyDocs ?? { im: [], cs: [], tva: [], facturi: [] },
     statements: parsed.statements ?? [],
@@ -499,6 +518,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const filled = Object.keys(facts).filter(k => k !== 'fiscalYear' && facts[k as keyof VehicleYearFacts] !== undefined);
         return { ...x, years: filled.length > 0 ? [...others, facts] : others };
       }),
+    })),
+    // PG-6e (B-31, D-FA-1). The fixed-asset register: added, corrected, deleted. No write path here
+    // defaults a fact — see the interface note for why each one is a legal assertion. `updateFixedAsset`
+    // patches only the keys it is handed, so putting a fact back to `undefined` is how a person clears an
+    // answer given by mistake, and that is a different act from never having answered.
+    addFixedAsset: a => {
+      if (!a.label.trim()) return false;
+      setData(d => ({ ...d, fixedAssets: [...d.fixedAssets, { ...a, id: uid() }] }));
+      return true;
+    },
+    deleteFixedAsset: id => setData(d => ({ ...d, fixedAssets: d.fixedAssets.filter(x => x.id !== id) })),
+    updateFixedAsset: (id, patch) => setData(d => ({
+      ...d,
+      fixedAssets: d.fixedAssets.map(x => (x.id === id ? { ...x, ...patch } : x)),
     })),
     addSnapshot: s => setData(d => ({ ...d, snapshots: [...d.snapshots, s] })),
     getSnapshot: id => data.snapshots.find(x => x.calculationId === id),

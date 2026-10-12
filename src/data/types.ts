@@ -1,5 +1,6 @@
 import type { PfaProfile } from '../domain/models';
 import type { ExpenseCategory, VehicleYearFacts } from '../domain/fiscal/deductibility';
+import type { FixedAssetFacts } from '../domain/fiscal/depreciation';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import type { MoneyPrecisionNotice } from './migration';
 import { localDateISO, now } from '../domain/date';
@@ -143,6 +144,31 @@ export interface Vehicle {
   years: VehicleYearFacts[];
 }
 
+/**
+ * PG-6e (B-31, D-FA-1) — one fixed asset in the register, with the facts the depreciation arithmetic needs.
+ *
+ * **What this entity is, and what `Vehicle` is not.** The two are deliberately separate records. A car can
+ * appear in both: `Vehicle` carries the running-cost facts art. 68 alin. (7) lit. k) and alin. (5) lit. j)
+ * read, and `FixedAsset` carries the amortisation facts art. 28 reads. Nothing links them, and nothing may
+ * infer one from the other — art. 68 alin. (7) lit. k) closes with „Cheltuielile care intră sub incidența
+ * acestor prevederi **nu includ cheltuielile privind amortizarea**”, and art. 28 alin. (14) caps amortisation
+ * **per vehicle** („pentru fiecare”) with no one-car limit at all. A car can therefore be depreciated while
+ * another car carries its running costs, and a single record holding both would have made that impossible
+ * to express.
+ *
+ * The fact vocabulary itself lives in `domain/fiscal/depreciation.ts` — the layer that reads it — for the
+ * standing reason in this repository: a vocabulary spelled twice drifts. This record adds only an `id`.
+ *
+ * **No field here has a default, and the v16→v17 chain step backfills none of them.** Each one is a legal
+ * assertion: a minted *punerea în funcțiune* date picks the year depreciation starts in; a minted duration
+ * picks the pct. 27 disposal ceiling; a minted acquisition of `cumparare` decides the contested aport
+ * question; a minted election under alin. (21) chooses between two mutually exclusive branches that pct. 31
+ * says must be chosen at entry into the patrimony.
+ */
+export interface FixedAsset extends FixedAssetFacts {
+  id: string;
+}
+
 // ── Pre-v10 record shapes (migration tests only) ────────────────────────────
 /**
  * A `Revenue` / `Expense` in the shape a **pre-v10** payload stored it: money as a bare number, with no
@@ -163,7 +189,7 @@ export type LegacyExpense = Omit<Expense, 'valoareFaraTva' | 'tva'> & { valoareF
  * at a `version` below 10, and assert what the chain produces — so the fixture must be typed as the shape
  * that arrives, not the shape that leaves.
  */
-export type LegacyAppData = Omit<AppData, 'revenues' | 'expenses' | 'filings' | 'occupancySheets' | 'vehicles'> & {
+export type LegacyAppData = Omit<AppData, 'revenues' | 'expenses' | 'filings' | 'occupancySheets' | 'vehicles' | 'fixedAssets'> & {
   revenues: LegacyRevenue[];
   expenses: LegacyExpense[];
   /**
@@ -478,6 +504,19 @@ export interface AppData {
    * the v14→v15 step backfills nothing, because a car the taxpayer never had cannot be minted by a migration.
    */
   vehicles: Vehicle[];
+  /**
+   * PG-6e (B-31, D-FA-1): the fixed assets this taxpayer holds in the business patrimony.
+   *
+   * On `AppData` and never on `profile`, for the reason `occupancySheets` above records: `snapshots/
+   * snapshot.ts` hashes `{ profile, revenues, expenses }` and `snapshots/serialize.ts` emits every own key
+   * of what it is handed, so an asset carried on the profile would enter every stored `inputsHash`, move a
+   * fiscal digest when an unrelated fact changed, and survive the asset's own deletion. Acceptance 9 of
+   * this phase is exactly that proof — `inputsHash` byte-identical with an asset present.
+   *
+   * Required on the loaded object, never on the payload: the load path resolves an absent key to `[]`, and
+   * the v16→v17 step backfills nothing, because an asset nobody acquired cannot be minted by a migration.
+   */
+  fixedAssets: FixedAsset[];
   documents: DocumentItem[];
   companyDocs: Record<DocTypeCode, CompanyDocument[]>;
   statements: TaxStatement[];

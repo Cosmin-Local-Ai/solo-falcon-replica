@@ -100,6 +100,10 @@ export function emptyData(): AppData {
     // taxpayer never stated and would place a vehicle inside or outside art. 68 alin. (5) lit. j) by
     // accident rather than by an answer.
     vehicles: [],
+    // PG-6e (B-31, D-FA-1): the empty dataset declares **no** fixed asset. A seeded asset would mint an
+    // entry into the patrimony, a *punerea în funcțiune* and a duration nobody chose, and would start
+    // amortising an asset the taxpayer never bought.
+    fixedAssets: [],
     documents: [],
     companyDocs: { im: [], cs: [], tva: [], facturi: [] },
     statements: [],
@@ -263,6 +267,10 @@ export const seedData: AppData = {
   // and no car sits inside or outside the one-car limit by our choice rather than the demo taxpayer's.
   // A fixture that needs a vehicle builds its own.
   vehicles: [],
+  // PG-6e (B-31, D-FA-1): the demo fixture declares **no** fixed asset, so the seed estimate stays exactly
+  // 311.200 bani — no depreciation figure enters it, and no asset fact is asserted on the demo taxpayer's
+  // behalf. A fixture that needs an asset builds its own.
+  fixedAssets: [],
   documents: [
     { id: 'doc1', nume: 'FCT-2026-001.pdf', data: '2026-02-02', categoria: 'Facturi' },
     { id: 'doc3', nume: 'Contract Presta Consulting.pdf', data: '2026-01-26', categoria: 'Contracte' },

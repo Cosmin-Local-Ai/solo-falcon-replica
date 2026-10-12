@@ -23,6 +23,7 @@ import type {
   SettingsState,
   TaxStatement,
   Vehicle,
+  FixedAsset,
 } from './types';
 
 /**
@@ -250,6 +251,45 @@ export const occupancySheetSchema = z.object({
   stays: z.array(occupancyStaySchema),
 });
 
+/**
+ * PG-6e (B-31, D-FA-1) — the fixed-asset register.
+ *
+ * Permissive about dates and about the declared amounts for the same reason `occupancyStaySchema` is:
+ * `safeParse` runs before the migration chain and a rejected payload is quarantined, so a strict date rule
+ * here would let one mistyped digit in a *punerea în funcțiune* date take down the taxpayer's revenues,
+ * expenses and filings with it. The shape is checked; the **arithmetic** is what refuses, in
+ * `domain/fiscal/depreciation.ts`, and it refuses by naming the gap rather than by rejecting the payload.
+ *
+ * Every optional field is optional because absence is the honest state, not a gap to be filled: an
+ * unanswered *punerea în funcțiune*, duration, method, acquisition, payment state or alin. (21) election
+ * makes the schedule refuse. Nothing here defaults one.
+ */
+export const fixedAssetSchema = z.object({
+  id: nonEmptyString,
+  label: z.string(),
+  entryDate: z.string(),
+  putInFunctionDate: z.string().optional(),
+  fiscalValue: bani(),
+  nonDeductibleVatIncluded: bani().optional(),
+  normalLifeMonths: z.number().int().optional(),
+  method: z.enum(['liniar', 'degresiv']).optional(),
+  subThresholdElection: z.enum(['intreg_la_punere_in_functiune', 'amortizare']).optional(),
+  acquisition: z.enum(['cumparare', 'aport', 'productie']).optional(),
+  paymentState: z.enum(['achitat', 'in_rate', 'neachitat']).optional(),
+  paidOn: z.string().optional(),
+  isM1Vehicle: z.boolean().optional(),
+  m1ExceptionCategory: z
+    .enum([
+      'urgenta_paza_curierat',
+      'vanzari_achizitii_test_drive_demonstratii',
+      'transport_persoane_cu_plata_inclusiv_taxi',
+      'servicii_inchiriere_leasing_opercional_scoli_soferi',
+    ])
+    .optional(),
+  disposedOn: z.string().optional(),
+  disposalKind: z.enum(['vanzare', 'casare', 'scoatere_din_gestiune']).optional(),
+});
+
 export const documentItemSchema = z.object({
   id: nonEmptyString,
   nume: nonEmptyString,
@@ -438,6 +478,13 @@ export interface PersistedAppData {
    * backfills nothing.
    */
   vehicles?: Vehicle[];
+  /**
+   * PG-6e (D-FA-1): the fixed-asset register. Declared rather than left off, for the standing reason in
+   * this file — **zod strips undeclared keys**, so an undeclared `fixedAssets` collection would be erased
+   * by the next save-and-load and the taxpayer would lose the register they owe under Normele Titlul IV
+   * pct. 7 alin. (8). Absent means none recorded, and the v16→v17 step backfills nothing.
+   */
+  fixedAssets?: FixedAsset[];
   documents?: DocumentItem[];
   companyDocs?: Record<DocTypeCode, CompanyDocument[]>;
   statements?: TaxStatement[];
@@ -492,6 +539,7 @@ export const persistedAppDataSchema = z.object({
   occupancySheets: z.array(occupancySheetSchema).optional(),
   // PG-6c. Permissive on the year facts by design — see `vehicleYearFactsSchema`.
   vehicles: z.array(vehicleSchema).optional(),
+  fixedAssets: z.array(fixedAssetSchema).optional(),
   documents: z.array(documentItemSchema).optional(),
   companyDocs: z
     .record(z.enum(['im', 'cs', 'tva', 'facturi']), z.array(companyDocumentSchema))
@@ -683,6 +731,7 @@ export type _checks = [
   Expect<Equal<z.output<typeof occupancySheetSchema>, OccupancySheet>>,
   Expect<Equal<z.output<typeof vehicleYearFactsSchema>, VehicleYearFacts>>,
   Expect<Equal<z.output<typeof vehicleSchema>, Vehicle>>,
+  Expect<Equal<z.output<typeof fixedAssetSchema>, FixedAsset>>,
   Expect<Equal<z.output<typeof documentItemSchema>, DocumentItem>>,
   Expect<Equal<z.output<typeof companyDocumentSchema>, CompanyDocument>>,
   Expect<Equal<z.output<typeof taxStatementSchema>, TaxStatement>>,

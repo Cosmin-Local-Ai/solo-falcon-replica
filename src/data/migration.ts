@@ -285,8 +285,33 @@ export const DATA_VERSION_VEHICLE_FACTS = 15;
  * The step is idempotent-safe: deleting an absent key is a no-op, and it writes the version unconditionally.
  */
 export const DATA_VERSION_OTHER_INCOME_LADDER = 16;
+/**
+ * PG-6e (B-31, D-FA-1) — the dataset can now hold **fixed assets**, with the facts the fiscal depreciation
+ * arithmetic needs: the date of entry into the patrimony, *punerea în funcțiune*, the depreciable fiscal
+ * value (which per Titlul II norm pct. 28 lit. b) **includes VAT that became non-deductible**), the
+ * taxpayer-declared *durata normală de funcționare*, the method, and the art. 28 alin. (21) sub-threshold
+ * election that norm pct. 31 says is made at entry into the patrimony.
+ *
+ * The step **backfills nothing**, and for this collection that is not a convention but the whole point.
+ * Every one of those fields is a legal assertion:
+ *
+ * - a minted `putInFunctionDate` picks the year depreciation starts in — and `research/36` §12.3 records
+ *   that the term is **never defined** in fiscal law, so there is no fact the app could derive it from;
+ * - a minted `entryDate` picks the art. 28 alin. (2) lit. b) threshold test, which is measured at entry and
+ *   not at payment;
+ * - a minted `normalLifeMonths` picks both the annual cota and the pct. 27 disposal ceiling, and pct. 27
+ *   puts that choice expressly with the taxpayer („stabilită de contribuabil”);
+ * - a minted `acquisition` of `cumparare` would decide the contested aport question that §10 records as
+ *   unresolved between art. 68 alin. (7) lit. k¹) and art. 7 pct. 44 lit. c);
+ * - a minted `subThresholdElection` would choose between two mutually exclusive branches that pct. 31 says
+ *   are chosen at entry — an election a migration cannot make after the fact.
+ *
+ * A payload that never named an asset ends with **no `fixedAssets` key at all**. Nothing downstream
+ * invents one: `depreciationSchedule` refuses on the missing facts and names the gap.
+ */
+export const DATA_VERSION_FIXED_ASSETS = 17;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_OTHER_INCOME_LADDER;
+export const CURRENT_DATA_VERSION = DATA_VERSION_FIXED_ASSETS;
 
 export interface MigrationStep {
   readonly from: number;
@@ -954,6 +979,21 @@ export function migrateOtherIncomeLadderV16(data: PersistedAppData): PersistedAp
   return { ...data, profile: profile as PfaProfile, version: DATA_VERSION_OTHER_INCOME_LADDER };
 }
 
+/**
+ * v16 → v17 (`fixed-assets`). Writes a version and touches no value.
+ *
+ * The forbidden version of this function is `fixedAssets: []` on every payload — that would turn „no asset
+ * has ever been declared” into „assets were declared and none exist”, and would put a key in the stored
+ * bytes that reads as a completed register. It is equally forbidden to derive an asset from an `Expense`
+ * row: a `depreciable_asset_purchase` expense records that money left, not that a depreciable asset entered
+ * the patrimony, and art. 68 alin. (7) lit. h) keeps that purchase out of the expense side precisely
+ * because the two are different facts. Idempotent-safe for the same reason v13-v16 are: it writes a version
+ * and touches nothing.
+ */
+export function migrateFixedAssetsV17(data: PersistedAppData): PersistedAppData {
+  return { ...data, version: DATA_VERSION_FIXED_ASSETS };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -1082,6 +1122,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Profilul poate înregistra acum SUMELE pe care persoana le-a declarat pentru fiecare dintre cele șase categorii de venituri de la art. 155 alin. (1) lit. c)-h) din Codul fiscal, pe an fiscal: proprietate intelectuală, asocierea cu o persoană juridică, cedarea folosinței bunurilor, activități agricole/silvicultură/piscicultură, investiții și alte surse. Listele de bifă „imobiliare / autovehicule / dividende / concesiune / alte” au fost eliminate, nu botezate altfel: ele omiteau trei dintre cele șase categorii, „concesiune” nu are niciun corespondent în Codul fiscal, iar „alte” este mai larg decât art. 114 — ar fi putut cuprinde jocuri de noroc sau transferul proprietăților imobiliare, care nu atrag niciodată CASS. Nicio bifă nu a fost transformată într-o sumă: o bifă spune că o sursă există, nu cât a plătit, iar art. 170 alin. (4) și art. 174 alin. (7) lit. b) compară sume cu salariile minime. Nici cele șase sume nu au fost completate: șase zerouri inventate ar muta o persoană de la „nu datorează deloc CASS” la o bază de 6, 12 sau 24 de salarii minime — exact defectul pe care acest pas îl închide.',
     apply: migrateOtherIncomeLadderV16,
+  },
+  {
+    from: DATA_VERSION_OTHER_INCOME_LADDER,
+    to: DATA_VERSION_FIXED_ASSETS,
+    name: 'fixed-assets',
+    summary:
+      'Datele pot înregistra acum mijloacele fixe din patrimoniul activității, cu faptele de care are nevoie amortizarea fiscală: data intrării în patrimoniu, data punerii în funcțiune, valoarea fiscală de amortizare (care, potrivit pct. 28 lit. b) din normele Titlul II, include și TVA devenită nedeductibilă), durata normală de funcționare stabilită de contribuabil, metoda (liniară sau degresivă) și opțiunea sub prag din art. 28 alin. (21), care potrivit pct. 31 din aceleași norme se exercită la data intrării în patrimoniu. Nimic nu a fost completat: fiecare dintre aceste câmpuri este o afirmație juridică. O dată a punerii în funcțiune inventată alege anul în care începe amortizarea, iar expresia nu este definită nicăieri în legea fiscală. O durată inventată alege cota anuală și plafonul de la scăderea din gestiune, pe care pct. 27 le lasă în mod expres contribuabilului. Un „aport” sau un „cumpărare” inventat decide întrebarea contestată dintre art. 68 alin. (7) lit. k^1) și art. 7 pct. 44 lit. c). O opțiune alin. (21) inventată alege între două căi alternative care, potrivit pct. 31, se aleg la intrarea în patrimoniu și nu pot fi schimbate ulterior. Nicio cheltuială nu a fost transformată în mijloc fix: o cheltuială de achiziție de bun amortizabil înregistrează că a plecat o sumă, nu că a intrat un bun amortizabil în patrimoniu, iar art. 68 alin. (7) lit. h) tocmai de aceea ține achiziția în afara cheltuielilor deductibile. Un payload care nu a numit niciodată un bun rămâne fără cheia `fixedAssets`.',
+    apply: migrateFixedAssetsV17,
   },
 ];
 

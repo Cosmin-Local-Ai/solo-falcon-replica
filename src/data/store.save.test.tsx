@@ -88,6 +88,14 @@ describe('save effect — serialization contract', () => {
       // `annual-filing` step and `legacyDeclarations` is gone with the record type. The key list is the
       // migration's evidence, written as a test.
       'filings',
+      // PG-6e (B-31, D-FA-1): the fixed-asset register is part of AppData, so it is serialized with the
+      // rest of the dataset — and this key list is the evidence that an asset the taxpayer declared, with
+      // its *punerea în funcțiune* and its declared duration, survives a save-and-load. Dropping the key
+      // would erase the register the Normele Titlul IV pct. 7 alin. (8) require them to keep, and would
+      // silently stop an amortisation that had already been deducted. `schema.ts` declares `fixedAssets?`
+      // for exactly this reason: **zod strips undeclared keys**, so an undeclared collection here would be
+      // erased by the next save and the taxpayer would lose it without an error.
+      'fixedAssets',
       // PG-6h-3: the occupancy sheets are part of AppData, so they are serialized with the rest of the
       // dataset — and this key list is the evidence that they survive a save. The alternative is the
       // worse failure D-OCC-1 forbids: a sheet the taxpayer is legally required to keep vanishing on the

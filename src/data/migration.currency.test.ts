@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   CURRENT_DATA_VERSION,
   DATA_VERSION_RECORD_CURRENCY,
-  DATA_VERSION_OTHER_INCOME_LADDER,
+  DATA_VERSION_FIXED_ASSETS,
   DATA_VERSION_RULE_SET_DIGEST,
   MIGRATION_CHAIN,
   migratePersistedData,
@@ -122,8 +122,9 @@ describe('record-currency is a no-op in value', () => {
     const after = migrateRecordCurrencyV10(v9Payload());
     expect(after.version).toBe(DATA_VERSION_RECORD_CURRENCY);
     // PG-6d re-pin (replaced, not deleted): this step is no longer the head of the chain — v11, v12, v13,
-    // v14, v15 and now v16 follow it. Unchanged is that the step itself stamps exactly 10 and nothing else.
-    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_OTHER_INCOME_LADDER);
+    // v14, v15, v16 and now v17 follow it. Unchanged is that the step itself stamps exactly 10 and nothing
+    // else.
+    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_FIXED_ASSETS);
   });
 
   it('is idempotent: running it again on a v10 payload changes nothing', () => {
@@ -218,12 +219,13 @@ describe('the step touches only the two collections it names', () => {
 describe('the chain', () => {
   it('runs record-currency as its own step, from 9 to 10', () => {
     // PG-5 re-pin (replaced, not deleted): this used to assert record-currency was the FINAL step. It is
-    // now step 10 of 12 — the annual-filing and activity-family steps follow it — so the assertion moves
-    // from "last" to "present at exactly this edge", which is the property this file cares about.
+    // now step 10 of 17 — the annual-filing, activity-family, accommodation, occupancy-sheet, vehicle-facts,
+    // other-income-ladder and fixed-assets steps follow it — so the assertion moves from "last" to
+    // "present at exactly this edge", which is the property this file cares about.
     const step = MIGRATION_CHAIN.find((s) => s.name === 'record-currency')!;
     expect(step.from).toBe(DATA_VERSION_RULE_SET_DIGEST);
     expect(step.to).toBe(DATA_VERSION_RECORD_CURRENCY);
-    expect(MIGRATION_CHAIN.indexOf(step)).toBe(MIGRATION_CHAIN.length - 7);
+    expect(MIGRATION_CHAIN.indexOf(step)).toBe(MIGRATION_CHAIN.length - 8);
   });
 
   it('a v9 payload needs one step per version above it', () => {
@@ -240,6 +242,7 @@ describe('the chain', () => {
       'occupancy-sheet',
       'vehicle-facts',
       'other-income-ladder',
+      'fixed-assets',
     ]);
   });
 
@@ -258,7 +261,7 @@ describe('the chain', () => {
     const amountsBefore = JSON.stringify(atV10.revenues.map(r => [r.valoareFaraTva, r.tva]));
     const outcome = migratePersistedData(atV10);
     expect(outcome.migrated).toBe(true);
-    expect(outcome.stepsApplied).toEqual(['annual-filing', 'activity-family', 'accommodation-facts', 'occupancy-sheet', 'vehicle-facts', 'other-income-ladder']);
+    expect(outcome.stepsApplied).toEqual(['annual-filing', 'activity-family', 'accommodation-facts', 'occupancy-sheet', 'vehicle-facts', 'other-income-ladder', 'fixed-assets']);
     expect(JSON.stringify(outcome.data.revenues.map(r => [r.valoareFaraTva, r.tva]))).toBe(amountsBefore);
     expect(outcome.data.version).toBe(CURRENT_DATA_VERSION);
   });
