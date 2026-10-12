@@ -328,3 +328,15 @@ This **changes a default this project has followed.** Until now the rule has bee
 **The boundary that survives the whole feature.** D-COM-1 stands: a CAEN code may **prompt** a question and must never **answer** one. A persona seeds **declared** facts that happen to be plausible for a trade; the app still asks, and nothing is inferred from the code.
 
 **This is the agreed resolution of B-96.** The current demo's implausibility — 9.700 lei of turnover next to a 395.000-lei threshold the app itself displays — is fixed by giving the **IT persona turnover above the plafon**, where registration is mandatory. The 9.700-lei profile survives, but as the persona it is honest for: the plain exempt PFA. **B-96 stays open until the set exists.**
+
+### D-AIC-1 — the intra-community-goods facts go on **Settings → Fiscal**, and **B-91 is fixed first**
+**Decided 2026-10-12.** B-97 needs two inputs for facts that are already modelled and computed (`aicGoodsWhileQuarterly`, `aicGoodsExigibilityMonth`). The placement fork was real: every other declared fact lives on **Settings → Fiscal**, but that route is the app's known accessibility blind spot — **B-91** records critical axe `label` violations there and the scan for it is **deliberately commented out** in `e2e/a11y.spec.ts`, while the periodicity panel PG-6g built sits on **Declarații** and *is* scanned.
+
+**The user chose consistency over the workaround, and removed the blind spot rather than working around it: fix B-91 first, then put the facts on Settings → Fiscal.** Two consequences that are part of the decision:
+- **B-91 moves from step 10 of the queue to a prerequisite of step 1.** It is no longer discretionary a11y polish.
+- **Re-enabling that scan is the point, not a side effect.** Until it is on, "axe green" on that route means nothing, and every future control added there inherits the blindness.
+
+### D-AIC-2 — answering „da" to the intra-community-goods question **requires a confirmation that names what changed**
+**Decided 2026-10-12.** The answer is not a neutral fact. One taxable intra-community acquisition of goods while quarterly **dissolves the quarter**: the fiscal period becomes the month, the year splits into **two distinct fiscal periods each needing its own decont**, and a **separate declarație de mențiuni** becomes due **within 5 working days of month end** (art. 322 alin. (7)–(8)).
+
+**The app must state that before it saves the answer** — monthly from which month, two returns instead of one, and the 5-working-day duty — and ask the user to confirm. **The answer is then recorded as theirs**, the same discipline D-VAT-1 applies to cadence: never a guessed answer, and a consequential one attributed to the person who gave it. **Rejected:** saving on a single click, which would apply a legal change with one press and no moment of understanding.
