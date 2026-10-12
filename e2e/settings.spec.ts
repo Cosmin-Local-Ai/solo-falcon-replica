@@ -408,8 +408,14 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
       // The retired flag vocabulary rides in with it on purpose: this is what an app at v4 wrote, and the
       // v16 step is the one that removes it. Without the key here, the assertion further down that the
       // written bytes carry no `otherIncome` would prove nothing.
+      //
+      // PG-6f adds the second retired vocabulary for the same reason. `vatExempt: false` is what a v4
+      // profile actually stored, and the v18 step deletes it without converting it; `vatRegistration:
+      // undefined` keeps the shared fixture's modern key out of the seeded bytes entirely (JSON.stringify
+      // drops an undefined value), so the assertion that the step mints no registration state tests the
+      // step rather than the fixture.
       version: 4,
-      profile: legacyProfile({ otherIncome: ['imobiliare'] }),
+      profile: legacyProfile({ otherIncome: ['imobiliare'], vatExempt: false, vatRegistration: undefined }),
       revenues: [
         {
           id: 'p10-r1',
@@ -484,7 +490,11 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // and `converted` is still 67450 bani. The step is stricter than the v14 one before it: v14 opened a
     // collection, v17 opens none — the `fixedAssets` key that appears in the bytes below comes from the
     // load path resolving an absent collection to empty, not from the migration writing one.
-    expect(saved.version).toBe(17);
+    // Re-pinned 2026-10-12 (PG-6f): 17 → 18, because `input-vat-registration` (17→18) follows it — the
+    // tenth time for the same reason, and the same kind of step as v16: it DELETES a retired field and
+    // mints nothing in its place. What this test exists for is untouched: the notice is still one long,
+    // `original` is still the verbatim 674.504 and `converted` is still 67450 bani.
+    expect(saved.version).toBe(18);
     // The v16 step's own halves, on the same bytes. First the non-write: this profile never declared an
     // amount for any of the six art. 155 alin. (1) lit. c)-h) categories, so the step opened no ladder year
     // and above all invented no zero — six minted zeros would have moved this person between "no CASS at
@@ -516,6 +526,13 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // normalisation of an absent collection — the step itself leaves the key off entirely, which is what
     // `store.migration.chain.test.tsx` asserts on the pure chain.
     expect(saved.fixedAssets).toEqual([]);
+    // The v18 step's own half, on the same bytes: the retired `vatExempt` boolean is gone, and no
+    // registration state was invented to replace it. Converting `false` to `inregistrat_art316` would have
+    // asserted an ANAF register fact the payload never recorded, and that fact decides the money measure
+    // of every record in the register — so absence is what comes back out, and the app says it does not
+    // know whether this person charges TVA.
+    expect('vatExempt' in saved.profile).toBe(false);
+    expect('vatRegistration' in saved.profile).toBe(false);
     // And the half of the v11 step that is a NON-write, asserted on the bytes: this payload carried no
     // `declarations` collection, so nothing was moved and nothing was invented. PG-5b re-pin: the monthly
     // key is now absent from the written bytes rather than present and empty — the record type is gone, so

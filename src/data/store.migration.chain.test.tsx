@@ -479,6 +479,60 @@ describe('migration chain (pure)', () => {
     expect('normalLifeMonths' in withAsset.data.fixedAssets![0]!).toBe(false);
   });
 
+  /**
+   * PG-6f (B-30, D-LEG-1): the v17→v18 step DELETES the retired `vatExempt` boolean and mints nothing in
+   * its place. This is the half of D-LEG-1 the chain has to prove, and it is stricter than a backfill
+   * ban: the step is not merely forbidden from inventing a registration state, it is forbidden from
+   * leaving the old field behind for a reader to re-derive one from.
+   *
+   * The conversion the step refuses is the obvious one — `false` to `inregistrat_art316`, `true` to
+   * `scutit_art310`. `research/42` §11.2 records that the boolean expresses none of the six states the
+   * law uses, and the state decides the money measure of every record in the register, so writing one
+   * here would assert an ANAF register fact the payload never held.
+   */
+  it('the input-vat step deletes the retired boolean and mints no registration state', () => {
+    // A genuinely pre-v18 profile. The seed profile declares a registration state today, so the fixture
+    // has to remove that key as well as carry the old boolean — otherwise the non-write asserted below
+    // would be confounded by the fixture rather than proved by the step.
+    const preV18Profile: Record<string, unknown> = { ...prePhase7Profile(), vatExempt: false };
+    delete preV18Profile.vatRegistration;
+    const payload = prePhase7Payload({
+      version: DATA_VERSION_FIXED_ASSETS,
+      profile: preV18Profile as never,
+    });
+    const outcome = migratePersistedData(payload as never);
+    const profile = outcome.data.profile!;
+    expect(outcome.fromVersion).toBe(DATA_VERSION_FIXED_ASSETS);
+    expect(outcome.stepsApplied).toEqual(['input-vat-registration']);
+    expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
+    // The deletion: the key does not survive, not as a value and not as a default.
+    expect('vatExempt' in profile).toBe(false);
+    // And the non-write: no registration state was inferred from the deleted boolean, or from anything
+    // else in the payload. Absence is the state the readers report as „the app does not know”.
+    expect('vatRegistration' in profile).toBe(false);
+    expect(profile.vatRegistration).toBeUndefined();
+    // A registration the person really declared passes through untouched — the step neither overwrites
+    // the state they chose nor fills in an effective date they did not give.
+    const declared = migratePersistedData(
+      prePhase7Payload({
+        version: DATA_VERSION_FIXED_ASSETS,
+        profile: {
+          ...prePhase7Profile(),
+          vatExempt: true,
+          vatRegistration: { status: 'inregistrare_voluntara', cashAccounting: 'da' },
+        } as never,
+      }) as never,
+    );
+    const declaredProfile = declared.data.profile!;
+    expect('vatExempt' in declaredProfile).toBe(false);
+    expect(declaredProfile.vatRegistration).toEqual({ status: 'inregistrare_voluntara', cashAccounting: 'da' });
+    expect('effectiveFrom' in declaredProfile.vatRegistration!).toBe(false);
+    // Idempotent under the chain contract: already at the head, no step matches `from`, byte-equal out.
+    const again = migratePersistedData(outcome.data);
+    expect(again.stepsApplied).toEqual([]);
+    expect(again.data).toEqual(outcome.data);
+  });
+
   it('treats a payload with no version key as the base of the chain', () => {
     const payload = prePhase7Payload({ version: undefined });
     const outcome = migratePersistedData(payload as never);
