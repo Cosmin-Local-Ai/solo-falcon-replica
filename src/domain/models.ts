@@ -378,6 +378,23 @@ export const CASS_LADDER_CATEGORIES: readonly CassLadderCategory[] = [
 ];
 
 /**
+ * What each ladder category is called **on screen**, keyed by the same identifier the engine sums.
+ *
+ * The refusal in `calcCassLadder` has to name the categories that are missing, and an identifier printed on
+ * a screen is an enum value posing as a sentence — the rule TASK 7 wrote the copy guard for. The names live
+ * here rather than in the copy layer because the refusing string is itself domain output: one list, so the
+ * engine's refusal and the form's labels cannot drift into two vocabularies.
+ */
+export const CASS_LADDER_CATEGORY_NAMES: Record<CassLadderCategory, string> = {
+  proprietate_intelectuala: 'proprietate intelectuală (art. 155 alin. (1) lit. c))',
+  asociere_persoana_juridica: 'asocierea cu o persoană juridică (lit. d))',
+  cedarea_folosintei_bunurilor: 'cedarea folosinței bunurilor (lit. e))',
+  activitati_agricole: 'activități agricole, silvicultură și piscicultură (lit. f))',
+  investitii: 'investiții (lit. g))',
+  alte_surse: 'alte surse (lit. h))',
+};
+
+/**
  * PG-6d (D-OTH-1) — the amounts the person **declared** for ONE fiscal year, one per ladder category.
  *
  * This is the shape DU 212 subsecțiunea 2.2 has: six per-category lines feeding one cumulated total

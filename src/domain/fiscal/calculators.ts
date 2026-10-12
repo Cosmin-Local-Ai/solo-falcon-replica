@@ -1,6 +1,6 @@
 import type { FiscalRule, FiscalParameter } from './rules';
 import type { CassLadderCategory, FactState, PfaYesNo } from '../models';
-import { CASS_LADDER_CATEGORIES } from '../models';
+import { CASS_LADDER_CATEGORIES, CASS_LADDER_CATEGORY_NAMES } from '../models';
 import { applyRateDecimal, lei, leiText, roundArt66, subBani, sumBani, type Bani } from '../money';
 
 export type ReviewRequired = { reviewRequired: true; reason: string };
@@ -614,7 +614,7 @@ function calcCassLadder(rule: FiscalRule, input?: CalculatorInput): CalculatorRe
       reason:
         `Baza de calcul CASS pentru veniturile din art. 155 alin. (1) lit. c)-h) nu poate fi stabilită: ` +
         `din cele șase categorii prevăzute de art. 170 alin. (4) lipsesc ${missing.length} ` +
-        `(${missing.join(', ')}). Cumularea se face peste TOATE cele șase, deci o categorie fără răspuns ` +
+        `(${missing.map((c) => CASS_LADDER_CATEGORY_NAMES[c]).join(', ')}). Cumularea se face peste TOATE șase, deci o categorie fără răspuns ` +
         'face suma necunoscută — nu o sumă mai mică. Aplicația nu completează zero: un zero declarat este ' +
         'o faptă înregistrată de persoana fizică, un zero inventat este o datorie sau o scutire care nu ' +
         'există (art. 170 alin. (2)-(4) din Codul fiscal).',
@@ -634,11 +634,11 @@ function calcCassLadder(rule: FiscalRule, input?: CalculatorInput): CalculatorRe
     return {
       reviewRequired: true,
       reason:
-        'Suma declarată la „alte surse” nu poate fi cumulatã: art. 155 alin. (1) lit. h) trimite la art. 114, ' +
+        'Suma declarată la „alte surse” nu poate fi cumulată: art. 155 alin. (1) lit. h) trimite la art. 114, ' +
         'iar art. 114 alin. (1) cuprinde numai veniturile care NU se încadrează în art. 61 lit. a)-h). ' +
         'Premiile și jocurile de noroc (art. 61 lit. g)) și transferul proprietăților imobiliare (art. 61 ' +
         'lit. h)) nu apar în art. 155 alin. (1) deloc și nu atrag niciodată CASS, deci un „alte” fără ' +
-        'calificarea art. 114 ar fabrica o contribuție. Aplicația refuză cumlarea până când persoana ' +
+        'calificarea art. 114 ar fabrica o contribuție. Aplicația refuză cumularea până când persoana ' +
         'declară că suma este un venit definit la art. 114.',
     };
   }
@@ -701,7 +701,7 @@ function calcCassLadder(rule: FiscalRule, input?: CalculatorInput): CalculatorRe
   if (cumulated < tier1 && cumulated + neimpozabil >= tier1) {
     readingDivergence =
       `art. 174 alin. (7) lit. b) nu poate fi evaluat fără să se aleagă între două lecturi. ` +
-      `Venitul cumulatum măsurat potrivit art. 170 alin. (4) este ${leiText(cumulated)} lei, sub 6 salarii ` +
+      `Venitul cumulată măsurat potrivit art. 170 alin. (4) este ${leiText(cumulated)} lei, sub 6 salarii ` +
       `minime brute (${leiText(tier1)} lei), dar cu veniturile neimpozabile de la art. 93 și 105 ` +
       `(${leiText(neimpozabil)} lei, excluse din cumulare de art. 170 alin. (5)) totalul realizat atinge ` +
       '6 salarii minime brute. Citește A: testul se face la nivelul VENITULUI realizat, deci diferența de ' +
@@ -724,16 +724,16 @@ function calcCassLadder(rule: FiscalRule, input?: CalculatorInput): CalculatorRe
   }
 
   const breakdown = [
-    `venit cumulatum din art. 155 alin. (1) lit. c)-h), măsurat potrivit art. 170 alin. (4): ${leiText(cumulated)} lei`,
-    ...CASS_LADDER_CATEGORIES.map((c) => `${c}: ${leiText(amounts[c] as Bani)} lei`),
+    `venit cumulat din art. 155 alin. (1) lit. c)-h), măsurat potrivit art. 170 alin. (4): ${leiText(cumulated)} lei`,
+    ...CASS_LADDER_CATEGORIES.map((c) => `${CASS_LADDER_CATEGORY_NAMES[c]}: ${leiText(amounts[c] as Bani)} lei`),
     `treapta aleasă: ${rung} — art. 170 alin. (2)-(4); intervalele sunt inclusive la limita de jos`,
     base === lei(0)
       ? typeof conditionPrecedent === 'string'
         ? `${conditionPrecedent}`
         : 'sub 6 salarii minime brute cumulate nu se datorează deloc CASS pentru aceste categorii — art. 170 alin. (2) este o condiție prealabilă, nu o cotă'
       : `baza anuală de calcul: ${leiText(base)} lei — art. 170 alin. (3); CASS = ${leiText(base)} × ${ratePercent / 100} = ${leiText(value)} lei — art. 174¹ alin. (1)`,
-    'un SINGUR bazine pentru întreaga persoană, nu câte unul per categorie: art. 170 alin. (3) vorbește despre „baza anuală de calcul” a „persoanelor”, iar art. 174¹ alin. (1) aplică 10 % la acea bază — la fel cum subsecțiunea 2.2 din Declarația Unică are șase rânduri care alimentează un singur total',
-    'plafonul de 72 SM din art. 170 alin. (1) NU se aplică acestui bazine: el mărginește venitul din art. 155 alin. (1) lit. b), nu cumularea de la lit. c)-h)',
+    'o SINGURĂ bază pentru întreaga persoană, nu câte una per categorie: art. 170 alin. (3) vorbește despre „baza anuală de calcul” a „persoanelor”, iar art. 174¹ alin. (1) aplică 10 % la acea bază — la fel cum subsecțiunea 2.2 din Declarația Unică are șase rânduri care alimentează un singur total',
+    'plafonul de 72 SM din art. 170 alin. (1) NU se aplică acestui bazin: el mărginește venitul din art. 155 alin. (1) lit. b), nu cumularea de la lit. c)-h)',
     'venitul net al PFA nu intră în acest cumul, iar acest cumul nu intră în plafonul de 72 SM — cele două căi nu se întâlnesc nicăieri',
   ];
   if (neimpozabil > 0) {

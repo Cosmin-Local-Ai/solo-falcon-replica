@@ -78,7 +78,6 @@ const legacyProfile = (overrides: Record<string, unknown> = {}) => ({
   caen: '6201',
   salaryStatus: 'nu',
   pensionStatus: 'nu',
-  otherIncome: [],
   socialInsuranceStatus: 'obligatoriu',
   vatExempt: false,
   cashFloorLei: 0,
@@ -406,8 +405,11 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
   test('names the sum in lei, and the report survives the save that follows the load', async ({ page }) => {
     await seed(page, {
       // A v4 payload: its money fields still hold lei, so 674.504 is below ban precision once converted.
+      // The retired flag vocabulary rides in with it on purpose: this is what an app at v4 wrote, and the
+      // v16 step is the one that removes it. Without the key here, the assertion further down that the
+      // written bytes carry no `otherIncome` would prove nothing.
       version: 4,
-      profile: legacyProfile(),
+      profile: legacyProfile({ otherIncome: ['imobiliare'] }),
       revenues: [
         {
           id: 'p10-r1',
@@ -470,7 +472,22 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // backfills it empty, so it writes a version and touches no value. What this test exists for is
     // untouched: the notice is still one long, `original` is still the verbatim 674.504 and `converted` is
     // still 67450 bani. No vehicle fact is inferred for a profile that never declared a car.
-    expect(saved.version).toBe(15);
+    // Re-pinned 2026-10-12 (PG-6d): 15 → 16, because `other-income-ladder` (15→16) follows it — the eighth
+    // time for the same reason, and the same kind of step again: it opens a per-year fact slot and backfills
+    // nothing. What this test exists for is untouched: the notice is still one long, `original` is still the
+    // verbatim 674.504 and `converted` is still 67450 bani. This step is one thing more than the previous
+    // ones, though: it also DELETES a field the retired flag list used to occupy, and it converts no flag
+    // into an amount.
+    expect(saved.version).toBe(16);
+    // The v16 step's own halves, on the same bytes. First the non-write: this profile never declared an
+    // amount for any of the six art. 155 alin. (1) lit. c)-h) categories, so the step opened no ladder year
+    // and above all invented no zero — six minted zeros would have moved this person between "no CASS at
+    // all" and a base of 6, 12 or 24 minimum wages, which is defect B-41.
+    expect('cassLadderYears' in saved.profile).toBe(false);
+    // And the deletion: the retired flag list does not survive the chain, not as a value and not as an
+    // empty array. An empty array would still be a category vocabulary the engine cannot use, and D-LEG-1
+    // retires it outright rather than tolerating it.
+    expect('otherIncome' in saved.profile).toBe(false);
     // The v12 step's own half, asserted on the store's bytes: this legacy profile carried no activity
     // family, and the step did not give it one. `'other'` here would have been exactly the default the
     // brief forbids — it reads as "the ordinary rules apply", asserted by the migration rather than chosen

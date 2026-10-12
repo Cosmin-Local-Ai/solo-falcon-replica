@@ -115,6 +115,28 @@ async function loadDeclarations(page: import('@playwright/test').Page): Promise<
   await expect(page.getByText('D212.2026.000042')).toBeVisible();
 }
 
+/*
+ * PG-6d — the fiscal settings tab, where the six art. 155 alin. (1) lit. c)-h) amounts are collected.
+ *
+ * SCANNED, AND DELIBERATELY NOT IN THE GATE YET. This tab was run through axe during PG-6d because PG-6d
+ * added a form section to it — six amount inputs and four selects, each with an explicit `<label htmlFor>`.
+ * The scan came back with **critical `label` violations on controls this phase did not touch and was not
+ * scoped to fix**: the regime select, the CAEN input, the start-year and fiscal-year inputs, the
+ * establishment-date input and the two vehicle inputs all render a `<label>` with no `htmlFor` and an
+ * `<input>` with no `id`. That is pre-existing debt on a route the gate had never looked at, and clearing it
+ * is a dozen fields in another phase's section, several of which other specs address by label text.
+ *
+ * It is recorded here rather than dropped, for two reasons: the tab must not stay unscanned by accident, and
+ * the next person to widen this gate should find the debt already named instead of rediscovering it as a
+ * surprise failure. The ladder section itself is clean; the fields around it are not. Clearing that debt is
+ * the precondition for adding this scan back — the loader below is what the scan will need when it returns:
+ *
+ *   await seedBrowser(page);
+ *   await page.clock.setFixedTime(fixedInstant());
+ *   await page.goto('/settings#!/fiscal');
+ *   await expect(page.locator('[data-cass-ladder]')).toBeVisible();
+ */
+
 /**
  * PG-6h-3 — the route this task added.
  *
