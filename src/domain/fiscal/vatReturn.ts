@@ -47,7 +47,13 @@
 import type { Bani } from '../money';
 import { formatBani } from '../money';
 import { isISOCalendarDate } from '../date';
-import type { PeriodicitySegment, VatPeriodicity } from './vatPeriodicity';
+import type { VatReturnRecord } from '../../data/types';
+import type {
+  Alin8Premise,
+  PeriodicitySegment,
+  VatPeriodicity,
+  VatPeriodicityFacts,
+} from './vatPeriodicity';
 
 // ── 1. The fiscal period ─────────────────────────────────────────────────────────
 
@@ -326,6 +332,17 @@ export function decontObligations(
 }
 
 /**
+ * B-102 — the id of the alin. (6) mențiuni obligation for a year.
+ *
+ * One producer, because two consumers must agree on it byte for byte: the calendar emits this id, and the
+ * alin. (8) return test looks the same id up among the filed returns to decide whether the declaration
+ * exists. A second spelling of an id is the B-70 defect class — two derivations of one fact, free to drift.
+ */
+export function annualMentiuniObligationId(year: number): string {
+  return `mentiuni-25-ianuarie-${year}`;
+}
+
+/**
  * art. 322 alin. (6) — the declarație de mențiuni until 25 ianuarie.
  *
  * Returns `null` when this person does not owe it, and says why. The two exclusions are in the article
@@ -336,10 +353,22 @@ export function decontObligations(
  * - „Fac excepție … persoanele impozabile care solicită scoaterea din evidența persoanelor înregistrate în
  *   scopuri de TVA conform art. 316, în vederea aplicării regimului special de scutire prevăzut la
  *   art. 310."
+ *
+ * **B-102 adds a second route to the same obligation, not a second obligation.** Alin. (8) teza a III-a
+ * sends the person returning to the quarter back through „declarația de mențiuni **prevăzută la alin. (6)**"
+ * — the very same form. A person on the month in the return year is not quarterly, so the old
+ * `quarterlyUnder` gate could never fire for them and the mechanism of the return was invisible. That was
+ * the case this obligation was missing, and adding a new obligation instead would have given the taxpayer
+ * two of a form that is due once.
  */
 export function annualMentiuniObligation(input: {
   year: number;
   quarterlyUnder: 'alin2' | 'alin5' | 'alin3' | 'alin4' | null;
+  /**
+   * B-102 — the flip year, when this year is the alin. (8) return year and nothing in the record disproves
+   * the return. Set from `Alin8State.eligibleToReturn`, never from a guess that the two years have passed.
+   */
+  alin8ReturnYear?: number | null;
   requestingArt310Return: boolean;
   /**
    * True when the dataset cannot say whether the art. 316→art. 310 return was requested. The obligation is
@@ -348,12 +377,12 @@ export function annualMentiuniObligation(input: {
    */
   art310ReturnUnknown?: boolean;
 }): VatObligation | null {
-  if (input.quarterlyUnder === null) return null;
+  if (input.quarterlyUnder === null && !input.alin8ReturnYear) return null;
   if (input.quarterlyUnder === 'alin3' || input.quarterlyUnder === 'alin4') return null;
   if (input.requestingArt310Return) return null;
   const dueOn = `${input.year}-01-25`;
   return {
-    id: `mentiuni-25-ianuarie-${input.year}`,
+    id: annualMentiuniObligationId(input.year),
     kind: 'mentiuni_annuale',
     year: input.year,
     dueOn,
@@ -361,7 +390,13 @@ export function annualMentiuniObligation(input: {
     citation: 'CF art. 322 alin. (6)',
     label:
       `Declarație de mențiuni până la 25 ianuarie ${input.year}: cifra de afaceri din ${input.year - 1} și `
-      + 'mențiunea că nu ai efectuat achiziții intracomunitare de bunuri în anul precedent. Nu este un decont.',
+      + 'mențiunea că nu ai efectuat achiziții intracomunitare de bunuri în anul precedent. Nu este un decont.'
+      + (input.alin8ReturnYear
+        ? ' Aceasta este declarația prin care se face revenirea la trimestrul calendaristic, după cei doi ani '
+          + `de lună începuți în ${input.alin8ReturnYear} (art. 322 alin. (8) tezele a II-a și a III-a). `
+          + 'Faptul că revenirea se produce din acest an este o interpretare: Codul fiscal nu dă nicio dată '
+          + 'pentru revenire.'
+        : ''),
     ...(input.art310ReturnUnknown
       ? {
           exceptionNote:
@@ -422,6 +457,40 @@ export function aicMentiuniObligation(input: {
 }
 
 // ── 3. Where 6f's numbers land — the D300 lines ──────────────────────────────────
+
+/**
+ * B-102 — the alin. (8) premise for one year, computed from the per-year fact array.
+ *
+ * The lookup is bounded at two years because that is as far as the article reaches: alin. (8) gives the
+ * month for the current year and the next, and nothing in art. 322 extends it further. The immediately
+ * preceding year is checked first, because a flip there makes this year the second monthly year outright —
+ * asking a return question about it would be the wrong question, not merely an unnecessary one.
+ *
+ * `isFiled` is passed in rather than restated here: `isFiledVatReturn` in `data/types.ts` is the ONE test
+ * that says a record proves a filing, and a second spelling of that vocabulary in the domain is how a
+ * draft return starts counting as a submission.
+ */
+export function alin8PremiseForYear(
+  years: readonly VatPeriodicityFacts[] | undefined,
+  year: number,
+  returns: readonly VatReturnRecord[],
+  isFiled: (r: Pick<VatReturnRecord, 'status'>) => boolean,
+): Alin8Premise | null {
+  for (const position of [1, 2] as const) {
+    const flipYear = year - position;
+    const facts = (years ?? []).find((y) => y.year === flipYear);
+    if (facts?.aicGoodsWhileQuarterly !== 'da') continue;
+    const month = facts.aicGoodsExigibilityMonth;
+    const filedId = annualMentiuniObligationId(year);
+    return {
+      flipYear,
+      position,
+      ...(month !== undefined ? { exigibilityMonth: month } : {}),
+      mentiuniFiled: returns.some((r) => isFiled(r) && r.obligationId === filedId),
+    };
+  }
+  return null;
+}
 
 /**
  * The D300 lines the claimable-VAT figure touches.

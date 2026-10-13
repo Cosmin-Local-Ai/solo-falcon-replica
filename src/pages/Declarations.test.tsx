@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { StoreProvider, STORAGE_KEY } from '../data/store';
 import { CURRENT_DATA_VERSION, DATA_VERSION_RECORD_CURRENCY } from '../data/migration';
@@ -6,6 +6,7 @@ import { seedData } from '../data/seed';
 import type { AnnualFiling } from '../data/types';
 import type { LegacyMonthlyDeclaration } from '../data/schema';
 import { lei } from '../domain/money';
+import { pinClock, unpinClock } from '../test/clock';
 import Declarations from './Declarations';
 
 /**
@@ -346,5 +347,179 @@ describe('PG-6g — the periodicity is asked, never guessed (acceptance 7)', () 
 
     // B-56 discipline: nothing on screen claims a submission happened. The app recorded one.
     expect(document.body.textContent).not.toMatch(/am depus decontul|decontul a fost depus la ANAF|am trimis decontul/);
+  });
+});
+
+/**
+ * B-102 / B-103 — the alin. (8) tail and the return, on the page that shows the calendar.
+ *
+ * The unit tests prove the derivation; these prove the surface actually changes. The fixture spans three
+ * years because the rule does: a 2026 acquisition, 2027 as the second monthly year, 2028 as the year the
+ * return question is about.
+ *
+ * **Read the second test with its limitation.** The filed mențiuni record is loaded from stored bytes,
+ * because the page offers no control to record one: `recordFiling` only acts on rows that carry a fiscal
+ * period, and a declarație de mențiuni has none. So the return to the quarter is correct in the domain and
+ * currently unreachable from the UI. That is recorded as a defect, not papered over here.
+ */
+const BNR_31_12_2027 = { ...BNR_31_12_2025, rate: '5.0000', rateDate: '2027-12-31' };
+
+/** Every calendar row the page renders, keyed by the obligation id the calendar minted. */
+function obligationRows(): HTMLElement[] {
+  return [...document.querySelectorAll<HTMLElement>('[data-obligation-id]')];
+}
+
+/** The deconturi only — the two mențiuni duties are not deconturi and must not be counted with them. */
+function decontRows(): HTMLElement[] {
+  return obligationRows().filter((r) => r.getAttribute('data-obligation-id')?.startsWith('decont-'));
+}
+
+describe('B-102 — the two-year tail and the conditional return, on the calendar', () => {
+  // The calendar only shows periods that have already closed as of the as-of date, so an un-pinned clock
+  // would answer „nothing has closed yet” for a 2028 register and every count below would pass or fail for
+  // the wrong reason. Pinned well after the year end, deliberately not at `fixedInstant()` — these cases
+  // are about 2028, and the shared constant is a 2026 instant.
+  beforeEach(() => pinClock(new Date('2028-12-31T12:00:00Z')));
+  afterEach(unpinClock);
+
+  const threeYearProfile = {
+    fiscalYear: 2028,
+    vatRegistration: { status: 'inregistrat_art316' as const, effectiveFrom: '2025-01-01' },
+    vatPeriodicityYears: [
+      {
+        year: 2026,
+        registrationEffectiveFrom: '2025-01-01',
+        registrationRoute: 'b' as const,
+        precedingYearTurnover: 1_000_000,
+        precedingYearAicGoods: 'nu' as const,
+        aicGoodsWhileQuarterly: 'da' as const,
+        aicGoodsExigibilityMonth: 6,
+      },
+      {
+        year: 2027,
+        registrationEffectiveFrom: '2025-01-01',
+        registrationRoute: 'b' as const,
+        precedingYearTurnover: 1_000_000,
+        precedingYearAicGoods: 'nu' as const,
+      },
+      {
+        year: 2028,
+        registrationEffectiveFrom: '2025-01-01',
+        registrationRoute: 'b' as const,
+        precedingYearTurnover: 1_000_000,
+        precedingYearAicGoods: 'nu' as const,
+      },
+    ],
+  };
+
+  const mentiuniRows = () =>
+    obligationRows().filter((r) => r.getAttribute('data-obligation-id') === 'mentiuni-25-ianuarie-2028');
+
+  it('acceptance 5 — the alin. (6) row appears in N+2 exactly once, for a person who is on the month', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        ...seedData,
+        version: CURRENT_DATA_VERSION,
+        fxRates: [BNR_31_12_2025, BNR_31_12_2027],
+        profile: { ...seedData.profile, ...threeYearProfile },
+      }),
+    );
+    render(<StoreProvider><Declarations /></StoreProvider>);
+
+    // Acceptance 4 first: with no filing on record the year is still monthly — twelve deconturi, not four.
+    expect(decontRows()).toHaveLength(12);
+
+    // And the declaration that would effect the return is there — once. Landmine 5: the old gate and the
+    // new one must not hand the taxpayer two of a form that is due once.
+    expect(mentiuniRows()).toHaveLength(1);
+    expect(mentiuniRows()[0].textContent).toContain('art. 322 alin. (6)');
+    expect(mentiuniRows()[0].textContent).toContain('alin. (8) tezele a II-a și a III-a');
+    expect(mentiuniRows()[0].textContent).toContain('interpretare');
+  });
+
+  it('acceptance 3 — with the alin. (6) declaration on record, N+2 is quarterly and the row is still single', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        ...seedData,
+        version: CURRENT_DATA_VERSION,
+        fxRates: [BNR_31_12_2025, BNR_31_12_2027],
+        vatReturns: [{
+          id: 'vr-mentiuni-2028',
+          obligationId: 'mentiuni-25-ianuarie-2028',
+          year: 2028,
+          form: '300',
+          periodKind: 'quarter',
+          periodIndex: 1,
+          status: 'depusa',
+          filedOn: '2028-01-10',
+        }],
+        profile: { ...seedData.profile, ...threeYearProfile },
+      }),
+    );
+    render(<StoreProvider><Declarations /></StoreProvider>);
+
+    expect(decontRows()).toHaveLength(4);
+    expect(mentiuniRows()).toHaveLength(1);
+    expect(mentiuniRows()[0].textContent).toContain('Depusă');
+  });
+
+  it('acceptance 3 — an ICAB in N+1 keeps N+2 monthly, and no mențiuni row is offered', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        ...seedData,
+        version: CURRENT_DATA_VERSION,
+        fxRates: [BNR_31_12_2025, BNR_31_12_2027],
+        profile: {
+          ...seedData.profile,
+          ...threeYearProfile,
+          vatPeriodicityYears: threeYearProfile.vatPeriodicityYears.map((y) =>
+            y.year === 2028 ? { ...y, precedingYearAicGoods: 'da' as const } : y,
+          ),
+        },
+      }),
+    );
+    render(<StoreProvider><Declarations /></StoreProvider>);
+    expect(decontRows()).toHaveLength(12);
+    expect(mentiuniRows()).toHaveLength(0);
+  });
+});
+
+describe('B-103 — the panel headline describes the year the user actually has', () => {
+  beforeEach(() => pinClock(new Date('2026-12-31T12:00:00Z')));
+  afterEach(unpinClock);
+
+  it('names the quarters before the flip instead of calling the whole year a month', () => {
+    // Since B-101 this year's calendar opens with two quarterly returns. A headline reading
+    // „lună calendaristică” described a year the taxpayer is not filing, and it did so in two places at
+    // once because the panel and the completeness channel each spelled their own sentence.
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        ...seedData,
+        version: CURRENT_DATA_VERSION,
+        fxRates: [BNR_31_12_2025],
+        profile: {
+          ...seedData.profile,
+          fiscalYear: 2026,
+          vatRegistration: { status: 'inregistrat_art316' as const, effectiveFrom: '2025-01-01' },
+          vatPeriodicityYears: [{
+            year: 2026,
+            registrationEffectiveFrom: '2025-01-01',
+            registrationRoute: 'b' as const,
+            precedingYearTurnover: 1_000_000,
+            precedingYearAicGoods: 'nu' as const,
+            aicGoodsWhileQuarterly: 'da' as const,
+            aicGoodsExigibilityMonth: 6,
+          }],
+        },
+      }),
+    );
+    render(<StoreProvider><Declarations /></StoreProvider>);
+    const panel = document.querySelector('[data-testid="vat-periodicity"]')!;
+    expect(panel.textContent).toContain('trimestrul calendaristic până la 06.2026, apoi luna calendaristică de la 07.2026');
+    expect(decontRows()).toHaveLength(8);
   });
 });

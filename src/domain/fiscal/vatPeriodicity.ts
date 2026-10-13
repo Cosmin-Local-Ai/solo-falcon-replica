@@ -129,10 +129,11 @@ export type Art322Branch =
   | 'alin4'
   | 'alin5'
   | 'alin7'
+  | 'alin8'
   | 'pct103_alin1';
 
 export const ART322_BRANCH_VALUES: readonly Art322Branch[] = [
-  'alin1', 'alin2', 'alin3', 'alin4', 'alin5', 'alin7', 'pct103_alin1',
+  'alin1', 'alin2', 'alin3', 'alin4', 'alin5', 'alin7', 'alin8', 'pct103_alin1',
 ];
 
 /**
@@ -190,6 +191,26 @@ export const ART322_RULE_TEXT: Record<Art322Branch, { citation: string; rule: st
       + 'taxabilă în România trece la luna calendaristică, iar primele două luni ale trimestrului devin o '
       + 'PERIOADĂ FISCALĂ DISTINCTĂ, cu decont propriu conform art. 323 alin. (1). Declarația de mențiuni '
       + 'se depune în maximum 5 zile lucrătoare de la finele lunii în care a intervenit exigibilitatea.',
+  },
+  /**
+   * B-102 — alin. (8), the sentence alin. (7) is followed by.
+   *
+   * The rule text carries the asymmetry on purpose, because it is the reason the derivation looks the way
+   * it does: the switch to the month is created by alin. (7) and ANAF applies it din oficiu, while the
+   * return to the quarter is **not** self-executing. A reader who sees only „doi ani de lună” will conclude
+   * the quarter comes back on its own, and that is the wrong answer in exactly the case the article cares
+   * about.
+   */
+  alin8: {
+    citation: 'CF art. 322 alin. (8)',
+    rule:
+      'Persoana care a trecut la luna calendaristică potrivit alin. (7) „va utiliza ca perioadă fiscală '
+      + 'luna calendaristică pentru anul curent și pentru anul următor”. Revenirea la trimestru nu se '
+      + 'produce singură: alin. (8) teza a II-a o condiționează de trei lucruri deodată — să nu fi '
+      + 'efectuat nicio achiziție intracomunitară de bunuri în anul următor, să nu fi depășit plafonul de '
+      + '100.000 euro de la alin. (2) și să depună declarația de mențiuni prevăzută la alin. (6). Cât timp '
+      + 'declarația aceea nu este în registru, perioada rămâne luna — la fel cum procedează și ANAF, care '
+      + 'ține registrul pe lună până i se depune declarația.',
   },
   pct103_alin1: {
     citation: 'Normele metodologice HG 1/2016, pct. 103 alin. (1)',
@@ -402,6 +423,64 @@ export interface VatPeriodicityFacts {
   userChoice?: VatPeriodicityChoice;
 }
 
+// ── 3b. B-102 — the alin. (8) tail, which crosses the year boundary ───────────────
+
+/**
+ * What the two years BEFORE the year being derived contribute to it.
+ *
+ * **This is computed, never stored.** `alin8PremiseForYear` in `fiscal/vatReturn.ts` builds it out of the
+ * same `PfaProfile.vatPeriodicityYears` array the derivation already reads, so no new field, no schema
+ * change and no chain step is needed: the array is already per-year and already carries
+ * `aicGoodsWhileQuarterly` and `aicGoodsExigibilityMonth`. That matters for more than tidiness — a
+ * cross-year answer that could be seeded from outside the facts would depend on which surface built it,
+ * which is the failure this shape rules out by construction.
+ */
+export interface Alin8Premise {
+  /** The year whose alin. (7) acquisition still governs the year being derived. */
+  flipYear: number;
+  /** 1 = this is the second monthly year (N+1); 2 = this is the year a return to the quarter is possible in (N+2). */
+  position: 1 | 2;
+  /** The month of exigibility declared in the flip year, when it was declared. */
+  exigibilityMonth?: number;
+  /** Whether a filed alin. (6) mențiuni declaration for the year being derived is on record. */
+  mentiuniFiled: boolean;
+}
+
+/** `unknown` is a real third state here: the fact exists to be declared and has not been. */
+export type Alin8ConditionStatus = 'met' | 'failed' | 'unknown';
+
+export interface Alin8Condition {
+  id: 'no_aic_in_following_year' | 'cap_not_exceeded' | 'mentiuni_filed';
+  status: Alin8ConditionStatus;
+  /** The article that imposes this condition — three different alineate, not one rule three times. */
+  rule: string;
+  /** What the record says about it, in Romanian. */
+  label: string;
+}
+
+/**
+ * How alin. (8) bears on the year being derived, as the derivation concluded it.
+ *
+ * `returned` is the whole point of B-102 and it is deliberately not the same thing as „two years have
+ * passed". The switch to the month is created by alin. (7) and ANAF applies it din oficiu; the return to
+ * the quarter is not self-executing, so the second year ending is necessary and nowhere near sufficient.
+ */
+export interface Alin8State {
+  flipYear: number;
+  position: 1 | 2;
+  /** True when this year the person is back on the quarter. */
+  returned: boolean;
+  /**
+   * True when nothing in the record disproves the return, so the alin. (6) declaration is the thing that
+   * would effect it. This is what the calendar uses to decide whether the 25 ianuarie duty exists; it is
+   * not a claim that the return has happened.
+   */
+  eligibleToReturn: boolean;
+  exigibilityMonth?: number;
+  /** The three conditions of alin. (8) teza a II-a, each with what the record says about it. */
+  conditions: Alin8Condition[];
+}
+
 // ── 4. The outcome ───────────────────────────────────────────────────────────────
 
 /** One arithmetic step, shown rather than asserted. */
@@ -439,6 +518,8 @@ export type VatPeriodicityOutcome =
       steps: PeriodicityStep[];
       /** B-101 — present only when the year changes regime inside itself (art. 322 alin. (7)). */
       segment?: PeriodicitySegment;
+      /** B-102 — present when alin. (8) decides this year, i.e. the year sits inside another year's flip. */
+      alin8?: Alin8State;
       /** True when the comparison is a tie-break the law does not settle (the „nu depășește" boundary). */
       boundaryNote?: string;
     }
@@ -521,10 +602,11 @@ function exceedsCap(actual: Decimal, cap: Decimal): boolean {
 export function deriveVatPeriodicity(
   facts: VatPeriodicityFacts,
   cap: PeriodicityCap | PeriodicityCapFailure,
+  alin8?: Alin8Premise | null,
 ): VatPeriodicityOutcome {
   const capOrNull = 'ok' in cap && cap.ok === false ? null : (cap as PeriodicityCap);
   const capFailure = 'ok' in cap && cap.ok === false ? cap : null;
-  const outcome = deriveBranch(facts, capOrNull, capFailure);
+  const outcome = deriveBranch(facts, capOrNull, capFailure, alin8);
   // D-VAT-1's second half, applied once so it cannot be forgotten on a branch. Where the article asks for a
   // figure the app does not have and the person has answered instead, the answer stands — as theirs, with
   // the rule they were shown, and never rewritten into a derivation the facts do not support.
@@ -551,10 +633,41 @@ export function deriveVatPeriodicity(
   return resolved;
 }
 
+/**
+ * B-103 — the ONE sentence that says what fiscal period this year has.
+ *
+ * The Form 300 panel and the completeness channel both render it. Before this each wrote its own: the
+ * panel read `periodicityLabels[outcome.periodicity]` and the completeness check spelled its own ternary,
+ * so a year that since B-101 opens with a quarterly return was described as „luna calendaristică" in two
+ * places at once, and correcting one of them would have left the other wrong. One function, one sentence,
+ * two call sites. It takes the whole outcome rather than a periodicity, so a caller cannot hand over half
+ * the truth and get a year-level label for a segmented year.
+ */
+export function vatPeriodicityYearSentence(
+  outcome: Extract<VatPeriodicityOutcome, { kind: 'derived' | 'user_confirmed' }>,
+  year: number,
+): string {
+  const segment = outcome.segment;
+  if (outcome.periodicity === 'month' && segment && segment.before === 'quarter') {
+    const pad = (m: number) => String(m).padStart(2, '0');
+    if (segment.fromMonth > 12) {
+      return `trimestrul calendaristic pentru întreg acest an; luna calendaristică începe abia în ${year + 1}`;
+    }
+    if (segment.fromMonth > 1) {
+      return (
+        `trimestrul calendaristic până la ${pad(segment.fromMonth - 1)}.${year}, `
+        + `apoi luna calendaristică de la ${pad(segment.fromMonth)}.${year}`
+      );
+    }
+  }
+  return outcome.periodicity === 'month' ? 'luna calendaristică' : 'trimestrul calendaristic';
+}
+
 function deriveBranch(
   facts: VatPeriodicityFacts,
   capOrNull: PeriodicityCap | null,
   capFailure: PeriodicityCapFailure | null,
+  alin8?: Alin8Premise | null,
 ): VatPeriodicityOutcome {
   const effectiveFrom = facts.registrationEffectiveFrom;
   const route = facts.registrationRoute;
@@ -641,6 +754,126 @@ function deriveBranch(
         ...(sinceStep ? [sinceStep] : []),
         { label: 'CF art. 322 alin. (8)', value: 'declarație de mențiuni în maximum 5 zile lucrătoare de la finele lunii; luna se folosește în anul curent și în cel următor' },
       ],
+    };
+  }
+
+  // 6b. B-102 — alin. (8): the month survives the year boundary, and the way back is not automatic.
+  //
+  // Alin. (7) creates the switch and ANAF enforces it din oficiu; alin. (8) then says the same person
+  // „va utiliza ca perioadă fiscală luna calendaristică pentru anul curent și pentru anul următor". That is
+  // a statement about TWO years. A per-year derivation reading only this year's own facts loses it, and
+  // that is how alin. (2) or alin. (5) came to answer `quarter` for the year after a flip — in direct
+  // contradiction of alin. (8). The premise comes from the same per-year fact array, so the answer cannot
+  // depend on which year was opened last.
+  //
+  // It sits above alin. (5), alin. (3)/(4) and alin. (2) because it overrides all three: alin. (8) names a
+  // period, it does not ask for a figure to compare. It sits below the alin. (7) block because a flip
+  // declared for THIS year is the better fact, and it is only reachable when this year declares none.
+  if (alin8) {
+    if (capOrNull === null) return askForCap(capFailure);
+    const { flipYear, position } = alin8;
+
+    if (position === 1) {
+      return {
+        kind: 'derived',
+        periodicity: 'month',
+        branch: 'alin8',
+        cap: capOrNull,
+        steps: [
+          {
+            label: 'CF art. 322 alin. (8)',
+            value:
+              `achiziția intracomunitară de bunuri din ${flipYear} face luna calendaristică obligatorie și `
+              + `în ${facts.year}: „pentru anul curent și pentru anul următor”`,
+          },
+          {
+            label: 'De ce nu decid alin. (2) sau alin. (5) pentru acest an',
+            value:
+              'al doilea an de lună nu s-a încheiat; alin. (8) numește perioada fără să ceară vreo cifră '
+              + 'de afaceri, deci o cifră care altfel ar duce la trimestru nu poate înlocui luna cât timp alin. (8) se mai aplică',
+          },
+        ],
+        alin8: { flipYear, position: 1, returned: false, eligibleToReturn: false, conditions: [] },
+      };
+    }
+
+    // position === 2 — the year in which a return to the quarter becomes possible, and the case the whole
+    // defect turns on. The two factual conditions are read from THIS year's record, which is correct: for
+    // year N+2 the alin. (2) facts are about N+1, and N+1 is exactly the year alin. (8) teza a II-a asks
+    // about. They are also the two statements ANAF's own pre-printed return declaration asks for, so the
+    // app is not minting a third question.
+    const noAic: Alin8ConditionStatus =
+      facts.precedingYearAicGoods === 'nu' ? 'met'
+      : facts.precedingYearAicGoods === 'da' ? 'failed' : 'unknown';
+    const capOk: Alin8ConditionStatus =
+      facts.precedingYearTurnover === undefined ? 'unknown'
+      : exceedsCap(new Decimal(facts.precedingYearTurnover), new Decimal(capOrNull.capBani)) ? 'failed' : 'met';
+    const filed: Alin8ConditionStatus = alin8.mentiuniFiled ? 'met' : 'failed';
+    const returned = noAic === 'met' && capOk === 'met' && filed === 'met';
+    const conditions: Alin8Condition[] = [
+      {
+        id: 'no_aic_in_following_year',
+        status: noAic,
+        rule: 'CF art. 322 alin. (8) teza a II-a',
+        label:
+          noAic === 'met' ? `nicio achiziție intracomunitară de bunuri în ${facts.year - 1}`
+          : noAic === 'failed'
+            ? `cel puțin o achiziție intracomunitară de bunuri în ${facts.year - 1} — condiție neîndeplinită`
+            : `nu este declarată nicio achiziție intracomunitară de bunuri pentru ${facts.year - 1}`,
+      },
+      {
+        id: 'cap_not_exceeded',
+        status: capOk,
+        rule: 'CF art. 322 alin. (2)',
+        label:
+          capOk === 'met'
+            ? `cifra de afaceri din ${facts.year - 1} nu depășește plafonul de 100.000 euro`
+            : capOk === 'failed'
+              ? `cifra de afaceri din ${facts.year - 1} depășește plafonul de 100.000 euro — condiție neîndeplinită`
+              : `cifra de afaceri din ${facts.year - 1} nu este declarată, deci plafonul nu poate fi verificat`,
+      },
+      {
+        id: 'mentiuni_filed',
+        status: filed,
+        rule: 'CF art. 322 alin. (6) și alin. (8) teza a III-a',
+        label:
+          filed === 'met'
+            ? `declarația de mențiuni prevăzută la alin. (6) este înregistrată pentru ${facts.year}`
+            : `declarația de mențiuni prevăzută la alin. (6) nu este înregistrată pentru ${facts.year}`,
+      },
+    ];
+    return {
+      kind: 'derived',
+      // The safe side of the open question in research/43 §Gaps-3 is the month: ANAF keeps the register on
+      // the month until a declaration is filed, so an unproven return must not be presented as one.
+      periodicity: returned ? 'quarter' : 'month',
+      branch: 'alin8',
+      cap: capOrNull,
+      steps: [
+        {
+          label: 'CF art. 322 alin. (8) teza a II-a',
+          value:
+            `revenirea la trimestrul calendaristic după cei doi ani de lună începuți în ${flipYear} nu se `
+            + 'produce singură; alin. (8) teza a III-a trimite contribuabilul la declarația de mențiuni prevăzută la alin. (6)',
+        },
+        ...conditions.map((c) => ({ label: `Condiție — ${c.rule}`, value: c.label })),
+        {
+          label: 'Interpretare, nu text de lege',
+          value:
+            `Codul fiscal nu spune de la ce dată se produce revenirea: în alin. (8) nu apare nicio `
+            + 'formulare de tipul „începând cu primul trimestru al anului următor”. Aplicația aplică '
+            + `revenirea de la 1 ianuarie ${facts.year}, al doilea an după cel al achiziției, pe baza `
+            + 'mecanismului alin. (6) și a exemplelor ANAF. Este o interpretare susținută, nu o regulă citată.',
+        },
+      ],
+      alin8: {
+        flipYear,
+        position: 2,
+        returned,
+        eligibleToReturn: noAic !== 'failed' && capOk !== 'failed',
+        ...(alin8.exigibilityMonth !== undefined ? { exigibilityMonth: alin8.exigibilityMonth } : {}),
+        conditions,
+      },
     };
   }
 
@@ -979,6 +1212,7 @@ export function vatPeriodicityForYear(
   year: number,
   provider: FxRateProvider,
   registration?: VatRegistration | null,
+  opts: { alin8?: Alin8Premise | null } = {},
 ): VatPeriodicityOutcome {
   const cap = periodicityCapForYear(year, provider);
   const facts = (years ?? []).find((y) => y.year === year);
@@ -993,6 +1227,7 @@ export function vatPeriodicityForYear(
   return deriveVatPeriodicity(
     { year, ...(facts ?? {}), ...(effectiveFrom ? { registrationEffectiveFrom: effectiveFrom } : {}) },
     cap,
+    opts.alin8 ?? null,
   );
 }
 

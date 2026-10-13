@@ -264,6 +264,47 @@ describe('B-97 — the art. 322 alin. (7)-(8) question on Settings → Regim fis
     expect(text('[data-aic-not-asked]')).toBe(aic.notAskedMonthly(2026));
   });
 
+  it('B-102 — does not ask the alin. (7) question in a year the previous year’s acquisition already made monthly', () => {
+    // Alin. (7) applies only to „persoana … care utilizează trimestrul calendaristic ca perioadă fiscală”.
+    // In the second year of a 2026 flip the person is on the month by alin. (8), even though 2027's own
+    // facts answer `quarter` under alin. (2). Asking them anyway invites a `da` that would record a
+    // quarter that never existed — and the gate reads the same premise the panel and the completeness
+    // channel read, so the three surfaces cannot disagree about whether the question is even open.
+    const flip2026 = {
+      year: 2026,
+      registrationEffectiveFrom: '2025-01-01',
+      registrationRoute: 'b',
+      precedingYearTurnover: 1_000_000,
+      precedingYearAicGoods: 'nu',
+      aicGoodsWhileQuarterly: 'da',
+      aicGoodsExigibilityMonth: 6,
+    };
+    const own2027 = {
+      year: 2027,
+      registrationEffectiveFrom: '2025-01-01',
+      registrationRoute: 'b',
+      precedingYearTurnover: 1_000_000,
+      precedingYearAicGoods: 'nu',
+    };
+    const years = [flip2026, own2027];
+    load({
+      fxRates: [BNR_31_12_2025],
+      profile: { ...seedData.profile, fiscalYear: 2027, vatPeriodicityYears: years },
+    });
+    renderFiscal();
+    expect(el('[data-aic-answer]')).toBeNull();
+    expect(text('[data-aic-not-asked]')).toBe(aic.notAskedMonthly(2027));
+
+    // The contrast, so the assertion above cannot pass because the block simply never renders: with no
+    // 2026 flip, 2027's own facts leave the quarter unestablished and the question is open again.
+    load({
+      fxRates: [BNR_31_12_2025],
+      profile: { ...seedData.profile, fiscalYear: 2027, vatPeriodicityYears: [years[1]] },
+    });
+    renderFiscal();
+    expect(el('[data-aic-answer]')).not.toBeNull();
+  });
+
   it('asks when the registration state itself is unknown, but asks for that fact first', () => {
     load({ profile: { ...seedData.profile, vatRegistration: undefined } });
     renderFiscal();

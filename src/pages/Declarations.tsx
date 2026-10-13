@@ -13,7 +13,7 @@ import {
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
 import { formatRoCalendarDate, localDateISO } from '../domain/date';
 import { formatBani } from '../domain/money';
-import { ART322_RULE_TEXT } from '../domain/fiscal/vatPeriodicity';
+import { ART322_RULE_TEXT, vatPeriodicityYearSentence } from '../domain/fiscal/vatPeriodicity';
 import { D300_DEDUCTIBLE_LINES, parkedGroups, unfiledFigureNote } from '../domain/fiscal/vatReturn';
 import {
   copy,
@@ -254,7 +254,7 @@ function VatPeriodicityPanel() {
               <Badge kind="info">{vatReturnCopy.derivedBadge}</Badge>{' '}
               <strong>
                 {vatReturnCopy.derivedLead(ART322_RULE_TEXT[outcome.branch].citation)}{' '}
-                {vatReturnCopy.periodicityLabels[outcome.periodicity]}
+                {vatPeriodicityYearSentence(outcome, year)}
               </strong>
             </div>
             <div className="hint">{ART322_RULE_TEXT[outcome.branch].rule}</div>
@@ -266,7 +266,7 @@ function VatPeriodicityPanel() {
               <Badge kind="neutral">{vatReturnCopy.confirmedBadge}</Badge>{' '}
               <strong>
                 {vatReturnCopy.confirmedLead(formatRoCalendarDate(outcome.choice.confirmedOn))}{' '}
-                {vatReturnCopy.periodicityLabels[outcome.periodicity]}
+                {vatPeriodicityYearSentence(outcome, year)}
               </strong>
             </div>
             <div className="hint">{ART322_RULE_TEXT[outcome.branch].rule}</div>

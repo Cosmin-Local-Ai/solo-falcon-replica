@@ -32,6 +32,7 @@ import {
 } from './vatReturn';
 import { isFiledVatReturn, type VatReturnRecord } from '../../data/types';
 import { alin7MonthStart, type PeriodicitySegment } from './vatPeriodicity';
+import { annualMentiuniObligationId } from './vatReturn';
 import { lei } from '../money';
 
 describe('art. 323 alin. (1) — the decont term, per fiscal period', () => {
@@ -359,6 +360,56 @@ describe('art. 322 alin. (6) — the 25-ianuarie declarație de mențiuni is its
     expect(decont.id).not.toBe(mentiuni.id);
     expect(decont.kind).toBe('decont');
     expect(mentiuni.kind).toBe('mentiuni_annuale');
+  });
+});
+
+/*
+ * B-102 — alin. (8) teza a III-a sends the returning taxpayer back through „declarația de mențiuni
+ * prevăzută la alin. (6)”. That is the SAME form, so the fix is a second gate on the existing obligation,
+ * not a second obligation. The old gate could never fire for these people: in the return year they are on
+ * the month, so `quarterlyUnder` is null and the very duty that effects the return was invisible.
+ */
+describe('B-102 — the alin. (6) declaration is also the mechanism of the return to the quarter', () => {
+  it('fires in the return year for someone on the month, which is the case the old gate missed', () => {
+    const o = annualMentiuniObligation({
+      year: 2028,
+      quarterlyUnder: null,
+      alin8ReturnYear: 2026,
+      requestingArt310Return: false,
+    })!;
+    expect(o).not.toBeNull();
+    expect(o.id).toBe('mentiuni-25-ianuarie-2028');
+    expect(o.dueOn).toBe('2028-01-25');
+    expect(o.citation).toBe('CF art. 322 alin. (6)');
+    expect(o.label).toContain('alin. (8) tezele a II-a și a III-a');
+    // Landmine 4: the year the return takes effect is an inference, and the row has to say so.
+    expect(o.label).toContain('interpretare');
+  });
+
+  it('does not fire when the record disproves the return', () => {
+    // `eligibleToReturn` is what the caller passes, and a failed cap or an ICAB in N+1 makes it false.
+    // Emitting the duty anyway would tell a taxpayer to file a declaration whose stated content is untrue.
+    expect(annualMentiuniObligation({
+      year: 2028, quarterlyUnder: null, alin8ReturnYear: null, requestingArt310Return: false,
+    })).toBeNull();
+  });
+
+  it('the art. 316 -> art. 310 exception still wins over the alin. (8) route', () => {
+    expect(annualMentiuniObligation({
+      year: 2028, quarterlyUnder: null, alin8ReturnYear: 2026, requestingArt310Return: true,
+    })).toBeNull();
+  });
+
+  it('one obligation, one id: the two gates produce the same row, not two', () => {
+    // Landmine 5. A person quarterly under alin. (2) and a person returning under alin. (8) get the same
+    // id, so a calendar that ever consulted both gates would collapse them by key rather than duplicate a
+    // form that is due once.
+    const quarterly = annualMentiuniObligation({ year: 2028, quarterlyUnder: 'alin2', requestingArt310Return: false })!;
+    const returning = annualMentiuniObligation({
+      year: 2028, quarterlyUnder: null, alin8ReturnYear: 2026, requestingArt310Return: false,
+    })!;
+    expect(returning.id).toBe(quarterly.id);
+    expect(returning.id).toBe(annualMentiuniObligationId(2028));
   });
 });
 

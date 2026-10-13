@@ -325,10 +325,11 @@ export const vatReturn = {
   confirmedBadge: 'alegerea dumneavoastră',
   derivedBadge: 'derivat din lege',
 
-  periodicityLabels: {
-    month: 'lună calendaristică',
-    quarter: 'trimestru calendaristic',
-  } as const,
+  // B-103 — there is no `periodicityLabels` map here any more. The sentence naming this year's fiscal
+  // period is produced once, by `vatPeriodicityYearSentence` in `domain/fiscal/vatPeriodicity.ts`, and both
+  // the panel and the completeness channel call it. A copy-side label map was how the panel came to say
+  // „lună calendaristică” for a year that since B-101 opens with a quarterly return: two spellings of one
+  // fact, only one of which knew about the segment.
 
   capHeading: 'Plafonul de 100.000 euro în lei',
   capRate: (rate: string, date: string): string => `Curs BNR ${rate} valabil pentru ${date}`,

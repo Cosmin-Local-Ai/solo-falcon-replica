@@ -22,7 +22,7 @@ import type {
   Revenue,
   TaxStatement,
 } from '../data/types';
-import { isFiledFiling } from '../data/types';
+import { isFiledFiling, isFiledVatReturn } from '../data/types';
 import type { PfaProfile } from './models';
 import { expenseFiscalDate, inPeriod, revenueFiscalDate } from './aggregation';
 import { sumBani, type Bani } from './money';
@@ -34,7 +34,11 @@ import { formatRoCalendarDate, isoCalendarDateProblem } from './date';
 // rule package. What changed is that the check can now name the missing fact instead of reciting a
 // sentence that had no way forward.
 import { recordedRateProvider } from './fx/ledger';
-import { ART322_RULE_TEXT, vatPeriodicityForYear } from './fiscal/vatPeriodicity';
+import { ART322_RULE_TEXT, vatPeriodicityForYear, vatPeriodicityYearSentence } from './fiscal/vatPeriodicity';
+// B-102 — the alin. (8) premise is built by the same function the dashboard adapter builds it with, so the
+// completeness channel and the Form 300 panel cannot answer differently for one profile-year. Threading
+// only: this check's gating, arithmetic and wording logic are untouched.
+import { alin8PremiseForYear } from './fiscal/vatReturn';
 
 /** One concrete, checkable fact about data completeness. */
 export interface CompletenessCheck {
@@ -329,13 +333,21 @@ function vatFilingPeriodCheck(data: AppData): CompletenessCheck {
     profile.fiscalYear,
     recordedRateProvider(data),
     registration,
+    {
+      alin8: alin8PremiseForYear(
+        profile.vatPeriodicityYears,
+        profile.fiscalYear,
+        data.vatReturns ?? [],
+        isFiledVatReturn,
+      ),
+    },
   );
   if (outcome.kind === 'derived') {
     return {
       key: 'vatFilingPeriod',
       satisfied: true,
       detail:
-        `perioada fiscală este ${outcome.periodicity === 'month' ? 'luna calendaristică' : 'trimestrul calendaristic'}`
+        `perioada fiscală este ${vatPeriodicityYearSentence(outcome, profile.fiscalYear)}`
         + ` — derivat din ${ART322_RULE_TEXT[outcome.branch].citation}; plafonul de 100.000 euro în lei la `
         + `cursul BNR ${outcome.cap.evidence.rate} valabil pentru ${outcome.cap.rateDate}`,
     };
@@ -345,7 +357,7 @@ function vatFilingPeriodCheck(data: AppData): CompletenessCheck {
       key: 'vatFilingPeriod',
       satisfied: true,
       detail:
-        `perioada fiscală este ${outcome.periodicity === 'month' ? 'luna calendaristică' : 'trimestrul calendaristic'}`
+        `perioada fiscală este ${vatPeriodicityYearSentence(outcome, profile.fiscalYear)}`
         + ` — răspunsul dumneavoastră din ${outcome.choice.confirmedOn}, după regula `
         + `${ART322_RULE_TEXT[outcome.branch].citation}; aplicația nu a putut deriva răspunsul`,
     };

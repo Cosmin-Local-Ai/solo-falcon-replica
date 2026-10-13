@@ -21,6 +21,7 @@ import {
   type VehicleYesNo,
 } from '../domain/fiscal/deductibility';
 import type { Vehicle } from '../data/types';
+import { isFiledVatReturn } from '../data/types';
 
 /** The four per-car facts the section can write. `fiscalYear` is never edited from a control. */
 type VehicleFactField = 'use' | 'exceptionCategory' | 'usedByPerson' | 'designatedForRunningCosts';
@@ -53,6 +54,7 @@ import {
 import {
   aicFlipForQuarter,
   aicMentiuniObligation,
+  alin8PremiseForYear,
   periodLabel,
 } from '../domain/fiscal/vatReturn';
 import { recordedRateProvider } from '../domain/fx/ledger';
@@ -644,6 +646,19 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     aicYear,
     recordedRateProvider(store),
     profile.vatRegistration,
+    // B-102 — the same premise the dashboard and the completeness channel pass, for the same reason:
+    // three call sites, one answer. Without it this gate reads only the year's own facts and would offer
+    // the alin. (7) question to a person the previous year's acquisition already put on the month — and
+    // alin. (7) applies only to someone „care utilizează trimestrul calendaristic ca perioadă fiscală”, so
+    // the question would be one the person cannot truthfully answer `da` to.
+    {
+      alin8: alin8PremiseForYear(
+        aicFactsWithoutFlip,
+        aicYear,
+        store.vatReturns ?? [],
+        isFiledVatReturn,
+      ),
+    },
   );
   const aicPeriodButForFlip =
     aicPeriodWithoutFlip.kind === 'ask' ? null : aicPeriodWithoutFlip.periodicity;

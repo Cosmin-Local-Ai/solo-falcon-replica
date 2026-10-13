@@ -15,9 +15,11 @@
  * rate and its date travel out on the evidence record rather than being baked into an answer.
  */
 import { describe, expect, it } from 'vitest';
+import type { VatReturnRecord } from '../../data/types';
 import { fixtureRateProvider } from '../fx/provider';
 import type { FxRateRecord } from '../fx/rates';
 import { lei, type Bani } from '../money';
+import { alin8PremiseForYear, annualMentiuniObligationId } from './vatReturn';
 import {
   ART322_RULE_TEXT,
   deriveVatPeriodicity,
@@ -26,6 +28,7 @@ import {
   proRateCap,
   VAT_PERIODICITY_CAP_EUR_MAJOR,
   vatPeriodicityForYear,
+  vatPeriodicityYearSentence,
   type VatPeriodicityFacts,
   type VatPeriodicityOutcome,
 } from './vatPeriodicity';
@@ -606,7 +609,7 @@ describe('monthsRemainingToYearEnd', () => {
 
 describe('the rule text the ask path shows', () => {
   it('states each branch in Romanian with its own citation', () => {
-    for (const branch of ['alin1', 'alin2', 'alin3', 'alin4', 'alin5', 'alin7', 'pct103_alin1'] as const) {
+    for (const branch of ['alin1', 'alin2', 'alin3', 'alin4', 'alin5', 'alin7', 'alin8', 'pct103_alin1'] as const) {
       const entry = ART322_RULE_TEXT[branch];
       expect(entry.citation).toMatch(/alin\.|pct\./);
       expect(entry.rule.length).toBeGreaterThan(40);
@@ -665,5 +668,329 @@ describe('vatPeriodicityForYear', () => {
     expect(outcome.kind).toBe('ask');
     if (outcome.kind !== 'ask') return;
     expect(outcome.questions.map((q) => q.id)).toContain('vat-in-art310-before');
+  });
+});
+
+/*
+ * ── B-102 — art. 322 alin. (8): a two-year tail, and a return that is not automatic ───────
+ *
+ * The finding that decides the shape of these tests, from `docs/ai/research/43_art322_alin8_two_year_tail.md`
+ * §4: **the switch to the month is fact-driven and ANAF enforces it din oficiu; the return to the quarter
+ * is not self-executing.** So two things had to stop being true:
+ *
+ * - a 2026 flip no longer leaves 2027 to be decided by 2027's own facts, which is how alin. (2) could
+ *   answer `quarter` in direct contradiction of alin. (8);
+ * - two years passing no longer brings the quarter back. The return needs no ICAB in N+1, the alin. (2)
+ *   cap met, **and** the alin. (6) declaration on record.
+ *
+ * Every case here spans three years, because a single-year assertion cannot express either half.
+ */
+describe('B-102 — alin. (8) carries the month across the year boundary', () => {
+  // A cap must be strikable for each year the span touches: Norme pct. 103 alin. (2) anchors the rate to
+  // 31 December of the year before, so 2027 and 2028 need their own fixture rates or the derivation would
+  // stop at `ask` and every assertion below would pass for the wrong reason.
+  const rate = (rateDate: string): FxRateRecord => ({
+    currency: 'EUR',
+    rate: '5.0000',
+    rateKind: 'daily_reference',
+    rateDate,
+    seriesCode: 'CURSZ_EUR',
+    sourceUrl: 'https://www.bnr.ro/Cursul-de-schimb--7333.html',
+    fetchedAt: '2026-01-02T08:00:00Z',
+    provisional: false,
+    entryMode: 'fetched',
+  });
+  const span = fixtureRateProvider([
+    BNR_31_12_2025,
+    rate('2026-12-31'),
+    rate('2027-12-31'),
+    rate('2028-12-31'),
+  ]);
+  const capFor = (year: number) => {
+    const c = periodicityCapForYear(year, span);
+    if (!('capBani' in c)) throw new Error(`cap fixture failed for ${year}`);
+    return c;
+  };
+
+  /** The alin. (7) event: an ICAB of goods exigible in June 2026 — lit. c), the quarter untouched. */
+  const flipYear: VatPeriodicityFacts = {
+    year: 2026,
+    registrationEffectiveFrom: '2025-01-01',
+    registrationRoute: 'b',
+    precedingYearTurnover: L(100_000),
+    precedingYearAicGoods: 'nu',
+    aicGoodsWhileQuarterly: 'da',
+    aicGoodsExigibilityMonth: 6,
+  };
+  /**
+   * N+1. Its own facts answer `quarter` — turnover under the cap, no ICAB of goods in 2025 — which is
+   * precisely the contradiction B-102 is about: alin. (2) is not the article that decides this year.
+   */
+  const secondYear: VatPeriodicityFacts = {
+    year: 2027,
+    registrationEffectiveFrom: '2025-01-01',
+    registrationRoute: 'b',
+    precedingYearTurnover: L(100_000),
+    precedingYearAicGoods: 'nu',
+  };
+  /** N+2 — the year the return question is about. `precedingYear*` here describe 2027, the year alin. (8) asks about. */
+  const returnYear = (over: Partial<VatPeriodicityFacts> = {}): VatPeriodicityFacts => ({
+    year: 2028,
+    registrationEffectiveFrom: '2025-01-01',
+    registrationRoute: 'b',
+    precedingYearTurnover: L(100_000),
+    precedingYearAicGoods: 'nu',
+    ...over,
+  });
+  const premise = (position: 1 | 2, mentiuniFiled: boolean) => ({
+    flipYear: 2026,
+    position,
+    exigibilityMonth: 6,
+    mentiuniFiled,
+  });
+
+  it('acceptance 1 — N is monthly, N+1 is monthly, and N+1 stays monthly even though its own facts say quarter', () => {
+    // The contrast is the assertion. Asked on its own facts, 2027 is a quarter under alin. (2); asked as
+    // the second year of a 2026 flip, alin. (8) makes it the month. A single-year carry — deriving 2027
+    // from 2027 — is the obvious under-fix, and it would pass a test that only checked 2026.
+    const onItsOwn = deriveVatPeriodicity(secondYear, capFor(2027));
+    expect(onItsOwn.kind === 'derived' && onItsOwn.periodicity).toBe('quarter');
+    expect(onItsOwn.kind === 'derived' && onItsOwn.branch).toBe('alin2');
+
+    const carried = deriveVatPeriodicity(secondYear, capFor(2027), premise(1, false));
+    expect(carried.kind).toBe('derived');
+    if (carried.kind !== 'derived') return;
+    expect(carried.periodicity).toBe('month');
+    expect(carried.branch).toBe('alin8');
+    expect(carried.alin8).toMatchObject({ flipYear: 2026, position: 1, returned: false });
+    // The tail is not a within-year segment: alin. (8) gives the whole of N+1 to the month.
+    expect(carried.segment).toBeUndefined();
+  });
+
+  it('acceptance 3 — N+2 returns to the quarter only when all three conditions hold', () => {
+    const back = deriveVatPeriodicity(returnYear(), capFor(2028), premise(2, true));
+    expect(back.kind).toBe('derived');
+    if (back.kind !== 'derived') return;
+    expect(back.periodicity).toBe('quarter');
+    expect(back.branch).toBe('alin8');
+    expect(back.alin8?.returned).toBe(true);
+    expect(back.alin8?.conditions.map((c) => c.status)).toEqual(['met', 'met', 'met']);
+  });
+
+  it('acceptance 3 — condition by condition: an ICAB of goods in N+1 keeps the month', () => {
+    const withAic = deriveVatPeriodicity(
+      returnYear({ precedingYearAicGoods: 'da' }),
+      capFor(2028),
+      premise(2, true),
+    );
+    expect(withAic.kind === 'derived' && withAic.periodicity).toBe('month');
+    if (withAic.kind !== 'derived') return;
+    expect(withAic.alin8?.conditions.find((c) => c.id === 'no_aic_in_following_year')?.status).toBe('failed');
+    // The other two still hold — one failed condition is enough, and the row must say which one.
+    expect(withAic.alin8?.conditions.find((c) => c.id === 'cap_not_exceeded')?.status).toBe('met');
+    expect(withAic.alin8?.conditions.find((c) => c.id === 'mentiuni_filed')?.status).toBe('met');
+  });
+
+  it('acceptance 3 — condition by condition: the alin. (2) cap exceeded keeps the month', () => {
+    // This is the condition the truncated quote of alin. (8) hid entirely. ANAF's own pre-printed return
+    // declaration and AJFP Galați practice both state it.
+    const overCap = deriveVatPeriodicity(
+      returnYear({ precedingYearTurnover: L(900_000) }),
+      capFor(2028),
+      premise(2, true),
+    );
+    expect(overCap.kind === 'derived' && overCap.periodicity).toBe('month');
+    if (overCap.kind !== 'derived') return;
+    expect(overCap.alin8?.conditions.find((c) => c.id === 'cap_not_exceeded')?.status).toBe('failed');
+    expect(overCap.alin8?.eligibleToReturn).toBe(false);
+  });
+
+  it('acceptance 3/4 — condition by condition: with no alin. (6) filing on record, N+2 stays monthly', () => {
+    // The safe side of research/43 §Gaps-3, and the side ANAF itself sits on: the register stays on the
+    // month until the declaration is filed. Auto-returning after two years is the wrong fix and it looks
+    // right — that is the whole defect.
+    const unfiled = deriveVatPeriodicity(returnYear(), capFor(2028), premise(2, false));
+    expect(unfiled.kind === 'derived' && unfiled.periodicity).toBe('month');
+    if (unfiled.kind !== 'derived') return;
+    expect(unfiled.alin8?.returned).toBe(false);
+    // Eligible is not the same as returned: the duty exists, the return does not.
+    expect(unfiled.alin8?.eligibleToReturn).toBe(true);
+    expect(unfiled.alin8?.conditions.find((c) => c.id === 'mentiuni_filed')?.status).toBe('failed');
+  });
+
+  it('acceptance 3 — two conditions holding and one failing is still the month', () => {
+    // The case a per-condition test misses: a rule that returned the quarter on a majority of conditions
+    // would pass three single-condition tests and still be wrong.
+    const twoOfThree = deriveVatPeriodicity(
+      returnYear({ precedingYearTurnover: L(100_000), precedingYearAicGoods: 'nu' }),
+      capFor(2028),
+      premise(2, false),
+    );
+    expect(twoOfThree.kind === 'derived' && twoOfThree.periodicity).toBe('month');
+  });
+
+  it('acceptance 2 — a second ICAB in N+1 keeps the month, and the app invents no reset rule', () => {
+    // Alin. (7) applies to „persoana … care utilizează trimestrul calendaristic ca perioadă fiscală”, so an
+    // acquisition made while already monthly is not an alin. (7) event and cannot start a fresh two-year
+    // tail. What it does do is fail alin. (8) teza a II-a, so the month continues. Whether a NEW two-year
+    // clock starts is not stated anywhere in the text — recorded as unresolved, and asserted here as
+    // "the app does not mint one".
+    const nPlus2 = deriveVatPeriodicity(
+      returnYear({ precedingYearAicGoods: 'da' }),
+      capFor(2028),
+      premise(2, true),
+    );
+    expect(nPlus2.kind === 'derived' && nPlus2.periodicity).toBe('month');
+    // 2029 declares no flip of its own, and neither 2027 nor 2028 declared one, so the tail has run out.
+    // The app says so rather than extending it indefinitely or restarting it.
+    const nPlus3 = deriveVatPeriodicity(
+      { ...returnYear(), year: 2029 },
+      capFor(2029),
+      null,
+    );
+    expect(nPlus3.kind === 'derived' && nPlus3.branch).toBe('alin2');
+    expect(nPlus3.kind === 'derived' && nPlus3.alin8).toBeUndefined();
+  });
+
+  it('landmine 7 — the answer does not depend on which year was derived last', () => {
+    // Per-year derivation is the shape of the data, so threading prior years through it must not turn it
+    // into state. Same facts, three orders, identical answers — and the premise is built by the same
+    // function the two surfaces use, so this pins the real path rather than a hand-passed argument.
+    const years = [flipYear, secondYear, returnYear()];
+    const ask = (year: number) =>
+      vatPeriodicityForYear(years, year, span, null, {
+        alin8: alin8PremiseForYear(years, year, [], () => true),
+      });
+    const first = ask(2027);
+    ask(2026);
+    ask(2028);
+    const again = ask(2027);
+    expect(again).toEqual(first);
+    // And it is the tail that answers, not the year's own facts — otherwise the equality above would be
+    // true for a derivation that never looked at 2026 at all.
+    expect(first.kind === 'derived' && first.branch).toBe('alin8');
+    expect(first.kind === 'derived' && first.periodicity).toBe('month');
+  });
+
+  it('landmine 4 — the N+2 date is labelled as interpretation, never as a quoted rule', () => {
+    // „începând cu primul trimestru al anului următor” does not appear in alin. (8). A sentence that states
+    // a date has to say it is an inference, or it is a fabrication in citation clothing.
+    const back = deriveVatPeriodicity(returnYear(), capFor(2028), premise(2, true));
+    expect(back.kind).toBe('derived');
+    if (back.kind !== 'derived') return;
+    const note = back.steps.find((s) => s.label === 'Interpretare, nu text de lege');
+    expect(note).toBeDefined();
+    expect(note?.value).toContain('nu spune de la ce dată');
+    expect(note?.value).toContain('interpretare');
+    expect(back.steps.some((s) => s.label.includes('alin. (8) teza a II-a'))).toBe(true);
+  });
+
+  it('the tail never reaches a year whose two predecessors declared no flip', () => {
+    const plain = deriveVatPeriodicity(secondYear, capFor(2027), null);
+    expect(plain.kind === 'derived' && plain.alin8).toBeUndefined();
+    // The premise itself is the guard: with no flip in 2026 or 2025 there is nothing to carry, and a
+    // person already monthly on another branch is never given a tail they never earned.
+    expect(alin8PremiseForYear([secondYear], 2027, [], () => true)).toBeNull();
+  });
+
+  it('the premise prefers the immediately preceding year, and reads the filing by obligation id', () => {
+    // A flip in 2026 AND in 2025 cannot both decide 2027: the nearer one makes 2027 the second monthly
+    // year outright, and asking a return question about it would be the wrong question.
+    const twoFlips = [
+      { ...flipYear },
+      { ...flipYear, year: 2025, aicGoodsExigibilityMonth: 3 },
+      secondYear,
+    ];
+    expect(alin8PremiseForYear(twoFlips, 2027, [], () => true)?.position).toBe(1);
+    expect(alin8PremiseForYear(twoFlips, 2028, [], () => true)?.position).toBe(2);
+    // The filing join is the obligation id, exactly as for a decont — and only a `depusa` record counts.
+    const filed: VatReturnRecord = {
+      id: 'vr-1', obligationId: annualMentiuniObligationId(2028), year: 2028, form: '300',
+      periodKind: 'quarter', periodIndex: 1, status: 'depusa',
+    };
+    const draft: VatReturnRecord = { ...filed, id: 'vr-2', status: 'in_pregatire' };
+    const isFiled = (r: Pick<VatReturnRecord, 'status'>): boolean => r.status === 'depusa';
+    const premiseFor2028 = (returns: readonly VatReturnRecord[]) =>
+      alin8PremiseForYear(twoFlips, 2028, returns, isFiled);
+    expect(premiseFor2028([filed])?.mentiuniFiled).toBe(true);
+    // A draft is not a filing. This is the same landmine PG-5 pinned for the D212.
+    expect(premiseFor2028([draft])?.mentiuniFiled).toBe(false);
+    // And a filing against a different year's declaration does not discharge this one.
+    expect(premiseFor2028([{ ...filed, obligationId: annualMentiuniObligationId(2027) }])?.mentiuniFiled)
+      .toBe(false);
+  });
+});
+
+describe('B-103 — one sentence names the year, and it knows about the segment', () => {
+  it('describes an alin. (7) lit. c) year as quarters then months, not as a bare month', () => {
+    // Since B-101 the calendar for this year opens with two quarterly returns. A headline that says
+    // „lună calendaristică” describes a year the taxpayer is not actually filing.
+    const flipped = deriveVatPeriodicity(
+      {
+        year: 2026,
+        registrationEffectiveFrom: '2025-01-01',
+        registrationRoute: 'b',
+        precedingYearTurnover: L(100_000),
+        precedingYearAicGoods: 'nu',
+        aicGoodsWhileQuarterly: 'da',
+        aicGoodsExigibilityMonth: 6,
+      },
+      cap,
+    );
+    expect(flipped.kind).toBe('derived');
+    if (flipped.kind !== 'derived') return;
+    expect(vatPeriodicityYearSentence(flipped, 2026))
+      .toBe('trimestrul calendaristic până la 06.2026, apoi luna calendaristică de la 07.2026');
+  });
+
+  it('says the year is entirely quarterly when the point falls in the next year', () => {
+    const december = deriveVatPeriodicity(
+      {
+        year: 2026,
+        registrationEffectiveFrom: '2025-01-01',
+        registrationRoute: 'b',
+        precedingYearTurnover: L(100_000),
+        precedingYearAicGoods: 'nu',
+        aicGoodsWhileQuarterly: 'da',
+        aicGoodsExigibilityMonth: 12,
+      },
+      cap,
+    );
+    expect(december.kind).toBe('derived');
+    if (december.kind !== 'derived') return;
+    expect(vatPeriodicityYearSentence(december, 2026))
+      .toBe('trimestrul calendaristic pentru întreg acest an; luna calendaristică începe abia în 2027');
+  });
+
+  it('leaves an unsegmented year saying what it always said', () => {
+    const quarterly = deriveVatPeriodicity(
+      {
+        year: 2026,
+        registrationEffectiveFrom: '2025-01-01',
+        registrationRoute: 'b',
+        precedingYearTurnover: L(100_000),
+        precedingYearAicGoods: 'nu',
+      },
+      cap,
+    );
+    expect(quarterly.kind).toBe('derived');
+    if (quarterly.kind !== 'derived') return;
+    expect(vatPeriodicityYearSentence(quarterly, 2026)).toBe('trimestrul calendaristic');
+    // lit. a) with the exigibility in January is monthly from month 1: no quarters precede the point, so
+    // the plain sentence is the correct one and the segment must not invent a half-year.
+    const fromJanuary = deriveVatPeriodicity(
+      {
+        year: 2026,
+        registrationEffectiveFrom: '2025-01-01',
+        registrationRoute: 'b',
+        precedingYearTurnover: L(900_000),
+        precedingYearAicGoods: 'nu',
+        aicGoodsWhileQuarterly: 'da',
+        aicGoodsExigibilityMonth: 1,
+      },
+      cap,
+    );
+    expect(fromJanuary.kind === 'derived' && vatPeriodicityYearSentence(fromJanuary, 2026))
+      .toBe('luna calendaristică');
   });
 });

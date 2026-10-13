@@ -1,4 +1,5 @@
 import type { AppData } from './types';
+import { isFiledVatReturn } from './types';
 import {
   selectYtd,
   selectMonthly,
@@ -47,6 +48,7 @@ import {
 import {
   aicFlipForQuarter,
   aicMentiuniObligation,
+  alin8PremiseForYear,
   annualMentiuniObligation,
   decontObligations,
   type AicFlip,
@@ -560,6 +562,19 @@ export function getVatPeriodicity(data: AppData): VatPeriodicityOutcome {
     data.profile.fiscalYear,
     recordedRateProvider(data),
     data.profile.vatRegistration,
+    // B-102 — alin. (8) is a rule about two years, so the derivation has to be able to see the previous
+    // two. The premise is computed here from the per-year fact array and the filed returns; nothing about
+    // it is stored. `domain/completeness.ts` builds it the same way from the same inputs, and
+    // `src/domain/vatPeriodicitySurfaces.test.ts` is the guard that keeps the two surfaces from ever
+    // answering differently for one profile-year.
+    {
+      alin8: alin8PremiseForYear(
+        data.profile.vatPeriodicityYears,
+        data.profile.fiscalYear,
+        data.vatReturns ?? [],
+        isFiledVatReturn,
+      ),
+    },
   );
 }
 
@@ -575,8 +590,9 @@ export function getVatPeriodicity(data: AppData): VatPeriodicityOutcome {
  * Three kinds of obligation, never collapsed into one date list:
  * - the deconturi, one per fiscal period, art. 323 alin. (1) — including the Q4 term that falls on 25
  *   ianuarie of the following year;
- * - the art. 322 alin. (6) mențiuni until 25 ianuarie, which is **not** a decont and is owed only by a
- *   person quarterly „potrivit alin. (2) și (5)";
+ * - the art. 322 alin. (6) mențiuni until 25 ianuarie, which is **not** a decont and is owed by a person
+ *   quarterly „potrivit alin. (2) și (5)”, and — B-102 — by the person alin. (8) teza a III-a sends back
+ *   through that same declaration in order to return to the quarter;
  * - the art. 322 alin. (8) 5-working-day mențiuni for an intra-community goods acquisition.
  *
  * The alin. (7) split is applied only when the month of exigibility is declared; a bare `da` cannot pick
@@ -606,9 +622,17 @@ export function getVatObligations(data: AppData, asOfDate: string): VatObligatio
       : periodicity.branch === 'alin2' || periodicity.branch === 'alin5' ? periodicity.branch
       : periodicity.branch === 'alin3' || periodicity.branch === 'alin4' ? periodicity.branch
       : null;
+  // B-102 — the second route to the alin. (6) declaration, and the one the defect was. A person in the
+  // alin. (8) return year is on the month, so `quarterlyUnder` is null for them and the very duty that
+  // *effects* the return never appeared. `eligibleToReturn` is the honest gate: the record does not
+  // disprove the return. It is not a claim that the return happened — that still needs the filing, and
+  // this row is the filing.
+  const alin8 = periodicity.kind === 'derived' ? periodicity.alin8 : undefined;
+  const alin8ReturnYear = alin8 && alin8.position === 2 && alin8.eligibleToReturn ? alin8.flipYear : null;
   const mentiuni = annualMentiuniObligation({
     year,
     quarterlyUnder,
+    alin8ReturnYear,
     requestingArt310Return: facts?.art310ReturnRequested === 'da',
     art310ReturnUnknown: facts?.art310ReturnRequested === undefined || facts?.art310ReturnRequested === 'nedeclarat',
   });
