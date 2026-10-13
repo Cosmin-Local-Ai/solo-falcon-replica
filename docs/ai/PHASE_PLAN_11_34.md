@@ -612,6 +612,16 @@ B-46's content is the list B-23 recorded as *not touched, recorded instead* when
 Already open from before: **B-34** (`Declaration` is monthly `{an, luna}` and cannot hold an annual D212) → **18A**; **B-35** (D300 periodicity undetermined; `vatExempt` boolean insufficient) → **18B**; **D1** (a clean first run is handed `seedData` and never told, `store.tsx:166-167`) → **11**, verified in **26**.
 
 
+### 12.16 — one sub-agent at a time, whatever its role. The limit is the machine, not the job title
+
+Written 2026-10-12, after I launched a second Researcher while one was already running and the owner cancelled it: **„you dont do researchers at the same time, its slower for my computer."**
+
+**I had read the standing rule — *never run more than ONE Worker at a time* — as being about Workers.** It isn't. Every sub-agent runs a model in its own terminal pane on the owner's hardware, so **two Researchers in parallel cost the same as two Workers, and sometimes more: a Researcher holds a browser open.**
+
+**So: one sub-agent at a time, full stop.** Workers, Researchers, Scouts — sequential. **The only thing that may overlap is my own reading and writing between dispatches.**
+
+**What this changes in practice:** when a task needs research and then implementation, that is **two sequential dispatches, and the wait is real.** The answer is not to overlap them. It is to **make each dispatch count** — one well-scoped Researcher covering everything the following pass needs, rather than a thin one now and a second one later because I under-asked. **Under-scoping a dispatch now costs a full extra round-trip later, which is the only way to make this slower.**
+
 ### 12.15 — a brief's boundary list is a hypothesis, and a challenged boundary is decided on evidence
 
 Written 2026-10-12, during B-102. My brief put `domain/completeness.ts` outside the "may touch" list. **The Worker asked rather than assumed**, and its evidence was in the tree: `vatFilingPeriodCheck` calls the **same derivation** `dashboard.ts` calls. Threading a new premise into one surface and not the other would have produced **two answers to one question** — the exact landmine the same brief carried. **The boundary was the defect, not the request.**
