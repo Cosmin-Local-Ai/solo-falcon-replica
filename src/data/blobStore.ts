@@ -77,6 +77,8 @@ export interface MemoryBlobStore extends BlobStore {
   snapshot(): Record<string, string>;
   /** Make the next `putBlob` reject — the failure path the relocation and import tests depend on. */
   failNextPut(reason?: string): void;
+  /** Make **every** following `putBlob` reject: the whole-store failure — a full quota, a denied permission. */
+  failPuts(reason?: string): void;
   /** Make the next `getBlob` reject or return null. */
   failNextGet(reason?: string): void;
 }
@@ -91,6 +93,7 @@ export interface MemoryBlobStore extends BlobStore {
 export function createMemoryBlobStore(initial: Record<string, string> = {}): MemoryBlobStore {
   const map = new Map<string, string>(Object.entries(initial));
   let putFailure: string | null = null;
+  let stickyPutFailure: string | null = null;
   let getFailure: string | null | undefined;
 
   return {
@@ -104,6 +107,9 @@ export function createMemoryBlobStore(initial: Record<string, string> = {}): Mem
       return map.has(id) ? map.get(id)! : null;
     },
     async putBlob(id, bytes) {
+      // Sticky first: a full quota or a denied permission does not heal after one attempt, and a test that
+      // wants "the store is unusable" must not have to re-arm it between every record.
+      if (stickyPutFailure !== null) throw new Error(stickyPutFailure);
       if (putFailure !== null) {
         const reason = putFailure;
         putFailure = null;
@@ -125,6 +131,9 @@ export function createMemoryBlobStore(initial: Record<string, string> = {}): Mem
     },
     failNextPut(reason = 'blob write failed') {
       putFailure = reason;
+    },
+    failPuts(reason = 'blob write failed') {
+      stickyPutFailure = reason;
     },
     failNextGet(reason = 'blob read failed') {
       getFailure = reason;

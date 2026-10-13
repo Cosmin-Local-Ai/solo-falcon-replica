@@ -31,6 +31,7 @@ import {
   countInlineBlobBearers,
   findOrphanBlobIds,
   relocateInlineBlobs,
+  referencedBlobIds,
   type RelocationFailure,
 } from './blobRelocation';
 import { connectDefaultBlobStore, getBlobStore, hasIndexedDB } from './blobStore';
@@ -526,6 +527,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // The order inside `relocateInlineBlobs` is the data safety: write, confirm, only then drop the inline
     // copy. A rejected write leaves that document's bytes exactly where they were.
     let cancelled = false;
+    // A runtime with no `indexedDB` global and no store handed to the seam has nothing to connect to, so it
+    // returns here rather than resolving a promise to say so. The status was already decided synchronously
+    // at `useState`; this also keeps an asynchronous `setState` out of every store render in an environment
+    // that cannot have a blob store — which is every jsdom test that has not injected one.
+    if (!hasIndexedDB() && !getBlobStore()) return;
     void (async () => {
       const store = await connectDefaultBlobStore();
       if (cancelled) return;
@@ -900,6 +906,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     sandboxActive: dataOrigin === 'sandbox',
     resetAllData: () => {
       preSandbox.current = null;
+      // PG-11 — a wipe is an **explicit** delete of every record, including every document, and the
+      // confirmation screen says so by name ("…documentele…"). Leaving the bytes behind in the browser while
+      // the records that named them are gone would be the one case where "orphans are reported, not removed"
+      // turns into "the person deleted their data and their scans stayed". This is not a sweep and not a
+      // timer: it runs because the person asked for everything to go.
+      const doomedBlobs = [...referencedBlobIds(dataRef.current)];
+      const store = getBlobStore();
+      if (store) {
+        for (const blobId of doomedBlobs) {
+          void store.deleteBlob(blobId).catch(err => {
+            console.warn('[store] blob not cleared with the rest of the data', blobId, err);
+          });
+        }
+      }
       try {
         localStorage.removeItem(STORAGE_KEY);
         // The preserved copy of a rejected payload is data too, and "start from zero" says zero. The
