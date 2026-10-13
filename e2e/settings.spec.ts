@@ -499,7 +499,15 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // long, `original` is still the verbatim 674.504 and `converted` is still 67450 bani.
     // Re-pinned again by B-105: 19 → 20, because `lease-facts` (19→20) follows it — a twelfth time for the
     // same reason, and the same kind of step as v13-v19: it opens a fact family and mints nothing in it.
-    expect(saved.version).toBe(20);
+    // Re-pinned again by PG-11: 20 → 21, because `document-blob-ref` (20→21) follows it — a thirteenth time
+    // for the same reason, and the same kind of step as v13-v20: it stamps a version and touches no value.
+    // It is the first rung in the chain whose subject is not in the payload at all — the bytes it eventually
+    // moves live in a separate store — and it is the one step that could not have been written `async` even
+    // if it wanted to be, because `MigrationStep.apply` is synchronous. It moves none of those bytes: the
+    // relocation is a pass that runs after the chain, and a document that cannot be moved keeps its bytes
+    // inline. What this test exists for is untouched: the notice is still one long, `original` is still the
+    // verbatim 674.504 and `converted` is still 67450 bani.
+    expect(saved.version).toBe(21);
     // The v20 step's own half, on the same bytes: no tenant nature, no owner-cost uplift, no alin. (8)
     // trigger and no contract date was invented for a payload that never named a lease. Each of those facts
     // decides a legal outcome on its own — which of art. 84 and art. 84^1 measures the income, what the 20 %

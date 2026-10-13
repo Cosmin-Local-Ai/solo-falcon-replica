@@ -299,6 +299,20 @@ describe('blob reclaim — explicit delete only (acceptance 7)', () => {
     expect(warn).toHaveBeenCalled();
   });
 
+  it('reports no orphan for a blob it has just relocated', async () => {
+    // The regression this pins: the orphan count used the store's ref to the dataset, and a child component's
+    // effect runs before its parent's — so at the moment the count was taken, the record still had no
+    // `blobRef`, and the blob that had just been written looked like it belonged to nothing. A person reading
+    // "1 document has no record pointing at it" right after a clean pass would be told their file is loose.
+    const store = createMemoryBlobStore();
+    setBlobStore(store);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payloadWithDocument()));
+    await mount();
+
+    await expect(store.listBlobIds()).resolves.toEqual([documentBlobId('facturi', 'doc-1')]);
+    await expect(storeRef!.orphanBlobIds()).resolves.toEqual([]);
+  });
+
   it('orphans are reported and left alone', async () => {
     const store = createMemoryBlobStore({ 'doc:facturi:fantoma': 'data:text/plain;base64,ZmFudG9tYQ==' });
     setBlobStore(store);

@@ -690,7 +690,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     orphanBlobIds: async () => {
       const store = getBlobStore();
       if (!store) return [];
-      return findOrphanBlobIds(dataRef.current, store);
+      // The render's `data`, not `dataRef.current`: a child component's effect runs before its parent's, so
+      // the ref can still hold the pre-relocation dataset at the moment a surface asks this question — and a
+      // freshly relocated blob would be reported as an orphan it is not.
+      return findOrphanBlobIds(data, store);
     },
     toast,
     dismissToast,

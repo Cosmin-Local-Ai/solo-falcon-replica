@@ -151,6 +151,15 @@ async function loadFiscalSettings(page: import('@playwright/test').Page): Promis
   await expect(page.locator('[data-cass-ladder]')).toBeVisible();
 }
 
+async function loadDataSettings(page: import('@playwright/test').Page): Promise<void> {
+  await seedBrowser(page);
+  await page.clock.setFixedTime(fixedInstant());
+  await page.goto('/settings#!/data');
+  // PG-11 added a file input and two buttons to this tab. A hidden `<input type="file">` is exactly the
+  // control that an a11y gate exists to catch, so the tab is scanned rather than assumed clean.
+  await expect(page.locator('[data-export-dataset]')).toBeVisible();
+}
+
 /**
  * PG-6h-3 — the route this task added.
  *
@@ -247,6 +256,27 @@ test.describe('PG-0 — axe-core accessibility gate on /dashboard', () => {
     expect(
       fatal,
       `axe found blocking violations on /settings#!/fiscal:\n\n${describeViolations(fatal)}`,
+    ).toHaveLength(0);
+  });
+
+  test('the data and backup settings tab has no serious or critical axe violations', async ({ page }) => {
+    await loadDataSettings(page);
+    const violations = await runAxe(page);
+    const fatal = blocking(violations);
+    const noise = violations.filter((v) => !BLOCKING_IMPACTS.includes(v.impact ?? ''));
+
+    test.info().annotations.push({
+      type: 'axe',
+      description: `${fatal.length} blocking (serious+critical), ${noise.length} non-blocking `
+        + `(minor+moderate) on /settings#!/data`,
+    });
+    if (noise.length > 0) {
+      console.log(`axe, non-blocking on /settings#!/data:\n${describeViolations(noise)}`);
+    }
+
+    expect(
+      fatal,
+      `axe found blocking violations on /settings#!/data:\n\n${describeViolations(fatal)}`,
     ).toHaveLength(0);
   });
 

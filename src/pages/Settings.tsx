@@ -574,7 +574,10 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     return () => {
       cancelled = true;
     };
-  }, [blobStoreStatus, blobRelocation, orphanBlobIds]);
+    // `orphanBlobIds` is deliberately not a dependency: its identity changes on every render, so depending on
+    // it would re-open IndexedDB on every one. These two are the moments the answer can actually change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blobStoreStatus, blobRelocation]);
   const [tab, setTab] = useState<TabKey>(
     TABS.some(t => t.key === initialTab) ? (initialTab as TabKey) : 'company'
   );

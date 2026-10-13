@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { StoreProvider, STORAGE_KEY } from './data/store';
+import { CURRENT_DATA_VERSION } from './data/migration';
 import { seedData } from './data/seed';
 import { seedStorage } from './test/storage';
 import App from './App';
@@ -151,5 +152,60 @@ describe('App shell surfaces the money-precision report (Phase 10, B-26)', () =>
       </StoreProvider>,
     );
     expect(container.querySelector('.banner[role=\"status\"]')).toBeNull();
+  });
+});
+
+/**
+ * PG-11 (phase 29), acceptance 4 — a write that did not happen has to reach the person, not only the log.
+ *
+ * Before this phase the save effect's entire response to a failed `setItem` was `console.warn`. The screen
+ * kept showing the record that had just been typed, the bytes on disk stayed the ones from before it, and
+ * the reload was where anyone would find out. This test fails on that build: it asserts the banner and the
+ * retry, and it keeps asserting the `console.warn` — the requirement is that the console line is no longer
+ * the **only** signal, not that it is gone.
+ */
+describe('a failed save is on screen (PG-11)', () => {
+  it('renders a banner naming the failed write, with a way to retry it', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const original = Object.getOwnPropertyDescriptor(window, 'localStorage')!;
+    const backing = new Map<string, string>([
+      [STORAGE_KEY, JSON.stringify({ ...seedData, version: CURRENT_DATA_VERSION })],
+    ]);
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      writable: true,
+      value: {
+        getItem: (key: string) => backing.get(key) ?? null,
+        setItem: () => {
+          throw new DOMException('QuotaExceededError');
+        },
+        removeItem: (key: string) => {
+          backing.delete(key);
+        },
+        clear: () => backing.clear(),
+      },
+    });
+
+    try {
+      const { container } = render(
+        <StoreProvider>
+          <App />
+        </StoreProvider>,
+      );
+
+      const banner = container.querySelector('[data-save-failure]');
+      if (!banner) throw new Error('the save-failure banner did not render');
+      expect(banner.getAttribute('role')).toBe('alert');
+      expect(banner.textContent).toContain('nu a fost salvată pe acest dispozitiv');
+      expect(banner.querySelector('[data-save-retry]')).not.toBeNull();
+      // The technical disclosure carries the storage error itself, under the plain-language banner.
+      expect(banner.textContent).toContain('QuotaExceededError');
+
+      // Still logged — the requirement is visibility, not the removal of the developer signal.
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(window, 'localStorage', original);
+      warn.mockRestore();
+    }
   });
 });

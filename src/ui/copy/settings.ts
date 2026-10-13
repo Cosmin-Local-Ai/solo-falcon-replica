@@ -504,7 +504,7 @@ export const settings = {
     backupImport: 'Importă o copie',
     backupWorking: 'Se lucrează la fișier…',
     /** The blob store is connected: the ceiling that document bytes used to hit is gone. */
-    blobConnected: 'Documentele sunt păstrate în afara datelor aplicției.',
+    blobConnected: 'Documentele sunt păstrate în afara datelor aplicației.',
     /**
      * `'unavailable'` is stated, not hidden. The app is correct in this state — documents keep working — but
      * the space limit the phase exists to remove is still there, and a person stacking up scans needs to
