@@ -342,13 +342,77 @@ describe('B-97 — the art. 322 alin. (7)-(8) question on Settings → Regim fis
     );
 
     expect(el('[data-obligation-id="mentiuni-aic-2026-05"]')).not.toBeNull();
-    // The year is on months, not on quarters: alin. (7) moved the fiscal period, and the panel shows one
-    // decont per closed month rather than one per quarter. (The partial-period split that lit. b) describes
-    // is **not** rendered by `decontObligations` — it applies a flip only to a `quarter` period, and alin.
-    // (7) has already set the periodicity to `month`. Recorded as a finding in the phase doc rather than
-    // asserted here, because the fix belongs to the calendar, which this task must not touch.)
-    expect(el('[data-obligation-id="decont-05.2026"]')).not.toBeNull();
+    // B-99: the year is on months, not on quarters, and the lit. b) distinct period is now one of them.
+    // Art. 322 alin. (7) lit. b) makes 04–05 a fiscal period of its own with its own decont under
+    // art. 323 alin. (1), so May is no longer a month with a return of its own — it is inside the distinct
+    // period. `decontObligations` used to apply a flip only to a `quarter` period, and alin. (7) has
+    // already set the periodicity to `month`, so the split was computed, passed in and never rendered while
+    // the confirmation panel above had already promised it. The panel's count and this calendar's count are
+    // pinned to each other below, which is what stops the two drifting again.
+    expect(el('[data-obligation-id="decont-04-05.2026"]')).not.toBeNull();
     expect(el('[data-obligation-id="decont-06.2026"]')).not.toBeNull();
+    expect(el('[data-obligation-id="decont-05.2026"]')).toBeNull();
     expect(el('[data-obligation-id="decont-T2.2026"]')).toBeNull();
+    // The mențiuni duty is contributed once — by `aicMentiuniObligation`, not twice by the calendar too.
+    expect(document.querySelectorAll('[data-obligation-id="mentiuni-aic-2026-05"]')).toHaveLength(1);
+  });
+
+  it('B-99 — the deconturi the confirmation promises are the deconturi the calendar produces', () => {
+    // The defect class, not the instance. The confirmation dialog states a consequence — „se depun 2
+    // deconturi pentru aceeași perioadă” — and the calendar is what the user then has to file. If the two
+    // are computed by different rules, the app promises a return and does not list it. This test reads the
+    // number out of the real confirmation sentence and counts the real calendar rows covering that quarter.
+    load({});
+    renderFiscal();
+
+    selectBy('[data-aic-answer]', 'da');
+    selectBy('[data-aic-month]', '5');
+    act(() => {
+      (el('[data-aic-review]') as HTMLButtonElement).click();
+    });
+    const body = Array.from(document.querySelectorAll('.modal-body li')).map((li) =>
+      (li.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    );
+    const claimed = Number(/se depun (\d+) deconturi/.exec(body[1] ?? '')?.[1]);
+    expect(Number.isInteger(claimed)).toBe(true);
+
+    // The same fact, saved, on the surface that owns the calendar.
+    act(() => {
+      (el('[data-aic-confirm-go]') as HTMLButtonElement).click();
+    });
+    localStorage.clear();
+    load({
+      fxRates: [BNR_31_12_2025],
+      profile: {
+        ...seedData.profile,
+        vatPeriodicityYears: [{
+          year: 2026,
+          aicGoodsWhileQuarterly: 'da',
+          aicGoodsExigibilityMonth: 5,
+          userChoice: {
+            periodicity: 'month',
+            branch: 'alin7',
+            confirmedBy: 'user',
+            confirmedOn: '2026-10-31',
+          },
+        }],
+      },
+    });
+    render(
+      <StoreProvider>
+        <Declarations />
+      </StoreProvider>,
+    );
+
+    const rows = [...document.querySelectorAll('[data-obligation-id^="decont-"]')];
+    // Which labels would cover the second quarter, whichever way the period is cut. The count is what is
+    // asserted, not the spelling: a calendar that kept 04, 05 and 06 as three months would give 3 against a
+    // confirmation that said 2, and that is precisely the drift B-99 was.
+    const q2Labels = ['T2 2026', '04.2026', '05.2026', '06.2026', '04-05.2026'];
+    const coveringQ2 = rows.filter((r) => {
+      const label = (r.querySelector('.hint')?.textContent ?? '').replace(/\s+/g, ' ').trim();
+      return q2Labels.some((l) => label.endsWith(l));
+    });
+    expect(coveringQ2).toHaveLength(claimed);
   });
 });

@@ -195,24 +195,74 @@ export interface VatObligation {
   exceptionNote?: string;
 }
 
+/** The months a fiscal period spans, as inclusive month numbers within its own year. */
+function monthSpan(p: VatFiscalPeriod): { first: number; last: number } {
+  if (p.kind === 'month') return { first: p.month, last: p.month };
+  if (p.kind === 'quarter') return { first: (p.quarter - 1) * 3 + 1, last: p.quarter * 3 };
+  return { first: p.fromMonth, last: p.toMonth };
+}
+
+/**
+ * Which alin. (7) flip, if any, governs the period the walk is standing on.
+ *
+ * A flip is keyed to a **quarter**, because alin. (7) speaks in quarters. But the walk is not always
+ * quarterly: alin. (7) itself puts the person on `month`, so by the time the calendar is built the year is
+ * already twelve month periods and the quarter the article names has to be recovered from the months. A
+ * quarter-only join was B-99 — the flip was computed, passed in, and never read, so the distinct period and
+ * its own decont stayed absent while the confirmation panel had already promised them.
+ *
+ * The month case therefore matches on *membership of the flip's quarter*, not on the acquisition month:
+ * the whole quarter is what the flip replaces, which is what keeps lit. c) honest — an acquisition in month
+ * 3 replaces the quarter with the quarter, i.e. changes nothing, and monthly begins with the next quarter.
+ */
+function flipGoverningPeriod(flips: readonly AicFlip[], p: VatFiscalPeriod): AicFlip | undefined {
+  const span = monthSpan(p);
+  return flips.find((f) => {
+    const qFirst = (f.quarter - 1) * 3 + 1;
+    return span.last >= qFirst && span.first <= qFirst + 2;
+  });
+}
+
 /**
  * The deconturi for a year, one per fiscal period.
  *
  * `throughAsOf` limits the list to periods that have already closed on or before the as-of date, so the
  * surface does not present a decont for a period still running. It never drops a closed period whose term
  * has passed — an overdue decont is exactly what the surface has to show.
+ *
+ * **The year's periods must cover every month of that year exactly once.** A flip substitutes its own
+ * periods for the periods of the quarter it names — whichever those are under the periodicity being walked
+ * — and the substitution happens at the first period of that quarter, with the rest of the quarter skipped.
+ * Splicing a distinct period *beside* an already-monthly year would cover two months twice and is the
+ * failure mode this loop is written against; the three letters of alin. (7) are asserted month-by-month in
+ * `vatReturn.test.ts`.
  */
 export function decontObligations(
   periodicity: VatPeriodicity,
   year: number,
   opts: { flips?: readonly AicFlip[]; closedThrough?: string } = {},
 ): VatObligation[] {
-  const flips = opts.flips ?? [];
+  // `AicFlip` carries no year of its own — only `quarter`, `letter`, `periods` and `note` — so the year a
+  // flip was computed for is visible only inside its periods. A flip from another year would splice that
+  // year's periods into this year's list and leave months covered twice or not at all, so it is dropped
+  // rather than trusted. Every caller builds the flip with the year it renders (`data/dashboard.ts`), so
+  // this cannot discard a correctly built flip.
+  const flips = (opts.flips ?? []).filter(
+    (f) => f.periods.length > 0 && f.periods.every((p) => p.year === year),
+  );
   const periods: VatFiscalPeriod[] = [];
+  const substituted = new Set<number>();
   for (const p of vatFiscalPeriods(periodicity, year)) {
-    const flip = p.kind === 'quarter' ? flips.find(f => f.quarter === p.quarter) : undefined;
-    if (flip) periods.push(...flip.periods);
-    else periods.push(p);
+    const flip = flipGoverningPeriod(flips, p);
+    if (!flip) {
+      periods.push(p);
+      continue;
+    }
+    // One substitution per quarter. On a monthly walk the flip governs three of the twelve periods, and
+    // pushing its periods at each of them would emit the same decont three times.
+    if (substituted.has(flip.quarter)) continue;
+    substituted.add(flip.quarter);
+    periods.push(...flip.periods);
   }
   return periods
     .map(p => ({

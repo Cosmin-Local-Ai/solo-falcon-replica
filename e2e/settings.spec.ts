@@ -764,6 +764,45 @@ test.describe('B-97 — art. 322 alin. (7)-(8): bunuri cumpărate dintr-un alt s
     await expect(page.locator('[data-obligation-id]')).toHaveCount(0);
   });
 
+  test('B-99 — the split the confirmation promises is the split the filing calendar lists', async ({ page }) => {
+    // The defect this pins is a promise the app did not keep. The confirmation the taxpayer answers says
+    // „În loc de un singur decont pe trimestrul T2, se depun 2 deconturi pentru aceeași perioadă”, and the
+    // calendar on /declarations is what they then have to file. Art. 322 alin. (7) sets the periodicity to
+    // the month itself, so the year reached the calendar as twelve ordinary months and the distinct period
+    // — with its own decont under art. 323 alin. (1) — was absent. The two halves are asserted against each
+    // other here, in a browser, because that drift is the defect class, not a detail of this case.
+    await fixClock(page);
+    await seedBrowserOnce(page);
+    await page.goto('/settings#!/fiscal');
+    await expect(page.locator('[data-aic-question]')).toBeVisible();
+
+    await page.selectOption('[data-aic-answer]', 'da');
+    await page.selectOption('[data-aic-month]', '5');
+    await page.locator('[data-aic-review]').click();
+    const promised = page.locator('.modal-body li').nth(1);
+    await expect(promised).toContainText('2 deconturi');
+    await page.locator('[data-aic-confirm-go]').click();
+
+    await page.goto('/declarations');
+    // The distinct period is its own row, with its own term from the same art. 323 alin. (1) formula — it
+    // ends 31 May, so it is due 25 June — and May is no longer a month with a return of its own.
+    const distinct = page.locator('[data-obligation-id="decont-04-05.2026"]');
+    await expect(distinct).toBeVisible();
+    await expect(distinct.locator('td').nth(1)).toHaveText('25.06.2026');
+    await expect(distinct.locator('td').nth(3)).toContainText('art. 323 alin. (1)');
+    await expect(page.locator('[data-obligation-id="decont-05.2026"]')).toHaveCount(0);
+    await expect(page.locator('[data-obligation-id="decont-06.2026"]')).toBeVisible();
+    // Two deconturi covering T2 — the number the confirmation stated, counted on the calendar.
+    await expect(page.locator('[data-obligation-id="decont-04-05.2026"], [data-obligation-id="decont-06.2026"]')).toHaveCount(2);
+    // The alin. (8) mențiuni duty appears exactly once: the calendar does not duplicate it.
+    await expect(page.locator('[data-obligation-id="mentiuni-aic-2026-05"]')).toHaveCount(1);
+
+    // And the distinct period is dischargeable on its own terms — the id is a join key, not a caption.
+    await distinct.locator('button').click();
+    await expect(distinct).toContainText('Depusă');
+    await expect(page.locator('[data-obligation-id="decont-06.2026"]')).toContainText('Neconsemnată');
+  });
+
   test('a person outside the VAT register is not asked, and the tab says why', async ({ page }) => {
     await fixClock(page);
     await seedBrowserOnce(page);

@@ -28,6 +28,7 @@ import {
   periodStart,
   unfiledFigureNote,
   vatFiscalPeriods,
+  type VatFiscalPeriod,
 } from './vatReturn';
 import { isFiledVatReturn, type VatReturnRecord } from '../../data/types';
 import { lei } from '../money';
@@ -113,6 +114,118 @@ describe('art. 322 alin. (7) — the quarter splits, and only in one of the thre
       'T1 2026', '04-05.2026', '06.2026', 'T3 2026', 'T4 2026',
     ]);
     expect(rows).toHaveLength(5);
+  });
+});
+
+/**
+ * B-99 — the flip has to be honoured whichever periodicity the calendar is walking.
+ *
+ * Art. 322 alin. (7) sets the periodicity to `month` itself, so on the alin. (7) branch the year arrives at
+ * `decontObligations` as twelve month periods and the quarter the article names has to be recovered from
+ * them. Joining the flip to `kind === 'quarter'` periods only meant the split was computed, passed in, and
+ * never read: the confirmation panel said „se depun 2 deconturi” and the calendar listed three monthly ones
+ * and no distinct period at all.
+ *
+ * These assertions are written as **month-by-month coverage**, not as presence. Splicing a distinct period
+ * into an already-monthly year is the obvious fix and the obvious way to cover March twice or drop it, and
+ * either error changes what the taxpayer is told to file.
+ */
+describe('B-99 — alin. (7) applied to a year that is already monthly', () => {
+  /** Every month the year's periods cover, in calendar order — each month exactly once, or the year is wrong. */
+  function coveredMonths(rows: readonly { period?: VatFiscalPeriod }[]): number[] {
+    const months: number[] = [];
+    for (const r of rows) {
+      const p = r.period!;
+      const first = Number(periodStart(p).slice(5, 7));
+      const last = Number(periodEnd(p).slice(5, 7));
+      for (let m = first; m <= last; m += 1) months.push(m);
+    }
+    return months;
+  }
+
+  const YEAR = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  const labelsFor = (periodicity: 'month' | 'quarter', month: number): string[] => {
+    const flip = aicFlipForQuarter(2026, Math.ceil(month / 3), month)!;
+    return decontObligations(periodicity, 2026, { flips: [flip] }).map((r) => periodLabel(r.period!));
+  };
+  const rowsFor = (periodicity: 'month' | 'quarter', month: number) => {
+    const flip = aicFlipForQuarter(2026, Math.ceil(month / 3), month)!;
+    return decontObligations(periodicity, 2026, { flips: [flip] });
+  };
+
+  it('lit. a) exigibility in month 1: twelve months, no distinct period, every month covered once', () => {
+    // A fix that always spliced a distinct period would invent an obligation the law does not create here.
+    expect(labelsFor('month', 4)).toEqual([
+      '01.2026', '02.2026', '03.2026', '04.2026', '05.2026', '06.2026',
+      '07.2026', '08.2026', '09.2026', '10.2026', '11.2026', '12.2026',
+    ]);
+    expect(rowsFor('month', 4).some((r) => r.period!.kind === 'partial')).toBe(false);
+    expect(coveredMonths(rowsFor('month', 4))).toEqual(YEAR);
+  });
+
+  it('lit. b) exigibility in month 2: the distinct period is its own decont, and no month is covered twice', () => {
+    expect(labelsFor('month', 5)).toEqual([
+      '01.2026', '02.2026', '03.2026', '04-05.2026', '06.2026',
+      '07.2026', '08.2026', '09.2026', '10.2026', '11.2026', '12.2026',
+    ]);
+    expect(coveredMonths(rowsFor('month', 5))).toEqual(YEAR);
+
+    const distinct = rowsFor('month', 5).find((r) => r.period!.kind === 'partial')!;
+    expect(distinct.id).toBe('decont-04-05.2026');
+    // art. 323 alin. (1) applied to the period the law created mid-quarter: it ends 31 May, so it is due
+    // 25 June. Same formula, same citation as every other decont — no separate term is invented here.
+    expect(distinct.dueOn).toBe('2026-06-25');
+    expect(distinct.paymentDueOn).toBe('2026-06-25');
+    expect(distinct.citation).toBe('CF art. 323 alin. (1); plată art. 326 alin. (1)');
+  });
+
+  it('lit. c) exigibility in month 3: the acquisition quarter is untouched, monthly runs from the next', () => {
+    expect(labelsFor('month', 6)).toEqual([
+      '01.2026', '02.2026', '03.2026', 'T2 2026',
+      '07.2026', '08.2026', '09.2026', '10.2026', '11.2026', '12.2026',
+    ]);
+    expect(coveredMonths(rowsFor('month', 6))).toEqual(YEAR);
+    expect(rowsFor('month', 6).some((r) => r.period!.kind === 'partial')).toBe(false);
+    expect(labelsFor('month', 6).indexOf('T2 2026')).toBe(3);
+  });
+
+  it('the quarterly walk is unchanged for all three letters — the path that already worked', () => {
+    // This substitution existed before B-99 and must not have moved. Recorded because the fix widened the
+    // join: a monthly walk now consults the flip too, and the quarterly answer has to stay the same answer.
+    expect(labelsFor('quarter', 4)).toEqual(['T1 2026', '04.2026', '05.2026', '06.2026', 'T3 2026', 'T4 2026']);
+    expect(labelsFor('quarter', 5)).toEqual(['T1 2026', '04-05.2026', '06.2026', 'T3 2026', 'T4 2026']);
+    expect(labelsFor('quarter', 6)).toEqual(['T1 2026', 'T2 2026', 'T3 2026', 'T4 2026']);
+    for (const month of [4, 5, 6]) expect(coveredMonths(rowsFor('quarter', month))).toEqual(YEAR);
+  });
+
+  it('no two obligations share an id, in either walk, for any month of exigibility', () => {
+    // The id is the join key a filed return is matched against, not a caption. A collision silently merges
+    // two terms into one and lets a single return discharge two periods.
+    for (const periodicity of ['month', 'quarter'] as const) {
+      for (let month = 1; month <= 12; month += 1) {
+        const ids = rowsFor(periodicity, month).map((r) => r.id);
+        expect(new Set(ids).size).toBe(ids.length);
+        expect(coveredMonths(rowsFor(periodicity, month))).toEqual(YEAR);
+      }
+    }
+  });
+
+  it('a flip computed for another year is dropped rather than spliced into this year', () => {
+    // `AicFlip` carries no year of its own, so a stale flip would otherwise inject another year's periods
+    // and leave this year's months covered twice or not at all.
+    const foreign = aicFlipForQuarter(2027, 2, 5)!;
+    const rows = decontObligations('month', 2026, { flips: [foreign] });
+    expect(rows).toHaveLength(12);
+    expect(coveredMonths(rows)).toEqual(YEAR);
+    expect(rows.some((r) => r.id.includes('2027'))).toBe(false);
+  });
+
+  it('the decont builder contributes no mențiuni row, so the alin. (8) duty can only appear once', () => {
+    // `aicMentiuniObligation` already contributes it. A second copy from the calendar would give the user
+    // two of a form that is due once.
+    for (const month of [4, 5, 6]) {
+      expect(rowsFor('month', month).every((r) => r.kind === 'decont')).toBe(true);
+    }
   });
 });
 
@@ -217,10 +330,17 @@ describe('acceptance 5 — the filing record keeps the AnnualFiling discipline',
   });
 
   it('the distinct alin. (7) period is representable, because `partial` exists', () => {
+    // The id written here is the one the calendar actually generates for that period — `periodLabel` renders
+    // a partial as `04-05.2026`, so the separator inside the period is a dash and the year is still joined
+    // with a dot. A fixture that hand-wrote a different spelling would still compile and still read as a
+    // join, but would never match a real obligation: the id is a join key, not a caption.
+    const generated = decontObligations('month', 2026, { flips: [aicFlipForQuarter(2026, 2, 5)!] })
+      .find((r) => r.period?.kind === 'partial')!;
     const p: VatReturnRecord = {
-      id: 'r-3', obligationId: 'decont-04-05-2026', year: 2026, form: '300', periodKind: 'partial',
+      id: 'r-3', obligationId: generated.id, year: 2026, form: '300', periodKind: 'partial',
       periodIndex: 4, periodToMonth: 5, status: 'in_pregatire',
     };
+    expect(p.obligationId).toBe('decont-04-05.2026');
     expect(p.periodKind).toBe('partial');
     expect(isFiledVatReturn(p)).toBe(false);
   });

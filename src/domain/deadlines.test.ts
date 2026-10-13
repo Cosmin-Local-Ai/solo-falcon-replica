@@ -6,8 +6,13 @@ import {
   daysRemaining,
   filterUpcoming,
   getApplicableDeadlines,
+  resolveDeadlineOutcome,
+  vatObligationDeadlines,
+  vatReturnForDeadline,
 } from './deadlines';
 import type { Deadline, DeadlineEventType } from './deadlines';
+import { aicFlipForQuarter, decontObligations } from './fiscal/vatReturn';
+import type { VatReturnRecord } from '../data/types';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal/package2026';
 import type { FiscalRule } from './fiscal/rules';
 
@@ -444,5 +449,51 @@ describe('classifyDeadline (Step 29 boundary tests)', () => {
     expect(classifyDeadline(makeDeadline('2026-05-31'), '2026-06-01')).toBe('past');
     expect(classifyDeadline(makeDeadline('2026-06-01'), '2026-06-01')).toBe('due_today');
     expect(classifyDeadline(makeDeadline('2026-06-02'), '2026-06-01')).toBe('upcoming');
+  });
+});
+
+/**
+ * B-99 — the distinct alin. (7) period is a term like any other, so the join has to work for it too.
+ *
+ * `obligationId` is a join key, not a label: `vatObligationDeadlines` turns a `VatObligation.id` into the
+ * `deadlineId`, and `vatReturnForDeadline` matches a filed return against it. The case that cannot be
+ * shortcut is the one that crosses a year boundary — an acquisition in November 2026 (lit. b) of art. 322
+ * alin. (7)) makes 10–11 a fiscal period of its own due 25 December, while December itself stays a period
+ * whose term is 25 ianuarie 2027. One filed return discharges one of those and not the other.
+ */
+describe('B-99 — the alin. (7) distinct period joins a filed return to its term', () => {
+  // lit. b) with the exigibility in November: Q4 is replaced by the partial 10–11 plus the month 12.
+  const flip = aicFlipForQuarter(2026, 4, 11)!;
+  const deadlines = vatObligationDeadlines(decontObligations('month', 2026, { flips: [flip] }), 2026);
+
+  it('dates the distinct period and the December month separately, one of them in the next calendar year', () => {
+    const distinct = deadlines.find((d) => d.deadlineId === 'decont-10-11.2026')!;
+    expect(distinct.date).toBe('2026-12-25');
+    expect(distinct.eventType).toBe('vat_return');
+    const december = deadlines.find((d) => d.deadlineId === 'decont-12.2026')!;
+    expect(december.date).toBe('2027-01-25');
+    expect(december.taxYear).toBe(2026);
+  });
+
+  it('a filed return discharges the term it names, and only that term', () => {
+    const december = deadlines.find((d) => d.deadlineId === 'decont-12.2026')!;
+    const distinct = deadlines.find((d) => d.deadlineId === 'decont-10-11.2026')!;
+    const filed: VatReturnRecord = {
+      id: 'r-dec', obligationId: 'decont-12.2026', year: 2026, form: '300',
+      periodKind: 'month', periodIndex: 12, status: 'depusa', filedOn: '2027-01-20',
+    };
+    // The join survives the year boundary: the term is in 2027, the period and the record are 2026.
+    expect(vatReturnForDeadline([filed], december)?.id).toBe('r-dec');
+    expect(resolveDeadlineOutcome(december, [], '2027-03-01', [filed])).toBe('done');
+    // The distinct period is a real obligation, not a caption on the December one: filing December does
+    // not discharge it, and it is overdue.
+    expect(vatReturnForDeadline([filed], distinct)).toBeNull();
+    expect(resolveDeadlineOutcome(distinct, [], '2027-03-01', [filed])).toBe('overdue');
+  });
+
+  it('gives one year no two deadlines with the same id', () => {
+    expect(new Set(deadlines.map((d) => d.deadlineId)).size).toBe(deadlines.length);
+    // Twelve months minus one, the two months the distinct period swallowed having become a single term.
+    expect(deadlines).toHaveLength(11);
   });
 });
