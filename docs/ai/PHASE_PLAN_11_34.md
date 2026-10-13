@@ -604,6 +604,18 @@ B-46's content is the list B-23 recorded as *not touched, recorded instead* when
 Already open from before: **B-34** (`Declaration` is monthly `{an, luna}` and cannot hold an annual D212) → **18A**; **B-35** (D300 periodicity undetermined; `vatExempt` boolean insufficient) → **18B**; **D1** (a clean first run is handed `seedData` and never told, `store.tsx:166-167`) → **11**, verified in **26**.
 
 
+### 12.14 — brief to the tools the agent actually has, not to the role its name implies
+
+Written 2026-10-12, after I briefed a Researcher to **read a research file and write a new one**. It can do neither. Verified against the agent definitions, not assumed:
+
+| Agent | Tools it actually has | Therefore a brief must never ask it to |
+|---|---|---|
+| **researcher** | `web_*`, `fetch_content`, `source_check`, `agent_browser*`, `recall` | read a repo file, write a file, run a command. **Supply every piece of context inline; take the result back as report text and write the file myself.** `recall` is session history, **not** the repository. |
+| **scout** | `read`, `grep`, `find`, `ls`, `recall` | modify anything, run a command, or search the web. Read-only over the tree. |
+| **worker** | `read`, `write`, `edit`, `bash`, lens/LSP/ast-grep, `recall` | — the only agent that can implement. |
+
+**The failure mode is the same one behind §12.12 and the two brief errors of 2026-10-12:** I write a document from what the role *suggests* and treat it as if it were verified. A Researcher is not "a developer who researches"; it is a browser with no filesystem. **Check the definition before briefing off it, and when a brief tells an agent to touch something it cannot reach, the brief is the defect — not the agent.**
+
 ### 12.13 Never `git add -A` while a Worker is in flight — **orchestrator error, 2026-10-12**
 **What happened.** While `worker-b51-scope-statement` was running, the orchestrator committed a documentation change with `git add -A && git commit`. That swept **six of the Worker's in-flight source files** — `Onboarding.tsx`, `Settings.tsx`, `scope.statement.test.tsx`, `ui/copy/common.ts`, `ui/copy/index.ts` and an e2e spec — into a commit whose message was about a work-queue section in a plan file. The Worker's own report had to say so, because its diff no longer matched any commit that described it.
 
