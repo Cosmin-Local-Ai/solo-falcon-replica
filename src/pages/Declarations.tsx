@@ -15,6 +15,10 @@ import { formatRoCalendarDate, localDateISO } from '../domain/date';
 import { formatBani } from '../domain/money';
 import { ART322_RULE_TEXT, vatPeriodicityYearSentence } from '../domain/fiscal/vatPeriodicity';
 import { D300_DEDUCTIBLE_LINES, parkedGroups, unfiledFigureNote } from '../domain/fiscal/vatReturn';
+// B-94 — the dated status flag on the 50 % vehicle cut. It is read from the domain object, not restated
+// here: the same object the decision in `domain/fiscal/vat.ts` describes, and the same one Dashboard
+// reads, so the two surfaces cannot give two accounts of one rule.
+import { VAT_VEHICLE_ART298_STATUS } from '../domain/fiscal/vat';
 import {
   copy,
   declarations as declarationsCopy,
@@ -420,6 +424,17 @@ function VatPeriodicityPanel() {
           </tbody>
         </table>
         <div className="hint">{vatReturnCopy.d300NotAFacsimile}</div>
+        {/* B-94 — the 50 % that lands on rd. 20–28 is explained here, so its status belongs here too.
+            The rule has no end date and the app does not give it one; what is dated is the EU
+            authorisation above it and the fact that its replacement is not adopted. */}
+        <div className="hint" data-testid="vat-cid-status">
+          <div>{vatReturnCopy.cidStatusHeading}</div>
+          <div>{vatReturnCopy.cidStatusAnchor(VAT_VEHICLE_ART298_STATUS)}</div>
+          <div>{vatReturnCopy.cidStatusDerogation(VAT_VEHICLE_ART298_STATUS)}</div>
+          <div>{vatReturnCopy.cidStatusExtension(VAT_VEHICLE_ART298_STATUS)}</div>
+          <div>{vatReturnCopy.cidStatusRisk(VAT_VEHICLE_ART298_STATUS)}</div>
+          <div>{vatReturnCopy.cidStatusGap(VAT_VEHICLE_ART298_STATUS)}</div>
+        </div>
       </div>
 
       {/* ── the three parked lists, still parked ────────────────────── */}

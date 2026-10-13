@@ -2,6 +2,10 @@ import { useDashboardData } from '../data/dashboardAdapter';
 import { useStore } from '../data/store';
 import { getFinancialSummary, type TaxEstimateState } from '../data/dashboard';
 import { isGapReason } from '../domain/estimateBasis';
+// B-94 — the dated status flag on the 50 % vehicle cut, read from the same domain object the input-VAT
+// decision is made in. Not restated here, and not restated on Declarații either: `ui/copy/records.ts`
+// renders it once and both surfaces call that.
+import { VAT_VEHICLE_ART298_STATUS } from '../domain/fiscal/vat';
 import { identityGreeting } from '../domain/profile';
 import { fmtDate } from '../data/types';
 import { formatBaniRON } from '../domain/money';
@@ -299,6 +303,17 @@ export default function DashboardPage() {
                         <strong>{formatBaniRON(data.inputVat.claimableTotal)}</strong>
                       </p>
                       <p className="hint">{dashboardCopy.estimate.inputVat.notOneFormLine}</p>
+                      {/* B-94 — the sentence above names the 50 % cut, so the cut's status goes next to it:
+                          the domestic rule has no end date, the EU authorisation above it does, and the
+                          replacement is proposed but not adopted **as of a stated date**. */}
+                      <div className="hint" data-testid="vat-cid-status">
+                        <p>{copy.vatReturn.cidStatusHeading}</p>
+                        <p>{copy.vatReturn.cidStatusAnchor(VAT_VEHICLE_ART298_STATUS)}</p>
+                        <p>{copy.vatReturn.cidStatusDerogation(VAT_VEHICLE_ART298_STATUS)}</p>
+                        <p>{copy.vatReturn.cidStatusExtension(VAT_VEHICLE_ART298_STATUS)}</p>
+                        <p>{copy.vatReturn.cidStatusRisk(VAT_VEHICLE_ART298_STATUS)}</p>
+                        <p>{copy.vatReturn.cidStatusGap(VAT_VEHICLE_ART298_STATUS)}</p>
+                      </div>
                       {data.inputVat.unresolved.length > 0 ? (
                         <p className="hint">
                           {dashboardCopy.estimate.inputVat.unresolvedLead}{' '}

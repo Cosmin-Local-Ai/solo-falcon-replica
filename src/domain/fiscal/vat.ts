@@ -357,6 +357,100 @@ export interface VatVehicleYearFacts {
   logbook?: VatYesNo;
 }
 
+// ── 3b. B-94 — the dated status flag on the 50 % cut ──────────────────────────────
+//
+// **The premise this reverses, stated where a future reader will hit it.** B-94 asked what happens to
+// this app's 50 % when Council Implementing Decision (EU) 2024/1641 lapses on 31 December 2026, and the
+// assumption inside that question was that the rule *rests on* the derogation. It does not. The 50 % is
+// **art. 298 alin. (1) Cod fiscal**: no date, no sunset clause, no reference to Directive 2006/112/CE,
+// no reference to any Council implementing decision, and no „autorizată" condition anywhere in its text.
+// Its only condition is factual — whether the vehicle is used exclusively for the economic activity.
+// The derogation is what makes the rule *compatible* with art. 168 of the Directive, not what makes it
+// *exist* (`docs/ai/research/45_cid_2024_1641_vehicle_vat_2027.md` §4.2, which corrects what
+// `research/42` §3 used to assert).
+//
+// The proof is two alineate away in the same article: art. 298 **alin. (4^1)** — the buildings rule —
+// *is* expressly conditional on Romania being „autorizată să aplice o măsură specială de derogare de la
+// dispozițiile Directivei 2006/112/CE…". **Conditional for buildings, unconditional for cars.** The
+// legislator knows how to write the dependency and chose not to write it here.
+//
+// **So there is no expiry to model, and giving the rule one would be the defect.** Setting an end date on
+// the vehicle rule, or adding a rule that switches to 100 % from 1 January 2027, would be wrong under
+// Romanian law as it stands: repealing art. 298 alin. (1) takes a legislative act. `anchorEndsOn` is
+// `null` for that reason, and `decideInputVat` computes `0.5` for a restricted FY2027 vehicle line
+// exactly as for FY2026.
+//
+// **What is genuinely open is the rule's compatibility, not its existence** — and that is what this
+// object exists to say, with a date attached to every absence in it. `adopted: false` means *not adopted
+// as of `asOf`*, never *rejected*: only one of those two claims is supported by the Council record, and
+// an absence finding with no date on it is not a finding but a guess with better posture.
+//
+// **The risk runs the opposite way from the usual staleness failure.** On an unreplaced lapse art. 298
+// alin. (1) stays on the statute book and ANAF keeps applying it, but it becomes contrary to art. 168
+// with no standstill fallback behind it — Art. 394 of the Directive grandfathers only measures applied at
+// 1 January 1977, which a 2007 accession state cannot reach, and that is why Romania has needed an art.
+// 395 authorisation continuously since 2012/232/EU. A taxpayer who refused the cap and claimed use-based
+// deduction would have a directly-effective EU-law argument, so the entitlement could be **broader** than
+// this app computes, not narrower.
+//
+// **Not merged in here, on purpose.** art. 298 alin. (4^1) (50 % on residential buildings) *is*
+// derogation-conditional and still not in force — a genuinely different status, recorded where it is
+// applied, in `fiscal/deductibility2026.ts`. And the income-tax 50 % at art. 68 alin. (7) lit. k) is a
+// different provision with a different category list; the derogation touches only the VAT one
+// (`research/42` §3).
+
+/**
+ * The status of the EU authorisation behind the 50 % vehicle cut, as data rather than as prose, so a
+ * surface can render it without restating any of its dates.
+ */
+export const VAT_VEHICLE_ART298_STATUS = {
+  /** The provision the app's 50 % actually rests on. Not art. 297 — that is the general scope article
+   *  art. 298 expressly derogates from („Prin excepție de la prevederile art. 297 …"). */
+  anchor: 'art. 298 alin. (1) Cod fiscal',
+  /** The domestic rule has no end date. Putting one here would be the trap this flag exists to refuse. */
+  anchorEndsOn: null,
+  /** art. 298 alin. (1) does not condition itself on the derogation; alin. (4^1) does, and says so. */
+  anchorDependsOnDerogation: false,
+  /** The fraction a restricted vehicle line gets, in every fiscal year this app computes. */
+  fraction: 0.5,
+  derogation: {
+    name: 'CID (EU) 2024/1641',
+    /** CELEX **32024D1641** — a non-legislative **Decision**. 'R' is the regulation letter and would be
+     *  a citation error, one this corpus already had and already fixed. */
+    celex: '32024D1641',
+    appliesFrom: '2024-01-01',
+    endsOn: '2026-12-31',
+    endsBy: 'art. 5 (2)',
+    /** art. 168 and art. 26 (1) (a). **Not** art. 169, which the derogation never touched, and not art.
+     *  168a, which is an immovable-property provision and authorises no flat percentage cut-off. */
+    derogatesFrom: 'art. 168 și art. 26 (1) (a) din Directiva 2006/112/CE',
+  },
+  extension: {
+    proposedOn: '2026-09-10',
+    instrument: 'COM(2026) 457 final',
+    file: '2026/0253(NLE)',
+    councilDocument: 'ST 13267/2026',
+    wouldEndOn: '2029-12-31',
+    /** NOT ADOPTED — not rejected. Nothing in the Council chain rejects this file; nothing adopts it. */
+    adopted: false,
+  },
+  /** The date the absence above was checked. Absence findings expire, so this one carries its own. */
+  asOf: '2026-10-13',
+  /** `research/45` §6 re-check trigger: confirm whether adoption landed before the derogation's own end. */
+  recheckBy: '2026-12-31',
+  /** The tail risk, recorded rather than computed. */
+  postLapse: {
+    computed: false,
+    domesticRuleStaysInForce: true,
+    contraryTo: 'art. 168 din Directiva 2006/112/CE',
+    deemedSupplyReturns: 'art. 26 (1) (a) din Directiva 2006/112/CE',
+    /** The entitlement could widen, not narrow — the opposite of the ordinary stale-rule failure. */
+    direction: 'entitlement_could_be_broader',
+  },
+} as const;
+
+export type VatVehicleRuleStatus = typeof VAT_VEHICLE_ART298_STATUS;
+
 // ── 4. The decision ───────────────────────────────────────────────────────────────
 
 /**
@@ -641,11 +735,14 @@ export function decideInputVat(input: InputVatInput): InputVatDecision {
         // Exclusive use claimed without the logbook: full deduction is the thing that must be evidenced,
         // so the unevidenced case falls to the statutory 50 % — and the 50 % branch needs no logbook
         // (Norme pct. 68 alin. (4)), so this is a settled 50 %, not an unresolved line.
+        // B-94: this fraction has no end date. CID (EU) 2024/1641 ends 31.12.2026 and the extension is
+        // not adopted, but art. 298 alin. (1) is free-standing — see `VAT_VEHICLE_ART298_STATUS`.
         fraction = 0.5;
         rule = 'art. 298 alin. (1); Norme pct. 68 alin. (4)';
       } else {
         // §6 row 7 — `mixed`, `unknown` or no use fact at all: „nu sunt utilizate exclusiv în scopul
         // activității economice" is satisfied, the 50 % cut applies, and no *foaie de parcurs* is needed.
+        // B-94: same as above — the cut is domestic law, so FY2027 gets the same 0.5 as FY2026.
         fraction = 0.5;
         rule = 'art. 298 alin. (1); Norme pct. 68 alin. (4)';
       }

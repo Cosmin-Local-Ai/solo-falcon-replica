@@ -11,6 +11,10 @@ import type { ExpenseCategory } from '../../domain/fiscal/deductibility';
 // PG-6g — the parked-list reason labels are exhaustive over the three reason unions PG-6f defined. The
 // labels live here; the unions stay in `domain/fiscal/vat.ts`, which this phase may not edit.
 import type { InputVatDeferredReason, InputVatUnresolvedReason, InputVatZeroReason } from '../../domain/fiscal/vat';
+// B-94 — the dated status flag on the art. 298 alin. (1) 50 % cut. The dates live in the domain object;
+// this module only says them, so no surface can restate one of them wrongly.
+import type { VatVehicleRuleStatus } from '../../domain/fiscal/vat';
+import { formatRoCalendarDate } from '../../domain/date';
 import type { FiscalDateField } from '../../domain/aggregation';
 import { validation } from './common';
 
@@ -375,6 +379,39 @@ export const vatReturn = {
     + 'pentru că limitarea de 50 % și cota pro-rata cad parțial în afara rd. 20–28.',
   d300Columns: { row: 'Rubrică', title: 'Denumire', treatment: 'Ce pune aplicația aici' },
   d300NotAFacsimile: 'Aici este schema rubricilor, nu facsimilul formularului.',
+
+  // ── B-94 — where the 50 % comes from, and what is open about it ──
+  /**
+   * The dated status flag on the 50 % vehicle cut, in the two places that already explain the 50 %: the
+   * Form 300 rubric layout on Declarații and the input-VAT disclosure on Dashboard. **One producer, two
+   * call sites** — a second spelling of these sentences is the B-70 defect class. Every date and every
+   * reference is interpolated from `VAT_VEHICLE_ART298_STATUS`; none is typed here, because a date typed
+   * into a sentence is a date nobody re-checks.
+   *
+   * Two things the wording must not do, and does not: it does not give the domestic rule an end date
+   * (art. 298 alin. (1) has none), and it does not call the extension *rejected* — only *not adopted, as
+   * of a stated date* is supported.
+   */
+  cidStatusHeading: 'De unde vine limitarea de 50 % și ce este deschis în jurul ei',
+  cidStatusAnchor: (s: VatVehicleRuleStatus): string =>
+    `Limitarea la 50 % este ${s.anchor}: regulă internă, fără termen de valabilitate și fără nicio trimitere `
+    + 'la o derogare a Uniunii Europene. Aplicația o aplică și pentru 2027, pentru că abrogarea ei cere un act legislativ.',
+  cidStatusDerogation: (s: VatVehicleRuleStatus): string =>
+    `${s.derogation.name} (CELEX ${s.derogation.celex}) este derogarea care face regula compatibilă cu `
+    + `${s.derogation.derogatesFrom} și se aplică până la ${formatRoCalendarDate(s.derogation.endsOn)} (${s.derogation.endsBy}).`,
+  cidStatusExtension: (s: VatVehicleRuleStatus): string =>
+    `Prelungirea până la ${formatRoCalendarDate(s.extension.wouldEndOn)} a fost propusă la `
+    + `${formatRoCalendarDate(s.extension.proposedOn)} (${s.extension.instrument}, dosar ${s.extension.file}, `
+    + `${s.extension.councilDocument}) și nu fusese adoptată la data verificării, `
+    + `${formatRoCalendarDate(s.asOf)}. Dosarul este încă deschis, iar aplicația nu anticipează soarta lui.`,
+  cidStatusRisk: (s: VatVehicleRuleStatus): string =>
+    `Dacă derogarea expiră fără înlocuire, ${s.anchor} rămâne în vigoare, dar devine contrară `
+    + `${s.postLapse.contraryTo}. În cazul acela dreptul de deducere ar putea fi mai larg decât calculul `
+    + 'aplicației, nu mai îngust.',
+  cidStatusGap: (s: VatVehicleRuleStatus): string =>
+    `Ce nu calculează aplicația: la expirarea derogării revine ${s.postLapse.deemedSupplyReturns}, deci `
+    + 'utilizarea personală a bunului redevine livrare impozabilă. Aplicația nu face acest calcul și nu '
+    + 'completează nimic din oficiu.',
 
   // ── the three parked lists from 6f ──
   parkedHeading: 'Linii excluse din total, cu motivul',
