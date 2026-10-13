@@ -386,7 +386,17 @@ export const companyDocumentSchema = z.object({
   id: nonEmptyString,
   nume: nonEmptyString,
   tip: z.enum(['factura', 'notafactura', 'bon-fiscal', 'pdf', 'png', 'jpg']),
-  content: z.string(),
+  // PG-11 (phase 29): the bytes became OPTIONAL here, and that is the shape change the v20→v21 chain step
+  // declares. It is not a loosening for its own sake — see `CompanyDocument.content` in `types.ts` for the
+  // three states, and `data/migration.ts` `migrateDocumentBlobRefV21` for why the step fills nothing in.
+  // A payload written before PG-11 still parses, unchanged, with its inline bytes intact: the load gate
+  // runs before the chain, so making this optional is what lets an old payload through to the relocation
+  // pass rather than quarantining it.
+  content: z.string().optional(),
+  // Declared, not left off, for the standing reason in this file: **zod strips undeclared keys**. An
+  // undeclared `blobRef` would be erased by the next save-and-load, and a record that lost its pointer
+  // while keeping no inline copy is a document that has stopped existing — with no error to show.
+  blobRef: z.string().optional(),
   marime: z.number().int().min(0),
   data: z.string(),
   dataDepunere: z.string().optional(),
@@ -401,7 +411,10 @@ export const taxStatementSchema = z.object({
   depunere: z.enum(['SOLO', 'personală']),
   dataDepunere: z.string().optional(),
   nume: z.string().optional(),
+  // PG-11: already optional — a statement has always been allowed to be registered without its PDF. The
+  // pointer is new, and declared for the same stripping reason as above.
   content: z.string().optional(),
+  blobRef: z.string().optional(),
 });
 
 export const ruleReleaseSchema = z.object({
@@ -690,6 +703,19 @@ export function parseAppDataResult(raw: string): ParseAppDataResult {
       detail: err instanceof Error ? err.message : String(err),
     };
   }
+  return validateAppDataPayload(parsed);
+}
+
+/**
+ * PG-11: the same gate, one step later in the pipeline.
+ *
+ * `parseAppDataResult` is JSON text in, validated payload out. Dataset import already has the JSON — it is
+ * holding an envelope whose `data` member has to go through this gate — so the gate is exposed on its own
+ * rather than re-serializing the value to feed the string form, and rather than import writing its own
+ * validation. **There is one schema gate in this app, and import goes through it.** A second validator is
+ * how a payload starts passing in one path and quarantining in the other.
+ */
+export function validateAppDataPayload(parsed: unknown): ParseAppDataResult {
   const result = persistedAppDataSchema.safeParse(parsed);
   if (result.success) return { ok: true, data: result.data };
   // Bounded on purpose: a payload that fails everywhere would otherwise produce

@@ -370,8 +370,28 @@ export const DATA_VERSION_VAT_RETURNS = 19;
  * does not rewrite one.
  */
 export const DATA_VERSION_LEASE_FACTS = 20;
+/**
+ * PG-11 (phase 29) — a document record may now carry a **pointer** to its bytes instead of the bytes.
+ *
+ * This is the step the brief calls justified, and it is justified by exactly one thing: **the persisted
+ * shape changed.** `CompanyDocument.content` stopped being required and `blobRef` appeared on both document
+ * record kinds, because bytes no longer have to live inside a record that travels through `localStorage`.
+ *
+ * **The step fills nothing in, and it could not if it tried.** The chain is entirely synchronous — every
+ * step here is a pure `apply(data) => data`, with not one `async` or `Promise` in this file — and the store
+ * the bytes move into is asynchronous. A step that reached for it would either break that contract or be a
+ * step that silently does nothing. So the shape change lives here and the **bytes move outside the chain**,
+ * after load, in `data/blobRelocation.ts`. Conflating the two is the failure mode this note exists to
+ * prevent.
+ *
+ * Nothing is backfilled, and nothing could be: a record that never had bytes gets no pointer, and a record
+ * that has them keeps them inline until a write to the blob store has actually been confirmed. A payload
+ * that already carries `blobRef` keys is left untouched, which is what makes re-running the step a no-op
+ * rather than a wipe.
+ */
+export const DATA_VERSION_DOCUMENT_BLOB_REF = 21;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_LEASE_FACTS;
+export const CURRENT_DATA_VERSION = DATA_VERSION_DOCUMENT_BLOB_REF;
 
 export interface MigrationStep {
   readonly from: number;
@@ -1092,6 +1112,21 @@ export function migrateLeaseFactsV20(data: PersistedAppData): PersistedAppData {
   return { ...data, version: DATA_VERSION_LEASE_FACTS };
 }
 
+/**
+ * v20 → v21 (`document-blob-ref`). Declares that a document record may carry `blobRef` instead of inline
+ * `content`. **The body is the version stamp and nothing else** — see `DATA_VERSION_DOCUMENT_BLOB_REF` for
+ * why this step cannot also be the thing that moves the bytes.
+ *
+ * The forbidden version of this function reaches for the blob store. It would have to be `async`, which
+ * `MigrationStep.apply` is not, and a chain runner cannot await it; the honest alternatives are a step that
+ * does nothing while pretending to have migrated, or a step that clears `content` before any write has been
+ * confirmed. The second one is how this phase would lose a document, and it is the specific catastrophe the
+ * brief names.
+ */
+export function migrateDocumentBlobRefV21(data: PersistedAppData): PersistedAppData {
+  return { ...data, version: DATA_VERSION_DOCUMENT_BLOB_REF };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -1252,6 +1287,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Profilul poate înregistra acum faptele pe care se decide REGIMUL sub care se impozitează închirierea obișnuită (cedarea folosinței bunurilor): dacă chiriașul este persoană fizică sau entitate cu obligația de a conduce evidență contabilă — faptă care desparte art. 84 de art. 84^1 — chiria prevăzută în contract pentru anul fiscal, cheltuielile care cad în sarcina proprietarului dar sunt efectuate de cealaltă parte, cele două condiții ale art. 84^1 alin. (8) (chirie plătită exclusiv în natură, garanție utilizată pentru plata chiriei) și data încheierii contractului, de la care pornește termenul de 30 de zile de la art. 83 alin. (5). Nimic nu a fost completat în acest pas, și acesta este tot conținutul lui. Un `tenantNature` inventat ar muta venitul între art. 84 și art. 84^1 și, cu el, obligația declarativă: art. 122 alin. (6) lit. a) scutește de declarația unică pentru impozitul pe venit când impozitul se reține la sursă și este final, dar art. 122 alin. (7) cere tot declarația pentru contribuții, pentru că pe chiria obișnuită CASS nu se reține la sursă. O chirie anuală inventată din încasările registrului ar înlocui măsura de la art. 84 alin. (2) („indiferent de momentul încasării”) cu măsura de la art. 85 alin. (2) („încasate în cursul anului fiscal”) — aceeași sumă la 31 decembrie și alta în orice altă zi a anului. O dată a contractului inventată ar naște un termen de înregistrare de 30 de zile pe care nimeni nu îl datorează. Un profil fără aceste fapte rămâne fără ele, iar aplicația refuză cifra în loc să ghicească regimul.',
     apply: migrateLeaseFactsV20,
+  },
+  {
+    from: DATA_VERSION_LEASE_FACTS,
+    to: DATA_VERSION_DOCUMENT_BLOB_REF,
+    name: 'document-blob-ref',
+    summary:
+      'Un document poate purta acum `blobRef` — o trimitere la octeții lui, păstrați în afara `localStorage` — în loc de octeții inline. Nimic nu a fost completat în acest pas, și acesta este tot conținutul lui: forma s-a schimbat, datele nu. Octeții sunt mutați de un pas asincron de realocare, dincolo de lanț, după încărcare, și numai după ce scrierea în depozitul de octeți a fost confirmată — acest lanț este în întregime sincron (nicio funcție `async` și niciun `Promise` în `migration.ts`), deci un pas care ar atinge depozitul ar fie să rupă contractul lui, fie să nu facă nimic în tăcere. O înregistrare care nu a avut niciodată octeți rămâne fără trimitere. O înregistrare care îi are rămâne cu ei inline până când scrierea a reușit: realocarea care pierde un document este mai gravă decât lipsa realocării.',
+    apply: migrateDocumentBlobRefV21,
   },
 ];
 

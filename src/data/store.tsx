@@ -8,7 +8,7 @@ import type {
 import type { VehicleYearFacts } from '../domain/fiscal/deductibility';
 import type { PfaProfile } from '../domain/models';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
-import { epochMs, isoCalendarDateProblemText, toInstantISO } from '../domain/date';
+import { epochMs, isoCalendarDateProblemText, toInstantISO, now } from '../domain/date';
 import { maxBani, type Bani } from '../domain/money';
 import { rateKey } from '../domain/fx/provider';
 import { validateRateRecord, type FxRateRecord } from '../domain/fx/rates';
@@ -26,6 +26,16 @@ import {
   type QuarantineReason,
   type QuarantineRecord,
 } from './quarantine';
+import {
+  applyRelocation,
+  countInlineBlobBearers,
+  findOrphanBlobIds,
+  relocateInlineBlobs,
+  type RelocationFailure,
+} from './blobRelocation';
+import { connectDefaultBlobStore, getBlobStore } from './blobStore';
+import { buildDatasetExport, type DatasetExportResult } from './datasetExport';
+import { validateDatasetImport } from './datasetImport';
 
 /**
  * The one storage key for the dataset. It does NOT change across versions —
@@ -73,6 +83,64 @@ export interface MigrationInfo {
   stepsApplied: string[];
 }
 
+/**
+ * PG-11 (phase 29) — a write to storage that did not happen.
+ *
+ * Before this phase the save effect answered a failed `setItem` with `console.warn` and moved on. That is
+ * the defect the brief names: the app can lose the user's most recent work — a quota failure, a blocked or
+ * private-mode store, a browser that refuses the write — and say nothing at all. The in-memory state stays
+ * usable, the screen keeps showing the record that was just typed, and the bytes on disk are the ones from
+ * before it. On reload, the work is gone and nothing ever claimed otherwise to the person.
+ *
+ * The state is structured, not a sentence: the fact lives here, the wording lives in `ui/copy`, and
+ * `App.tsx` renders it. That is the same one-producer rule the deadline labels follow.
+ */
+export interface SaveFailure {
+  /** Instant the failed write was attempted, from the domain's clock seam. */
+  at: string;
+  /** The storage error's own message — shown under the banner's technical disclosure, never as the banner. */
+  message: string;
+  /** How many writes in a row have failed. A retry that fails again must not look like the first one. */
+  attempts: number;
+}
+
+/**
+ * Whether this runtime has a store for document bytes.
+ *
+ * `'unavailable'` is a state the app stays correct in: records keep their bytes inline, the ceiling stays
+ * where it was, and the person is told. It is never treated as "no documents", and it never becomes a
+ * reason to drop anything.
+ */
+export type BlobStoreStatus = 'unknown' | 'connected' | 'unavailable';
+
+/** What the relocation pass did after load. `failed` records keep their inline bytes. */
+export interface BlobRelocationSummary {
+  moved: number;
+  failed: RelocationFailure[];
+}
+
+/** A blob that could not be reclaimed when its document was deleted. Reported; never retried silently. */
+export interface BlobReclaimFailure {
+  blobId: string;
+  label: string;
+  reason: string;
+}
+
+export type DatasetImportOutcome =
+  | {
+      status: 'imported';
+      fromVersion: number;
+      toVersion: number;
+      stepsApplied: string[];
+      /** Document bytes moved out of the file and into the blob store. */
+      blobsStored: number;
+      /** Bytes that stayed inline in the dataset because the blob write failed. */
+      blobFailures: RelocationFailure[];
+      /** When the backup declared it was produced. Never inferred. */
+      exportedAt: string | null;
+    }
+  | { status: 'rejected'; reason: QuarantineReason; detail: string; quarantined: boolean };
+
 interface LoadedData {
   data: AppData;
   dataOrigin: DataOrigin;
@@ -95,6 +163,41 @@ interface StoreValue extends AppData {
   quarantine: QuarantineRecord | null;
   /** Re-read the preserved copy (it survives saves and reloads). */
   getQuarantinedPayload: () => string | null;
+  /**
+   * PG-11 — non-null while the last write to storage failed. The banner in `App.tsx` renders it; the fact
+   * is produced here, in one place. Cleared by the next write that succeeds.
+   */
+  saveFailure: SaveFailure | null;
+  /** PG-11 — try the last write again, without changing any data. */
+  retrySave: () => void;
+  /** PG-11 — whether document bytes have somewhere larger than `localStorage` to live. */
+  blobStoreStatus: BlobStoreStatus;
+  /** PG-11 — what the relocation pass did after load, once it has run. */
+  blobRelocation: BlobRelocationSummary | null;
+  /** PG-11 — blobs that could not be reclaimed after their document was deleted. */
+  blobReclaimFailures: BlobReclaimFailure[];
+  /**
+   * PG-11 — build a complete, restorable backup: the whole dataset verbatim, version included, with the
+   * document bytes read back out of the blob store and embedded.
+   *
+   * Refuses rather than emitting a partial file: a backup with a silently missing document is a corrupt
+   * backup, which is worse than no backup because the person now believes they are safe.
+   */
+  exportDataset: () => Promise<DatasetExportResult>;
+  /**
+   * PG-11 — restore a backup. Validates the whole payload, and runs an older `version` through the existing
+   * migration chain, **before** anything is written. On failure nothing changes and the payload goes to
+   * quarantine under the D-3 contract.
+   *
+   * This is not the document upload path and shares no code with it: one adds a file to a record, the other
+   * replaces the person's whole world.
+   */
+  importDataset: (raw: string) => Promise<DatasetImportOutcome>;
+  /**
+   * PG-11 — blobs no record points at. **Reported, never removed**: an orphan is usually a crash between
+   * "blob written" and "dataset saved", and these are retained documents.
+   */
+  orphanBlobIds: () => Promise<string[]>;
   addRevenue: (r: Omit<Revenue, 'id'>) => boolean;
   updateRevenue: (r: Revenue) => boolean;
   deleteRevenue: (id: string) => void;
@@ -355,6 +458,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const timers = useRef<number[]>([]);
 
+  // ── PG-11: the save path's own failure state ──────────────────────────────────────────────────────
+  // A ref mirrors the state so the save effect can decide "first failure or another one" without reading
+  // state captured at render time, and without a setState on every successful write.
+  const [saveFailure, setSaveFailure] = useState<SaveFailure | null>(null);
+  const saveFailureRef = useRef<SaveFailure | null>(null);
+  // Bumped by `retrySave`: the effect keys on `data`, and a retry changes no data, so without this the
+  // person would have to edit a record to ask the app to try writing again.
+  const [saveNonce, setSaveNonce] = useState(0);
+
+  // ── PG-11: document bytes ─────────────────────────────────────────────────────────────────────────
+  const [blobStoreStatus, setBlobStoreStatus] = useState<BlobStoreStatus>('unknown');
+  const [blobRelocation, setBlobRelocation] = useState<BlobRelocationSummary | null>(null);
+  const [blobReclaimFailures, setBlobReclaimFailures] = useState<BlobReclaimFailure[]>([]);
+  // The dataset as it is right now, for the asynchronous paths that cannot close over a render's value.
+  const dataRef = useRef(data);
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+  const relocationStarted = useRef(false);
+
   useEffect(() => {
     // Two states must never reach storage.
     //  - 'sandbox': the fixture is a view, not the user's data. Writing it would make the demo the
@@ -367,13 +490,90 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // what guarantees a payload always declares the version this build
       // understands, even after a mutation, so the chain never has to guess.
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, version: CURRENT_DATA_VERSION }));
+      if (saveFailureRef.current) {
+        // A write that succeeds ends the failure state: the banner must not outlive the problem.
+        saveFailureRef.current = null;
+        setSaveFailure(null);
+      }
     } catch (err) {
-      // Controlled write failure (e.g. storage quota exceeded, setItem
-      // throwing): log and continue. The in-memory state stays usable and
-      // the next mutation retries the write; no retry/backoff machinery.
+      // Controlled write failure (e.g. storage quota exceeded, setItem throwing): the in-memory state stays
+      // usable and the next mutation retries the write. What must NOT happen — and was the whole of this
+      // branch before PG-11 — is the failure staying inside `console.warn`, where only a developer sees it.
+      // The person has just been told nothing while their most recent work sits unwritten.
+      const message = err instanceof Error ? err.message : String(err);
       console.warn('[store] failed to persist app data to localStorage', err);
+      const failure: SaveFailure = {
+        at: toInstantISO(now()),
+        message,
+        attempts: (saveFailureRef.current?.attempts ?? 0) + 1,
+      };
+      saveFailureRef.current = failure;
+      setSaveFailure(failure);
     }
-  }, [data, dataOrigin]);
+  }, [data, dataOrigin, saveNonce]);
+
+  const retrySave = useCallback(() => setSaveNonce(n => n + 1), []);
+
+  useEffect(() => {
+    // PG-11 — connect the blob store, then move any inline bytes, **after load and outside the migration
+    // chain**. The chain is synchronous end to end; the store is not, so no step in it can do this.
+    //
+    // The order inside `relocateInlineBlobs` is the data safety: write, confirm, only then drop the inline
+    // copy. A rejected write leaves that document's bytes exactly where they were.
+    let cancelled = false;
+    void (async () => {
+      const store = await connectDefaultBlobStore();
+      if (cancelled) return;
+      if (!store) {
+        setBlobStoreStatus('unavailable');
+        return;
+      }
+      setBlobStoreStatus('connected');
+      if (relocationStarted.current) return;
+      // The demo fixture is a view, not the person's data: its documents must never be written into a store
+      // that outlives the reload.
+      if (initial.dataOrigin === 'sandbox') return;
+      relocationStarted.current = true;
+      const snapshot = dataRef.current;
+      if (countInlineBlobBearers(snapshot) === 0) {
+        setBlobRelocation({ moved: 0, failed: [] });
+        return;
+      }
+      const result = await relocateInlineBlobs(snapshot, store);
+      if (cancelled) return;
+      setBlobRelocation({ moved: result.moved, failed: result.failed });
+      // Not `result.data`: the person may have typed while these writes were in flight, and applying the
+      // snapshot's shape over live state would drop what they entered. `applyRelocation` re-checks each
+      // record's bytes against what was actually written before it drops them.
+      const applied = applyRelocation(dataRef.current, result.relocated);
+      if (applied !== dataRef.current) setData(applied);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Mount only. The dataset it reads is the one `loadInitial` produced; later changes are relocated by the
+    // upload path itself, not by a re-run of this effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /**
+   * PG-11 — reclaim a document's bytes when the person deletes the document.
+   *
+   * **Explicit delete only.** No expiry, no sweep, no garbage collection on a timer: these are retained
+   * documents, and `pages/Documents.tsx` records that one *fișă* exists only because a retention obligation
+   * has to be producible in order to be kept at all. A failure here is recorded and surfaced, not retried
+   * behind the person's back — an orphan is reported, never silently removed.
+   */
+  const reclaimBlob = useCallback((blobRef: string | undefined, label: string) => {
+    if (!blobRef) return;
+    const store = getBlobStore();
+    if (!store) return;
+    void store.deleteBlob(blobRef).catch(err => {
+      const reason = err instanceof Error ? err.message : String(err);
+      console.warn('[store] blob reclaim failed after delete', blobRef, err);
+      setBlobReclaimFailures(prev => [...prev, { blobId: blobRef, label, reason }]);
+    });
+  }, []);
 
   useEffect(() => () => { timers.current.forEach(t => window.clearTimeout(t)); }, []);
 
@@ -421,6 +621,66 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     migration: initial.migration,
     quarantine,
     getQuarantinedPayload: () => readQuarantine(QUARANTINE_STORAGE_KEY)?.raw ?? null,
+    saveFailure,
+    retrySave,
+    blobStoreStatus,
+    blobRelocation,
+    blobReclaimFailures,
+    exportDataset: () => buildDatasetExport(dataRef.current, getBlobStore(), now()),
+    importDataset: async raw => {
+      // Validate the whole payload before anything is written. Nothing below this line touches state until
+      // the payload is known to be a dataset this build can hold.
+      const validation = validateDatasetImport(raw);
+      if (!validation.ok) {
+        // The D-3 contract, reused rather than re-invented: the rejected bytes are preserved verbatim, the
+        // first copy wins, and the app says so. The dataset already on screen is not touched.
+        const { record } = quarantinePayload(
+          QUARANTINE_STORAGE_KEY,
+          raw,
+          validation.reason,
+          `import: ${validation.detail}`,
+        );
+        if (record) setQuarantine(record);
+        return { status: 'rejected', reason: validation.reason, detail: validation.detail, quarantined: !!record };
+      }
+
+      const staged = toAppData(validation.data);
+      // Split the bytes out **before** the dataset that will point at them is written: a record must never
+      // be persisted with a reference to a blob that is not there yet. If a write fails, that document keeps
+      // its bytes inline — the same rule the relocation pass follows, and the reason an import that cannot
+      // reach the blob store still imports the person's documents rather than losing them.
+      const store = getBlobStore();
+      let blobsStored = 0;
+      let blobFailures: RelocationFailure[] = [];
+      let applied = staged;
+      if (store) {
+        const relocated = await relocateInlineBlobs(staged, store);
+        applied = relocated.data;
+        blobsStored = relocated.moved;
+        blobFailures = relocated.failed;
+      }
+      // An import replaces what is on screen, so the sandbox view it may have been sitting on is over; the
+      // pre-sandbox snapshot must not come back underneath the restored dataset.
+      preSandbox.current = null;
+      setData(applied);
+      // An import is stored data from this moment on, whatever the origin was — including 'empty', where the
+      // save effect deliberately does not write.
+      setDataOrigin('persisted');
+      return {
+        status: 'imported',
+        fromVersion: validation.fromVersion,
+        toVersion: validation.toVersion,
+        stepsApplied: validation.stepsApplied,
+        blobsStored,
+        blobFailures,
+        exportedAt: validation.exportedAt,
+      };
+    },
+    orphanBlobIds: async () => {
+      const store = getBlobStore();
+      if (!store) return [];
+      return findOrphanBlobIds(dataRef.current, store);
+    },
     toast,
     dismissToast,
 
@@ -485,17 +745,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }));
       return true;
     },
-    deleteDocument: (code, id) => setData(d => ({
-      ...d,
-      companyDocs: { ...d.companyDocs, [code]: d.companyDocs[code].filter(x => x.id !== id) },
-    })),
+    deleteDocument: (code, id) => {
+      const doomed = data.companyDocs[code]?.find(x => x.id === id);
+      setData(d => ({
+        ...d,
+        companyDocs: { ...d.companyDocs, [code]: d.companyDocs[code].filter(x => x.id !== id) },
+      }));
+      reclaimBlob(doomed?.blobRef, doomed?.nume ?? id);
+    },
 
     addStatement: s => {
       if (rejectInvalidDates('statement', s, 'Declarație fiscală')) return false;
       setData(d => ({ ...d, statements: [{ ...s, id: uid() }, ...d.statements] }));
       return true;
     },
-    deleteStatement: id => setData(d => ({ ...d, statements: d.statements.filter(x => x.id !== id) })),
+    deleteStatement: id => {
+      const doomed = data.statements.find(x => x.id === id);
+      setData(d => ({ ...d, statements: d.statements.filter(x => x.id !== id) }));
+      reclaimBlob(doomed?.blobRef, doomed?.nume ?? doomed?.tip ?? id);
+    },
 
     // PG-6h-3 (D-OCC-1). The sheet is retained data about other people, so the write surface is small and
     // the delete is real: `filter` on the stored collection, which the save effect then writes back, so

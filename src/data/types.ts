@@ -480,7 +480,23 @@ export interface CompanyDocument {
   id: string;
   nume: string;
   tip: 'factura' | 'notafactura' | 'bon-fiscal' | 'pdf' | 'png' | 'jpg';
-  content: string;
+  /**
+   * PG-11 (phase 29): the bytes, **inline**. Optional now, and the two empty states are different facts:
+   *  - `content` present — the bytes are in the record, which is what every payload written before
+   *    PG-11 looks like, and what a record keeps if the blob store rejected the write;
+   *  - `blobRef` present, `content` absent — the bytes live in the blob store and this record points at
+   *    them;
+   *  - neither — the record describes a document with no bytes attached, which is what an upload that
+   *    never completed leaves behind.
+   *
+   * Nothing may treat "no `content`" as "no document": the row still exists, still counts, and its bytes
+   * are read back through `resolveBlobContent`.
+   */
+  content?: string;
+  /** PG-11: the blob store key holding this document's bytes. Never generated independently of the
+   *  record — see `documentBlobId` in `data/blobStore.ts`, and why a derived id is what makes a
+   *  relocation idempotent. */
+  blobRef?: string;
   marime: number;
   data: string;
   dataDepunere?: string;
@@ -496,7 +512,10 @@ export interface TaxStatement {
   depunere: 'SOLO' | 'personală';
   dataDepunere?: string;
   nume?: string;
+  /** PG-11: same three states as `CompanyDocument.content`. */
   content?: string;
+  /** PG-11: the blob store key holding this statement's bytes. See `statementBlobId`. */
+  blobRef?: string;
 }
 
 // ── Setări ────────────────────────────────────────────────
