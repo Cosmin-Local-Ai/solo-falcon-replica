@@ -415,4 +415,64 @@ describe('B-97 — the art. 322 alin. (7)-(8) question on Settings → Regim fis
     });
     expect(coveringQ2).toHaveLength(claimed);
   });
+
+  it('B-101 — the month the confirmation says the change starts at is the month the calendar starts at', () => {
+    // The other direction of the same guard. B-99 proved the panel does not over-promise returns for the
+    // quarter of exigibility. B-101 is the panel under-promising the rest of the year: it said „perioada
+    // fiscală devine luna calendaristică” while the corrected calendar shows a quarterly return for every
+    // quarter closed before the point alin. (7) names. So the month named in the sentence is read out of the
+    // sentence and compared with the first monthly row the calendar actually lists.
+    load({});
+    renderFiscal();
+
+    selectBy('[data-aic-answer]', 'da');
+    selectBy('[data-aic-month]', '5');
+    act(() => {
+      (el('[data-aic-review]') as HTMLButtonElement).click();
+    });
+    const body = Array.from(document.querySelectorAll('.modal-body li')).map((li) =>
+      (li.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    );
+    const promised = /începând cu (\d{2}\.\d{4})/.exec(body[0] ?? '')?.[1];
+    expect(promised).toBe('06.2026');
+
+    act(() => {
+      (el('[data-aic-confirm-go]') as HTMLButtonElement).click();
+    });
+    localStorage.clear();
+    load({
+      fxRates: [BNR_31_12_2025],
+      profile: {
+        ...seedData.profile,
+        vatPeriodicityYears: [{
+          year: 2026,
+          aicGoodsWhileQuarterly: 'da',
+          aicGoodsExigibilityMonth: 5,
+          userChoice: {
+            periodicity: 'month',
+            branch: 'alin7',
+            confirmedBy: 'user',
+            confirmedOn: '2026-10-31',
+          },
+        }],
+      },
+    });
+    render(
+      <StoreProvider>
+        <Declarations />
+      </StoreProvider>,
+    );
+
+    // Q1 was never monthly, so it is one row, and it is the row a plain quarterly person would have had.
+    expect(el('[data-obligation-id="decont-T1-2026"]')).not.toBeNull();
+    for (const gone of ['decont-01.2026', 'decont-02.2026', 'decont-03.2026']) {
+      expect(el(`[data-obligation-id="${gone}"]`)).toBeNull();
+    }
+    // The first monthly row is the month the sentence promised — not the month of exigibility, and not
+    // April. That equality is the whole of B-101 in one assertion.
+    const monthly = [...document.querySelectorAll('[data-obligation-id^="decont-"]')]
+      .map((r) => r.getAttribute('data-obligation-id')!)
+      .filter((id) => /^decont-\d{2}\.\d{4}$/.test(id));
+    expect(monthly[0]).toBe(`decont-${promised}`);
+  });
 });

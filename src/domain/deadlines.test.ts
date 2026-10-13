@@ -12,6 +12,7 @@ import {
 } from './deadlines';
 import type { Deadline, DeadlineEventType } from './deadlines';
 import { aicFlipForQuarter, decontObligations } from './fiscal/vatReturn';
+import { alin7MonthStart } from './fiscal/vatPeriodicity';
 import type { VatReturnRecord } from '../data/types';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal/package2026';
 import type { FiscalRule } from './fiscal/rules';
@@ -464,7 +465,13 @@ describe('classifyDeadline (Step 29 boundary tests)', () => {
 describe('B-99 — the alin. (7) distinct period joins a filed return to its term', () => {
   // lit. b) with the exigibility in November: Q4 is replaced by the partial 10–11 plus the month 12.
   const flip = aicFlipForQuarter(2026, 4, 11)!;
-  const deadlines = vatObligationDeadlines(decontObligations('month', 2026, { flips: [flip] }), 2026);
+  // B-101 — and the year is not twelve months. Art. 322 alin. (7) lit. b) begins the month at the third
+  // month of Q4, so the first three quarters are still one return each. Without the segment this fixture
+  // handed the taxpayer twelve monthly deconturi for a year they spent on the quarter until December.
+  const deadlines = vatObligationDeadlines(
+    decontObligations('month', 2026, { flips: [flip], segment: { before: 'quarter', after: 'month', fromMonth: alin7MonthStart(11)! } }),
+    2026,
+  );
 
   it('dates the distinct period and the December month separately, one of them in the next calendar year', () => {
     const distinct = deadlines.find((d) => d.deadlineId === 'decont-10-11.2026')!;
@@ -493,7 +500,24 @@ describe('B-99 — the alin. (7) distinct period joins a filed return to its ter
 
   it('gives one year no two deadlines with the same id', () => {
     expect(new Set(deadlines.map((d) => d.deadlineId)).size).toBe(deadlines.length);
-    // Twelve months minus one, the two months the distinct period swallowed having become a single term.
-    expect(deadlines).toHaveLength(11);
+    // Three untouched quarters, the distinct 10–11 period, and December. B-101 moved this from 11: the
+    // eight monthly rows the old fixture carried were returns for quarters that were never monthly.
+    expect(deadlines.map((d) => d.deadlineId)).toEqual([
+      'decont-T1-2026', 'decont-T2-2026', 'decont-T3-2026', 'decont-10-11.2026', 'decont-12.2026',
+    ]);
+  });
+
+  it('a return filed against a restored quarter discharges that quarter, across the year boundary', () => {
+    // The restored Q1 is not a caption: it is the same term a plain quarterly person has, so a filing
+    // recorded against it joins, and the December term dated in 2027 stays open.
+    const q1 = deadlines.find((d) => d.deadlineId === 'decont-T1-2026')!;
+    const december = deadlines.find((d) => d.deadlineId === 'decont-12.2026')!;
+    const filed: VatReturnRecord = {
+      id: 'r-q1', obligationId: 'decont-T1-2026', year: 2026, form: '300',
+      periodKind: 'quarter', periodIndex: 1, status: 'depusa', filedOn: '2026-04-20',
+    };
+    expect(vatReturnForDeadline([filed], q1)?.id).toBe('r-q1');
+    expect(resolveDeadlineOutcome(q1, [], '2027-03-01', [filed])).toBe('done');
+    expect(resolveDeadlineOutcome(december, [], '2027-03-01', [filed])).toBe('overdue');
   });
 });

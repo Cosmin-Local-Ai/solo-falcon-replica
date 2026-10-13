@@ -781,9 +781,19 @@ test.describe('B-97 — art. 322 alin. (7)-(8): bunuri cumpărate dintr-un alt s
     await page.locator('[data-aic-review]').click();
     const promised = page.locator('.modal-body li').nth(1);
     await expect(promised).toContainText('2 deconturi');
+    // B-101 — the confirmation also has to say WHEN the month begins, because the calendar now shows a
+    // quarterly return for every quarter closed before that point. „Perioada fiscală devine luna
+    // calendaristică” alone promised a year of months that the law does not give.
+    await expect(page.locator('.modal-body li').nth(0)).toContainText('începând cu 06.2026');
     await page.locator('[data-aic-confirm-go]').click();
 
     await page.goto('/declarations');
+    // B-101 — the first quarter was never monthly. Art. 322 alin. (7) lit. b) begins the month at the third
+    // month of T2, so Q1 is one return, under the same id a plain quarterly person would have had.
+    await expect(page.locator('[data-obligation-id="decont-T1-2026"]')).toBeVisible();
+    await expect(page.locator('[data-obligation-id="decont-01.2026"]')).toHaveCount(0);
+    await expect(page.locator('[data-obligation-id="decont-02.2026"]')).toHaveCount(0);
+    await expect(page.locator('[data-obligation-id="decont-03.2026"]')).toHaveCount(0);
     // The distinct period is its own row, with its own term from the same art. 323 alin. (1) formula — it
     // ends 31 May, so it is due 25 June — and May is no longer a month with a return of its own.
     const distinct = page.locator('[data-obligation-id="decont-04-05.2026"]');

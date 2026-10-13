@@ -47,6 +47,7 @@ import {
 // five working days of alin. (8). This file writes facts; it computes nothing fiscal.
 import {
   vatPeriodicityForYear,
+  alin7MonthStart,
   type VatPeriodicityFacts,
 } from '../domain/fiscal/vatPeriodicity';
 import {
@@ -132,7 +133,18 @@ function aicEffectLines(year: number, month: number): string[] {
   const quarter = Math.ceil(month / 3);
   const flip = aicFlipForQuarter(year, quarter, month);
   const lines: string[] = [];
-  if (flip) lines.push(`${a.effectMonthly} ${flip.note}`);
+  if (flip) {
+    // B-101 — the sentence the panel owes the calendar. `alin7MonthStart` is the same authority the
+    // derivation and the obligation builder read, so the point named here cannot be a hand-written month
+    // that the calendar then contradicts.
+    const start = alin7MonthStart(month);
+    const since = start === null
+      ? ''
+      : start > 12
+      ? ` ${a.effectSinceNextYear(year + 1)}`
+      : ` ${a.effectSince(`${String(start).padStart(2, '0')}.${year}`)}`;
+    lines.push(`${a.effectMonthly} ${flip.note}${since}`);
+  }
   lines.push(
     flip && flip.periods.length > 1
       ? a.effectReturnsSplit(

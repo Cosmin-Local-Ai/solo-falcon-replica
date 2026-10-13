@@ -614,7 +614,15 @@ export function getVatObligations(data: AppData, asOfDate: string): VatObligatio
   });
 
   return [
-    ...decontObligations(periodicity.periodicity, year, { flips, closedThrough: asOfDate }),
+    // B-101 — the segment travels with the periodicity, not with the flip. Art. 322 alin. (7) fixes the
+    // month the calendar month begins at, and only the derivation knows whether this person was on the
+    // quarter at all; `decontObligations` walks quarters up to that point and months after it. A person
+    // already monthly on some other branch has no segment and keeps the year they already had.
+    ...decontObligations(periodicity.periodicity, year, {
+      flips,
+      closedThrough: asOfDate,
+      segment: periodicity.segment,
+    }),
     ...(mentiuni ? [mentiuni] : []),
     ...extra,
   ];

@@ -65,6 +65,57 @@ export function isVatPeriodicity(value: unknown): value is VatPeriodicity {
 }
 
 /**
+ * B-101 — a periodicity that changes **inside** the year.
+ *
+ * Art. 322 alin. (7) does not say the fiscal period is the month for the year. It says the period „devine
+ * luna calendaristică **începând cu**" a point the article fixes — the first month of the quarter, the third
+ * month of it, or the first month of the NEXT quarter. Before that point the same article describes the
+ * person as one „care utilizează trimestrul calendaristic ca perioadă fiscală", so the year carries two
+ * regimes and a year-level label is not enough: a bare `month` makes the obligation builder emit monthly
+ * deconturi for quarters that were never monthly. That over-reporting is B-101.
+ *
+ * `fromMonth` is the first month of the year at which `after` applies, inclusive. `13` is a legal value: an
+ * exigibility in the third month of the fourth quarter pushes the month into the FOLLOWING year (alin. (7)
+ * lit. c)), which leaves that year entirely quarterly.
+ *
+ * Absent means one regime for the whole year — the ordinary case, and the one every other alineat gives.
+ */
+export interface PeriodicitySegment {
+  before: VatPeriodicity;
+  after: VatPeriodicity;
+  fromMonth: number;
+}
+
+/**
+ * Where art. 322 alin. (7) puts the start of the month, for a given month of exigibility.
+ *
+ * The three litera are arithmetic on the position of the month inside its own quarter:
+ * - lit. a) first month of the quarter → the month begins **in that month**;
+ * - lit. b) second month → it begins at the **third** month, the first two becoming a distinct period;
+ * - lit. c) third month → it begins at the first month of the **next** quarter.
+ *
+ * `aicFlipForQuarter` in `fiscal/vatReturn.ts` stays the authority for **which periods replace the quarter**;
+ * this is the authority for **when the month begins**, which is a derivation fact rather than a calendar
+ * fact. Two readings of one litera can drift, so all twelve months are pinned against `aicFlipForQuarter`
+ * in `vatReturn.test.ts` — an unlinked pair is how a calendar starts disagreeing with the article it is
+ * supposed to implement.
+ */
+export function alin7MonthStart(monthOfExigibility: number | undefined): number | null {
+  if (monthOfExigibility === undefined) return null;
+  if (!Number.isInteger(monthOfExigibility) || monthOfExigibility < 1 || monthOfExigibility > 12) return null;
+  const offsetInQuarter = (monthOfExigibility - 1) % 3;
+  return monthOfExigibility + (offsetInQuarter === 0 ? 0 : 1);
+}
+
+/** Which litera of art. 322 alin. (7) an exigibility month falls under; null when there is no month. */
+export function alin7Litera(monthOfExigibility: number | undefined): 'a' | 'b' | 'c' | null {
+  if (monthOfExigibility === undefined) return null;
+  if (!Number.isInteger(monthOfExigibility) || monthOfExigibility < 1 || monthOfExigibility > 12) return null;
+  const offsetInQuarter = (monthOfExigibility - 1) % 3;
+  return offsetInQuarter === 0 ? 'a' : offsetInQuarter === 1 ? 'b' : 'c';
+}
+
+/**
  * The art. 322 / Norme pct. 103 branch that decides, or would decide.
  *
  * `pct103_alin1` is a Norme branch, not an alineat of the code: for a person registered **din oficiu**
@@ -386,6 +437,8 @@ export type VatPeriodicityOutcome =
       /** The pro-rated comparator, present only for alin. (3). */
       proRated?: ProRatedCap;
       steps: PeriodicityStep[];
+      /** B-101 — present only when the year changes regime inside itself (art. 322 alin. (7)). */
+      segment?: PeriodicitySegment;
       /** True when the comparison is a tie-break the law does not settle (the „nu depășește" boundary). */
       boundaryNote?: string;
     }
@@ -396,6 +449,8 @@ export type VatPeriodicityOutcome =
       choice: VatPeriodicityChoice;
       cap: PeriodicityCap | null;
       steps: PeriodicityStep[];
+      /** B-101 — a confirmed answer is a year-level answer; it carries no point inside the year. */
+      segment?: PeriodicitySegment;
     }
   | {
       kind: 'ask';
@@ -473,12 +528,27 @@ export function deriveVatPeriodicity(
   // D-VAT-1's second half, applied once so it cannot be forgotten on a branch. Where the article asks for a
   // figure the app does not have and the person has answered instead, the answer stands — as theirs, with
   // the rule they were shown, and never rewritten into a derivation the facts do not support.
-  if (outcome.kind === 'ask' && facts.userChoice) {
-    return confirmedOutcome(facts.userChoice, capOrNull, [
-      { label: 'De ce nu a putut fi derivat', value: outcome.detail },
-    ]);
+  const resolved = outcome.kind === 'ask' && facts.userChoice
+    ? confirmedOutcome(facts.userChoice, capOrNull, [
+        { label: 'De ce nu a putut fi derivat', value: outcome.detail },
+      ])
+    : outcome;
+  // B-101 — the point at which the month begins is a consequence of the alin. (7) FACTS, not of which branch
+  // happened to answer, so it is attached here rather than inside one branch. A person who confirmed
+  // „monthly" for an alin. (7) year because the registration facts were missing still declared the month of
+  // exigibility, and the calendar has to know where the quarter stopped. A person already monthly on another
+  // branch never enters this: the fact that gates it is `aicGoodsWhileQuarterly`, which says in its own name
+  // that the period was a quarter when the acquisition happened.
+  const start = facts.aicGoodsWhileQuarterly === 'da' ? alin7MonthStart(facts.aicGoodsExigibilityMonth) : null;
+  if (
+    start !== null
+    && resolved.kind !== 'ask'
+    && resolved.branch === 'alin7'
+    && resolved.periodicity === 'month'
+  ) {
+    return { ...resolved, segment: { before: 'quarter', after: 'month', fromMonth: start } };
   }
-  return outcome;
+  return resolved;
 }
 
 function deriveBranch(
@@ -540,6 +610,26 @@ function deriveBranch(
   //    prevederile alin. (2) - (6)"), so it is checked before the registration-year branches.
   if (facts.aicGoodsWhileQuarterly === 'da') {
     if (capOrNull === null) return askForCap(capFailure);
+    const month = facts.aicGoodsExigibilityMonth;
+    const litera = alin7Litera(month);
+    const start = alin7MonthStart(month);
+    const splitStep =
+      litera === 'a'
+        ? { label: 'CF art. 322 alin. (7) lit. a)', value: 'luna calendaristică începe în prima lună a trimestrului; nicio perioadă fiscală distinctă' }
+        : litera === 'b'
+        ? { label: 'CF art. 322 alin. (7) lit. b)', value: 'primele două luni ale trimestrului devin perioadă fiscală distinctă, cu decont propriu' }
+        : litera === 'c'
+        ? { label: 'CF art. 322 alin. (7) lit. c)', value: 'trimestrul în curs rămâne neatins; luna calendaristică începe cu prima lună a trimestrului următor' }
+        : { label: 'CF art. 322 alin. (7)', value: 'luna exigibilității nu este declarată, deci aplicația nu poate alege litera și nu fixează punctul de la care începe luna' };
+    // B-101 — the fact the obligation builder walks on. Art. 322 alin. (7) moves the period „începând cu" a
+    // month, so everything before that month is still the quarter. Naming only the month is what let the
+    // calendar emit twelve deconturi for a year that began on quarters.
+    const sinceStep =
+      start === null
+        ? null
+        : start > 12
+        ? { label: 'CF art. 322 alin. (7) „începând cu"', value: `luna calendaristică începe abia în ${facts.year + 1}; ${facts.year} rămâne în întregime trimestrial` }
+        : { label: 'CF art. 322 alin. (7) „începând cu"', value: `luna calendaristică de la ${String(start).padStart(2, '0')}.${facts.year}; până la acea lună perioada fiscală rămâne trimestrul calendaristic` };
     return {
       kind: 'derived',
       periodicity: 'month',
@@ -547,7 +637,8 @@ function deriveBranch(
       cap: capOrNull,
       steps: [
         { label: 'Eveniment', value: 'achiziție intracomunitară de bunuri taxabilă în România, fiind trimestrial' },
-        { label: 'CF art. 322 alin. (7) lit. b)', value: 'primele două luni ale trimestrului devin perioadă fiscală distinctă, cu decont propriu' },
+        splitStep,
+        ...(sinceStep ? [sinceStep] : []),
         { label: 'CF art. 322 alin. (8)', value: 'declarație de mențiuni în maximum 5 zile lucrătoare de la finele lunii; luna se folosește în anul curent și în cel următor' },
       ],
     };

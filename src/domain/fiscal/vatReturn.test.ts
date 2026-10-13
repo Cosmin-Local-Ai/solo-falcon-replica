@@ -31,6 +31,7 @@ import {
   type VatFiscalPeriod,
 } from './vatReturn';
 import { isFiledVatReturn, type VatReturnRecord } from '../../data/types';
+import { alin7MonthStart, type PeriodicitySegment } from './vatPeriodicity';
 import { lei } from '../money';
 
 describe('art. 323 alin. (1) — the decont term, per fiscal period', () => {
@@ -129,8 +130,14 @@ describe('art. 322 alin. (7) — the quarter splits, and only in one of the thre
  * These assertions are written as **month-by-month coverage**, not as presence. Splicing a distinct period
  * into an already-monthly year is the obvious fix and the obvious way to cover March twice or drop it, and
  * either error changes what the taxpayer is told to file.
+ *
+ * **B-101 corrects the lists this block shipped.** They asserted coverage, which passed, and the year they
+ * covered was wrong: `01.2026, 02.2026, 03.2026` are three monthly returns for a first quarter that was
+ * never monthly. Art. 322 alin. (7) makes the month begin at a point inside the year, so everything before
+ * that point is still one return for a quarter. Coverage and count are both asserted now, and so is the
+ * exact list — a count alone hid this once already (lit. a) is 10, not 12, and only the list says so).
  */
-describe('B-99 — alin. (7) applied to a year that is already monthly', () => {
+describe('B-99 / B-101 — alin. (7) on a year that is already monthly, from the point the month begins', () => {
   /** Every month the year's periods cover, in calendar order — each month exactly once, or the year is wrong. */
   function coveredMonths(rows: readonly { period?: VatFiscalPeriod }[]): number[] {
     const months: number[] = [];
@@ -152,25 +159,59 @@ describe('B-99 — alin. (7) applied to a year that is already monthly', () => {
     const flip = aicFlipForQuarter(2026, Math.ceil(month / 3), month)!;
     return decontObligations(periodicity, 2026, { flips: [flip] });
   };
+  /**
+   * B-101 — the call the dashboard actually makes. A flipped year arrives at the builder with BOTH the flip
+   * and the point inside the year at which the month begins; the flip alone only ever says what replaces the
+   * quarter of exigibility, never what the earlier quarters were.
+   */
+  const segmentFor = (month: number): PeriodicitySegment => ({
+    before: 'quarter',
+    after: 'month',
+    fromMonth: alin7MonthStart(month)!,
+  });
+  const flippedRows = (month: number) => {
+    const flip = aicFlipForQuarter(2026, Math.ceil(month / 3), month)!;
+    return decontObligations('month', 2026, { flips: [flip], segment: segmentFor(month) });
+  };
+  const flippedLabels = (month: number): string[] => flippedRows(month).map((r) => periodLabel(r.period!));
 
-  it('lit. a) exigibility in month 1: twelve months, no distinct period, every month covered once', () => {
-    // A fix that always spliced a distinct period would invent an obligation the law does not create here.
-    expect(labelsFor('month', 4)).toEqual([
+  it('lit. a) exigibility in January: nothing precedes the point, so twelve months is the right answer', () => {
+    // The one case where the year really is twelve months on an alin. (7) year: the month begins at the first
+    // month of the first quarter, so there is no quarter left before it to restore.
+    expect(flippedLabels(1)).toEqual([
       '01.2026', '02.2026', '03.2026', '04.2026', '05.2026', '06.2026',
       '07.2026', '08.2026', '09.2026', '10.2026', '11.2026', '12.2026',
     ]);
-    expect(rowsFor('month', 4).some((r) => r.period!.kind === 'partial')).toBe(false);
-    expect(coveredMonths(rowsFor('month', 4))).toEqual(YEAR);
+    expect(flippedRows(1).some((r) => r.period!.kind === 'partial')).toBe(false);
+    expect(coveredMonths(flippedRows(1))).toEqual(YEAR);
   });
 
-  it('lit. b) exigibility in month 2: the distinct period is its own decont, and no month is covered twice', () => {
-    expect(labelsFor('month', 5)).toEqual([
-      '01.2026', '02.2026', '03.2026', '04-05.2026', '06.2026',
+  it('B-101 lit. a) exigibility in April: Q1 was never monthly, so it is ONE return, not three', () => {
+    // This is the assertion B-99 shipped wrong. Art. 322 alin. (7) lit. a) starts the month at the FIRST
+    // month of the quarter, so the quarter before it is still a quarter. The old list — three monthly rows
+    // for January, February and March — showed the taxpayer three deconturi nobody requires. The count is
+    // 12 either way, which is exactly how the error survived a count-shaped check: the SHAPE is the finding.
+    expect(flippedLabels(4)).toEqual([
+      'T1 2026',
+      '04.2026', '05.2026', '06.2026',
       '07.2026', '08.2026', '09.2026', '10.2026', '11.2026', '12.2026',
     ]);
-    expect(coveredMonths(rowsFor('month', 5))).toEqual(YEAR);
+    expect(flippedRows(4)).toHaveLength(10);
+    expect(flippedRows(4).some((r) => r.period!.kind === 'partial')).toBe(false);
+    expect(coveredMonths(flippedRows(4))).toEqual(YEAR);
+  });
 
-    const distinct = rowsFor('month', 5).find((r) => r.period!.kind === 'partial')!;
+  it('B-101 lit. b) exigibility in May: T1, the distinct 04-05 period, then months — 9 returns, not 11', () => {
+    // Old (wrong): 01.2026, 02.2026, 03.2026, 04-05.2026, 06…12.2026 = 11. The first three are monthly rows
+    // for a quarter that was never monthly.
+    expect(flippedLabels(5)).toEqual([
+      'T1 2026', '04-05.2026', '06.2026',
+      '07.2026', '08.2026', '09.2026', '10.2026', '11.2026', '12.2026',
+    ]);
+    expect(flippedRows(5)).toHaveLength(9);
+    expect(coveredMonths(flippedRows(5))).toEqual(YEAR);
+
+    const distinct = flippedRows(5).find((r) => r.period!.kind === 'partial')!;
     expect(distinct.id).toBe('decont-04-05.2026');
     // art. 323 alin. (1) applied to the period the law created mid-quarter: it ends 31 May, so it is due
     // 25 June. Same formula, same citation as every other decont — no separate term is invented here.
@@ -179,26 +220,73 @@ describe('B-99 — alin. (7) applied to a year that is already monthly', () => {
     expect(distinct.citation).toBe('CF art. 323 alin. (1); plată art. 326 alin. (1)');
   });
 
-  it('lit. c) exigibility in month 3: the acquisition quarter is untouched, monthly runs from the next', () => {
-    expect(labelsFor('month', 6)).toEqual([
-      '01.2026', '02.2026', '03.2026', 'T2 2026',
+  it('B-101 lit. c) exigibility in June: T1 and T2 as quarters, months from July — 8 returns, not 10', () => {
+    // Old (wrong): 01.2026, 02.2026, 03.2026, T2 2026, 07…12.2026 = 10. Q1 was quarterly and stays
+    // quarterly; the acquisition quarter is untouched; the month begins with the NEXT quarter.
+    expect(flippedLabels(6)).toEqual([
+      'T1 2026', 'T2 2026',
       '07.2026', '08.2026', '09.2026', '10.2026', '11.2026', '12.2026',
     ]);
-    expect(coveredMonths(rowsFor('month', 6))).toEqual(YEAR);
-    expect(rowsFor('month', 6).some((r) => r.period!.kind === 'partial')).toBe(false);
-    expect(labelsFor('month', 6).indexOf('T2 2026')).toBe(3);
+    expect(flippedRows(6)).toHaveLength(8);
+    expect(flippedRows(6).some((r) => r.period!.kind === 'partial')).toBe(false);
+    expect(coveredMonths(flippedRows(6))).toEqual(YEAR);
+  });
+
+  it('B-101 lit. c) exigibility in December: the month begins next year, so this year is four quarters', () => {
+    // `fromMonth` 13 is not a sentinel to be clamped away — it is what alin. (7) lit. c) says when the
+    // exigibility lands in the third month of Q4. Clamping it to 12 would mint a December return.
+    expect(alin7MonthStart(12)).toBe(13);
+    expect(flippedLabels(12)).toEqual(['T1 2026', 'T2 2026', 'T3 2026', 'T4 2026']);
+    expect(coveredMonths(flippedRows(12))).toEqual(YEAR);
+  });
+
+  it('B-101 a restored quarter carries the id a plain quarterly person would have had', () => {
+    // The id is the join key a filed return is matched on, so a quarter put back into the year must be the
+    // SAME term, not a look-alike. A filing recorded against `decont-T1-2026` has to discharge the restored
+    // Q1 and nothing else. Only the quarters wholly before the point are restored — the rest of the year is
+    // genuinely monthly, and asserting a T4 that the law does not give would be the same invention in
+    // reverse.
+    const plain = decontObligations('quarter', 2026);
+    for (const month of [4, 5, 6, 11, 12]) {
+      const start = alin7MonthStart(month)!;
+      const restoredQuarters = plain.filter((r) => r.period!.kind === 'quarter'
+        && r.period!.quarter * 3 < start);
+      expect(restoredQuarters.length).toBeGreaterThan(0);
+      for (const p of restoredQuarters) {
+        const restored = flippedRows(month).find((r) => r.id === p.id);
+        expect(restored).toBeDefined();
+        expect(restored!.dueOn).toBe(p.dueOn);
+        expect(restored!.label).toBe(p.label);
+      }
+    }
+  });
+
+  it('B-101 the segment and the flip never disagree about where the month begins, for any month', () => {
+    // Two readings of one litera is how a calendar drifts from the article: `alin7MonthStart` fixes the
+    // point, `aicFlipForQuarter` cuts the quarter. For every month of the year the first month-kind period
+    // the flip emits must be the month the segment says the month starts — and for lit. c), which emits no
+    // month at all, it must be the first month of the following quarter.
+    for (let month = 1; month <= 12; month += 1) {
+      const flip = aicFlipForQuarter(2026, Math.ceil(month / 3), month)!;
+      const start = alin7MonthStart(month)!;
+      const firstMonthly = flip.periods.find((p) => p.kind === 'month');
+      expect(firstMonthly ? firstMonthly.month : Math.ceil(month / 3) * 3 + 1).toBe(Math.min(start, 13));
+      expect(coveredMonths(flippedRows(month))).toEqual(YEAR);
+    }
   });
 
   it('the quarterly walk is unchanged for all three letters — the path that already worked', () => {
     // This substitution existed before B-99 and must not have moved. Recorded because the fix widened the
     // join: a monthly walk now consults the flip too, and the quarterly answer has to stay the same answer.
+    // A quarterly person has no segment at all — the derivation only produces one on the alin. (7) branch —
+    // so `yearPeriods` is never reached on this path.
     expect(labelsFor('quarter', 4)).toEqual(['T1 2026', '04.2026', '05.2026', '06.2026', 'T3 2026', 'T4 2026']);
     expect(labelsFor('quarter', 5)).toEqual(['T1 2026', '04-05.2026', '06.2026', 'T3 2026', 'T4 2026']);
     expect(labelsFor('quarter', 6)).toEqual(['T1 2026', 'T2 2026', 'T3 2026', 'T4 2026']);
     for (const month of [4, 5, 6]) expect(coveredMonths(rowsFor('quarter', month))).toEqual(YEAR);
   });
 
-  it('no two obligations share an id, in either walk, for any month of exigibility', () => {
+  it('no two obligations share an id, in any walk, for any month of exigibility', () => {
     // The id is the join key a filed return is matched against, not a caption. A collision silently merges
     // two terms into one and lets a single return discharge two periods.
     for (const periodicity of ['month', 'quarter'] as const) {
@@ -207,6 +295,11 @@ describe('B-99 — alin. (7) applied to a year that is already monthly', () => {
         expect(new Set(ids).size).toBe(ids.length);
         expect(coveredMonths(rowsFor(periodicity, month))).toEqual(YEAR);
       }
+    }
+    for (let month = 1; month <= 12; month += 1) {
+      const ids = flippedRows(month).map((r) => r.id);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(coveredMonths(flippedRows(month))).toEqual(YEAR);
     }
   });
 
@@ -225,6 +318,7 @@ describe('B-99 — alin. (7) applied to a year that is already monthly', () => {
     // two of a form that is due once.
     for (const month of [4, 5, 6]) {
       expect(rowsFor('month', month).every((r) => r.kind === 'decont')).toBe(true);
+      expect(flippedRows(month).every((r) => r.kind === 'decont')).toBe(true);
     }
   });
 });

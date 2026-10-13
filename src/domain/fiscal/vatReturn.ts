@@ -47,7 +47,7 @@
 import type { Bani } from '../money';
 import { formatBani } from '../money';
 import { isISOCalendarDate } from '../date';
-import type { VatPeriodicity } from './vatPeriodicity';
+import type { PeriodicitySegment, VatPeriodicity } from './vatPeriodicity';
 
 // ── 1. The fiscal period ─────────────────────────────────────────────────────────
 
@@ -115,6 +115,42 @@ export function vatFiscalPeriods(periodicity: VatPeriodicity, year: number): Vat
     return [1, 2, 3, 4].map(q => ({ kind: 'quarter', year, quarter: q }));
   }
   return Array.from({ length: 12 }, (_, i) => ({ kind: 'month' as const, year, month: i + 1 }));
+}
+
+/**
+ * B-101 — the periods of a year whose periodicity **changes inside it**.
+ *
+ * Art. 322 alin. (7) makes the fiscal period the month „începând cu" a stated point; before that point the
+ * person is still on the quarter. `vatFiscalPeriods` cannot say that, because it takes one periodicity for
+ * a whole year — which is how the calendar came to list twelve monthly deconturi for a year that began on
+ * quarters, three returns for a quarter that was never monthly.
+ *
+ * The split is done at the **quarter** boundary, because the regime that ends is a quarterly one: a quarter
+ * is either wholly before the point (one return for the quarter) or reached by it (three monthly returns).
+ * A quarter the point falls inside is left to the flip, which is what `aicFlipForQuarter` exists to cut.
+ * Coverage stays exact by construction: every quarter contributes either its one quarter period or its
+ * three months, never both and never neither.
+ *
+ * A restored quarter is built with the same `{ kind: 'quarter', year, quarter }` a plain quarterly person
+ * gets, so `periodLabel` gives it the same id and a return already filed against it still joins.
+ */
+function yearPeriods(
+  periodicity: VatPeriodicity,
+  year: number,
+  segment?: PeriodicitySegment,
+): VatFiscalPeriod[] {
+  if (!segment || segment.before === segment.after) return vatFiscalPeriods(periodicity, year);
+  const periods: VatFiscalPeriod[] = [];
+  for (let q = 1; q <= 4; q += 1) {
+    const first = (q - 1) * 3 + 1;
+    const regime: VatPeriodicity = q * 3 < segment.fromMonth ? segment.before : segment.after;
+    if (regime === 'quarter') {
+      periods.push({ kind: 'quarter', year, quarter: q });
+    } else {
+      for (let m = first; m <= first + 2; m += 1) periods.push({ kind: 'month', year, month: m });
+    }
+  }
+  return periods;
 }
 
 /**
@@ -236,11 +272,18 @@ function flipGoverningPeriod(flips: readonly AicFlip[], p: VatFiscalPeriod): Aic
  * Splicing a distinct period *beside* an already-monthly year would cover two months twice and is the
  * failure mode this loop is written against; the three letters of alin. (7) are asserted month-by-month in
  * `vatReturn.test.ts`.
+ *
+ * **B-101 — and the year must not contain periods the person never owed.** `vatFiscalPeriods` answers a
+ * year, but alin. (7) answers a point inside the year, so `segment` is what tells this walk where the month
+ * began. Without it a flipped year is walked as twelve months and the taxpayer is shown monthly deconturi
+ * for quarters they filed as quarters. With it the walk is quarters up to the point and months after it.
+ * A person who was never on the quarter has no segment, and inventing one would show them quarters they
+ * never had — which is why the derivation, not this function, decides whether a segment exists.
  */
 export function decontObligations(
   periodicity: VatPeriodicity,
   year: number,
-  opts: { flips?: readonly AicFlip[]; closedThrough?: string } = {},
+  opts: { flips?: readonly AicFlip[]; closedThrough?: string; segment?: PeriodicitySegment } = {},
 ): VatObligation[] {
   // `AicFlip` carries no year of its own — only `quarter`, `letter`, `periods` and `note` — so the year a
   // flip was computed for is visible only inside its periods. A flip from another year would splice that
@@ -252,7 +295,7 @@ export function decontObligations(
   );
   const periods: VatFiscalPeriod[] = [];
   const substituted = new Set<number>();
-  for (const p of vatFiscalPeriods(periodicity, year)) {
+  for (const p of yearPeriods(periodicity, year, opts.segment)) {
     const flip = flipGoverningPeriod(flips, p);
     if (!flip) {
       periods.push(p);

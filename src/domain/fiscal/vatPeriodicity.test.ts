@@ -27,6 +27,7 @@ import {
   VAT_PERIODICITY_CAP_EUR_MAJOR,
   vatPeriodicityForYear,
   type VatPeriodicityFacts,
+  type VatPeriodicityOutcome,
 } from './vatPeriodicity';
 
 /** BNR EUR/RON valabil pentru 31.12.2025 — research/33 §8, marked CORROBORATED / secondary. */
@@ -468,6 +469,83 @@ describe('alin. (7) — one intra-community goods acquisition flips the quarter 
       cap,
     );
     expect(withoutFlip.kind === 'derived' && withoutFlip.periodicity).toBe('quarter');
+  });
+});
+
+describe('B-101 — an alin. (7) year has a START POINT, not just a periodicity', () => {
+  const flipped = (month: number | undefined): VatPeriodicityFacts => ({
+    year: 2026,
+    registrationEffectiveFrom: '2025-01-01',
+    registrationRoute: 'b',
+    precedingYearTurnover: L(100_000),
+    precedingYearAicGoods: 'nu',
+    aicGoodsWhileQuarterly: 'da',
+    ...(month === undefined ? {} : { aicGoodsExigibilityMonth: month }),
+  });
+
+  it('names the month the calendar month begins at, for each of the three litera', () => {
+    // Art. 322 alin. (7) says „începând cu", and the three litera put that point in three different places.
+    // A year-level `periodicity: 'month'` cannot carry it, which is what let the obligation builder emit
+    // monthly deconturi for quarters this person spent on the quarter.
+    const starts: Array<[number, number]> = [
+      [1, 1],   // lit. a) in the first month of Q1 — nothing precedes the point
+      [4, 4],   // lit. a) in the first month of Q2 — Q1 stays a quarter
+      [5, 6],   // lit. b) in the second month — the month begins at the THIRD; 04-05 is the distinct period
+      [6, 7],   // lit. c) in the third month — the month begins with the NEXT quarter
+      [12, 13], // lit. c) in the third month of Q4 — the month begins next year; this year is all quarters
+    ];
+    for (const [month, fromMonth] of starts) {
+      const outcome = deriveVatPeriodicity(flipped(month), cap);
+      expect(outcome.kind).toBe('derived');
+      if (outcome.kind !== 'derived') continue;
+      expect(outcome.segment).toEqual({ before: 'quarter', after: 'month', fromMonth });
+    }
+  });
+
+  it('attaches the point to a CONFIRMED alin. (7) answer too, because it comes from the facts', () => {
+    // The registration facts are missing here, so the derivation stops and the person's own answer decides
+    // the year. The point is still known — they declared the month of exigibility — and a calendar that
+    // ignored it would show twelve monthly returns to someone who filed quarters until June.
+    const facts: VatPeriodicityFacts = {
+      year: 2026,
+      aicGoodsWhileQuarterly: 'da',
+      aicGoodsExigibilityMonth: 5,
+      userChoice: { periodicity: 'month', branch: 'alin7', confirmedBy: 'user', confirmedOn: '2026-10-31' },
+    };
+    const outcome = deriveVatPeriodicity(facts, cap);
+    expect(outcome.kind).toBe('user_confirmed');
+    if (outcome.kind !== 'user_confirmed') return;
+    expect(outcome.segment).toEqual({ before: 'quarter', after: 'month', fromMonth: 6 });
+  });
+
+  it('gives NO point to a person who was already monthly, and none to a bare „da”', () => {
+    // Applying this unconditionally invents quarters for someone who never had them. The gate is
+    // `aicGoodsWhileQuarterly`, which states in its own name that the period was a quarter.
+    const overCap: VatPeriodicityOutcome = deriveVatPeriodicity(
+      {
+        year: 2026,
+        registrationEffectiveFrom: '2025-01-01',
+        registrationRoute: 'b',
+        precedingYearTurnover: L(900_000),
+        precedingYearAicGoods: 'nu',
+      },
+      cap,
+    );
+    expect(overCap.kind).toBe('derived');
+    if (overCap.kind === 'derived') expect(overCap.segment).toBeUndefined();
+
+    const dinOficiu: VatPeriodicityOutcome = deriveVatPeriodicity(
+      { year: 2026, registrationRoute: 'din_oficiu', registrationEffectiveFrom: '2026-03-01' },
+      cap,
+    );
+    expect(dinOficiu.kind).toBe('derived');
+    if (dinOficiu.kind === 'derived') expect(dinOficiu.segment).toBeUndefined();
+
+    // A `da` with no month cannot pick a litera, so it cannot name a point either. The app says so rather
+    // than guessing one, and the calendar stays as it was.
+    const noMonth = deriveVatPeriodicity(flipped(undefined), cap);
+    expect(noMonth.kind).toBe('derived');
+    if (noMonth.kind === 'derived') expect(noMonth.segment).toBeUndefined();
   });
 });
 

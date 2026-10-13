@@ -384,6 +384,14 @@ export const settings = {
       effectsIntro: (year: number): string =>
         `Răspunsul „da” pentru ${year} nu este o simplă bifă: schimbă perioada fiscală și adaugă o obligație de depunere. Citește cele trei efecte și confirmă. Nimic nu este salvat până la „Confirm și salvez”.`,
       effectMonthly: 'Perioada fiscală devine luna calendaristică.',
+      // B-101 — „devine luna calendaristică" is only half of alin. (7): the article says „începând cu" a
+      // month it then names. Without the second sentence the panel promises a year of months and the
+      // calendar shows a quarterly return for every quarter closed before that month — the promise and the
+      // calendar drifting in the direction that under-states nothing but misleads anyway.
+      effectSince: (fromLabel: string): string =>
+        `Luna calendaristică se aplică începând cu ${fromLabel}; până la acea lună perioada fiscală rămâne trimestrul calendaristic, cu un singur decont pentru fiecare trimestru încheiat înainte de ea.`,
+      effectSinceNextYear: (year: number): string =>
+        `Luna calendaristică începe abia în ${year}; anul în curs rămâne în întregime trimestrial, câte un singur decont pe trimestru.`,
       effectReturnsOne: (quarter: number): string =>
         `Trimestrul T${quarter} rămâne neatins și se declară într-un singur decont; luna calendaristică începe cu trimestrul următor.`,
       effectReturnsSplit: (quarter: number, count: number, periods: string): string =>
