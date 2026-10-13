@@ -564,6 +564,379 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     // Verified 2026-10-12 against the amending act and three consolidated mirrors — research/44 §1.
     verifiedAt: '2026-10-12',
   },
+  // ── B-105: art. 84 and art. 84^1 — ordinary *cedarea folosinței bunurilor*, the two regimes the
+  // package did not carry at all.
+  //
+  // A long-term landlord is the most common landlord there is, and this package resolved the correct TITLE
+  // for them (art. 155 alin. (1) lit. e), *cedarea folosinței bunurilor*) and then had nothing to compute
+  // under. That is the same shape B-88 had one sub-category over, and the fix is the same: a rule of their
+  // own, with their own citations, added BESIDE `ACCOMMODATION_ART85_ROOMS_2026` — which is untouched.
+  //
+  // **The first thing a reader must not get wrong is the number in the defect's own title.** The 20 % is
+  // the *cota forfetară de cheltuieli* — an EXPENSE ratio. The tax is **10 % of the net**, and the rate
+  // lives in a different article from the ratio: art. 84 alin. (3) sets the ratio, **art. 123 alin. (2)**
+  // sets the rate. Reading 20 as a rate applied to gross would be wrong twice over.
+  //
+  // **The second thing, and the quieter one: these are three regimes with three different answers to „when
+  // is income income”, and the totals agree only at 31 December.**
+  //
+  //   art. 84   — annual **accrual**: the rent stipulated by the contract „pentru fiecare an fiscal,
+  //               indiferent de momentul încasării” (alin. (1)-(2)).
+  //   art. 84^1 — **per payment**: net fixed „la fiecare plată, de către plătitorii de venit” (alin. (3)).
+  //               alin. (1) deliberately OMITS the annual clause art. 84 alin. (1) carries — that omission
+  //               is the regime, not a drafting accident, and reusing the accrual reading here is the trap.
+  //   art. 85   — **cash in the year**: „încasate în cursul anului fiscal” (alin. (2)), shipped last pass.
+  //
+  // **And three FX rules, which must not meet:** art. 84 alin. (3^1) *curs de schimb mediu anual din anul
+  // de realizare a venitului*; art. 84^1 alin. (2) *cursul comunicat de BNR din ziua precedentă plății*;
+  // art. 85 alin. (4) *ultima zi bancară anterioară încasării*. One conversion path serving all three makes
+  // two of them wrong. (ANAF Cluj's own 2026 material mislabels the *curs mediu anual* rule as „art. 83” —
+  // the correct cite is art. 84 alin. (3^1), and operational guidance is not citation.)
+  //
+  // **NOT ENCODED, deliberately:** the *arendă* alineate of the same article (alin. (4)-(9)) — arenda
+  // agricolă has a cash-basis gross, its own 20 % at alin. (7), its own withholding at alin. (8), and CASS
+  // that CAN be withheld at source (art. 174^1 alin. (3)), which is the single biggest behavioural
+  // difference from ordinary rent. It is recorded as a gap in `docs/ai/phases/52_b105_cedare_folosintei.md`,
+  // not half-built from the ordinary-rent rule.
+  {
+    ...PROVENANCE_2026,
+    ruleId: 'CEDARE_ART84_2026',
+    name: 'Venit din cedarea folosinței bunurilor — cotă forfetară de cheltuieli 20 %, cota 10 % (art. 84)',
+    taxRegime: 'cedare-art84-flat-ratio',
+    effectiveFrom: '2026-01-01',
+    effectiveTo: null,
+    parameters: [
+      {
+        id: 'expense_ratio',
+        label: 'Cotă forfetară de cheltuieli (procente din venitul brut)',
+        value: 20,
+        unit: 'percent',
+        // art. 84 alin. (3): „Venitul net anual … se stabilește prin deducerea din venitul brut a
+        // cheltuielilor determinate prin aplicarea cotei de 20 % asupra venitului brut.” Modified by
+        // Legea 239/2025 art. XII pct. 8 ONLY to replace the carve-out phrase, which is what carves the
+        // 1–7 room short-term case out and leaves 20 % for everything else. It is an EXPENSE ratio: the
+        // net is 80 % of gross. It is NOT a tax rate.
+        description:
+          'art. 84 alin. (3): cheltuieli forfetare = 20 % din venitul brut, deci venitul net = 80 % din venitul brut. Nu este o cotă de impozitare. Cota de impozitare este 10 % asupra VENITULUI NET și stă la art. 123 alin. (2), nu aici.',
+      },
+      {
+        id: 'tax_rate',
+        label: 'Cota de impozitare aplicată venitului net (procente)',
+        value: 10,
+        unit: 'percent',
+        // art. 123 alin. (2) as amended by Legea 239/2025 art. XII pct. 16: 10 % over the net annual, for
+        // *cedarea folosinței* income „altele decât cele pentru care este prevăzută reținerea la sursă
+        // potrivit art. 84 și 84^1”. Here the taxpayer establishes the tax themselves — it is NOT final,
+        // which is the difference from art. 84^1 alin. (6) and from art. 85 alin. (6).
+        description:
+          'art. 123 alin. (2): 10 % asupra venitului net anual. Impozitul este stabilit de contribuabil (art. 122 alin. (3)), nu reținut la sursă, și NU este „impozit final”.',
+      },
+      {
+        id: 'gross_basis',
+        label: 'Măsura venitului brut',
+        value: 'contract_rent_per_fiscal_year_regardless_of_collection',
+        unit: 'text',
+        // The distinction most likely to be lost. art. 84 alin. (1): „…reprezintă totalitatea sumelor în
+        // bani … stabilite potrivit contractului încheiat între părți, pentru fiecare an fiscal,
+        // indiferent de momentul încasării acestora.” alin. (2) repeats it for rent: „pe baza chiriei
+        // prevăzute în contract … indiferent de momentul încasării chiriei.” So the measure is the
+        // contract rent FOR THE YEAR, not the collections in the year — which is what art. 85 alin. (2)
+        // measures and what the app's ledger pass already does. Summing receipts here would apply art. 85's
+        // rule to art. 84's taxpayer.
+        description:
+          'art. 84 alin. (1)-(2): venitul brut este chiria stabilită potrivit contractului pentru fiecare an fiscal, „indiferent de momentul încasării”. Nu este măsura de la art. 85 alin. (2) („încasate în cursul anului fiscal”) și nu este măsura per plată de la art. 84^1 alin. (3).',
+      },
+      {
+        id: 'gross_uplift',
+        label: 'Majorarea brutului: cheltuielile proprietarului plătite de cealaltă parte',
+        value:
+          'art. 84 alin. (1) ultima propoziție: „Venitul brut se majorează cu valoarea cheltuielilor ce cad, conform dispozițiilor legale, în sarcina proprietarului, uzufructuarului sau a altui deținător legal, dacă sunt efectuate de cealaltă parte contractantă.” Aceste sume nu sunt în registrul proprietarului — le-a plătit chiriașul — deci nicio înregistrare nu le poate furniza; sunt o faptă declarată. Se adaugă la BRUT înainte de cota forfetară, nu după: cota este procent din brut, deci ordinea schimbă netul.',
+        unit: 'text',
+        description:
+          'B-105. Același uplift apare și la art. 84^1 alin. (1). Dacă ar fi scăzut după forfetar, cifra ar fi alta — de aceea regula îl ține pe brut.',
+      },
+      {
+        id: 'fx_basis',
+        label: 'Temeiul de conversie pentru veniturile în valută',
+        value: 'annual_average_of_income_realisation_year',
+        unit: 'text',
+        // art. 84 alin. (3^1), introduced by Legea 296/2020 pct. 49 from 01-01-2021: „În situația în care
+        // chiria reprezintă echivalentul în lei al unei valute, venitul brut anual se determină pe baza
+        // chiriei lunare evaluate la cursul de schimb mediu anual al pieței valutare, comunicat de Banca
+        // Națională a României, din anul de realizare a venitului.” NOT the last banking day (art. 85
+        // alin. (4)) and NOT the day before payment (art. 84^1 alin. (2)).
+        description:
+          'art. 84 alin. (3^1): cursul de schimb MEDIU ANUAL comunicat de BNR din anul de realizare a venitului. Nu ultima zi bancară anterioară încasării (art. 85 alin. (4)) și nu cursul din ziua precedentă plății (art. 84^1 alin. (2)). BNR publică media anuală abia după închiderea anului — aplicația nu o calculează din cursurile zilnice.',
+      },
+      {
+        id: 'no_proration',
+        label: 'Fracțiune de an',
+        value: 'fraction_of_year_is_annual_income',
+        unit: 'text',
+        description:
+          'art. 118 alin. (3): veniturile din categoriile art. 61 lit. a), a^1), c) și f) realizate într-o fracțiune de an se consideră venit anual. Nimic nu este proratat — nici treptele de 6 / 12 / 24 SM de la art. 170 alin. (3).',
+      },
+      {
+        id: 'cass_route',
+        label: 'Unde intră venitul net la contribuții',
+        value:
+          'Venitul net al art. 84 intră în cumularea de la art. 170 alin. (4) lit. c), al cărui text FY2026 este „venitul net pentru veniturile din cedarea folosinței bunurilor, stabilite potrivit art. 84-85” — o plajă care acoperă art. 84, art. 84^1 și art. 85. Baza pe care o alege acea cumulare este TREAPTA (6 / 12 / 24 SM, art. 170 alin. (3)), nu netul. Nu intră în scara de la art. 170 alin. (1), care mărginește la 72 SM venitul din art. 155 alin. (1) lit. b): închirierea este lit. e).',
+        unit: 'text',
+        description:
+          'B-105, consecința 4 a sarcinii. Cele două scări rămân paralele, așa cum le-a lăsat B-88: nu se combină nicăieri.',
+      },
+      {
+        id: 'no_evidence_book',
+        label: 'Nicio obligație de evidență',
+        value:
+          'art. 84 alin. (10): „Contribuabilii care obțin venituri din cedarea folosinței bunurilor nu au obligația completării Registrului de evidență fiscală și de conducere a evidenței contabile.” Aceasta este o diferență REALĂ față de regimul pe termen scurt de la art. 85 alin. (7), care păstrează partea de venit a Registrului de evidență fiscală. Aplicația nu generează nicio obligație de evidență pentru acest regim.',
+        unit: 'text',
+        description:
+          'B-105, punctul 8 al acceptanței. Nu se inventează nicio obligație REF pentru că regimul pe termen scurt are una — cele două titluri au obligații diferite.',
+      },
+      {
+        id: 'filing_deadline',
+        label: 'Termen de depunere a declarației unice',
+        value: '2027-05-25',
+        unit: 'date',
+        description:
+          'art. 122 alin. (3): „…pentru fiecare an fiscal, până la data de 25 mai inclusiv a anului următor celui de realizare a veniturilor.” Aici impozitul este stabilit de contribuabil, deci declarația se datorează: art. 122 alin. (6) lit. a) scutește numai impozitul care „se reține la sursă și reprezintă impozit final”. NU art. 121.',
+      },
+      {
+        id: 'payment_deadline',
+        label: 'Termen de plată',
+        value: '2027-05-25',
+        unit: 'date',
+        description:
+          'art. 123 alin. (7): impozitul anual se achită tot până la termenul de depunere a declarației — 25 mai. NU art. 121.',
+      },
+      {
+        id: 'form_section',
+        label: 'Unde se înscrie în declarația 212',
+        value:
+          'OPANAF 2.736/2025 (MO 1.207 / anexa 1.207 bis, 29.12.2025), Cap. I, Secțiunea 1, Subsecțiunea 1, pct. 1.3 „cedarea folosinței bunurilor”: 1.3.1.1 chirie în valută · 1.3.1.2 în lei · 1.3.1.3 plătită exclusiv în natură · 1.3.1.4 garanție utilizată pentru plata chiriei. Se completează pe fiecare contract/sursă (art. 122 alin. (4)). Rândul 1.3 din Secțiunea a 2-a, Subsecțiunea 2.2 este unde intră în treaptă chiria reținută la sursă.',
+        unit: 'text',
+        description:
+          'B-105. Etichetele formularului rămân în urmă față de textul FY2026 al legii; aplicația citează articolul așa cum îl numerotează FY2026, nu așa îl numerotează procedura. Modelul pentru veniturile anului 2026 (depus în 2027) nu este publicat încă — termenul este cert, secțiunea de pe noul model nu este.',
+      },
+    ],
+    calculatorId: 'calc-cedare-art84-flat-ratio',
+    // art. 84 alin. (1) and (3) were modified by Legea nr. 239 din 15.12.2025 (MO 1160/15.12.2025) art. XII
+    // pct. 8, aplicabil „începând cu veniturile aferente anului 2026”. pct. 8 reads „La articolul 84,
+    // alineatele (1) și (3) se modifică…” — ONLY those two, and the operative delta in both is the
+    // carve-out phrase. Every other alineat is untouched by 239/2025. `docs/ai/research/
+    // 46_art84_84_1_cedare_folosintei_2026.md` §1 is the source for the verbatim text and the per-alineat
+    // amendment notes; §Gaps-3 records that the UNCHANGED alineate rest on unofficial mirrors that agree
+    // with each other and with ANAF operational material, while the changed ones are backed by the primary
+    // law. FY2026 and FY2027 are identical for these articles (research/46 §10).
+    sourceAct: 'Cod fiscal — Legea nr. 239/2025, Art. XII pct. 8 (MO 1160/15.12.2025)',
+    sourceArticle:
+      'art. 84 alin. (1) (venitul brut pe an fiscal, „indiferent de momentul încasării”, plus majorarea cu cheltuielile proprietarului plătite de cealaltă parte); art. 84 alin. (2) (brutul chiriei pe baza contractului); art. 84 alin. (3) (cotă forfetară de cheltuieli 20 %); art. 84 alin. (3^1) (curs mediu anual din anul de realizare a venitului); art. 84 alin. (10) (fără Registrul de evidență fiscală, fără evidență contabilă); art. 123 alin. (2) (cota 10 % asupra venitului net); art. 122 alin. (3)-(4) (declarația până la 25 mai, pe fiecare contract); art. 123 alin. (7) (plata până la același termen); art. 170 alin. (4) lit. c) și alin. (3) (venitul net alimentează cumularea, baza este treapta); art. 118 alin. (3) (fracțiune de an = venit anual)',
+    sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/305208',
+    // Verified 2026-10-13 against Legea 239/2025 art. XII pct. 8 (primary) and three agreeing consolidated
+    // mirrors — research/46 §1.
+    verifiedAt: '2026-10-13',
+  },
+  // ── B-105: art. 84^1 — the same 20 % and the same 10 %, in a regime whose tax never reaches the
+  // landlord's hands.
+  //
+  // This is the regime a corporate tenant puts the landlord into, and it is the one most implementations
+  // get wrong at the declaration step rather than the arithmetic step: „withheld and final” does NOT mean
+  // „nothing to file”.
+  {
+    ...PROVENANCE_2026,
+    ruleId: 'CEDARE_ART84X1_2026',
+    name: 'Cedarea folosinței bunurilor plătite de persoane juridice — reținere la sursă 10 %, impozit final (art. 84^1)',
+    taxRegime: 'cedare-art84x1-withheld',
+    effectiveFrom: '2026-01-01',
+    effectiveTo: null,
+    parameters: [
+      {
+        id: 'expense_ratio',
+        label: 'Cotă forfetară de cheltuieli, stabilită la fiecare plată (procente)',
+        value: 20,
+        unit: 'percent',
+        // art. 84^1 alin. (3): venitul net se stabilește „la fiecare plată, de către plătitorii de venit
+        // … prin deducerea din venitul brut a cheltuielilor determinate prin aplicarea cotei de 20 % asupra
+        // venitului brut.” Same number as art. 84 alin. (3), different unit of account: per PAYMENT, not
+        // per fiscal year.
+        description:
+          'art. 84^1 alin. (3): 20 % din venitul brut, determinat LA FIECARE PLATĂ de plătitorul de venit. Nu este netul anual al art. 84 alin. (3), deși cota este aceeași.',
+      },
+      {
+        id: 'tax_rate',
+        label: 'Cota reținută la sursă (procente din venitul net)',
+        value: 10,
+        unit: 'percent',
+        // art. 84^1 alin. (5)-(6): 10 % over the net, reținut la momentul plății, „reprezintă impozit
+        // final”, virat de plătitor până la data de 25 inclusiv a lunii următoare celei în care a fost
+        // reținut.
+        description:
+          'art. 84^1 alin. (5)-(6): 10 % asupra venitului net, reținut la momentul plății, impozit FINAL. Plătitorul îl virează până la 25 a lunii următoare — nu contribuabilul, și nu la 25 mai.',
+      },
+      {
+        id: 'gross_basis',
+        label: 'Măsura venitului brut',
+        value: 'per_payment_established_by_payer',
+        unit: 'text',
+        // ⚠ art. 84^1 alin. (1) OMITS the „pentru fiecare an fiscal, indiferent de momentul încasării”
+        // clause that art. 84 alin. (1) carries. That omission is deliberate — alin. (3) fixes the net
+        // „la fiecare plată” — and it is the single most likely place for this build to go wrong, because
+        // reusing the art. 84 accrual logic here produces the same total at 31 December and a different
+        // one on every other date.
+        description:
+          'art. 84^1 alin. (1) și alin. (3): venitul brut se stabilește potrivit contractului, iar netul „la fiecare plată”. Alineatul (1) nu conține formula „pentru fiecare an fiscal, indiferent de momentul încasării” — aceea este doar la art. 84 alin. (1).',
+      },
+      {
+        id: 'fx_basis',
+        label: 'Temeiul de conversie pentru sumele în valută',
+        value: 'daily_rate_of_day_before_payment',
+        unit: 'text',
+        // art. 84^1 alin. (2): „cursul de schimb comunicat de Banca Națională a României din ziua
+        // precedentă celei în care se efectuează plata”. A THIRD rule, different from art. 84 alin. (3^1)
+        // (annual average) and from art. 85 alin. (4) (last banking day before collection). Mechanically
+        // the app asks the same daily-rate provider and names the day before the payment as the anchor —
+        // it does not average, and it does not take the collection day.
+        description:
+          'art. 84^1 alin. (2): cursul BNR din ZIUA PRECEDENTĂ plății. Nu media anuală (art. 84 alin. (3^1)), nu ultima zi bancară anterioară încasării (art. 85 alin. (4)).',
+      },
+      {
+        id: 'payer_duties',
+        label: 'Obligațiile plătitorului de venit',
+        value:
+          'art. 84^1 alin. (4): plătitorii de venit (persoane juridice sau alte entități cu obligația de a conduce evidență contabilă) calculează, rețin, declară și virează impozitul, și au obligația ca, la cerere, să emită un document prin care se atestă impozitul reținut și virat. Dreptul la acest certificat este al proprietarului și merită afișat: este singura dovadă pe care o are pentru o sume reținută din venitul lui.',
+        unit: 'text',
+        description:
+          'B-105. Aplicația înregistrează fapta (impozitul a fost reținut), nu o calculează ca datorie a proprietarului.',
+      },
+      {
+        id: 'withholding_exception',
+        label: 'Excepția de la alin. (3)-(6): art. 84^1 alin. (8)',
+        value:
+          'art. 84^1 alin. (8) (introdus de OUG 138/2024 art. VI pct. 5): când venitul brut se plătește EXCLUSIV ÎN NATURĂ, sau când o garanție stabilită prin contract este utilizată pentru plata chiriei, reținerea la sursă nu se aplică. În cazul acesta proprietarul determină singur venitul net (brut minus 20 %), calculează impozitul și îl achită prin depunerea Declarației Unice până la termenul din art. 122 alin. (3). Nu este un caz marginal: mută întreaga obligație înapoi la proprietar.',
+        unit: 'text',
+        description:
+          'B-105, acceptanța 6. Ambele condiții sunt fapte declarate (`rentPaidExclusivelyInKind`, `guaranteeAppliedToRent`); absența răspunsului nu este „nu”.',
+      },
+      {
+        id: 'declaration_duty',
+        label: 'Ce datorează proprietarul ca declarație',
+        value:
+          'Două texte, amândouă necesare. art. 122 alin. (6) lit. a): nu se depune declarația pentru venitul la care impozitul „se reține la sursă și reprezintă impozit final” — deci NU se generează nicio obligație de Declarație Unică pentru impozitul pe venit. art. 122 alin. (7): cei care au impozitul reținut dar datorează CAS și/sau CASS depun tot declarația unică pentru a stabili, declara și achita contribuțiile. Pe chiria obișnuită CASS NU se reține la sursă — art. 174^1 alin. (3) acoperă numai drepturile de proprietate intelectuală, arenda și asocierile — deci un proprietar cu impozit reținut datorează în continuare o Declarație Unică pentru contribuții. „Reținut și final” nu înseamnă „nu ai nimic de depus”.',
+        unit: 'text',
+        description:
+          'B-105, acceptanțele 2 și 3. Aplicația diferențiază cele două: pentru acest regim termenul de 25 mai rămâne, dar declarația este „numai contribuțiile”, nu impozitul pe venit.',
+      },
+      {
+        id: 'payer_remittance_deadline',
+        label: 'Termenul de virare de către plătitor',
+        value: '2026-02-25',
+        unit: 'date',
+        // art. 84^1 alin. (6): „până la data de 25 inclusiv a lunii următoare celei în care a fost reținut”.
+        // The value is an EXAMPLE of the monthly rule (a January 2026 payment), not a fixed annual date —
+        // the rule is monthly and event-relative, and this app does not model a monthly obligation of a
+        // third party. It is carried as text-plus-example so the distinction is on the record.
+        description:
+          'art. 84^1 alin. (6): până la 25 inclusiv a lunii următoare celei în care impozitul a fost reținut. Este o obligație a PLĂTITORULUI, nu al proprietarului, și este lunară — aplicația nu emite acest termen ca termen al utilizatorului.',
+      },
+      {
+        id: 'no_evidence_book',
+        label: 'Nicio obligație de evidență',
+        value:
+          'art. 84^1 alin. (7): contribuabilii nu au obligația completării Registrului de evidență fiscală și nici a conducerii evidenței contabile. Nicio obligație de evidență nu se generează pentru acest regim.',
+        unit: 'text',
+        description:
+          'B-105, punctul 8 al acceptanței. art. 84 alin. (10) spune același lucru pentru varianta autodeterminată.',
+      },
+      {
+        id: 'cass_route',
+        label: 'Unde intră venitul net la contribuții',
+        value:
+          'Același drum ca la art. 84: art. 170 alin. (4) lit. c) cumulează „venitul net pentru veniturile din cedarea folosinței bunurilor, stabilite potrivit art. 84-85” — plaja acoperă și art. 84^1 — iar baza este treapta de 6 / 12 / 24 SM (art. 170 alin. (3)). CASS nu se reține aici (art. 174^1 alin. (3)), deci treapta se datorează și se declară de proprietar.',
+        unit: 'text',
+        description:
+          'B-105, consecința 4. Netul reținut la sursă alimentează tot scara de la art. 170 alin. (2)-(4); faptul că impozitul pe venit a fost achitat de altcineva nu scoate venitul din cumul.',
+      },
+      {
+        id: 'payer_declaration_open_question',
+        label: 'Întrebare deschisă: declarația pe care o depune PLĂTITORUL',
+        value:
+          'art. 132 alin. (2) trimite la declarația 112 și scoate explicit arenda, dar NU numește veniturile de la art. 84^1; OPANAF 102/2025 le pune în declarația 205 (anuală, sfârșitul lui februarie), materialele ANAF pe 2026 spun 112 până la 25, iar materialele mai vechi spun 100 și 205. Niciun text primar nu hotărăște. Este obligația CHIRIAȘULUI, nu a proprietarului, și nu blochează nimic în acest regim — aplicația nu o ghicește.',
+        unit: 'text',
+        description:
+          'B-105, `docs/ai/research/46_art84_84_1_cedare_folosintei_2026.md` §Gaps-1. Rămâne nehotărât în mod explicit; aplicația nu emite niciun termen pentru ea.',
+      },
+    ],
+    calculatorId: 'calc-cedare-art84x1-withheld',
+    // Introduced by OUG nr. 115/2023 art. LIII pct. 64, for 2024 incomes; its title and alin. (1) and (3)
+    // were modified by Legea nr. 239/2025 art. XII pct. 9 (MO 1160/15.12.2025) from FY2026 incomes, and
+    // alin. (4) and alin. (8)-(9) by OUG 138/2024 art. VI pct. 4-5. research/46 §2 is the source for the
+    // verbatim text with the per-alineat notes; §4 is the source for what the landlord still owes.
+    //
+    // NOT ENCODED, deliberately: alin. (9) — the payer's art. 132 alin. (2) declaration. It is a third
+    // party's obligation and its form is unsettled (see `payer_declaration_open_question`).
+    sourceAct: 'Cod fiscal — OUG 115/2023 pct. 64; modificat prin Legea 239/2025 Art. XII pct. 9 și OUG 138/2024 art. VI pct. 4-5',
+    sourceArticle:
+      'art. 84^1 alin. (1) (venitul brut potrivit contractului, plus majorarea cu cheltuielile proprietarului plătite de cealaltă parte; fără formula „pentru fiecare an fiscal, indiferent de momentul încasării”); art. 84^1 alin. (2) (cursul BNR din ziua precedentă plății); art. 84^1 alin. (3) (netul la fiecare plată, 20 %); art. 84^1 alin. (4) (plătitorul calculează, reține, declară, virează și emite certificat la cerere); art. 84^1 alin. (5)-(6) (10 % reținut la momentul plății, impozit final, virat până la 25 a lunii următoare); art. 84^1 alin. (7) (fără Registrul de evidență fiscală, fără evidență contabilă); art. 84^1 alin. (8) (excepția: plată exclusiv în natură sau garanție utilizată pentru plata chiriei — contribuabilul se autodetermină și depune Declarația Unică până la termenul din art. 122 alin. (3)); art. 122 alin. (6) lit. a) (fără declarație pentru impozitul reținut și final); art. 122 alin. (7) (declarație pentru contribuții); art. 174^1 alin. (3) (CASS reținută la sursă numai la DPI, arendă și asocieri); art. 170 alin. (4) lit. c) (venitul net alimentează cumularea)',
+    sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/305208',
+    // Verified 2026-10-13 — research/46 §2 and §4.
+    verifiedAt: '2026-10-13',
+  },
+  // ── B-105: a duty the app did not surface at all — registering the lease contract.
+  //
+  // art. 83 alin. (5) FY2026 (renumbered from the old alin. (6) by Legea 239/2025 art. XII pct. 7) puts a
+  // 30-day registration duty on *cedarea folosinței* income. The Cod fiscal names NO form for it; the form
+  // is an ANAF order. So the article is cited to the code and the form is cited to the order — they are
+  // different acts and collapsing them would be a false citation.
+  //
+  // ⚠ The duty is NOT waived because the tenant is a company. The only carve-outs the alineat states are
+  // **arendare** and **închirierea pe termen scurt** a camerelor în locuințe proprietate personală — which
+  // is precisely why it applies to the two regimes added here and not to the one shipped last pass.
+  {
+    ...PROVENANCE_2026,
+    ruleId: 'CEDARE_CONTRACT_REGISTRATION_DEADLINE_2026',
+    name: 'Înregistrarea contractului de locațiune — 30 de zile (art. 83 alin. (5))',
+    taxRegime: 'deadlines',
+    effectiveFrom: '2026-01-01',
+    effectiveTo: null,
+    parameters: [
+      { id: 'event_type', label: 'Deadline event type', value: 'lease_contract_registration', unit: 'text' },
+      { id: 'event', label: 'Event that starts the clock', value: 'lease_contract', unit: 'text' },
+      { id: 'offset_days', label: 'Days from the contract to the term (30 = „cel mult 30 de zile”)', value: 30, unit: 'days' },
+      { id: 'applies_to', label: 'Applies to', value: 'lease_contract_registration', unit: 'text' },
+      // The fact family that must answer affirmatively before this rule emits anything. Read from the
+      // profile by `domain/models.ts leaseRegistrationDutyForYear`, never inferred here.
+      { id: 'applies_when', label: 'Fact family that must be affirmatively in force', value: 'lease_registration', unit: 'text' },
+      {
+        id: 'carve_outs',
+        label: 'Cine NU are obligația',
+        value:
+          'art. 83 alin. (5) vizează veniturile din cedarea folosinței bunurilor „altele decât veniturile din arendare și cele din închirierea pe termen scurt de către proprietari a camerelor situate în locuințe proprietate personală”. Doar acestea două sunt scoase. Faptul că chiriașul este persoană juridică NU scutește de înregistrare — aceasta este exact situația regimului de la art. 84^1.',
+        unit: 'text',
+        description:
+          'B-105, acceptanța 5. Termenul apare pentru un registru art. 84 / art. 84^1 și NU apare pentru un registru de închiriere pe termen scurt (1–7 camere).',
+      },
+      {
+        id: 'form',
+        label: 'Undu se depune, și pe ce formular',
+        value:
+          'formular „Cerere de înregistrare a contractelor de locațiune”, cod C168 — instituit prin OPANAF 114/2019, modificat prin OPANAF 2031/2022 și OPANAF 161/2025 (MO 109/6.02.2025). Codul fiscal NU numește niciun formular: obligația este în lege, formularul este în ordinul ANAF, și cele două se citează separat. Se depune la registratură, prin postă recomandată sau electronic (SPV), cu copie a contractului „conform cu originalul”; organul fiscal o înregistrează în termen de 5 zile. Pentru un bun deținut în cote, contractul desemnează care proprietar înregistrează.',
+        unit: 'text',
+        description:
+          'B-105. OPANAF 161/2025 încă trimite la numerotarea veche a art. 83 și la formularea „în scop turistic” — numerotarea procedurii nu schimbă numerotarea legii; aplicația citează articolul așa cum îl numerotează FY2026.',
+      },
+    ],
+    calculatorId: 'calc-deadline',
+    // art. 83 was wholly replaced by Legea nr. 239/2025 art. XII pct. 7 from FY2026 incomes; the
+    // registration duty sits at alin. (5) in that numbering. research/46 §5 is the source, including the
+    // competent-body rules from the OPANAF 161/2025 instructions.
+    sourceAct: 'Cod fiscal — Legea nr. 239/2025, Art. XII pct. 7 (MO 1160/15.12.2025); formularul: OPANAF 114/2019, modificat prin OPANAF 2031/2022 și OPANAF 161/2025',
+    sourceArticle:
+      'art. 83 alin. (5) (înregistrarea contractului de locațiune și a modificărilor ulterioare în termen de cel mult 30 de zile la organul fiscal competent; sunt excluse arendarea și închirierea pe termen scurt a camerelor în locuințe proprietate personală)',
+    sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/305208',
+    // Verified 2026-10-13 — research/46 §5.
+    verifiedAt: '2026-10-13',
+  },
   // PG-6e (B-31, D-FA-1) — the Titlul II amortisation figures a Titlul IV PFA inherits through art. 68
   // alin. (4) lit. d) („să respecte regulile privind amortizarea, prevăzute în titlul II, după caz”).
   // Read only by `domain/fiscal/depreciation.ts`. It supplies no treatment and no rate: the treatments of a

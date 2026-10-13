@@ -99,6 +99,20 @@ export const scenarios = {
      */
     accommodationAttributionMissing:
       'Aplicația nu poate stabili care dintre încasările acestui registru sunt veniturile la care se aplică metoda forfetară. Înregistrările de venit nu păstrează activitatea din care a venit fiecare încasare, așa că aplicația nu poate împărți registrul între metoda forfetară și sistem real fără să ghicească ea. O astfel de împărțire ar muta venituri de la un titlu fiscal la altul dintr-o presupunere a aplicației, nu dintr-un răspuns al tău, așa că aplicația refuză o cifră în loc să atribuie ea încasările.',
+    /**
+     * B-105 — the regime is settled, and the gross it would run on is not.
+     *
+     * This sentence must not read like `accommodationGrossUndetermined` above it. That one says the TITLE is
+     * unsettled — three questions about rooms, tourism status and the reading of art. 68^3 alin. (3). Here
+     * the regime is already decided by the tenant fact the person declared; what is missing is the measure.
+     * The detail rendered underneath is the assembler's own sentence and names which cause it is: a BNR rate
+     * for the anchor the article asks for, a declared contract rent that disagrees with the register, or the
+     * VAT registration state. The headline therefore says what the app can do (both regimes, each with its
+     * own ratio and its own rate) and what it refuses to do (invent a rate, or pick between two figures for
+     * one rent).
+     */
+    cedareGrossUndetermined:
+      'Aplicația știe să calculeze închirierea obișnuită: cheltuieli forfetare de 20 % din venitul brut (art. 84 alin. (3), respectiv art. 84^1 alin. (3)) și impozit de 10 % din venitul net (art. 123 alin. (2)). Ceea ce nu se poate stabili este venitul brut la care s-ar aplica cota. Fiecare regim are propria măsură și propriul temei de conversie — art. 84 alin. (3^1) cere cursul mediu anual din anul realizării venitului, art. 84^1 alin. (2) cere cursul din ziua precedentă plății — și niciunul nu se completează prin implicit: BNR publică media anuală abia după închiderea anului, iar aplicația nu o calculează din cursurile zilnice. Detaliul de mai jos spune ce anume lipsește. Aplicația nu alege nici dintre o chirie declarată și documentele din registru când cele două dau cifre diferite.',
   } satisfies Record<ScenarioMessageKey, string>,
 
   /** The control the scenario points at. */

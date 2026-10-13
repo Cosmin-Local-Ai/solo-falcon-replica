@@ -35,6 +35,20 @@ export type FiscalRegime =
   | 'expense-deductibility'
   | 'accommodation-flat-ratio'
   | 'short-term-rooms-flat-ratio'
+  // B-105 adds the two ordinary-*cedarea folosinței* regimes, and they are fresh strings for the same
+  // reason every other one above is: `tax.ts` resolves a regime with `applicable.find(r => r.taxRegime ===
+  // ...)`, so a fourth rule sharing 'accommodation-flat-ratio' or 'short-term-rooms-flat-ratio' would be
+  // silently shadowed by whichever ruleId sorts first — and these three articles share a percentage and
+  // share nothing else. art. 84 alin. (3) and art. 84^1 alin. (3) both say 20 %, art. 85 alin. (2) says
+  // 30 %, and all three are taxed at 10 %. What differs is the whole of the rest: art. 84 measures the
+  // contract rent for the fiscal year „indiferent de momentul încasării” and converts it at the *curs mediu
+  // anual* of the realisation year (alin. (3^1)); art. 84^1 fixes the net „la fiecare plată”, withholds 10 %
+  // at the moment of payment as a FINAL tax, and converts at the rate of the day before the payment
+  // (alin. (2)); art. 85 measures „încasate în cursul anului fiscal” at the last banking day before each
+  // collection. One regime string for any two of them would make one gross rule, one FX rule and one
+  // declaration duty answer for all three, and the three totals agree only at 31 December.
+  | 'cedare-art84-flat-ratio'
+  | 'cedare-art84x1-withheld'
   | 'fiscal-depreciation';
 
 /**

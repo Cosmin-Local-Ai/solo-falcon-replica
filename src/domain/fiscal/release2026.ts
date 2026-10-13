@@ -8,24 +8,28 @@ import { ruleSetDigest } from './ruleSetDigest';
  * `releaseId` and `createdAt` used to be the whole identity, and neither moved across the Phase 3 (CAS),
  * Phase 4 (CASS) and Phase 5 (income tax) corrections: the arithmetic changed, the identity did not. Two
  * snapshots carrying `PFA_2026_SYSTEM_REAL` could therefore encode different law. `contentHash` is what
- * closes that — it is the SHA-256 of the canonical serialisation of the 51 rules this release names
- * (`./ruleSetDigest`), so any change to a formula-bearing parameter produces a different release.
+ * closes that — it is the SHA-256 of the canonical serialisation of the rules this release names
+ * (`./ruleSetDigest`), so any change to a formula-bearing parameter produces a different release. The
+ * count is not quoted here on purpose: it moves with every rule added, and a stale count in a comment is
+ * the kind of number a reader trusts without checking.
  *
  * `createdAt` is now a real instant, not the effective date repeated. It is the commit instant of the
- * last change to this rule set's content — the B-88 addition of `ACCOMMODATION_ART85_ROOMS_2026` (art. 85,
- * 2026-10-13), which added a rule and therefore moved the content hash; before that it was the PG-6h-2
+ * last change to this rule set's content — the B-105 addition of `CEDARE_ART84_2026`,
+ * `CEDARE_ART84X1_2026` and `CEDARE_CONTRACT_REGISTRATION_DEADLINE_2026` (art. 84, art. 84^1 and art. 83
+ * alin. (5), 2026-10-13), which added three rules and therefore moved the content hash; before that it was
+ * the B-88 addition of `ACCOMMODATION_ART85_ROOMS_2026` (art. 85, 2026-10-13), then the PG-6h-2
  * accommodation-facts change (2026-10-12), and before that the PG-6h-1 addition of
  * `ACCOMMODATION_68X3_2026` (art. 68^3, 2026-10-11). Derivation and the full history are recorded in
  * `docs/ai/phases/20_rule_release_immutability.md` §4. `effectiveFrom: '2026-01-01'` is when the law
  * bites; `createdAt` is when this record was made. A test now pins that they differ.
  *
- * PG-6h-1 moved `version` from 1 to 2, PG-6h-2 to 3 and B-88 to 4, each time for one reason: the rule set
- * grew, so `contentHash` moved, and the governance in
+ * PG-6h-1 moved `version` from 1 to 2, PG-6h-2 to 3, B-88 to 4 and B-105 to 5, each time for one reason:
+ * the rule set grew, so `contentHash` moved, and the governance in
  * `docs/ai/phases/20_rule_release_immutability.md` §6 makes the version a *consequence* of
  * a content change rather than a display number. No existing rule was edited — `CAS_2026`, `CASS_2026`,
- * `INCOME_TAX_2026`, `ACCOMMODATION_68X3_2026` and the 39 deductibility rules keep their parameters,
- * citations and `version: 1` byte-for-byte; the registry's per-rule digest check would have thrown
- * otherwise.
+ * `INCOME_TAX_2026`, `ACCOMMODATION_68X3_2026`, `ACCOMMODATION_ART85_ROOMS_2026` and the 39 deductibility
+ * rules keep their parameters, citations and `version: 1` byte-for-byte; the registry's per-rule digest
+ * check would have thrown otherwise.
  */
 export const PFA_2026_RELEASE: RuleRelease = {
   releaseId: 'PFA_2026_SYSTEM_REAL',
@@ -34,7 +38,7 @@ export const PFA_2026_RELEASE: RuleRelease = {
   entityType: 'PFA',
   taxYear: 2026,
   lifecycle: 'ACTIVE',
-  version: 4,
+  version: 5,
   contentHash: ruleSetDigest(PFA_2026_SYSTEM_REAL_PACKAGE),
   ruleIds: [
     'PFA_2026_TAX_REFERENCE',
@@ -53,6 +57,18 @@ export const PFA_2026_RELEASE: RuleRelease = {
     // lit. b)), different gross rule (cash basis, commission outside the gross), different contribution
     // route (the art. 170 alin. (4) cumul, base = the rung), different citations.
     'ACCOMMODATION_ART85_ROOMS_2026',
+    // B-105 — the two ordinary *cedarea folosinței bunurilor* regimes, added BESIDE the art. 85 rule rather
+    // than folded into it. Each carries its own forfetară ratio (20 %, not 30 %), its own gross rule and its
+    // own FX rule: art. 84 measures the contract rent for the fiscal year „indiferent de momentul
+    // încasării” and converts at the *curs mediu anual* of the realisation year (alin. (3^1)); art. 84^1
+    // fixes the net „la fiecare plată”, withholds 10 % as a final tax, and converts at the rate of the day
+    // before the payment (alin. (2)). Same 10 % rate as art. 85, three different regimes.
+    'CEDARE_ART84_2026',
+    'CEDARE_ART84X1_2026',
+    // B-105 — the lease-contract registration term (art. 83 alin. (5)): cel mult 30 de zile de la contract,
+    // filed on form C168 under OPANAF 114/2019 as amended. The Cod fiscal names no form, so the rule cites
+    // the article to the code and the form to the ANAF order.
+    'CEDARE_CONTRACT_REGISTRATION_DEADLINE_2026',
     // PG-6e — the Titlul II amortisation figures a Titlul IV PFA inherits through art. 68 alin. (4) lit. d).
     // Its own regime, so it is read only by `domain/fiscal/depreciation.ts` and cannot be mistaken for an
     // art. 68 treatment or for a contribution rule. See docs/ai/phases/43_pg6e_fixed_assets.md.
@@ -107,7 +123,7 @@ export const PFA_2026_RELEASE: RuleRelease = {
   status: 'SAFE_ACTIVATION',
   effectiveFrom: '2026-01-01',
   effectiveTo: null,
-  createdAt: '2026-10-13T12:00:00+03:00',
+  createdAt: '2026-10-13T18:00:00+03:00',
   evidence: [
     // Cod fiscal, consolidated (Portal Legislativ doc 312601, consolidation history newest 08.08.2026)
     // — art. 68, 118, 122 alin. (3), 123 alin. (1), 135^1 alin. (3), 148 alin. (2), 170 alin. (1),
@@ -141,6 +157,11 @@ export const PFA_2026_RELEASE: RuleRelease = {
     // alin. (5) lit. g^1), g^2) and s).
     'https://legislatie.just.ro/Public/DetaliiDocument/307847',
     'https://legislatie.just.ro/Public/DetaliiDocumentAfis/307580',
+    // B-105: the lease-contract registration duty is cited to the Cod fiscal (art. 83 alin. (5)) and its
+    // FORM is cited to the ANAF order in the rule's own `sourceAct` (OPANAF 114/2019, modified by OPANAF
+    // 2031/2022 and OPANAF 161/2025). No URL is added here for those orders: `docs/ai/research/
+    // 46_art84_84_1_cedare_folosintei_2026.md` §5 records them as kept sources but does not record a
+    // retrievable primary link for them, and an unverified link in an evidence list is worse than none.
   ],
   notes:
     'Provenance verified 2026-10-05 against primary sources; see docs/ai/phases/02_fiscal_baseline.md, ' +

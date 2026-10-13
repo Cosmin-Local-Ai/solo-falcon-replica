@@ -153,7 +153,16 @@ export interface TaxAmountBases {
  * methods over one source are not two legs — that is defect B-85, and the method gate in
  * `computeTaxEstimate` is what keeps the list at one entry per register.
  */
-export type IncomeDeterminationMethodTag = 'sistem-real' | 'accommodation-flat-ratio' | 'short-term-rooms-art85';
+export type IncomeDeterminationMethodTag =
+  | 'sistem-real'
+  | 'accommodation-flat-ratio'
+  | 'short-term-rooms-art85'
+  // B-105 — the two ordinary *cedarea folosinței bunurilor* regimes. The tag mirrors
+  // `estimateBasis.ts IncomeDeterminationMethod` because the engine reads the assembler's decision and is
+  // never entitled to re-derive it; adding a method there without adding it here is a compile error, which
+  // is the point.
+  | 'cedare-art84'
+  | 'cedare-art84x1';
 
 export interface ContributionLeg {
   method: IncomeDeterminationMethodTag;

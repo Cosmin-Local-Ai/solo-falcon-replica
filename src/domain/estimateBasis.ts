@@ -31,7 +31,7 @@
  * No fiscal value, rate, parameter or rule lives here.
  */
 import type { UnconvertedRecord, YtdTotals } from './aggregation';
-import { expenseFiscalDate, inPeriod, selectYtd } from './aggregation';
+import { expenseFiscalDate, inPeriod, revenueFiscalDate, selectYtd } from './aggregation';
 import type { AppData, Expense } from '../data/types';
 import {
   classifyExpenseDeductibility,
@@ -65,10 +65,22 @@ import {
   type LedgerConversion,
   type UnconvertedLedgerRecord,
 } from './fx/ledger';
-import { addBani, applyRateDecimal, isRon, lei, money, requireRon, subBani, type Bani, type CurrencyCode } from './money';
+import { addBani, applyRateDecimal, isRon, lei, leiText, money, requireRon, subBani, sumBani, type Bani, type CurrencyCode, type Money } from './money';
 // PG-6h-2 — the accommodation title is resolved in `domain/models.ts`, the one place the art. 83 alin. (4)
 // boundary is read. This module threads the answer; it does not compare the count.
-import { accommodationIncomeTitleForYear } from './models';
+// B-105 adds the lease-facts reader from the same module, for the same reason: the regime split is decided
+// once, in one place, and this module threads it.
+import {
+  accommodationIncomeTitleForYear,
+  art84x1WithholdingBlocked,
+  leaseFactsForYear,
+} from './models';
+// B-105 — the two ordinary-rent regimes convert at two different anchors, so the gross they measure has to
+// be struck through the FX boundary that already exists: `convertToRon` over `recordedRateProvider(data)`.
+// This module does not touch `domain/fx/` internals and does not write a second rate lookup — it names the
+// anchor the article asks for and lets the existing converter answer it.
+import { convertToRon, type ConversionAnchor } from './fx/convert';
+import type { FxRateProvider } from './fx/provider';
 import { selectProjectionV1, type ProjectionV1 } from './projection';
 import {
   evaluateScenarios,
@@ -127,6 +139,17 @@ export interface EstimateAmounts {
    * declared — so the decision is attached here rather than re-derived downstream.
    */
   flatRatioMethod?: IncomeDeterminationMethod;
+  /**
+   * B-105 — whether art. 84^1 alin. (8) switches the withholding off for this register.
+   *
+   * alin. (8) is an exception to alin. (3)-(6): where the gross is paid **exclusively in kind**, or a
+   * **contractual guarantee is applied to the rent**, the payer does not withhold, and the owner determines
+   * the net, computes the tax and files the Declarația Unică up to the art. 122 alin. (3) term. The
+   * arithmetic is the same 20 % and the same 10 %; what changes is whose obligation the tax is, and whether
+   * a return is owed for it. It travels beside `flatRatioMethod` for the same reason that field does: the
+   * assembler read the declared facts once, and the engine is not entitled to read them again.
+   */
+  flatRatioWithholdingBlocked?: boolean;
 }
 
 /**
@@ -346,7 +369,16 @@ export function amountsForEstimate(basis: AttributedEstimateBasis): EstimateAmou
  * refuses for the year as a whole; it means this module does not manufacture a method the rule set does
  * not contain.
  */
-export type IncomeDeterminationMethod = 'sistem-real' | 'accommodation-flat-ratio' | 'short-term-rooms-art85';
+export type IncomeDeterminationMethod =
+  | 'sistem-real'
+  | 'accommodation-flat-ratio'
+  | 'short-term-rooms-art85'
+  // B-105 — the two ordinary *cedarea folosinței bunurilor* regimes. They join this union rather than
+  // borrowing one of the three above because the whole point of the union is that it names WHICH article
+  // measures this register, and these two articles differ from each other and from art. 85 in the gross
+  // rule, the FX rule, who computes the tax and whether a Declarația Unică is owed for it.
+  | 'cedare-art84'
+  | 'cedare-art84x1';
 
 /**
  * B-85 — the method is singular, and that is the contract, not an implementation detail.
@@ -405,6 +437,35 @@ export function selectIncomeDeterminationMethod(
       return 'short-term-rooms-art85';
     }
   }
+  // ── B-105 — the two ordinary *cedarea folosinței bunurilor* regimes ──────────────────────────
+  //
+  // This branch sits BELOW the cazare branch on purpose. A register that declares a room count for the year
+  // is a *închiriere pe termen scurt* register, and art. 83 alin. (5) carves exactly that case out of the
+  // ordinary-rent duty set; the ordinary regimes are what is left. The two never both answer for one
+  // register, because the app holds one register and one declared family (B-89).
+  //
+  // **The fact that splits them is the tenant, not the landlord.** art. 84 alin. (1) opens „altele decât
+  // veniturile plătite de persoane juridice sau alte entități care au obligația de a conduce evidență
+  // contabilă”, and art. 84^1's title takes that same population and gives it a withholding regime. So a
+  // natural-person tenant leaves the income under art. 84 and a corporate tenant moves it to art. 84^1 —
+  // where the net is fixed „la fiecare plată” (alin. (3)) instead of once for the fiscal year, the tax is
+  // withheld and FINAL (alin. (5)-(6)), the FX anchor is the day before the payment (alin. (2)), and the
+  // landlord owes no Declarația Unică for the income tax (art. 122 alin. (6) lit. a)) while still owing one
+  // for the contributions (art. 122 alin. (7), because art. 174^1 alin. (3) withholds CASS only on DPI,
+  // arendă and asocieri).
+  //
+  // Nothing here infers the tenant's legal nature from a CUI on a receipt, from the tenant's name, or from
+  // anything else in the register: `leaseFactsForYear` returns what the person declared, and an undeclared
+  // tenant fact leaves the register on the sistem-real path with the missing fact reported.
+  const leaseYear = leaseFactsForYear(profile.leaseFactsYears, profile.fiscalYear);
+  if (leaseYear?.tenantNature === 'entitate_cu_evidenta_contabila') {
+    // The year-scoping guard again: a fiscal year whose rule set does not carry the art. 84^1 rule has
+    // nothing to be measured under, and this module does not manufacture a method the rule set lacks.
+    if (applicable.some((r) => r.taxRegime === 'cedare-art84x1-withheld')) return 'cedare-art84x1';
+  }
+  if (leaseYear?.tenantNature === 'persoana_fizica') {
+    if (applicable.some((r) => r.taxRegime === 'cedare-art84-flat-ratio')) return 'cedare-art84';
+  }
   return applicable.some((r) => r.taxRegime === 'accommodation-flat-ratio')
     ? 'accommodation-flat-ratio'
     : 'sistem-real';
@@ -460,6 +521,187 @@ function flatRatioGrossFromYtd(ytd: YtdTotals, data: AppData): Bani | null {
 }
 
 /**
+ * B-105 — the gross the two ordinary *cedarea folosinței bunurilor* regimes run on.
+ *
+ * **This function exists because one gross path would make two of the three rent regimes wrong.** art. 84,
+ * art. 84^1 and art. 85 each answer „when is income income” differently, and each converts at a different
+ * date. The three totals agree at 31 December and differ on every other day of the year, which is why a
+ * shared path would survive a casual review and be wrong in production:
+ *
+ * | regime | which records count | FX anchor |
+ * |---|---|---|
+ * | art. 84   | the rent for the fiscal year, „indiferent de momentul încasării” (alin. (1)-(2)) | **curs mediu anual** din anul realizării (alin. (3^1)) |
+ * | art. 84^1 | per payment, net fixed „la fiecare plată” (alin. (3)) | **cursul din ziua precedentă plății** (alin. (2)) |
+ * | art. 85   | „încasate în cursul anului fiscal” (alin. (2)) — the ledger pass, not this function | ultima zi bancară anterioară încasării (alin. (4)) |
+ *
+ * The FX is done through the boundary that already exists — `convertToRon` over `recordedRateProvider(data)`.
+ * This module names the ANCHOR each article asks for and lets the existing converter resolve the rate; it
+ * does not touch `domain/fx/` internals, does not write a second rate lookup, and never averages or
+ * interpolates (the converter refuses when it has no rate, and that refusal is reported here rather than
+ * papered over).
+ *
+ * What the app cannot do is measure art. 84's accrual gross from nothing: it has no contract-period field,
+ * so the accrual measure it can build is the rent DOCUMENTED for the year (document date, not collection
+ * date) — unless the person declared the contract rent themselves, which is the legal measure and wins.
+ * Where a declared contract rent and the register's documents disagree, this refuses rather than picking a
+ * winner: two producers for one figure is the defect class this project keeps paying for.
+ */
+export interface CedareGross {
+  gross: Bani | null;
+  /** Why no gross could be struck. Reported, never guessed, and never replaced by a default. */
+  detail?: string;
+}
+
+/**
+ * The calendar day before an ISO date, in the same fixed-width form.
+ *
+ * art. 84^1 alin. (2) asks for „cursul de schimb comunicat de Banca Națională a României din ziua
+ * precedentă celei în care se efectuează plata”, so the anchor is a day, not the payment itself. The
+ * arithmetic is done on UTC instants at midnight and re-read as a UTC calendar date, which is what makes
+ * the subtraction safe across a DST boundary — a local-time subtraction would land on the wrong day twice a
+ * year in Bucharest.
+ */
+function isoDayBefore(iso: string): string {
+  return new Date(Date.parse(`${iso}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+}
+
+/** Convert one money field under one anchor, or say why it could not be converted. */
+function convertUnderAnchor(
+  amount: Money,
+  anchor: ConversionAnchor,
+  provider: FxRateProvider,
+  context: string,
+): { bani: Bani } | { detail: string } {
+  if (isRon(amount)) return { bani: amount.amount };
+  const outcome = convertToRon(amount, anchor, provider);
+  if (outcome.ok) return { bani: outcome.ron.amount };
+  if (outcome.reason === 'unsupported_currency') {
+    return {
+      detail:
+        `${context}: aplicația nu are o serie BNR pentru ${outcome.currency}, deci chiria nu poate fi ` +
+        'exprimată în lei fără să ghicească un curs.',
+    };
+  }
+  const anchorLabel =
+    anchor.basis === 'payment_date_daily'
+      ? `la data ${anchor.onDate}`
+      : anchor.basis === 'payment_year_annual_average'
+        ? `pentru anul ${anchor.paymentYear}`
+        : `pentru anul ${anchor.incomeRealisationYear}`;
+  return {
+    detail:
+      `${context}: conversia a eșuat (${anchorLabel}) — ${'detail' in outcome ? outcome.detail : 'fără detaliu'}. ` +
+      'Regulile de conversie din Titlul IV cer un curs anume; aplicația nu calculează media din cursurile ' +
+      'zilnice și nu ia un curs dintr-o altă zi ca să obțină un număr.',
+  };
+}
+
+export function selectCedareGross(
+  data: AppData,
+  asOfDate: string,
+  method: IncomeDeterminationMethod,
+): CedareGross {
+  const profile = data.profile;
+  const fiscalYear = profile.fiscalYear;
+  const leaseYear = leaseFactsForYear(profile.leaseFactsYears, fiscalYear);
+
+  // The money measure is a registration fact, not a guess — the same rule `flatRatioGrossFromYtd` applies,
+  // for the same reason (OMFP 3254/2017 art. 4 alin. (3): TVA colectată nu reprezintă venit).
+  const registration = profile.vatRegistration;
+  if (!registration) {
+    return {
+      gross: null,
+      detail:
+        'Starea de înregistrare în scopuri de TVA nu este declarată, deci aplicația nu știe ce măsură a ' +
+        'chiriei să adune: una cu TVA-ul în venit pentru cel scutit potrivit art. 310, alta fără TVA colectată ' +
+        'pentru cel înregistrat potrivit art. 316. Aplicația nu alege între ele.',
+    };
+  }
+  const chargesVat = registrationChargesVat(registration.status);
+  const provider = recordedRateProvider(data);
+
+  // ── art. 84: the accrual measure ────────────────────────────────────────────────────────────
+  if (method === 'cedare-art84') {
+    const anchor: ConversionAnchor = {
+      basis: 'income_realisation_year_annual_average',
+      incomeRealisationYear: fiscalYear,
+    };
+    // The documents FOR the year, not the money received in it. `r.date` rather than `revenueFiscalDate(r)`
+    // is the whole difference from art. 84^1 and art. 85, and it is deliberate: art. 84 alin. (2) measures
+    // „pe baza chiriei prevăzute în contract … indiferent de momentul încasării chiriei”.
+    const documents = data.revenues.filter(
+      (r) => r.status === 'inregistrata' && inPeriod(r.date, asOfDate, fiscalYear),
+    );
+    let derived = lei(0);
+    for (const r of documents) {
+      const net = convertUnderAnchor(r.valoareFaraTva, anchor, provider, `documentul ${r.nr} (${r.date})`);
+      if ('detail' in net) return { gross: null, detail: net.detail };
+      let line = net.bani;
+      if (!chargesVat) {
+        const vat = convertUnderAnchor(r.tva, anchor, provider, `TVA-ul documentului ${r.nr} (${r.date})`);
+        if ('detail' in vat) return { gross: null, detail: vat.detail };
+        line = sumBani([line, vat.bani]);
+      }
+      derived = sumBani([derived, line]);
+    }
+
+    const declared = leaseYear?.contractRentAnnual;
+    let rent: Bani;
+    if (declared !== undefined) {
+      if (documents.length > 0 && declared !== derived) {
+        return {
+          gross: null,
+          detail:
+            `Chiria pentru anul fiscal ${fiscalYear} are doi producători care nu cad de acord: persoana a ` +
+            `declarat ${leiText(declared)} lei chirie prevăzută în contract, iar documentele înregistrate ` +
+            `pentru acest an însumează ${leiText(derived)} lei. art. 84 alin. (2) măsoară chiria „prevăzută ` +
+            'în contract”, deci aplicația nu alege între ele și nu completează diferența.',
+        };
+      }
+      rent = declared;
+    } else {
+      rent = derived;
+    }
+    const uplift = leaseYear?.ownerCostsPaidByTenant ?? lei(0);
+    // The uplift joins the GROSS, before the ratio — art. 84 alin. (1) last sentence „Venitul brut se
+    // majorează cu…”. Deducting it after the 20 % would produce a different net, which is why it is added
+    // here rather than passed to the calculator.
+    return { gross: sumBani([rent, uplift]) };
+  }
+
+  // ── art. 84^1: the per-payment measure ───────────────────────────────────────────────────
+  //
+  // Note what changed from the branch above: the records are selected by the MONEY date, and the rate is
+  // asked for the day BEFORE each payment. Both come from the article, and neither is interchangeable with
+  // the art. 84 branch — reusing the accrual selection here is the trap research/46 §2 calls out, because
+  // alin. (1) of art. 84^1 deliberately omits the annual clause art. 84 alin. (1) carries.
+  const payments = data.revenues.filter(
+    (r) => r.status === 'inregistrata' && inPeriod(revenueFiscalDate(r), asOfDate, fiscalYear),
+  );
+  let total = lei(0);
+  for (const r of payments) {
+    const paidOn = revenueFiscalDate(r);
+    const anchor: ConversionAnchor = { basis: 'payment_date_daily', onDate: isoDayBefore(paidOn) };
+    const net = convertUnderAnchor(
+      r.valoareFaraTva,
+      anchor,
+      provider,
+      `plata din ${paidOn} (cursul din ${isoDayBefore(paidOn)}, art. 84^1 alin. (2))`,
+    );
+    if ('detail' in net) return { gross: null, detail: net.detail };
+    let line = net.bani;
+    if (!chargesVat) {
+      const vat = convertUnderAnchor(r.tva, anchor, provider, `TVA-ul plății din ${paidOn}`);
+      if ('detail' in vat) return { gross: null, detail: vat.detail };
+      line = sumBani([line, vat.bani]);
+    }
+    total = sumBani([total, line]);
+  }
+  const uplift = leaseYear?.ownerCostsPaidByTenant ?? lei(0);
+  return { gross: sumBani([total, uplift]) };
+}
+
+/**
  * The open questions the art. 68^3 rule carries in its own parameters.
  *
  * Lifted, not written. The registry is not a wording layer and neither is this module: the two readings of
@@ -505,9 +747,15 @@ function withFlatRatioGross(
   amounts: EstimateAmounts,
   gross: Bani | undefined,
   method: IncomeDeterminationMethod,
+  withholdingBlocked: boolean,
 ): EstimateAmounts {
   if (gross === undefined) return amounts;
-  return { ...amounts, flatRatioGross: gross, flatRatioMethod: method };
+  return {
+    ...amounts,
+    flatRatioGross: gross,
+    flatRatioMethod: method,
+    flatRatioWithholdingBlocked: withholdingBlocked,
+  };
 }
 
 // ── TASK 2b: the deductible subset, assembled here and nowhere else ───────────
@@ -1616,6 +1864,21 @@ export function selectEstimateOperands(
   // expense engine's absence is fatal depends on whether the law supplied a different method for this
   // income, and that is a question about the rule set, not about the classifier.
   const method = selectIncomeDeterminationMethod(ledger.data, rules, asOfDate, context.activityFamily);
+  // B-105 — the gross the two ordinary-rent regimes run on, and whether art. 84^1 alin. (8) has switched
+  // their withholding off. Both are computed here, before the registry runs, because the registry needs the
+  // first as a fact (a cedare register whose gross cannot be struck is a refusal, not a zero) and the engine
+  // needs the second as an operand (it decides whether the tax is the payer's to withhold or the owner's to
+  // self-assess and file). Neither is re-derived downstream.
+  const cedareGross =
+    method === 'cedare-art84' || method === 'cedare-art84x1'
+      ? selectCedareGross(ledger.data, asOfDate, method)
+      : { gross: null as Bani | null, detail: undefined };
+  const cedareWithholdingBlocked =
+    method === 'cedare-art84x1'
+      ? art84x1WithholdingBlocked(
+          leaseFactsForYear(ledger.data.profile.leaseFactsYears, ledger.data.profile.fiscalYear),
+        )
+      : false;
   const deductible = {
     ...selectDeductibleExpenses(ledger.data, asOfDate, rules, context),
     // The assembler's own pass covers revenues as well as expenses, so the audit trail it reports is the
@@ -1673,6 +1936,10 @@ export function selectEstimateOperands(
     // mixed-method year about the SAME register the engine is about to run — and it is the reason the
     // refusal and the composition cannot ever disagree about which method was in play.
     incomeDeterminationMethod: method,
+    // B-105 — why a cedare register has no gross, when that is the case. Handed over as the assembler's own
+    // finding rather than re-detected by the registry: the gross is struck here, and a second place deciding
+    // whether it exists is how one register gets two answers about the same money.
+    cedareGrossDetail: cedareGross.gross === null ? (cedareGross.detail ?? null) : null,
   });
   const refusal = scenarioRefusal(scenarios);
   if (refusal !== null) {
@@ -1702,7 +1969,9 @@ export function selectEstimateOperands(
   const flatRatioGross =
     method === 'sistem-real'
       ? undefined
-      : flatRatioGrossFromYtd(ytd, ledger.data) ?? undefined;
+      : method === 'cedare-art84' || method === 'cedare-art84x1'
+        ? cedareGross.gross ?? undefined
+        : flatRatioGrossFromYtd(ytd, ledger.data) ?? undefined;
   const projection = selectProjectionV1(scoped, asOfDate);
   const basisBeforeCaps = selectTaxEstimateBasis(projection, ytd, asOfDate);
 
@@ -1754,7 +2023,12 @@ export function selectEstimateOperands(
     applyVatToExpenseBase(inputVat, amounts.expensesNet, deductibleForVat);
 
   if (deductible.annualCapped.length === 0) {
-    const amounts = withFlatRatioGross(amountsForEstimate(basisBeforeCaps), flatRatioGross, method);
+    const amounts = withFlatRatioGross(
+      amountsForEstimate(basisBeforeCaps),
+      flatRatioGross,
+      method,
+      cedareWithholdingBlocked,
+    );
     return {
       kind: 'run',
       basis: basisBeforeCaps,
@@ -1776,7 +2050,7 @@ export function selectEstimateOperands(
     claimed: claimAnnualMeasure(line),
   }));
   const { basis, adjustments } = applyAnnualDeductibilityCaps(basisBeforeCaps, claims);
-  const amounts = withFlatRatioGross(amountsForEstimate(basis), flatRatioGross, method);
+  const amounts = withFlatRatioGross(amountsForEstimate(basis), flatRatioGross, method, cedareWithholdingBlocked);
   return {
     kind: 'run',
     basis,

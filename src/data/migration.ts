@@ -347,8 +347,31 @@ export const DATA_VERSION_INPUT_VAT = 18;
  * Idempotent-safe for the same reason v13-v18 are: it adds at most one key and writes a version.
  */
 export const DATA_VERSION_VAT_RETURNS = 19;
+/**
+ * B-105 — the profile can now hold the facts an ordinary *cedarea folosinței bunurilor* register carries:
+ * what kind of tenant pays, what the contract stipulates for the year, the costs legally the owner's that
+ * the tenant paid, the two art. 84¹ alin. (8) triggers, and when the contract was concluded.
+ *
+ * The step **backfills nothing**, and for this family that is not a convention but the only safe
+ * behaviour. Each of these fields decides a legal consequence that no stored record evidences:
+ *
+ *  - a `tenantNature` invented here would move the income between art. 84 and art. 84¹, and with it the
+ *    declaration duty — art. 122 alin. (6) lit. a) exempts the taxpayer from the Declarația Unică for the
+ *    income where the tax is withheld at source and final, while art. 122 alin. (7) still requires one for
+ *    the contributions, because CASS on ordinary rent is not withheld;
+ *  - a `contractRentAnnual` invented from the register's collections would replace the accrual measure of
+ *    art. 84 alin. (2) („indiferent de momentul încasării”) with the cash measure of art. 85 alin. (2)
+ *    („încasate în cursul anului fiscal”) — the same total at 31 December and a different one on every
+ *    other day of the year, which is the quietest way this area can be got wrong;
+ *  - a `contractDate` invented here would mint a 30-day registration term under art. 83 alin. (5) that
+ *    nobody owes.
+ *
+ * A payload that already carries `leaseFactsYears` keeps it untouched: this step opens a profile field, it
+ * does not rewrite one.
+ */
+export const DATA_VERSION_LEASE_FACTS = 20;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_VAT_RETURNS;
+export const CURRENT_DATA_VERSION = DATA_VERSION_LEASE_FACTS;
 
 export interface MigrationStep {
   readonly from: number;
@@ -1056,6 +1079,19 @@ export function migrateVatReturnsV19(data: PersistedAppData): PersistedAppData {
   return { ...data, vatReturns: [], version: DATA_VERSION_VAT_RETURNS };
 }
 
+/**
+ * v19 → v20 (`lease-facts`). Opens `profile.leaseFactsYears` by writing nothing. See
+ * `DATA_VERSION_LEASE_FACTS` for the three facts this step refuses to invent.
+ *
+ * The body is deliberately the version stamp and nothing else. There is no key to open at the top level —
+ * these are profile facts, not a collection — and no stored record carries anything from which a tenant's
+ * legal nature, a contract's stipulated rent or a contract date could be derived. A payload that already
+ * carries the field keeps it untouched, which is what makes re-running the step a no-op rather than a wipe.
+ */
+export function migrateLeaseFactsV20(data: PersistedAppData): PersistedAppData {
+  return { ...data, version: DATA_VERSION_LEASE_FACTS };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -1208,6 +1244,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Datele pot înregistra acum deconturile periodice de TVA (formular 300, OPANAF nr. 174 din 05.02.2026, MO I nr. 105 din 09.02.2026), câte un record pentru fiecare perioadă fiscală. Colecția se deschide VIDĂ, și acesta este tot conținutul pasului. O perioadă fiscală care există nu este nicio dovadă că decontul pentru ea a fost depus, iar aplicația nu a depus niciodată vreunul: un record `depusa` inventat pentru fiecare lună sau trimestru ar fabrica tocmai dovada falsă pe care pasul v10→v11 a eliminat-o, și ar permite unui termen să fie marcat „Depusă” dintr-un record pe care nimeni nu l-a făcut. La fel rămân absente și faptele din profil pe care se decide art. 322: alin. (3) cere o cifră pe care contribuabilul o PRECONIZEAZĂ — o estimare pe care doar el o poate face — iar alin. (4) se aprinde doar dacă persoana venea de sub scutirea de la art. 310, un statut pe care registrul nu l-a înregistrat niciodată. O perioadă fiscală implicită ar însemna că aplicația a răspuns la o întrebare care nu a fost pusă încă; în schimb aplicația întreabă, spune regula în română și marchează răspunsul ca fiind al persoanei, nu concluzia ei. Un payload care are deja cheia `vatReturns` o păstrează neschimată: acest pas deschide o colecție, nu rescrie una.',
     apply: migrateVatReturnsV19,
+  },
+  {
+    from: DATA_VERSION_VAT_RETURNS,
+    to: DATA_VERSION_LEASE_FACTS,
+    name: 'lease-facts',
+    summary:
+      'Profilul poate înregistra acum faptele pe care se decide REGIMUL sub care se impozitează închirierea obișnuită (cedarea folosinței bunurilor): dacă chiriașul este persoană fizică sau entitate cu obligația de a conduce evidență contabilă — faptă care desparte art. 84 de art. 84^1 — chiria prevăzută în contract pentru anul fiscal, cheltuielile care cad în sarcina proprietarului dar sunt efectuate de cealaltă parte, cele două condiții ale art. 84^1 alin. (8) (chirie plătită exclusiv în natură, garanție utilizată pentru plata chiriei) și data încheierii contractului, de la care pornește termenul de 30 de zile de la art. 83 alin. (5). Nimic nu a fost completat în acest pas, și acesta este tot conținutul lui. Un `tenantNature` inventat ar muta venitul între art. 84 și art. 84^1 și, cu el, obligația declarativă: art. 122 alin. (6) lit. a) scutește de declarația unică pentru impozitul pe venit când impozitul se reține la sursă și este final, dar art. 122 alin. (7) cere tot declarația pentru contribuții, pentru că pe chiria obișnuită CASS nu se reține la sursă. O chirie anuală inventată din încasările registrului ar înlocui măsura de la art. 84 alin. (2) („indiferent de momentul încasării”) cu măsura de la art. 85 alin. (2) („încasate în cursul anului fiscal”) — aceeași sumă la 31 decembrie și alta în orice altă zi a anului. O dată a contractului inventată ar naște un termen de înregistrare de 30 de zile pe care nimeni nu îl datorează. Un profil fără aceste fapte rămâne fără ele, iar aplicația refuză cifra în loc să ghicească regimul.',
+    apply: migrateLeaseFactsV20,
   },
 ];
 

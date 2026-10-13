@@ -176,6 +176,30 @@ export const pfaProfileSchema: z.ZodType<PfaProfile> = z.object({
     .optional(),
   accommodationCommissionReading: z.enum(['reading_a', 'reading_b']).optional(),
   accommodationTourismEligibility: z.enum(['da', 'nu']).optional(),
+  // B-105 — the ordinary *cedarea folosinței bunurilor* facts. All optional, none with `.default()`, for
+  // the reason every addition above gives: this is the persisted gate, and a required field here resets
+  // every payload written before it. Absence is also the honest state — a tenant nature invented by a
+  // default would decide whether a Declarația Unică is owed for the income at all (art. 122 alin. (6)
+  // lit. a) exempts where the tax is withheld and final; alin. (7) still requires one for the
+  // contributions), and a contract date invented by a default would mint a 30-day registration term under
+  // art. 83 alin. (5) that nobody owes. Year-attributed because art. 84 alin. (1) speaks per fiscal year.
+  leaseFactsYears: z
+    .array(
+      z.object({
+        fiscalYear: z.number().int().min(1990).max(2100),
+        tenantNature: z.enum(['persoana_fizica', 'entitate_cu_evidenta_contabila']).optional(),
+        contractRentAnnual: z.number().min(0).finite().transform((n) => n as Bani).optional(),
+        ownerCostsPaidByTenant: z.number().min(0).finite().transform((n) => n as Bani).optional(),
+        rentPaidExclusivelyInKind: z.enum(['da', 'nu']).optional(),
+        guaranteeAppliedToRent: z.enum(['da', 'nu']).optional(),
+        contractDate: z
+          .string()
+          .regex(ISO_CALENDAR_DATE, 'leaseFactsYears.contractDate must be ISO YYYY-MM-DD')
+          .optional(),
+        contractRegistered: z.enum(['da', 'nu']).optional(),
+      }),
+    )
+    .optional(),
   socialInsuranceStatus: z.enum(['obligatoriu', 'exempt', 'neplata']),
   // PG-6f (B-30, D-LEG-1) — `vatExempt: z.boolean()` is **removed**, not widened. D-LEG-1 is standing
   // („we do not need legacy data. we have no users yet”): a retired shape is deleted from the type, the

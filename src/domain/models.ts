@@ -552,6 +552,163 @@ export function withCassLadderYear(
   return [...others, year];
 }
 
+// ── B-105: the facts an ordinary *cedarea folosinței bunurilor* register carries ────────────
+//
+// These are the facts that decide WHICH of the two ordinary-rent regimes applies, and they are the only
+// facts the two articles turn on. Nothing here is derived: no CAEN code, no revenue amount and no contract
+// type establishes any of them.
+//
+// **The distinction these facts exist to keep apart is the quietest one in this area.** Three regimes answer
+// „when is income income” differently, and the totals agree only at 31 December:
+//
+//   - art. 84  — **annual accrual**: the rent stipulated by the contract „pentru fiecare an fiscal,
+//     indiferent de momentul încasării” (alin. (1)-(2)).
+//   - art. 84¹ — **per payment**: the net is fixed „la fiecare plată, de către plătitorii de venit”
+//     (alin. (3)). alin. (1) deliberately omits the annual clause art. 84 alin. (1) carries.
+//   - art. 85  — **cash in the year**: „încasate în cursul anului fiscal” (alin. (2)), shipped in the
+//     previous pass and not touched by this one.
+//
+// Reusing one gross rule across them is the trap this block is built to make impossible.
+
+/**
+ * What the tenant IS — the single fact that separates art. 84 from art. 84¹.
+ *
+ * art. 84 alin. (1) opens with „altele decât veniturile plătite de persoane juridice sau alte entități care
+ * au obligația de a conduce evidență contabilă”, and art. 84¹'s title takes exactly that population out and
+ * gives it a withholding regime. So the split is not about the landlord, the contract or the asset: it is
+ * about the payer. A natural-person tenant leaves the income under art. 84; a company or any entity obliged
+ * to keep accounting records moves it to art. 84¹, where the payer withholds 10 % and the tax is final.
+ *
+ * The app asks. It does not read the tenant's `cui` on a receipt and infer accounting obligations from it —
+ * a CUI does not say whether the holder is a persoană juridică, and `Revenue.cui` is a free-text field.
+ */
+export const LEASE_TENANT_NATURE_VALUES = ['persoana_fizica', 'entitate_cu_evidenta_contabila'] as const;
+export type LeaseTenantNature = (typeof LEASE_TENANT_NATURE_VALUES)[number];
+
+/**
+ * The lease facts declared for ONE fiscal year.
+ *
+ * Every field is optional and none has a `.default()`, for the reason every other fact family in this file
+ * gives: this is the persisted gate, and a required field resets every payload written before it. Absence
+ * is also the honest state — a contract date invented by a default would mint a 30-day term that was never
+ * owed, and a tenant nature invented by a default would move the income between two regimes with different
+ * declaration duties.
+ */
+export interface LeaseFactsYear {
+  /** The fiscal year these facts describe. art. 84 alin. (1) speaks per fiscal year. */
+  fiscalYear: number;
+  /**
+   * The fact that selects the regime. Absent means the app does not know which of art. 84 and art. 84¹
+   * this register falls under, and it must not pick one: the two differ in who computes the tax, whether
+   * it is final, and whether a Declarația Unică is owed for the income at all.
+   */
+  tenantNature?: LeaseTenantNature;
+  /**
+   * The accrual measure of the gross: the rent the contract stipulates for THIS fiscal year, in lei.
+   *
+   * It is a declared amount rather than a sum of receipts precisely because art. 84 alin. (2) measures
+   * „pe baza chiriei prevăzute în contract … indiferent de momentul încasării chiriei”. Summing the
+   * register's collections here would apply art. 85's cash rule to an accrual regime — the same number at
+   * 31 December and a different one on every other day of the year.
+   */
+  contractRentAnnual?: Bani;
+  /**
+   * The gross uplift of art. 84 alin. (1) last sentence and art. 84¹ alin. (1): „Venitul brut se majorează
+   * cu valoarea cheltuielilor ce cad, conform dispozițiilor legale, în sarcina proprietarului,
+   * uzufructuarului sau a altui deținător legal, dacă sunt efectuate de cealaltă parte contractantă.”
+   *
+   * These costs are not in the landlord's register — the tenant paid them — so no record can supply them.
+   * They are added to the gross BEFORE the forfetară ratio, never after: the ratio is a percentage of the
+   * gross, so the order changes the net.
+   */
+  ownerCostsPaidByTenant?: Bani;
+  /**
+   * art. 84¹ alin. (8) trigger 1: the gross is owed **exclusively in kind**. Withheld at source does not
+   * apply, and the whole duty — determine the net, compute the tax, file the Declarația Unică — moves back
+   * onto the owner.
+   */
+  rentPaidExclusivelyInKind?: PfaYesNo;
+  /**
+   * art. 84¹ alin. (8) trigger 2: a contractual guarantee („garanție utilizată pentru plata chiriei
+   * stabilită prin contract”) was applied to pay rent. Same consequence as the in-kind case.
+   */
+  guaranteeAppliedToRent?: PfaYesNo;
+  /**
+   * The date the lease contract was concluded — the event the 30-day registration term runs from
+   * (art. 83 alin. (5)). Optional because the app may be told about a lease without being told when it was
+   * signed; an absent date resolves the term to undated, never to a guessed date.
+   */
+  contractDate?: string;
+  /**
+   * Whether the contract has been registered with the competent tax body — the C168 filing under OPANAF
+   * 114/2019 as amended. The Cod fiscal names no form, so the form is cited to the ANAF order and this
+   * field records only the person's own statement about it.
+   */
+  contractRegistered?: PfaYesNo;
+}
+
+/** The lease facts declared for one fiscal year, or `undefined` when that year was never answered. */
+export function leaseFactsForYear(
+  years: readonly LeaseFactsYear[] | undefined,
+  fiscalYear: number,
+): LeaseFactsYear | undefined {
+  return years?.find((y) => y.fiscalYear === fiscalYear);
+}
+
+/**
+ * Replace or remove ONE year's lease facts without disturbing the other years — the same discipline as
+ * `withCassLadderYear` and `withAccommodationRoomCount`.
+ */
+export function withLeaseFactsYear(
+  years: readonly LeaseFactsYear[] | undefined,
+  year: LeaseFactsYear | undefined,
+): LeaseFactsYear[] | undefined {
+  const others = (years ?? []).filter((y) => y.fiscalYear !== year?.fiscalYear);
+  if (year === undefined) return others.length > 0 ? others : undefined;
+  return [...others, year];
+}
+
+/**
+ * Whether the art. 84¹ withholding is switched off by alin. (8) for this year.
+ *
+ * alin. (8) is an exception to alin. (3)-(6), not an edge case: where the gross is paid exclusively in
+ * kind, or a contractual guarantee is applied to the rent, the payer does not withhold and the owner
+ * self-determines the net, computes the tax and files the Declarația Unică up to the art. 122 alin. (3)
+ * term. Either answer being `da` is enough — the alineat states the two triggers in the alternative.
+ *
+ * Absence of both answers is NOT `nu`: it means the question was never asked, and the app keeps the
+ * withholding reading the tenant fact gives rather than inventing a trigger.
+ */
+export function art84x1WithholdingBlocked(year: LeaseFactsYear | undefined): boolean {
+  if (!year) return false;
+  return year.rentPaidExclusivelyInKind === 'da' || year.guaranteeAppliedToRent === 'da';
+}
+
+/**
+ * Whether the art. 83 alin. (5) contract-registration duty reaches this year's letting.
+ *
+ * The duty is NOT waived because the tenant is a company — that is the mistake this function exists to
+ * prevent, because the corporate-tenant case is exactly the art. 84¹ regime being built here. The only
+ * carve-outs are the two the alineat names: **arendare** and **închirierea pe termen scurt** a camerelor în
+ * locuințe proprietate personală. The second is the regime shipped in the previous pass, which is why the
+ * duty applies to this one and not to that one.
+ *
+ * The app therefore asks two things and infers nothing: a lease was declared for this year (a tenant
+ * nature is recorded), and the register is not an accommodation register (no room count is recorded for
+ * the year, and the declared family is not `cazare`). A short-term-letting register is carved out by the
+ * alineat itself; an arendă register is out of scope for this build and is recorded as a gap, not
+ * half-built from the art. 84 rule.
+ */
+export function leaseRegistrationDutyForYear(
+  profile: Pick<PfaProfile, 'leaseFactsYears' | 'accommodationRoomCounts' | 'activityFamily'>,
+  fiscalYear: number,
+): boolean {
+  const year = leaseFactsForYear(profile.leaseFactsYears, fiscalYear);
+  if (year === undefined || year.tenantNature === undefined) return false;
+  if (profile.activityFamily === 'cazare') return false;
+  return accommodationRoomCountForYear(profile.accommodationRoomCounts, fiscalYear) === undefined;
+}
+
 /**
  * CASS status for the profile. The three stored strings are PERSISTED DATA — renaming a value would
  * be a data migration this brief does not authorise, so only the vocabulary AROUND them changes (B-19).
@@ -784,6 +941,23 @@ export interface PfaProfile {
    * the statement; the classification itself belongs to tourism law and the ONRC authorisation, not here.
    */
   accommodationTourismEligibility?: AccommodationTourismEligibility;
+  /**
+   * B-105 — the facts of an ordinary *cedarea folosinței bunurilor* register, **one record per fiscal
+   * year**.
+   *
+   * These are the facts CF art. 84 and art. 84¹ turn on, and nothing else supplies them: which kind of
+   * tenant pays (art. 84 alin. (1) vs art. 84¹'s title), what the contract stipulates for the year
+   * (art. 84 alin. (2), „indiferent de momentul încasării”), the costs legally the owner's that the tenant
+   * paid (alin. (1) last sentence), whether alin. (8) of art. 84¹ switches withholding off, and when the
+   * contract was concluded (art. 83 alin. (5)'s 30-day term).
+   *
+   * Optional, no `.default()`, no backfill — the same three properties as the accommodation rail above it.
+   * A default here would mint a legal fact: a tenant nature invented by a schema decides whether a
+   * Declarația Unică is owed for the income at all (art. 122 alin. (6) lit. a) vs alin. (7)), and a contract
+   * date invented by a schema mints a registration deadline nobody owes. Migration step v19→v20 writes
+   * nothing for the same reason.
+   */
+  leaseFactsYears?: LeaseFactsYear[];
   /** CASS status. */
   socialInsuranceStatus: PfaSocialInsuranceStatus;
   /**

@@ -96,7 +96,12 @@ export type ScenarioMessageKey =
   | 'activityFamilyUndeclared'
   | 'accommodationGrossUndetermined'
   | 'accommodationTitleCedareaFolosintei'
-  | 'accommodationAttributionMissing';
+  | 'accommodationAttributionMissing'
+  // B-105 — a cedarea folosinței register whose gross the assembler could not strike. It is a separate key
+  // from `accommodationGrossUndetermined` because the causes are different: there the gross is unsettled
+  // because three questions about the TITLE are unanswered; here the regime is settled and what is missing
+  // is a rate, a declared contract rent that disagrees with the register, or the VAT registration fact.
+  | 'cedareGrossUndetermined';
 
 /**
  * Everything a detector is allowed to look at.
@@ -176,6 +181,16 @@ export interface ScenarioFacts {
    * means the caller never went through the assembler, and absence is not `sistem-real`.
    */
   incomeDeterminationMethod?: IncomeDeterminationMethod;
+  /**
+   * B-105 — why a *cedarea folosinței* register has no gross, when that is the case, in the assembler's own
+   * words.
+   *
+   * The assembler strikes the gross; the registry does not. Handing the finding over rather than re-detecting
+   * it is the same discipline as `classifierRefusal` above: a second place deciding whether the gross exists
+   * is how one register ends up with two answers about the same money. `null` means the gross was struck
+   * successfully; absent means the caller never went through the assembler.
+   */
+  cedareGrossDetail?: string | null;
 }
 
 /** The family this register is being evaluated under — resolved once, read by every detector that needs it. */
@@ -515,6 +530,43 @@ const accommodationAttributionScenario: ScenarioSupport = {
 };
 
 /**
+ * The gross of an ordinary *cedarea folosinței bunurilor* register could not be struck (B-105).
+ *
+ * The two cedare regimes are the first place this app measures a register at something other than the
+ * ledger's per-collection conversion, because art. 84 alin. (3^1) asks for the *curs mediu anual* of the
+ * realisation year and art. 84^1 alin. (2) asks for the rate of the day before each payment. Both ask the
+ * existing converter and both refuse when it has no rate — BNR publishes an annual average only after the
+ * year closes, and the app never computes one out of the daily rows.
+ *
+ * Three causes reach this entry, and the detail says which: a missing rate for the anchor the article names,
+ * a declared contract rent that disagrees with the register's documents (two producers for one figure), or
+ * an undeclared VAT registration, which decides the measure of every leu in the gross. All three are stops,
+ * not gaps: unlike a missing profile fact, no figure stands beside the hole that would still be this
+ * taxpayer's figure.
+ *
+ * It is keyed to the resolved METHOD, like the accommodation entries beside it, so one register never carries
+ * two refusals about the same gross.
+ */
+const cedareGrossScenario: ScenarioSupport = {
+  id: 'cedare-gross-undetermined',
+  effect: 'refuse',
+  message: 'cedareGrossUndetermined',
+  fixTarget: { page: 'settings', tab: 'fiscal' },
+  detect(facts) {
+    if (!facts.data?.profile) return null;
+    if (
+      facts.incomeDeterminationMethod !== 'cedare-art84' &&
+      facts.incomeDeterminationMethod !== 'cedare-art84x1'
+    ) {
+      return null;
+    }
+    const detail = facts.cedareGrossDetail ?? null;
+    if (detail === null) return null;
+    return { detail };
+  },
+};
+
+/**
  * The recorded regime is one this rule package cannot compute (defect B-14).
  *
  * Already live today: `tax.ts` refuses it and the B-14 e2e pins the reason. It is registered here so
@@ -586,6 +638,10 @@ export const SCENARIO_SUPPORT: readonly ScenarioSupport[] = [
   accommodationGrossScenario,
   accommodationTitleScenario,
   accommodationAttributionScenario,
+  // B-105 — after the accommodation entries, for the same reason `accommodationAttributionScenario` sits
+  // where it does: the entries are keyed to different methods, and one register must not collect two
+  // refusals about one gross.
+  cedareGrossScenario,
   regimeScenario,
   activityFamilyScenario,
 ];

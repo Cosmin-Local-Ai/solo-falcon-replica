@@ -974,6 +974,153 @@ function calcShortTermRoomsFlatRatio(rule: FiscalRule, input?: CalculatorInput):
 }
 
 /**
+ * B-105 — CF art. 84: ordinary *cedarea folosinței bunurilor*, self-assessed.
+ *
+ * A separate calculator from `calcShortTermRoomsFlatRatio`, for the same reason that one is separate from
+ * `calcAccommodationFlatRatio`: the percentages overlap and nothing else does. Here the ratio is **20 %**
+ * (alin. (3)), not 30 %, and the rate is 10 % of the net under **art. 123 alin. (2)** — a different article
+ * from the one that sets the ratio. The tax is NOT final: the taxpayer establishes it through the
+ * Declarația Unică (art. 122 alin. (3)) and pays it by the same date (art. 123 alin. (7)).
+ *
+ * What the caller hands in is the **accrual** gross — the rent the contract stipulates for the fiscal year,
+ * „indiferent de momentul încasării” (alin. (1)-(2)), already increased by the costs legally the owner's
+ * that the tenant paid (alin. (1) last sentence) and already converted at the *curs mediu anual* of the
+ * realisation year (alin. (3^1)). This calculator does not choose any of that; it applies the ratio to the
+ * gross it is given, and the gross rule is what separates this from art. 84^1 and art. 85.
+ *
+ * Rounding follows the house boundary: art. 66 alin. (1) rounds the sums that are DUE, so the tax is
+ * rounded once here; the net is a BASE, and an inexact base is reported, never repaired.
+ */
+function calcCedareArt84FlatRatio(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
+  const expenseRatioPercent = paramNumber(rule, 'expense_ratio'); // unscaled integer percent
+  const taxRatePercent = paramNumber(rule, 'tax_rate'); // unscaled integer percent
+  const gross = input?.gross;
+  if (typeof gross !== 'number') {
+    return {
+      reviewRequired: true,
+      reason:
+        'art. 84 alin. (3): cota forfetară de 20 % se aplică asupra venitului brut, iar niciun venit brut nu a ' +
+        'furnizat. Pentru acest regim brutul este chiria prevăzută în contract pentru anul fiscal — nu sumele ' +
+        'încasate — deci aplicația refuză în loc să pună la loc încasările registrului.',
+    };
+  }
+  if (gross < 0) {
+    return {
+      reviewRequired: true,
+      reason: `art. 84: venitul brut nu poate fi negativ; s-a primit ${leiText(gross)} lei.`,
+    };
+  }
+
+  const netDec = applyRateDecimal(gross, 100 - expenseRatioPercent);
+  if (!netDec.isInteger()) {
+    return {
+      reviewRequired: true,
+      reason:
+        `art. 84 alin. (3): venitul net rezultat din ${leiText(gross)} lei × ${(100 - expenseRatioPercent) / 100} ` +
+        'nu este un număr întreg de bani. art. 66 alin. (1) rotește sumele datorate, nu bazele, deci ' +
+        'aplicația nu rotunjește o bază ca să obțină un număr rotund — raportează în schimb.',
+    };
+  }
+  const net = netDec.toNumber() as Bani;
+  const tax = roundArt66(applyRateDecimal(net, taxRatePercent));
+
+  const filingDeadline = paramValue(rule, 'filing_deadline');
+  const paymentDeadline = paramValue(rule, 'payment_deadline');
+  const breakdown = [
+    `venit brut (art. 84 alin. (1)-(2): chiria stabilită potrivit contractului pentru anul fiscal, indiferent de momentul încasării): ${leiText(gross)} lei`,
+    'brutul include majorarea din art. 84 alin. (1) ultima propoziție — cheltuielile care cad în sarcina proprietarului dar sunt efectuate de cealaltă parte contractantă. Se adaugă ÎNAINTE de cota forfetară: cota este procent din brut, deci ordinea schimbă netul',
+    `cheltuieli forfetare = ${expenseRatioPercent}% din venitul brut = ${leiText(subBani(gross, net))} lei — art. 84 alin. (3). Aceasta este cota pentru închirierea obișnuită; 30 % aparține exclusiv închirierii pe termen scurt de 1–7 camere (art. 85 alin. (2))`,
+    `venit net = ${leiText(gross)} × ${(100 - expenseRatioPercent) / 100} = ${leiText(net)} lei`,
+    `impozit = ${leiText(net)} × ${taxRatePercent / 100} = ${leiText(tax)} lei — art. 123 alin. (2). Cota stă în alt articol decât cota forfetară, și impozitul NU este final: contribuabilul și-l stabilește singur`,
+    'art. 84 alin. (3^1): chiria în valută se evaluează la cursul de schimb MEDIU ANUAL comunicat de BNR din anul de realizare a venitului — nu ultima zi bancară (art. 85 alin. (4)), nu ziua precedentă plății (art. 84^1 alin. (2))',
+    'venitul net alimentează CUMULAREA din art. 170 alin. (4) lit. c) — textul FY2026 spune „stabilite potrivit art. 84-85”, plajă care acoperă art. 84, art. 84^1 și art. 85 — iar baza este TREAPTA de 6 / 12 / 24 SM (art. 170 alin. (3)). Nu este baza de la art. 170 alin. (1), care mărginește la 72 SM venitul din lit. b); CAS nu se datorează pe acest venit',
+    'art. 84 alin. (10): fără Registrul de evidență fiscală și fără evidență contabilă — nicio obligație de evidență nu se generează pentru acest regim',
+  ];
+  if (typeof filingDeadline === 'string') {
+    breakdown.push(
+      `depunerea declarației unice: ${filingDeadline} — art. 122 alin. (3). Spre deosebire de art. 84^1, aici impozitul nu este reținut la sursă, deci scutirea de la art. 122 alin. (6) lit. a) nu se aplică`,
+    );
+  }
+  if (typeof paymentDeadline === 'string') {
+    breakdown.push(`plata: ${paymentDeadline} — art. 123 alin. (7), același termen cu depunerea`);
+  }
+  return { value: tax, determinedNet: net, breakdown };
+}
+
+/**
+ * B-105 — CF art. 84^1: the same 20 % and the same 10 %, in the regime where the tax never reaches the
+ * landlord's hands.
+ *
+ * The arithmetic looks identical to art. 84 and is not the same quantity: alin. (3) fixes the net „la
+ * fiecare plată, de către plătitorii de venit”, not once for the fiscal year. art. 84^1 alin. (1) omits the
+ * „pentru fiecare an fiscal, indiferent de momentul încasării” clause art. 84 alin. (1) carries, and that
+ * omission is the regime. The ratio is linear, so the sum of the per-payment nets equals the ratio applied
+ * to the sum of the payments — but only while each payment's own net is a whole number of bani. Where it
+ * is not, this calculator reports rather than inventing a per-payment rounding rule the article does not
+ * state.
+ *
+ * What this calculator does NOT do is decide whether the landlord owes a Declarația Unică. alin. (5)-(6)
+ * make the withheld tax final and alin. (4) puts the calculation, the withholding, the declaration and the
+ * remittance on the payer — but art. 122 alin. (6) lit. a) exempts the return only for the income tax, and
+ * art. 122 alin. (7) still requires one where CAS or CASS is owed, and CASS on ordinary rent is not
+ * withheld (art. 174^1 alin. (3) covers only DPI, arendă and asocieri). That split is the caller's, and it
+ * is the part most implementations miss.
+ */
+function calcCedareArt84x1Withheld(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
+  const expenseRatioPercent = paramNumber(rule, 'expense_ratio'); // unscaled integer percent
+  const taxRatePercent = paramNumber(rule, 'tax_rate'); // unscaled integer percent
+  const gross = input?.gross;
+  if (typeof gross !== 'number') {
+    return {
+      reviewRequired: true,
+      reason:
+        'art. 84^1 alin. (3): venitul net se stabilește la fiecare plată prin deducerea a 20 % din venitul ' +
+        'brut, iar niciun venit brut nu a fost furnizat. Aplicația refuză în loc să presupună unul.',
+    };
+  }
+  if (gross < 0) {
+    return {
+      reviewRequired: true,
+      reason: `art. 84^1: venitul brut nu poate fi negativ; s-a primit ${leiText(gross)} lei.`,
+    };
+  }
+
+  const netDec = applyRateDecimal(gross, 100 - expenseRatioPercent);
+  if (!netDec.isInteger()) {
+    return {
+      reviewRequired: true,
+      reason:
+        `art. 84^1 alin. (3): venitul net rezultat din ${leiText(gross)} lei × ${(100 - expenseRatioPercent) / 100} ` +
+        'nu este un număr întreg de bani. Netul se stabilește la fiecare plată, iar aplicația nu inventează o ' +
+        'regulă de rotunjire per plată pe care alineatul nu o scrie — raportează în schimb.',
+    };
+  }
+  const net = netDec.toNumber() as Bani;
+  const tax = roundArt66(applyRateDecimal(net, taxRatePercent));
+
+  const remittance = paramValue(rule, 'payer_remittance_deadline');
+  const breakdown = [
+    `venit brut al plăților din an (art. 84^1 alin. (1): sumele stabilite potrivit contractului, plus majorarea cu cheltuielile proprietarului plătite de cealaltă parte): ${leiText(gross)} lei`,
+    'netul se stabilește LA FIECARE PLATĂ, de către plătitorii de venit (alin. (3)) — nu o dată pentru anul fiscal ca la art. 84 alin. (3), și nu pe încasările anului ca la art. 85 alin. (2). Cota fiind liniară, totalul neturilor per plată este egal cu cota aplicată totalului atâta vreme cât fiecare plată dă un număr întreg de bani; când nu dă, aplicația raportează',
+    `cheltuieli forfetare = ${expenseRatioPercent}% din venitul brut = ${leiText(subBani(gross, net))} lei — art. 84^1 alin. (3)`,
+    `venit net = ${leiText(gross)} × ${(100 - expenseRatioPercent) / 100} = ${leiText(net)} lei`,
+    `impozit reținut = ${leiText(net)} × ${taxRatePercent / 100} = ${leiText(tax)} lei — art. 84^1 alin. (5)-(6), reținut la momentul plății, impozit FINAL. Nu se achită de contribuabil și nu se mai recalculează`,
+    'art. 84^1 alin. (2): sumele în valută se convertesc la cursul BNR din ZIUA PRECEDENTĂ plății — nu media anuală (art. 84 alin. (3^1)), nu ultima zi bancară anterioară încasării (art. 85 alin. (4))',
+    'art. 84^1 alin. (4): plătitorul calculează, reține, declară și virează impozitul, și la cerere emite un document care atestă impozitul reținut și virat — proprietarul are dreptul la acel document',
+    'FAPTUL PE CARE MULTE IMPLEMENTĂRI ÎL RATĂZĂ: „reținut și final” nu înseamnă „nu ai nimic de depus”. art. 122 alin. (6) lit. a) scutește declarația numai pentru impozitul pe venit; art. 122 alin. (7) cere declarația unică și celor cu impozit reținut care datorează CAS/CASS, iar pe chiria obișnuită CASS nu se reține la sursă (art. 174^1 alin. (3) acoperă numai DPI, arendă și asocieri). Rămâne deci o declarație pentru contribuții',
+    'art. 84^1 alin. (8): dacă venitul brut se plătește exclusiv în natură, sau o garanție contractuală este utilizată pentru plata chiriei, reținerea nu se aplică — proprietarul își determină singur netul, își calculează impozitul și depune Declarația Unică până la termenul din art. 122 alin. (3)',
+    'venitul net alimentează cumularea din art. 170 alin. (4) lit. c) („stabilite potrivit art. 84-85”), iar baza este treapta de 6 / 12 / 24 SM — faptul că impozitul pe venit a fost achitat de plătitor nu scoate venitul din cumul',
+    'art. 84^1 alin. (7): fără Registrul de evidență fiscală și fără evidență contabilă — nicio obligație de evidență nu se generează pentru acest regim',
+  ];
+  if (typeof remittance === 'string') {
+    breakdown.push(
+      `virarea de către plătitor: până la 25 inclusiv a lunii următoare celei în care impozitul a fost reținut (art. 84^1 alin. (6)) — termen al plătitorului, lunar, nu termenul utilizatorului; ${remittance} este un exemplu, nu o dată fixă a acestui regim`,
+    );
+  }
+  return { value: tax, determinedNet: net, breakdown };
+}
+
+/**
  * PG-6e — the fiscal depreciation of one asset for one fiscal year.
  *
  * It is a thin wrapper over `depreciationSchedule`, and the reason it exists at all is the house rule that
@@ -1065,6 +1212,8 @@ export const calculatorRegistry: Record<string, CalculatorFunction> = {
   'calc-income-tax': calcIncomeTax,
   'calc-accommodation-flat-ratio': calcAccommodationFlatRatio,
   'calc-short-term-rooms-flat-ratio': calcShortTermRoomsFlatRatio,
+  'calc-cedare-art84-flat-ratio': calcCedareArt84FlatRatio,
+  'calc-cedare-art84x1-withheld': calcCedareArt84x1Withheld,
   'calc-fiscal-depreciation': calcFiscalDepreciation,
   'calc-vat-threshold': calcVatThreshold,
   'calc-deadline': calcDeadline,
