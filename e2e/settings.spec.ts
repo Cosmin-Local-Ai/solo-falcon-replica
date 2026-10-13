@@ -497,7 +497,15 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // it — an eleventh time for the same reason, and the same kind of step as v13-v17: it OPENS a
     // collection and mints nothing in it. What this test exists for is untouched: the notice is still one
     // long, `original` is still the verbatim 674.504 and `converted` is still 67450 bani.
-    expect(saved.version).toBe(19);
+    // Re-pinned again by B-105: 19 → 20, because `lease-facts` (19→20) follows it — a twelfth time for the
+    // same reason, and the same kind of step as v13-v19: it opens a fact family and mints nothing in it.
+    expect(saved.version).toBe(20);
+    // The v20 step's own half, on the same bytes: no tenant nature, no owner-cost uplift, no alin. (8)
+    // trigger and no contract date was invented for a payload that never named a lease. Each of those facts
+    // decides a legal outcome on its own — which of art. 84 and art. 84^1 measures the income, what the 20 %
+    // ratio runs over, and whether the tax is the payer's to withhold — so a default would not be a missing
+    // value, it would be a different taxpayer.
+    expect('leaseFactsYears' in saved.profile).toBe(false);
     // The v16 step's own halves, on the same bytes. First the non-write: this profile never declared an
     // amount for any of the six art. 155 alin. (1) lit. c)-h) categories, so the step opened no ladder year
     // and above all invented no zero — six minted zeros would have moved this person between "no CASS at

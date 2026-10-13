@@ -74,6 +74,11 @@ import {
   profileHasTourismCaen,
   withAccommodationRoomCount,
 } from '../domain/models';
+// B-105 — the lease facts and the per-year merge that writes them. Read and written through `domain/models.ts`,
+// the one place the cedare facts are interpreted, so the form and the engine cannot disagree about which
+// regime a declared tenant puts the register in.
+import type { LeaseFactsYear, LeaseTenantNature } from '../domain/models';
+import { withLeaseFactsYear } from '../domain/models';
 // PG-6d (D-OTH-1, D-OTH-2, B-41) — the six art. 155 alin. (1) lit. c)-h) amounts, read and written per
 // fiscal year. `withCassLadderYear` is used rather than a wholesale replace so editing 2026 cannot erase a
 // year the profile already holds for 2027.
@@ -116,6 +121,66 @@ type LadderAmountField = (typeof LADDER_AMOUNT_FIELDS)[number];
 function ladderAmountInput(profile: PfaProfile, key: LadderAmountField): string {
   const value = cassLadderForYear(profile.cassLadderYears, profile.fiscalYear)?.[key];
   return typeof value === 'number' ? leiInputValue(value) : '';
+}
+
+/**
+ * B-105 — the lease facts declared for the profile's fiscal year, read back for the form.
+ *
+ * Every field here has a third state, and the third state matters more than usual: each answer decides a
+ * legal outcome by itself. The tenant's legal nature selects between art. 84 and art. 84^1 — and with it who
+ * computes the tax, whether it is final, and whether a Declarația Unică is owed for the income at all. So an
+ * empty box must stay empty rather than arrive with a sensible default: a default would not be a missing
+ * value, it would be a different taxpayer.
+ */
+function leaseYearOf(profile: PfaProfile): LeaseFactsYear | undefined {
+  return profile.leaseFactsYears?.find((r) => r.fiscalYear === profile.fiscalYear);
+}
+
+function leaseAmountInput(profile: PfaProfile, key: 'contractRentAnnual' | 'ownerCostsPaidByTenant'): string {
+  const value = leaseYearOf(profile)?.[key];
+  return value === undefined ? '' : leiInputValue(value);
+}
+
+/**
+ * The form's lease fields turned back into one year's facts. Empty boxes write absence, never a stand-in, and
+ * a year with nothing in it writes no year at all — clearing the section makes that year unanswered again
+ * rather than declaring a lease with an unstated tenant.
+ */
+function leaseFactsFromForm(
+  fiscalYear: number,
+  fiscal: {
+    leaseTenant: string;
+    leaseContractRent: string;
+    leaseOwnerCosts: string;
+    leaseInKind: string;
+    leaseGuarantee: string;
+    leaseContractDate: string;
+    leaseRegistered: string;
+  },
+): LeaseFactsYear | undefined {
+  const amount = (raw: string) => {
+    const trimmed = raw.trim();
+    if (trimmed === '') return undefined;
+    // `parseLeiInput` answers null for anything it cannot hold exactly in bani — including a lei value with
+    // more than two decimals. Writing absence for that is honest: the app does not round a declared amount to
+    // a scale the money model cannot hold.
+    const parsed = parseLeiInput(trimmed);
+    return parsed === null ? undefined : parsed;
+  };
+  const year: LeaseFactsYear = {
+    fiscalYear,
+    tenantNature: (fiscal.leaseTenant || undefined) as LeaseFactsYear['tenantNature'],
+    contractRentAnnual: amount(fiscal.leaseContractRent),
+    ownerCostsPaidByTenant: amount(fiscal.leaseOwnerCosts),
+    rentPaidExclusivelyInKind: (fiscal.leaseInKind || undefined) as LeaseFactsYear['rentPaidExclusivelyInKind'],
+    guaranteeAppliedToRent: (fiscal.leaseGuarantee || undefined) as LeaseFactsYear['guaranteeAppliedToRent'],
+    contractDate: fiscal.leaseContractDate.trim() === '' ? undefined : fiscal.leaseContractDate.trim(),
+    contractRegistered: (fiscal.leaseRegistered || undefined) as LeaseFactsYear['contractRegistered'],
+  };
+  const answered = (Object.keys(year) as (keyof LeaseFactsYear)[]).some(
+    (k) => k !== 'fiscalYear' && year[k] !== undefined,
+  );
+  return answered ? year : undefined;
 }
 
 /**
@@ -497,6 +562,18 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       | AccommodationCommissionReading
       | '',
     accommodationEligibility: (profile.accommodationTourismEligibility ?? '') as TriState,
+    // B-105 — the three facts that decide which ordinary *cedarea folosinței* regime measures this register,
+    // plus the two amounts the gross is made of and the contract date the 30-day registration term runs from.
+    // `''` on every one of them means "never recorded", and each of them would be a legal fact if the form
+    // filled it in: the tenant's nature moves the income between art. 84 and art. 84^1, the uplift changes the
+    // base the 20 % ratio runs over, and either alin. (8) trigger switches the withholding off entirely.
+    leaseTenant: (leaseYearOf(profile)?.tenantNature ?? '') as LeaseTenantNature | '',
+    leaseContractRent: leaseAmountInput(profile, 'contractRentAnnual'),
+    leaseOwnerCosts: leaseAmountInput(profile, 'ownerCostsPaidByTenant'),
+    leaseInKind: (leaseYearOf(profile)?.rentPaidExclusivelyInKind ?? '') as TriState,
+    leaseGuarantee: (leaseYearOf(profile)?.guaranteeAppliedToRent ?? '') as TriState,
+    leaseContractDate: leaseYearOf(profile)?.contractDate ?? '',
+    leaseRegistered: (leaseYearOf(profile)?.contractRegistered ?? '') as TriState,
     // PG-6d (D-OTH-1, B-41) — the six art. 155 alin. (1) lit. c)-h) amounts, read back for the fiscal year
     // the profile declares. Every one has a THIRD state: an empty box means "never answered", which is not
     // 0 lei and not "no income". The engine refuses to sum a partial answer set, so the form must be able
@@ -885,6 +962,10 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       accommodationCommissionReading: fiscal.accommodationCommission || undefined,
       accommodationTourismEligibility:
         fiscal.accommodationEligibility === '' ? undefined : fiscal.accommodationEligibility,
+      // B-105 — merged per fiscal year rather than replaced wholesale, so editing 2026 does not erase a lease
+      // declared for 2027. An untouched section writes the year list back unchanged; a cleared one writes
+      // absence, never a lease with an unstated tenant.
+      leaseFactsYears: withLeaseFactsYear(profile.leaseFactsYears, leaseFactsFromForm(fy, fiscal)),
       // PG-6d — written per fiscal year, and only when the person actually declared something. An untouched
       // section writes the year list back unchanged; a cleared one writes absence, never six zeros.
       cassLadderYears: ladderYear
@@ -1523,6 +1604,118 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                   )}
                 </div>
               )}
+
+              {/* B-105 — the ordinary *cedarea folosinței bunurilor* facts.
+
+                  Shown whenever the register is not a short-term-rooms one, and never pre-filled. The tenant
+                  fact is the one that selects the regime, and the app refuses to infer it: a CUI in the
+                  tenant column is not evidence about whether that tenant keeps accounting records, and
+                  guessing it would move the income between art. 84 and art. 84^1 — which changes who
+                  computes the tax, whether it is final, and whether a Declarația Unică is owed for it. */}
+              <div className="field" data-lease-block>
+                <label htmlFor="set-lease-tenant">{settingsCopy.fiscal.leaseTenantNature}</label>
+                <select
+                  id="set-lease-tenant"
+                  className="input"
+                  data-lease-tenant
+                  value={fiscal.leaseTenant}
+                  onChange={e => setFiscal({ ...fiscal, leaseTenant: e.target.value as LeaseTenantNature | '' })}
+                >
+                  <option value="">{copy.ui.answerUnrecorded}</option>
+                  <option value="persoana_fizica">{settingsCopy.fiscal.leaseTenantNatureOptions.persoana_fizica}</option>
+                  <option value="entitate_cu_evidenta_contabila">
+                    {settingsCopy.fiscal.leaseTenantNatureOptions.entitate_cu_evidenta_contabila}
+                  </option>
+                </select>
+                <span className="hint" data-lease-tenant-hint>
+                  {fiscal.leaseTenant === ''
+                    ? settingsCopy.fiscal.leaseTenantNatureUnanswered
+                    : settingsCopy.fiscal.leaseTenantNatureHint}
+                </span>
+                {/* Which regime the declared tenant produces, stated beside the choice rather than left for
+                    the person to discover in the figure. */}
+                {fiscal.leaseTenant !== '' && (
+                  <span className="hint" data-lease-regime-applied>
+                    {settingsCopy.fiscal.leaseRegimeApplied[fiscal.leaseTenant]}
+                  </span>
+                )}
+
+                <label htmlFor="set-lease-rent">{settingsCopy.fiscal.leaseContractRent}</label>
+                <input
+                  id="set-lease-rent"
+                  className="input"
+                  type="text"
+                  inputMode="decimal"
+                  data-lease-rent
+                  value={fiscal.leaseContractRent}
+                  onChange={e => setFiscal({ ...fiscal, leaseContractRent: e.target.value })}
+                />
+                <span className="hint">{settingsCopy.fiscal.leaseContractRentHint}</span>
+
+                <label htmlFor="set-lease-owner-costs">{settingsCopy.fiscal.leaseOwnerCosts}</label>
+                <input
+                  id="set-lease-owner-costs"
+                  className="input"
+                  type="text"
+                  inputMode="decimal"
+                  data-lease-owner-costs
+                  value={fiscal.leaseOwnerCosts}
+                  onChange={e => setFiscal({ ...fiscal, leaseOwnerCosts: e.target.value })}
+                />
+                <span className="hint">{settingsCopy.fiscal.leaseOwnerCostsHint}</span>
+
+                <label htmlFor="set-lease-in-kind">{settingsCopy.fiscal.leaseInKind}</label>
+                <select
+                  id="set-lease-in-kind"
+                  className="input"
+                  data-lease-in-kind
+                  value={fiscal.leaseInKind}
+                  onChange={e => setFiscal({ ...fiscal, leaseInKind: e.target.value as TriState })}
+                >
+                  <option value="">{copy.ui.answerUnrecorded}</option>
+                  <option value="da">{copy.ui.answerYes}</option>
+                  <option value="nu">{copy.ui.answerNo}</option>
+                </select>
+
+                <label htmlFor="set-lease-guarantee">{settingsCopy.fiscal.leaseGuarantee}</label>
+                <select
+                  id="set-lease-guarantee"
+                  className="input"
+                  data-lease-guarantee
+                  value={fiscal.leaseGuarantee}
+                  onChange={e => setFiscal({ ...fiscal, leaseGuarantee: e.target.value as TriState })}
+                >
+                  <option value="">{copy.ui.answerUnrecorded}</option>
+                  <option value="da">{copy.ui.answerYes}</option>
+                  <option value="nu">{copy.ui.answerNo}</option>
+                </select>
+                <span className="hint">{settingsCopy.fiscal.leaseAlin8Hint}</span>
+
+                <label htmlFor="set-lease-concluded">{settingsCopy.fiscal.leaseContractDate}</label>
+                <input
+                  id="set-lease-concluded"
+                  className="input"
+                  type="date"
+                  data-lease-concluded
+                  value={fiscal.leaseContractDate}
+                  onChange={e => setFiscal({ ...fiscal, leaseContractDate: e.target.value })}
+                />
+                <span className="hint">{settingsCopy.fiscal.leaseContractDateHint}</span>
+
+                <label htmlFor="set-lease-registered">{settingsCopy.fiscal.leaseRegistered}</label>
+                <select
+                  id="set-lease-registered"
+                  className="input"
+                  data-lease-registered
+                  value={fiscal.leaseRegistered}
+                  onChange={e => setFiscal({ ...fiscal, leaseRegistered: e.target.value as TriState })}
+                >
+                  <option value="">{copy.ui.answerUnrecorded}</option>
+                  <option value="da">{copy.ui.answerYes}</option>
+                  <option value="nu">{copy.ui.answerNo}</option>
+                </select>
+                <span className="hint">{settingsCopy.fiscal.leaseRegisteredHint}</span>
+              </div>
 
               {/* PG-6h-3 — the entry point to the occupancy sheet.
 

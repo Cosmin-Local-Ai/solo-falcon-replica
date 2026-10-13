@@ -2,7 +2,7 @@ import type { Deadline, DeadlineView } from '../../domain/deadlines';
 import { classifyDeadline, daysRemaining } from '../../domain/deadlines';
 import { formatRoCalendarDate } from '../../domain/date';
 import { Card, CardHeader, CardTitle, CardDescription } from '../ui/card';
-import { deadlineAppliesToLabels, deadlines as deadlineCopy } from '../../ui/copy';
+import { deadlineAppliesToLabels, declarationScopeLabels, deadlines as deadlineCopy } from '../../ui/copy';
 
 /**
  * DeadlineSection (Step 22, verified Step 31, PG-5) — presentational only.
@@ -63,6 +63,13 @@ export default function DeadlineSection({ deadlines, asOfDate }: DeadlineSection
               <div>
                 <strong className="item-title">{labelFor(d)}</strong>
                 <div className="hint">{deadlineAppliesToLabels[d.appliesTo] ?? d.appliesTo}</div>
+                {/* B-105 — a D212 row says what is in the return, not just when it is due. For a landlord
+                    whose tax the payer withheld, the income-tax section is not theirs (art. 122 alin. (6)
+                    lit. a)) while the contributions section still is (art. 122 alin. (7)); the row without
+                    this line reads as either a wrong task or as „nothing to file”, and both are false. */}
+                {d.declarationScope ? (
+                  <div className="hint">{declarationScopeLabels[d.declarationScope]}</div>
+                ) : null}
                 <div className="item-meta">
                   {d.date === null || days === null
                     ? deadlineCopy.notApplicable

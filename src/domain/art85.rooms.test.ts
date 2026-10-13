@@ -558,21 +558,54 @@ describe('the gross stays an input, and the rule keeps its questions open', () =
 });
 
 describe('the 30 % belongs to this sub-category only — the 20 % of the rest of the chapter is untouched', () => {
-  it('the package carries no forfetar rule for ordinary cedarea folosinței, so nothing can read 30 % there', () => {
-    // The scope correction, stated as a fact about the rule set. art. 84 alin. (3) and art. 84^1 alin. (3)
-    // keep a 20 % forfetară cotă de cheltuieli for every other *cedarea folosinței bunurilor*, and this
-    // build has no rule for that income at all — which is the only reason applying 30 % here cannot leak.
-    // If a cedarea rule is ever added, it must carry its own 20 % and its own method; the two ratios may
-    // not share a parameter, a calculator or a taxRegime.
-    const regimes = new Set(PFA_2026_SYSTEM_REAL_PACKAGE.map((r) => r.taxRegime));
-    expect(regimes.has('short-term-rooms-flat-ratio')).toBe(true);
-    expect(PFA_2026_SYSTEM_REAL_PACKAGE.filter((r) => r.taxRegime === 'short-term-rooms-flat-ratio')).toHaveLength(1);
-    // No rule in the package supplies a 20 % expense ratio, so there is no second forfetar to confuse with
-    // this one — and no rule may be added to this one's parameters.
-    const percentParams = PFA_2026_SYSTEM_REAL_PACKAGE.flatMap((r) =>
-      r.parameters.filter((p) => p.unit === 'percent').map((p) => [r.ruleId, p.id, p.value] as const),
-    );
-    expect(percentParams.filter(([, , value]) => value === 20)).toEqual([]);
+  it('the two flat ratios live in four separate rules, and no ratio crosses between the pairs', () => {
+    // The scope correction, stated as a fact about the rule set.
+    //
+    // B-105 changed what this test can assert. It used to prove the boundary by pointing out that no ordinary
+    // *cedarea folosinței* rule existed at all, so a 30 % had nowhere to leak to. Now the two ordinary rules
+    // exist — art. 84 alin. (3) and art. 84^1 alin. (3), each carrying a 20 % forfetară cotă de cheltuieli —
+    // so the boundary has to be proven directly: four rules, four calculators, and no ratio crossing between
+    // the accommodation pair and the cedare pair. That is the stronger form of the same claim, and it is the
+    // one the comment here always asked for: „If a cedarea rule is ever added, it must carry its own 20 % and
+    // its own method; the two ratios may not share a parameter, a calculator or a taxRegime.”
+    const byRegime = (regime: string) => PFA_2026_SYSTEM_REAL_PACKAGE.filter((r) => r.taxRegime === regime);
+    expect(byRegime('short-term-rooms-flat-ratio')).toHaveLength(1);
+    expect(byRegime('accommodation-flat-ratio')).toHaveLength(1);
+    expect(byRegime('cedare-art84-flat-ratio')).toHaveLength(1);
+    expect(byRegime('cedare-art84x1-withheld')).toHaveLength(1);
+
+    const expenseRatioOf = (ruleId: string): number => {
+      const rule = PFA_2026_SYSTEM_REAL_PACKAGE.find((r) => r.ruleId === ruleId)!;
+      const param = rule.parameters.find((p) => p.id === 'expense_ratio' && p.unit === 'percent')!;
+      // A percent parameter that stopped being numeric is a rule-shape change, and a test that compared
+      // `'20' === 20` would report a passing boundary on a broken rule.
+      if (typeof param.value !== 'number') {
+        throw new Error(`${ruleId}.expense_ratio is not numeric: ${String(param.value)}`);
+      }
+      return param.value;
+    };
+    // The accommodation pair at 30 %, the cedare pair at 20 %.
+    expect(expenseRatioOf('ACCOMMODATION_ART85_ROOMS_2026')).toBe(30);
+    expect(expenseRatioOf('ACCOMMODATION_68X3_2026')).toBe(30);
+    expect(expenseRatioOf('CEDARE_ART84_2026')).toBe(20);
+    expect(expenseRatioOf('CEDARE_ART84X1_2026')).toBe(20);
+
+    // No ratio crosses. A 30 % on a cedare rule would understate the net of every landlord with a natural-
+    // person or corporate tenant; a 20 % on the rooms rule would overstate the net of every taxpayer under
+    // art. 85 alin. (2). Both errors are silent, because all four articles then apply the same 10 %.
+    const flatRules = [
+      ...byRegime('short-term-rooms-flat-ratio'),
+      ...byRegime('accommodation-flat-ratio'),
+      ...byRegime('cedare-art84-flat-ratio'),
+      ...byRegime('cedare-art84x1-withheld'),
+    ];
+    const ratios = flatRules.map((r) => expenseRatioOf(r.ruleId));
+    expect(ratios.filter((v) => v === 30)).toHaveLength(2);
+    expect(ratios.filter((v) => v === 20)).toHaveLength(2);
+
+    // Four calculators, so patching one rule's parameters cannot move another regime's figure. Two rules
+    // sharing a calculator would be the B-29 class: invisible in the arithmetic, visible only in the number.
+    expect(new Set(flatRules.map((r) => r.calculatorId)).size).toBe(4);
   });
 
   it('the two flat ratios are read from two rules: patching one leaves the other at 70 %', async () => {

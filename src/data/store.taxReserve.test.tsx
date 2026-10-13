@@ -158,9 +158,11 @@ describe('a payload with no reserve field loads as null, not 0', () => {
     expect(storeRef!.dataOrigin).toBe('persisted');
     // PG-5 re-pin: the chain grew by the `annual-filing` step; the reserve contract is untouched.
     // Re-pinned again for PG-6h-2's `accommodation-facts` step, again for PG-6h-3's `occupancy-sheet`
-    // step, and again for PG-6f's `input-vat-registration` step — the list grows by one entry each time,
-    // and the guarded property is the one on the next line: a payload with no reserve still loads as null,
-    // and a payload with no declared VAT registration still loads with the field absent.
+    // step, again for PG-6f's `input-vat-registration` step, and again for B-105's `lease-facts` step — the
+    // list grows by one entry each time, and the guarded property is the one on the next line: a payload with
+    // no reserve still loads as null, and a payload with no declared VAT registration still loads with the
+    // field absent. `lease-facts` opens `profile.leaseFactsYears` by writing nothing, so it cannot mint a
+    // reserve either.
     expect(storeRef!.migration!.stepsApplied).toEqual([
       'tax-reserve',
       'pension-facts',
@@ -175,6 +177,8 @@ describe('a payload with no reserve field loads as null, not 0', () => {
       'fixed-assets',
       'input-vat-registration',
     'vat-returns',
+    // B-105 — appended after v19, never renumbered.
+    'lease-facts',
     ]);
     expect(storeRef!.reservedAmount).toBeNull();
     // And the next write stamps the current version — the upgrade is one-way and additive.

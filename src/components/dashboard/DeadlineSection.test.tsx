@@ -25,11 +25,28 @@ function makeDeadline(overrides: Partial<DeadlineView> = {}): DeadlineView {
     done: false,
     filedOn: null,
     outcome: 'upcoming',
+    // B-105 — required, so a new field on the annotated row cannot reach the card without a fixture deciding
+    // it. `null` is the not-a-Declarația-Unică case; the D212 test below sets the scope explicitly.
+    declarationScope: null,
     ...overrides,
   };
 }
 
 describe('DeadlineSection (Step 32 — Romanian, no raw enums)', () => {
+  it('a D212 term says what is in the return, and a withheld-at-source landlord is not sent to prepare a tax section', () => {
+    // art. 122 alin. (6) lit. a) takes the income tax out of the return when the payer withheld it under art.
+    // 84^1; art. 122 alin. (7) puts the contributions back in, because CASS on ordinary rent is not withheld.
+    // The card that says only „Depunere D212” is wrong in both directions, so the scope is rendered.
+    render(
+      <DeadlineSection
+        deadlines={[makeDeadline({ declarationScope: 'contributions_only' })]}
+        asOfDate={AS_OF}
+      />,
+    );
+    expect(screen.getByText(/contribuții sociale/i)).toBeInTheDocument();
+    expect(screen.getByText(/reținut la sursă/i)).toBeInTheDocument();
+  });
+
   it('renders the Romanian title, description, item label, and days remaining', () => {
     render(<DeadlineSection deadlines={[makeDeadline()]} asOfDate={AS_OF} />);
     expect(screen.getByText('Termene limită')).toBeInTheDocument();

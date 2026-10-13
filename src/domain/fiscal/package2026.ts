@@ -923,7 +923,7 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
           'formular „Cerere de înregistrare a contractelor de locațiune”, cod C168 — instituit prin OPANAF 114/2019, modificat prin OPANAF 2031/2022 și OPANAF 161/2025 (MO 109/6.02.2025). Codul fiscal NU numește niciun formular: obligația este în lege, formularul este în ordinul ANAF, și cele două se citează separat. Se depune la registratură, prin postă recomandată sau electronic (SPV), cu copie a contractului „conform cu originalul”; organul fiscal o înregistrează în termen de 5 zile. Pentru un bun deținut în cote, contractul desemnează care proprietar înregistrează.',
         unit: 'text',
         description:
-          'B-105. OPANAF 161/2025 încă trimite la numerotarea veche a art. 83 și la formularea „în scop turistic” — numerotarea procedurii nu schimbă numerotarea legii; aplicația citează articolul așa cum îl numerotează FY2026.',
+          'B-105. OPANAF 161/2025 încă trimite la numerotarea veche a art. 83 și la formularea de turism pe care Codul fiscal nu o mai întrebuințează de la veniturile anului 2026 — numerotarea procedurii nu schimbă numerotarea legii, deci aplicația citează articolul așa cum îl numerotează FY2026, nu așa îl numerotează ordinul.',
       },
     ],
     calculatorId: 'calc-deadline',

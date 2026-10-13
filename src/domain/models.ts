@@ -710,6 +710,75 @@ export function leaseRegistrationDutyForYear(
 }
 
 /**
+ * The fact families affirmatively in force for this profile-year, in the vocabulary the deadline rules use
+ * through their `applies_when` parameter.
+ *
+ * This is the seam that keeps a fourth regime from becoming a fifth answer to „which obligations does this
+ * person have”. A deadline rule that declares a family emits NOTHING unless the family is listed here, and
+ * this function lists families only from facts the person declared:
+ *
+ * - `lease_registration` — the art. 83 alin. (5) duty to register the contract within 30 days. Present for
+ *   an ordinary *cedarea folosinței* register, absent for a short-term-rooms register, because the alineat
+ *   itself carves the short-term case out. Note that a corporate tenant does NOT remove it: the carve-outs
+ *   are arendare and short-term letting, nothing else.
+ * - `cedare_art84` — a natural-person tenant, so the owner self-assesses (art. 84 alin. (1), art. 122 alin.
+ *   (3)).
+ * - `cedare_art84x1_withheld` — a corporate tenant and no alin. (8) trigger, so the payer withholds a final
+ *   10 % and the owner owes no income-tax entry on the Declarația Unică (art. 122 alin. (6) lit. a)).
+ * - `cedare_art84x1_self_assessed` — a corporate tenant BUT an alin. (8) trigger (rent paid exclusively in
+ *   kind, or a guarantee applied to it), which puts the whole duty back on the owner.
+ *
+ * Nothing here consults the rule set. Whether a year HAS the rules is the rule set's own business —
+ * `selectApplicableRules` already scopes every deadline rule by year, so a year without the art. 84^1 rule
+ * emits nothing regardless of what this function returns. Keeping the two questions apart is what stops the
+ * fact layer and the rule layer from each deciding the same thing.
+ */
+export function cedareDeadlineFactFamilies(
+  profile: Pick<PfaProfile, 'leaseFactsYears' | 'accommodationRoomCounts' | 'activityFamily'>,
+  fiscalYear: number,
+): string[] {
+  const families: string[] = [];
+  if (leaseRegistrationDutyForYear(profile, fiscalYear)) families.push('lease_registration');
+  const year = leaseFactsForYear(profile.leaseFactsYears, fiscalYear);
+  if (year?.tenantNature === 'persoana_fizica') families.push('cedare_art84');
+  if (year?.tenantNature === 'entitate_cu_evidenta_contabila') {
+    families.push(art84x1WithholdingBlocked(year) ? 'cedare_art84x1_self_assessed' : 'cedare_art84x1_withheld');
+  }
+  return families;
+}
+
+/**
+ * What the Declarația Unică of this profile-year contains, given the letting regime.
+ *
+ * This is the distinction the brief calls the quiet one: **„withheld and final” does not mean “nothing to
+ * file”.** art. 84^1 alin. (4)-(6) put the calculation, the withholding, the declaration and the remittance
+ * of a final 10 % on the plătitor, and art. 122 alin. (6) lit. a) then exempts the owner's return **for the
+ * income tax only**. The contributions half survives, because art. 174^1 alin. (3) lets the payer withhold
+ * CASS only on daily wage, arendă and association income — never on ordinary rent — so art. 122 alin. (7)
+ * still requires a Declarația Unică from anyone who owes CAS or CASS. The landlord therefore files, and what
+ * they file is a contributions declaration.
+ *
+ * alin. (8) takes it all back: rent paid exclusively in kind, or a contractual guarantee applied to the rent,
+ * switches the withholding off, and the owner determines the net, computes the tax and files the full return
+ * under art. 122 alin. (3).
+ *
+ * `full` is the default because it is what every other regime in this app does. The narrower answer is
+ * produced only from the two declared facts that cause it — a corporate tenant, and no alin. (8) trigger —
+ * never from the presence of a withheld tax line, so a register that was merely computed under art. 84^1
+ * cannot silently redefine the user's filing duty.
+ */
+export type SingleDeclarationScope = 'full' | 'contributions_only';
+
+export function singleDeclarationScopeForYear(
+  profile: Pick<PfaProfile, 'leaseFactsYears'>,
+  fiscalYear: number,
+): SingleDeclarationScope {
+  const year = leaseFactsForYear(profile.leaseFactsYears, fiscalYear);
+  if (year?.tenantNature !== 'entitate_cu_evidenta_contabila') return 'full';
+  return art84x1WithholdingBlocked(year) ? 'full' : 'contributions_only';
+}
+
+/**
  * CASS status for the profile. The three stored strings are PERSISTED DATA — renaming a value would
  * be a data migration this brief does not authorise, so only the vocabulary AROUND them changes (B-19).
  *

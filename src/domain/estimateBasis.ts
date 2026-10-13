@@ -406,11 +406,48 @@ export function selectIncomeDeterminationMethod(
   // two different rules would let the determination method and the classifier be about two different
   // activities from the same call.
   const family = declaredFamily ?? profile?.activityFamily;
-  if (family !== 'cazare' || !profile) return 'sistem-real';
+  if (!profile) return 'sistem-real';
   const applicable = selectApplicableRules([...rules], {
     taxYear: profile.fiscalYear,
     asOfDate,
   });
+  // ── B-105 — the two ordinary *cedarea folosinței bunurilor* regimes ─────────────────────
+  //
+  // This branch had to move, and the move is the interesting part of the task. Until now the whole function
+  // sat behind `family !== 'cazare' → sistem-real`, which was right when the only non-sistem-real method in
+  // the app was an accommodation one. The ordinary rent regimes are the first methods this app has that
+  // belong to a NON-cazare register — a long-term landlord is not a cazare operator — so a guard that sends
+  // every non-cazare register straight to sistem-real makes them unreachable. The guard now selects the path
+  // instead of ending the question, and what it does NOT change is the invariant it used to enforce by
+  // accident: a register whose family is not cazare still cannot select an accommodation method.
+  //
+  // **The fact that splits the two regimes is the tenant, not the landlord.** art. 84 alin. (1) opens „altele
+  // decât veniturile plătite de persoane juridice sau alte entități care au obligația de a conduce evidență
+  // contabilă”, and art. 84^1 takes that same population and gives it a withholding regime. So a natural-
+  // person tenant leaves the income under art. 84 and a corporate tenant moves it to art. 84^1 — where the
+  // net is fixed „la fiecare plată” (alin. (3)) instead of once for the fiscal year, the tax is withheld and
+  // FINAL (alin. (5)-(6)), the FX anchor is the day before the payment (alin. (2)), and the landlord owes no
+  // Declarația Unică for the income tax (art. 122 alin. (6) lit. a)) while still owing one for the
+  // contributions (art. 122 alin. (7), because art. 174^1 alin. (3) withholds CASS only on DPI, arendă and
+  // asocieri).
+  //
+  // Nothing here infers the tenant's legal nature from a CUI on a receipt, from the tenant's name, or from
+  // anything else in the register: `leaseFactsForYear` returns what the person declared, and an undeclared
+  // tenant fact leaves the register on the sistem-real path with the missing fact reported.
+  if (family !== 'cazare') {
+    const leaseYear = leaseFactsForYear(profile.leaseFactsYears, profile.fiscalYear);
+    if (leaseYear?.tenantNature === 'entitate_cu_evidenta_contabila') {
+      // The year-scoping guard: a fiscal year whose rule set does not carry the art. 84^1 rule has nothing to
+      // be measured under, and this module does not manufacture a method the rule set lacks.
+      if (applicable.some((r) => r.taxRegime === 'cedare-art84x1-withheld')) return 'cedare-art84x1';
+    }
+    if (leaseYear?.tenantNature === 'persoana_fizica') {
+      if (applicable.some((r) => r.taxRegime === 'cedare-art84-flat-ratio')) return 'cedare-art84';
+    }
+    return 'sistem-real';
+  }
+  // ── A cazare register: the room count decides which flat article, if any, measures it ───────
+  //
   // B-88 — the room count decides the TITLE, and the title decides which flat rule, if any, measures this
   // register. The comparison is not written here: `domain/models.ts accommodationIncomeTitleForYear` is the
   // single place the art. 83 alin. (4) boundary is read, and it is the same resolver `scenarios.ts` and the
@@ -437,35 +474,10 @@ export function selectIncomeDeterminationMethod(
       return 'short-term-rooms-art85';
     }
   }
-  // ── B-105 — the two ordinary *cedarea folosinței bunurilor* regimes ──────────────────────────
-  //
-  // This branch sits BELOW the cazare branch on purpose. A register that declares a room count for the year
-  // is a *închiriere pe termen scurt* register, and art. 83 alin. (5) carves exactly that case out of the
-  // ordinary-rent duty set; the ordinary regimes are what is left. The two never both answer for one
-  // register, because the app holds one register and one declared family (B-89).
-  //
-  // **The fact that splits them is the tenant, not the landlord.** art. 84 alin. (1) opens „altele decât
-  // veniturile plătite de persoane juridice sau alte entități care au obligația de a conduce evidență
-  // contabilă”, and art. 84^1's title takes that same population and gives it a withholding regime. So a
-  // natural-person tenant leaves the income under art. 84 and a corporate tenant moves it to art. 84^1 —
-  // where the net is fixed „la fiecare plată” (alin. (3)) instead of once for the fiscal year, the tax is
-  // withheld and FINAL (alin. (5)-(6)), the FX anchor is the day before the payment (alin. (2)), and the
-  // landlord owes no Declarația Unică for the income tax (art. 122 alin. (6) lit. a)) while still owing one
-  // for the contributions (art. 122 alin. (7), because art. 174^1 alin. (3) withholds CASS only on DPI,
-  // arendă and asocieri).
-  //
-  // Nothing here infers the tenant's legal nature from a CUI on a receipt, from the tenant's name, or from
-  // anything else in the register: `leaseFactsForYear` returns what the person declared, and an undeclared
-  // tenant fact leaves the register on the sistem-real path with the missing fact reported.
-  const leaseYear = leaseFactsForYear(profile.leaseFactsYears, profile.fiscalYear);
-  if (leaseYear?.tenantNature === 'entitate_cu_evidenta_contabila') {
-    // The year-scoping guard again: a fiscal year whose rule set does not carry the art. 84^1 rule has
-    // nothing to be measured under, and this module does not manufacture a method the rule set lacks.
-    if (applicable.some((r) => r.taxRegime === 'cedare-art84x1-withheld')) return 'cedare-art84x1';
-  }
-  if (leaseYear?.tenantNature === 'persoana_fizica') {
-    if (applicable.some((r) => r.taxRegime === 'cedare-art84-flat-ratio')) return 'cedare-art84';
-  }
+  // The two ordinary *cedarea folosinței bunurilor* regimes are selected ABOVE, before this branch: they
+  // belong to a NON-cazare register, so a guard that sent every non-cazare register straight to sistem-real
+  // would have made them unreachable. A cazare register that is not the 1–7 room case is the art. 68^3
+  // question, exactly as it was before B-105.
   return applicable.some((r) => r.taxRegime === 'accommodation-flat-ratio')
     ? 'accommodation-flat-ratio'
     : 'sistem-real';

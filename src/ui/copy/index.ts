@@ -30,6 +30,8 @@ export {
   CHECK_LABELS,
   checkLabel,
   deadlineAppliesToLabels,
+  // B-105 — what a D212 term covers for this profile-year.
+  declarationScopeLabels,
   deadlineLabels,
   deadlineLabelFor,
   vatFilingPeriodUnknown,

@@ -12,15 +12,21 @@ describe('PFA 2026 system-real package', () => {
   // 9 because the deductibility rule set is data in this package, which is what makes a later legal
   // correction a new rule release rather than a code change. No parameter value, formula or computed
   // figure in the original 9 rules changed.
-  it('contains exactly 51 rules (12 fiscal + 39 expense-deductibility)', () => {
+  it('contains exactly 54 rules (15 fiscal + 39 expense-deductibility)', () => {
     // PG-6h-1 added the 10th: ACCOMMODATION_68X3_2026, the art. 68^3 flat-ratio determination method.
     // PG-6e added the 11th: FISCAL_DEPRECIATION_2026, the Titlul II amortisation figures a Titlul IV PFA
     // inherits through art. 68 alin. (4) lit. d). B-88 added the 12th: ACCOMMODATION_ART85_ROOMS_2026, the
     // art. 85 flat ratio for 1–7 rooms let pe termen scurt — a separate rule from the 68^3 one because the
-    // two articles share only a percentage. Each move is the rule set growing, never a rule changing: no
+    // two articles share only a percentage. B-105 added the 13th, 14th and 15th: CEDARE_ART84_2026 and
+    // CEDARE_ART84X1_2026, the two ordinary *cedarea folosinței bunurilor* regimes — again separate from
+    // each other and from the accommodation pair, because art. 84, art. 84^1 and art. 85 share a rate and
+    // share nothing else (gross measure, FX anchor, who computes the tax, whether it is final, whether a
+    // Declarația Unică is owed for it) — plus CEDARE_CONTRACT_REGISTRATION_DEADLINE_2026, the 30-day duty to
+    // register the lease contract itself, which is an obligation on the contract rather than a figure in the
+    // tax and so cannot ride inside either rule. Each move is the rule set growing, never a rule changing: no
     // existing rule's parameters, citation or version moved, which is what the registry's per-rule digest
-    // check enforces. This count was 49 before PG-6e and 50 before B-88.
-    expect(PFA_2026_SYSTEM_REAL_PACKAGE).toHaveLength(51);
+    // check enforces. This count was 49 before PG-6e, 50 before B-88 and 51 before B-105.
+    expect(PFA_2026_SYSTEM_REAL_PACKAGE).toHaveLength(54);
   });
 
   it('every rule has 16 defined fields and valid provenance', () => {
@@ -79,17 +85,19 @@ describe('selectApplicableRules', () => {
   // 49 - 1 = 48: only GENERAL_MINIMUM_WAGE_2026_H2 is outside the window on 2026-03-15. The two
   // art. 68 alin. (5) letters added by OUG 8/2026 (g^1 occupational pensions, g^2 PEPP) ARE selected
   // here because they take effect 2026-03-01 - contributions paid before that date must not reach them.
-  it('returns 50 rules for a date in H1 2026 (H2 wage rule not yet effective)', () => {
+  it('returns 53 rules for a date in H1 2026 (H2 wage rule not yet effective)', () => {
     const selected = selectApplicableRules(PFA_2026_SYSTEM_REAL_PACKAGE, {
       taxYear: 2026,
       asOfDate: '2026-03-15',
     });
-    // 51 - 1: GENERAL_MINIMUM_WAGE_2026_H2 takes effect 2026-07-01. FISCAL_DEPRECIATION_2026 is inside the
+    // 54 - 1: GENERAL_MINIMUM_WAGE_2026_H2 takes effect 2026-07-01. FISCAL_DEPRECIATION_2026 is inside the
     // window — OUG 8/2026 art. 10 alin. (2) makes the 5.000-lei threshold applicable „începând cu anul
     // fiscal 2026”, which covers the January–February purchases too. ACCOMMODATION_ART85_ROOMS_2026 is
-    // inside it as well: art. 85 applies from the FY2026 income year, with no mid-year start. Was 49 before
-    // B-88 grew the package to 51.
-    expect(selected).toHaveLength(50);
+    // inside it as well: art. 85 applies from the FY2026 income year, with no mid-year start. So are all
+    // three cedare rules — Legea 239/2025 art. XII pct. 8 applies „începând cu veniturile aferente anului
+    // 2026”, which is the whole year and not a quarter of it, and the contract-registration duty runs from
+    // the contract date under HG 1425/2025. Was 50 before B-105 grew the package to 54.
+    expect(selected).toHaveLength(53);
   });
 
   it('excludes the H1 minimum wage rule after 2026-06-30', () => {
@@ -100,10 +108,10 @@ describe('selectApplicableRules', () => {
     const ids = selected.map((r) => r.ruleId);
     expect(ids).not.toContain('GENERAL_MINIMUM_WAGE_2026_H1');
     expect(ids).toContain('GENERAL_MINIMUM_WAGE_2026_H2');
-    // 51 - 1 = 50: only GENERAL_MINIMUM_WAGE_2026_H1 has expired by 2026-09-01. ACCOMMODATION_68X3_2026 and
+    // 54 - 1 = 53: only GENERAL_MINIMUM_WAGE_2026_H1 has expired by 2026-09-01. ACCOMMODATION_68X3_2026 and
     // ACCOMMODATION_ART85_ROOMS_2026 are both inside the window — each applies from the FY2026 income year,
-    // with no mid-year start. Was 49 before B-88 grew the package to 51.
-    expect(selected).toHaveLength(50);
+    // with no mid-year start — and so are the three cedare rules. Was 50 before B-105 grew the package to 54.
+    expect(selected).toHaveLength(53);
   });
 
   it('returns nothing for a year without rules', () => {
@@ -613,10 +621,12 @@ describe('PFA 2026 release identity (TASK 6)', () => {
   it('the release declares a lifecycle, a version and an open window', () => {
     expect(PFA_2026_RELEASE.lifecycle).toBe('ACTIVE');
     // PG-6h-1 moved this 1 → 2. PG-6e moved it 2 → 3 for the same reason: FISCAL_DEPRECIATION_2026 was
-    // added, so contentHash moved. The governance in docs/ai/phases/20_rule_release_immutability.md §6
-    // makes `version` a consequence of a content change, and adding a rule moves contentHash — so a version
-    // that stayed put would be the registry's own check failing, not a display number lagging behind.
-    expect(PFA_2026_RELEASE.version).toBe(4);
+    // added, so contentHash moved. B-105 moved it 4 → 5 for the same reason again — CEDARE_ART84_2026 and
+    // CEDARE_ART84X1_2026 were added, so the digest of the rule set moved. The governance in docs/ai/phases/
+    // 20_rule_release_immutability.md §6 makes `version` a consequence of a content change, and adding a
+    // rule moves contentHash — so a version that stayed put would be the registry's own check failing, not a
+    // display number lagging behind.
+    expect(PFA_2026_RELEASE.version).toBe(5);
     expect(PFA_2026_RELEASE.effectiveTo).toBeNull();
     expect(PFA_2026_RELEASE.supersededBy).toBeUndefined();
   });

@@ -1,5 +1,8 @@
 import type { FiscalRule } from './fiscal/rules';
 import { selectApplicableRules } from './fiscal/select';
+// B-105 — the declaration scope is resolved in `domain/models.ts`, the one place the lease facts are read.
+// This module types the field and carries it; it does not decide it.
+import type { SingleDeclarationScope } from './models';
 import type { AnnualFiling } from '../data/types';
 import { isFiledFiling } from '../data/types';
 // PG-6g — the periodic VAT return is a record type in its own right, with its own filed-status test, for
@@ -41,7 +44,17 @@ import type { VatObligation } from './fiscal/vatReturn';
  * in docs/ai/research/15_verification_of_deadline_claims_2026.md §1. A PFA start date therefore
  * resolves NO deadline at all — silence is the correct behaviour, not a gap to fill.
  */
-export type DeadlineEventType = 'd212_filing' | 'vat_registration' | 'vat_return' | 'vat_mentiuni';
+export type DeadlineEventType =
+  | 'd212_filing'
+  | 'vat_registration'
+  | 'vat_return'
+  | 'vat_mentiuni'
+  // B-105 — art. 83 alin. (5): the lease contract itself must be registered with the competent tax body
+  // within at most 30 days. This is a duty on the CONTRACT, not on the income, which is why it is a separate
+  // event type rather than a parameter on the D212 row: it falls on a different date, is discharged by a
+  // different document (the C168 request under OPANAF 114/2019 as amended, not the Declarația Unică), and it
+  // does NOT exist for the short-term-rooms regime the previous pass shipped.
+  | 'lease_contract_registration';
 
 /**
  * Runtime registry of the event types above. A deadline rule whose `event_type` parameter is not
@@ -56,7 +69,7 @@ export type DeadlineEventType = 'd212_filing' | 'vat_registration' | 'vat_return
  * as a boundary deviation in `docs/ai/phases/45_pg6g_form300.md`.
  */
 export const DEADLINE_EVENT_TYPES: readonly DeadlineEventType[] = [
-  'd212_filing', 'vat_registration', 'vat_return', 'vat_mentiuni',
+  'd212_filing', 'vat_registration', 'vat_return', 'vat_mentiuni', 'lease_contract_registration',
 ];
 
 export interface Deadline {
@@ -96,6 +109,29 @@ export interface DeadlineQuery {
    * input has to be a day too.
    */
   vatExceedanceDate?: string;
+  /**
+   * B-105 — the date the lease contract was concluded. Resolves `lease_contract_registration` ONLY.
+   *
+   * art. 83 alin. (5) runs the „cel mult 30 de zile” term from the contract, so the contract date is the
+   * event and the offset is rule data (`CEDARE_CONTRACT_REGISTRATION_DEADLINE_2026`). An absent date leaves
+   * the row undated and `not_applicable`, exactly as the VAT exceedance date does: the obligation exists and
+   * the app has no source for the day, so it must not invent one.
+   */
+  leaseContractDate?: string;
+  /**
+   * B-105 — the fact families affirmatively in force for this profile-year.
+   *
+   * A deadline rule may declare `applies_when` with the fact family that must be in force before the rule
+   * emits anything. A rule that declares one and finds the family absent emits NOTHING — not an undated row,
+   * nothing at all. This is how art. 83 alin. (5) reaches an ordinary *cedarea folosinței* register and not
+   * a short-term-rooms register: the carve-out is in the alineat, so the absence of the duty is a fact about
+   * the law, and the app states it by producing no row rather than by producing a row that says „nu se
+   * aplică”.
+   *
+   * The list is produced by `domain/models.ts cedareDeadlineFactFamilies` from declared facts. A rule that
+   * declares no `applies_when` is unaffected, so every pre-B-105 rule behaves exactly as before.
+   */
+  factFamilies?: readonly string[];
 }
 
 /**
@@ -105,10 +141,11 @@ export interface DeadlineQuery {
  * `event: 'pfa_start'` cannot resolve and emits a `not_applicable`, dateless deadline — the
  * start-date silence is structural, not a convention a future edit can quietly forget.
  */
-export type DeadlineEventKey = 'vat_exceedance';
+export type DeadlineEventKey = 'vat_exceedance' | 'lease_contract';
 
 const EVENT_DATE: Record<DeadlineEventKey, (query: DeadlineQuery) => string | undefined> = {
   vat_exceedance: (query) => query.vatExceedanceDate,
+  lease_contract: (query) => query.leaseContractDate,
 };
 
 export type DeadlinePhase = 'past' | 'due_today' | 'upcoming';
@@ -141,6 +178,16 @@ export interface DeadlineView extends Deadline {
   /** The date recorded on the filing that discharged this term, when there is one. */
   filedOn: string | null;
   outcome: DeadlineOutcome;
+  /**
+   * B-105 — what the D212 term this row names actually covers, for this profile-year.
+   *
+   * `null` on every row that is not a Declarația Unică term. On a D212 row it is the answer to „ce anume
+   * am de depus”, and it is not derivable from the row itself: art. 122 alin. (6) lit. a) removes the income
+   * tax from the return when the payer withheld it, and art. 122 alin. (7) puts the contributions back in.
+   * The same 25 May term therefore means two different things depending on the tenant fact, and a card that
+   * says only „Depunere D212” tells a withheld-at-source landlord to prepare a tax section they do not owe.
+   */
+  declarationScope: SingleDeclarationScope | null;
 }
 
 const DAY_MS = 86400000;
@@ -222,6 +269,15 @@ function resolveDeadlineRule(rule: FiscalRule, query: DeadlineQuery): ResolvedDe
 
   const appliesTo = paramValue(rule, 'applies_to');
   if (typeof appliesTo !== 'string' || appliesTo.length === 0) return null;
+
+  // B-105 — a rule may gate itself on a fact family. Absent family ⇒ emit NOTHING, and the distinction
+  // between „nothing at all” and „an undated row” is the whole point: art. 83 alin. (5) carves the
+  // short-term-rooms regime out of the duty, so for that register there is no obligation to date, to mark
+  // overdue, or to explain. Only rules that DECLARE a family are gated; every pre-existing rule is untouched.
+  const appliesWhen = paramValue(rule, 'applies_when');
+  if (typeof appliesWhen === 'string' && appliesWhen.length > 0) {
+    if (!(query.factFamilies ?? []).includes(appliesWhen)) return null;
+  }
 
   const event = paramValue(rule, 'event');
   if (typeof event === 'string' && event.length > 0) {

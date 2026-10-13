@@ -142,6 +142,47 @@ export const settings = {
      *   CAEN ↔ tourism-structure mapping in any source. A form that asks a question because of a code, and
      *   says the code is not the answer, is the difference between a prompt and an inference.
      */
+    // ── B-105 — the ordinary *cedarea folosinței bunurilor* facts ──────────────────────────────
+    //
+    // Three facts, and each one moves a legal outcome by itself, which is why none of them may arrive
+    // pre-filled. The tenant's legal nature decides between art. 84 and art. 84^1, and with it who computes
+    // the tax, whether it is final, and whether a Declarația Unică is owed for the income. Whether the tenant
+    // paid the owner's costs changes the gross the 20 % ratio runs over. Whether the rent was paid in kind,
+    // or a guarantee was applied to it, switches the withholding off and puts the whole duty back on the
+    // owner. A default for any of them is not a missing value — it is a different taxpayer.
+    leaseSection: 'Închiriere obișnuită (cedarea folosinței bunurilor): cine plătește și ce anume plătește',
+    leaseTenantNature: 'Cine îți plătește chiria?',
+    leaseTenantNatureOptions: {
+      persoana_fizica: 'O persoană fizică (fără obligația de a ține evidență contabilă)',
+      entitate_cu_evidenta_contabila: 'O persoană juridică sau altă entitate cu obligația de a ține evidență contabilă',
+    },
+    leaseTenantNatureHint:
+      'Faptul care alege regimul este chiriașul, nu proprietarul. art. 84 alin. (1) din Codul fiscal se adresează veniturilor „altele decât veniturile plătite de persoane juridice sau alte entități care au obligația de a conduce evidență contabilă”, iar art. 84^1 ia exact acea populație scoasă și îi dă un regim de reținere la sursă. Cu un chiriaș persoană fizică impozitul și-l stabilești singur și nu este impozit final; cu un chiriaș care ține evidență contabilă impozitul de 10 % se reține la momentul plății și este impozit final.',
+    leaseTenantNatureUnanswered:
+      'Fără răspuns. Aplicația nu alege regimul în locul tău și nu îl ghicește din CUI-ul din registru, din numele chiriașului sau dintr-o valoare implicită; cât timp lipsește, venitul se calculează în sistem real, iar regula care ar fi trebuit aplicată rămâne consemnată ca faptă care lipsește.',
+    leaseRegimeApplied: {
+      persoana_fizica:
+        'Regimul pe care aplicația îl va folosi: art. 84 — venitul brut este chiria prevăzută în contract pentru anul fiscal, indiferent de momentul încasării; cheltuieli forfetare 20 %; impozit de 10 % din venitul net, stabilit de tine și nevătămând ca impozit final (art. 123 alin. (2)).',
+      entitate_cu_evidenta_contabila:
+        'Regimul pe care aplicația îl va folosi: art. 84^1 — venitul net se stabilește la fiecare plată, impozitul de 10 % se reține la sursă de chiriaș și este impozit final (art. 84^1 alin. (5)-(6)). Pe Declarația Unică rămân contribuțiile sociale: art. 122 alin. (6) lit. a) scutește declarația numai pentru impozitul pe venit, iar pe chiria obișnuită CASS nu se reține la sursă.',
+    },
+    leaseContractRent: 'Chiria prevăzută în contract pentru acest an fiscal (lei)',
+    leaseContractRentHint:
+      'art. 84 alin. (2) măsoară venitul brut „pe baza chiriei prevăzute în contract pentru fiecare an fiscal, indiferent de momentul încasării chiriei”. Se declară chiria anului, nu încasările anului: sunt două mărimi diferite și la 31 decembrie dau același total, în rest nu. Dacă lași câmpul gol, aplicația adună documentele înregistrate pentru acest an și spune că asta a făcut; dacă declarai o sumă și documentele dau alta, aplicația refuză în loc să aleagă.',
+    leaseOwnerCosts: 'Cheltuieli care cad în sarcina proprietarului, dar plătite de chiriaș (lei)',
+    leaseOwnerCostsHint:
+      'art. 84 alin. (1) ultima propoziție: venitul brut se majorează cu cheltuielile care cad în sarcina proprietarului și sunt efectuate de cealaltă parte contractantă. Ele nu sunt în registrul tău — chiriașul le-a plătit — deci numai tu le poți declara. Se adaugă la brut ÎNAINTE de cota forfetară de 20 %, pentru că cota este procent din brut; ordinea schimbă netul.',
+    leaseInKind: 'Chiria se plătește exclusiv în natură?',
+    leaseGuarantee: 'O garanție contractuală a fost folosită pentru plata chiriei?',
+    leaseAlin8Hint:
+      'art. 84^1 alin. (8): când venitul brut se plătește exclusiv în natură, sau o garanție contractuală este utilizată pentru plata chiriei, reținerea la sursă nu se aplică — îți determini singur venitul net, îți calculezi impozitul și depui Declarația Unică până la termenul din art. 122 alin. (3). Este o excepție prevăzută de lege, nu o situație de margine.',
+    leaseContractDate: 'Data încheierii contractului de locațiune',
+    leaseContractDateHint:
+      'art. 83 alin. (5): contractul de locațiune și modificările ulterioare se înregistrează la organul fiscal competent în termen de cel mult 30 de zile. Termenul pornește de la contract, deci fără data lui aplicația nu poate fixa termenul — îl raportează ca nedefinit, nu ca împlinit. Obligația nu dispare pentru că chiriașul este persoană juridică; sunt scutite numai arendarea și închirierea pe termen scurt a camerelor în locuințe proprietate personală.',
+    leaseRegistered: 'Ai înregistrat contractul la organul fiscal?',
+    leaseRegisteredHint:
+      'Se înregistrează cu formularul „Cerere de înregistrare a contractelor de locațiune”, cod C168 — instituit prin OPANAF 114/2019 și modificat prin OPANAF 2031/2022 și OPANAF 161/2025. Codul fiscal nu numește niciun formular: obligația este în lege, formularul este în ordinul ANAF, și cele două se citează separat. Aplicația înregistrează răspunsul tău despre depunere, nu îl verifică.',
+
     accommodationSection: 'Cazare: câte camere și sub ce titlu intră venitul',
     accommodationRooms: 'Numărul de camere închiriate pe termen scurt, pentru anul fiscal de mai sus',
     accommodationRoomsHint:

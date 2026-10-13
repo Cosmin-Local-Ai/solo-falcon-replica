@@ -74,6 +74,16 @@ export interface TaxCalculationInput {
    */
   flatRatioMethod?: IncomeDeterminationMethodTag | null;
   /**
+   * B-105 — whether art. 84^1 alin. (8) has switched the withholding off for this register.
+   *
+   * Where the gross is paid **exclusively in kind**, or a **contractual guarantee is applied to the rent**,
+   * the payer does not withhold: the owner determines the net, computes the tax and files the Declarația
+   * Unică up to the art. 122 alin. (3) term. The arithmetic is unchanged; what changes is whose sum the tax
+   * is. The engine reads this rather than re-reading the profile's lease facts, for the same reason it reads
+   * `flatRatioMethod` rather than re-deriving the article.
+   */
+  flatRatioWithholdingBlocked?: boolean;
+  /**
    * TASK 6: the release the calculation is bound to, or `null` when this build registers none for the
    * profile's fiscal year. `null` makes the engine refuse instead of writing a snapshot that names no law
    * — the old behaviour was to hand in the 2026 release whatever the year said, which is how a call site
@@ -268,7 +278,7 @@ export const CASS_FLAG_REVIEW_REASON =
   + 'rămâne valoarea calculată, dar nu poate fi prezentată ca o scutire dovedită.';
 
 export async function computeTaxEstimate(input: TaxCalculationInput): Promise<TaxEstimateResult> {
-  const { inputs, profile, revenues, expenses, revenuesNet, expensesNet, expenseBase, flatRatioGross, flatRatioMethod, ruleRelease, rules } = input;
+  const { inputs, profile, revenues, expenses, revenuesNet, expensesNet, expenseBase, flatRatioGross, flatRatioMethod, flatRatioWithholdingBlocked, ruleRelease, rules } = input;
   // `leiText`, not the raw value: these sentences are read by a person, and a person reads leu.
   if (!Number.isFinite(revenues) || revenues < 0) return rr(`Veniturile trebuie să fie >= 0, s-a obținut ${leiText(revenues)}`);
   if (!Number.isFinite(expenses) || expenses < 0) return rr(`Cheltuielile trebuie să fie >= 0, s-a obținut ${leiText(expenses)}`);
@@ -299,6 +309,13 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // not a reuse of the one above is the whole point of this block: the two articles share a percentage and
   // share nothing else, and a single lookup would resolve whichever ruleId sorts first.
   const shortTermRoomsRule = applicable.find((r) => r.taxRegime === 'short-term-rooms-flat-ratio');
+  // B-105: the two ordinary *cedarea folosinței* rules. Two more regime strings, for the same reason as the
+  // one above — the three articles share a rate and share nothing else, and one lookup would resolve
+  // whichever ruleId sorts first. art. 84 alin. (3) and art. 84^1 alin. (3) both say 20 %; art. 85 alin. (2)
+  // says 30 %; all three are taxed at 10 %, but art. 84's rate sits at art. 123 alin. (2) and is NOT final,
+  // while art. 84^1's is withheld by the payer and IS final (alin. (5)-(6)).
+  const cedareArt84Rule = applicable.find((r) => r.taxRegime === 'cedare-art84-flat-ratio');
+  const cedareArt84x1Rule = applicable.find((r) => r.taxRegime === 'cedare-art84x1-withheld');
   if (!casRule) return rr(`Regula CAS nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}`, lines);
   if (!cassRule) return rr(`Regula CASS nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}`, lines);
   if (!incomeTaxRule) return rr(`Regula de impozit pe venit nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}`, lines);
@@ -409,14 +426,53 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   let flatLeg: FlatRatioLeg | null = null;
   // B-88 — the art. 85 leg. Same shape, separate rule, separate calculator, separate citations.
   let roomsLeg: FlatRatioLeg | null = null;
+  // B-105 — the ordinary *cedarea folosinței* leg. One leg, whichever of the two regimes the tenant fact
+  // selected, because only one method ever runs for one register.
+  let cedareLeg: FlatRatioLeg | null = null;
+  // True when the tax on this leg is the PAYER'S to withhold, not the owner's to pay: art. 84^1 alin. (5)-(6)
+  // with alin. (8) not triggered. It decides whether the sum enters the total the owner owes.
+  let cedareWithheldAtSource = false;
   if (typeof flatRatioGross === 'number') {
     // Which article this gross belongs to is read off the operand, never re-derived here: the assembler
     // decided it once from the declared room count and the declared answer to the art. 85 alin. (1)
     // exclusion. Absent means a call site that predates B-88, and for those art. 68^3 is the only flat
     // method that has ever existed — the default is stated, not implied by a fallthrough.
     const flatMethod: IncomeDeterminationMethodTag =
-      flatRatioMethod === 'short-term-rooms-art85' ? 'short-term-rooms-art85' : 'accommodation-flat-ratio';
-    if (flatMethod === 'short-term-rooms-art85') {
+      flatRatioMethod === 'short-term-rooms-art85' ||
+      flatRatioMethod === 'cedare-art84' ||
+      flatRatioMethod === 'cedare-art84x1'
+        ? flatRatioMethod
+        : 'accommodation-flat-ratio';
+    if (flatMethod === 'cedare-art84' || flatMethod === 'cedare-art84x1') {
+      const rule = flatMethod === 'cedare-art84' ? cedareArt84Rule : cedareArt84x1Rule;
+      if (!rule) {
+        return rr(
+          flatMethod === 'cedare-art84'
+            ? `Regula de stabilire a venitului din cedarea folosinței bunurilor (art. 84) nu a fost găsită pentru ` +
+              `anul fiscal ${inputs.fiscalYear}; un venit brut din art. 84 nu poate fi calculat după regulile unui alt an.`
+            : 'Regula de stabilire a impozului pentru cedarea folosinței bunurilor plătite de persoane juridice ' +
+              `(art. 84^1) nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}; un venit brut din art. 84^1 nu ` +
+              'poate fi calculat după regulile unui alt an.',
+          lines,
+        );
+      }
+      const cedareRes = calculatorRegistry[
+        flatMethod === 'cedare-art84' ? 'calc-cedare-art84-flat-ratio' : 'calc-cedare-art84x1-withheld'
+      ](rule, { gross: flatRatioGross });
+      if ('reviewRequired' in cedareRes) return rr(cedareRes.reason, lines);
+      if (typeof cedareRes.determinedNet !== 'number') {
+        return rr(
+          `Regula ${flatMethod === 'cedare-art84' ? 'art. 84' : 'art. 84^1'} nu a raportat venitul net determinat; `
+            + 'compoziția nu îl recalculează pe cont propriu.',
+          lines,
+        );
+      }
+      cedareLeg = { gross: flatRatioGross, net: cedareRes.determinedNet, tax: cedareRes.value };
+      // art. 84^1 alin. (5)-(6) makes the payer the one who calculates, withholds, declares and remits the
+      // tax, and alin. (8) is the exception that puts all of it back on the owner. The assembler read the two
+      // declared facts; this only honours the answer.
+      cedareWithheldAtSource = flatMethod === 'cedare-art84x1' && flatRatioWithholdingBlocked !== true;
+    } else if (flatMethod === 'short-term-rooms-art85') {
       if (!shortTermRoomsRule) {
         return rr(
           `Regula de stabilire a venitului din închirierea pe termen scurt a 1–7 camere în locuință proprietate ` +
@@ -463,9 +519,15 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   }
   // One label for the ring-fenced tax, so the three return paths below cannot print the wrong article.
   const flatTaxLabel =
-    roomsLeg !== null
-      ? 'Impozit art. 85 (10 %, impozitul fiind final)'
-      : 'Impozit art. 68^3 (10 %, impozitul fiind final)';
+    cedareLeg !== null
+      ? cedareWithheldAtSource
+        ? 'Impozit reținut la sursă de plătitor (art. 84^1 alin. (5)-(6), 10 %, impozit final — nu se achită de contribuabil)'
+        : 'Impozit art. 84^1 alin. (8) (10 %, stabilit de contribuabil pentru că reținerea nu se aplică)'
+      : roomsLeg !== null
+        ? 'Impozit art. 85 (10 %, impozitul fiind final)'
+        : 'Impozit art. 68^3 (10 %, impozitul fiind final)';
+  // The label art. 84's own tax carries — it is NOT „final”, and that is the difference from the other three.
+  const cedareArt84TaxLabel = 'Impozit art. 84 (10 % din venitul net, art. 123 alin. (2), stabilit de contribuabil)';
 
   // THE GATE. One leg per source, and the operand the assembler supplied decides which one this register
   // is. `flatRatioGross` is attached by `estimateBasis.ts withFlatRatioGross` only when
@@ -482,32 +544,42 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // mistake under a different sign. The list is empty for this method, and that is a statement about the
   // law, not an omission: CAS is not owed on rent income, and art. 170 alin. (1) does not reach it.
   const legs: ContributionLeg[] =
-    roomsLeg !== null
+    roomsLeg !== null || cedareLeg !== null
       ? []
       : flatLeg !== null
         ? [{ method: 'accommodation-flat-ratio', net: flatLeg.net }]
         : [{ method: 'sistem-real', net: subBani(sistemRealGross, sistemRealExpenseBase) }];
   // True whenever a flat-ratio method ran, whichever article supplied it. The art. 118 alin. (2) composition
-  // below must not run for either of them, and `legs[0].method` cannot express that for art. 85 — there is
-  // no leg to read.
-  const flatMethodRan = roomsLeg !== null || flatLeg !== null;
+  // below must not run for any of them, and `legs[0].method` cannot express that for art. 85 or for the two
+  // cedare regimes — there is no leg to read.
+  const flatMethodRan = roomsLeg !== null || flatLeg !== null || cedareLeg !== null;
 
   // The three quantities every consumer reads, stated once per method so `gross - deductibleBase === net`
   // holds on either branch and no surface has to know which method ran in order to read them. For a flat
   // method the expense here is the deemed ratio, not a recorded cost: art. 68^3 alin. (2) and art. 85
   // alin. (2) each replace the register's expenses with it, which is precisely why the sistem-real expense
   // leg is not run beside either.
-  const net = roomsLeg?.net ?? flatLeg?.net ?? subBani(sistemRealGross, sistemRealExpenseBase);
-  const gross = roomsLeg?.gross ?? flatLeg?.gross ?? sistemRealGross;
+  const net = roomsLeg?.net ?? flatLeg?.net ?? cedareLeg?.net ?? subBani(sistemRealGross, sistemRealExpenseBase);
+  const gross = roomsLeg?.gross ?? flatLeg?.gross ?? cedareLeg?.gross ?? sistemRealGross;
   const deductibleBase =
     roomsLeg !== null
       ? subBani(roomsLeg.gross, roomsLeg.net)
       : flatLeg !== null
         ? subBani(flatLeg.gross, flatLeg.net)
-        : sistemRealExpenseBase;
-  const flatTax: Bani = roomsLeg?.tax ?? flatLeg?.tax ?? lei(0);
+        : cedareLeg !== null
+          ? subBani(cedareLeg.gross, cedareLeg.net)
+          : sistemRealExpenseBase;
+  const flatTax: Bani = roomsLeg?.tax ?? flatLeg?.tax ?? cedareLeg?.tax ?? lei(0);
+  // B-105 — the part of that tax the OWNER owes. art. 84^1 alin. (4)-(6) puts the calculation, the withholding,
+  // the declaration and the remittance of a FINAL 10 % on the plătitor de venit, so for a withheld-at-source
+  // register the sum is reported (it is the owner's income tax, withheld from their rent, and they are
+  // entitled to the alin. (4) certificate proving it) but it is NOT added to what the owner must pay. Adding
+  // it would tell a landlord to pay twice the same leu. alin. (8) — rent paid exclusively in kind, or a
+  // guarantee applied to the rent — switches the withholding off, and then the same sum is the owner's.
+  const withheldAtSourceTax: Bani = cedareWithheldAtSource ? cedareLeg?.tax ?? lei(0) : lei(0);
+  const taxDueByOwner: Bani = subBani(flatTax, withheldAtSourceTax);
 
-  if (flatLeg === null && roomsLeg === null) {
+  if (flatLeg === null && roomsLeg === null && cedareLeg === null) {
     lines.push({ label: 'Venit brut', value: gross });
     // B-16: this used to be `Math.min(deductibleBase, gross)`. That clamp forced the net to stay >= 0, so
     // a fiscal loss was UNREPRESENTABLE — an expense-heavy year came out as "no tax, no loss" and the
@@ -523,6 +595,21 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     lines.push({ label: 'Venit brut art. 85 (încasări în cursul anului fiscal)', value: gross });
     lines.push({ label: 'Cheltuieli forfetare 30 % (art. 85 alin. (2))', value: deductibleBase });
     lines.push({ label: 'Venit net art. 85', value: net });
+  } else if (cedareLeg !== null) {
+    // The label says which measure the gross is, because the three rent regimes measure it differently and
+    // the figure beside the label is not interchangeable between them.
+    lines.push({
+      label:
+        flatRatioMethod === 'cedare-art84'
+          ? 'Venit brut art. 84 (chiria prevăzută în contract pentru anul fiscal, indiferent de încasare)'
+          : 'Venit brut art. 84^1 (sumele plătite de chiriaș în anul fiscal)',
+      value: gross,
+    });
+    lines.push({ label: 'Cheltuieli forfetare 20 % (art. 84 alin. (3) / art. 84^1 alin. (3))', value: deductibleBase });
+    lines.push({
+      label: flatRatioMethod === 'cedare-art84' ? 'Venit net art. 84' : 'Venit net art. 84^1',
+      value: net,
+    });
   } else {
     lines.push({ label: 'Venit brut art. 68^3 (încasări)', value: gross });
     lines.push({ label: 'Cheltuieli forfetare 30 % (art. 68^3 alin. (2))', value: deductibleBase });
@@ -622,15 +709,22 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     // task exists to keep true. And it does not silently overwrite a declared amount: if the person typed a
     // cedarea folosinței figure for this year and the engine computed a different one, two producers are
     // claiming one figure, and the engine reports that rather than picking a winner.
-    const computedCedareNet = roomsLeg?.net;
+    const computedCedareNet = roomsLeg?.net ?? cedareLeg?.net;
     if (ladderYear !== undefined || computedCedareNet !== undefined) {
       const declaredCedare = ladderYear?.cedareaFolosinteiBunurilor;
       if (computedCedareNet !== undefined && declaredCedare !== undefined && declaredCedare !== computedCedareNet) {
         return rr(
           `Venitul net din cedarea folosinței bunurilor pentru ${inputs.fiscalYear} are doi producători care nu ` +
-            `cad de acord: persoana a declarat ${leiText(declaredCedare)} lei, iar regula art. 85 a determinat ` +
-            `${leiText(computedCedareNet)} lei din încasările registrului. Scara de la art. 170 alin. (2)-(4) ` +
-            'cumulează o singură sumă per categorie, deci aplicația nu alege între ele.',
+            `cad de acord: persoana a declarat ${leiText(declaredCedare)} lei, iar regula ` +
+            // The message names the rule that actually produced the figure. Saying „regula art. 85” about a net
+            // the art. 84 or art. 84^1 rule determined would send the person to the wrong article to fix it.
+            (flatRatioMethod === 'cedare-art84'
+              ? 'art. 84'
+              : flatRatioMethod === 'cedare-art84x1'
+                ? 'art. 84^1'
+                : 'art. 85') +
+            ` a determinat ${leiText(computedCedareNet)} lei din registrul de venituri. Scara de la art. 170 ` +
+            'alin. (2)-(4) cumulează o singură sumă per categorie, deci aplicația nu alege între ele.',
           lines,
         );
       }
@@ -739,8 +833,24 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // at all. The guard is on the method, not on the presence of a leg — which is the difference between
   // guarding the arithmetic and guarding the code path.
   if (flatMethodRan) {
-    const total = sumBani([casRes.value, cassValue, cassLadderValue, flatTax]);
-    lines.push({ label: flatTaxLabel, value: flatTax });
+    const total = sumBani([casRes.value, cassValue, cassLadderValue, taxDueByOwner]);
+    lines.push({
+      label:
+        cedareLeg !== null && flatRatioMethod === 'cedare-art84'
+          ? cedareArt84TaxLabel
+          : flatTaxLabel,
+      value: flatTax,
+    });
+    if (withheldAtSourceTax > 0) {
+      // Reported, not charged. The owner sees what was taken out of their rent and knows the sum is not
+      // theirs to pay again; art. 84^1 alin. (4) last sentence gives them the right to ask the payer for the
+      // document that proves it.
+      lines.push({
+        label:
+          'Din care: reținut și virat de plătitorul de venit (art. 84^1 alin. (4)-(6)) — nu se achită de contribuabil; la cerere, plătitorul emite documentul care atestă impozitul reținut și virat',
+        value: withheldAtSourceTax,
+      });
+    }
     lines.push({ label: 'Total taxe', value: total });
     const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, rules: applicable, calculationLines: lines, output: { total } });
     return {
@@ -831,9 +941,9 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
         rule: 'CF art. 118 alin. (4): „Pierderea fiscală anuală înregistrată pe fiecare sursă din activități independente … determinată în sistem real, se reportează și se compensează de către contribuabil în limita a 70% din veniturile nete anuale, obținute din aceeași sursă de venit în următorii 5 ani fiscali consecutivi.” Alin. (5): reportul se face cronologic pe 5 ani consecutivi, dreptul este personal și netransmisibil, iar pierderea necompensată la expirarea perioadei este pierdere definitivă.',
       };
     }
-    const total = sumBani([casRes.value, cassValue, cassLadderValue, flatTax]);
+    const total = sumBani([casRes.value, cassValue, cassLadderValue, taxDueByOwner]);
     lines.push({ label: 'Impozit pe venit (fără bază impozabilă)', value: lei(0) });
-    if (flatLeg !== null || roomsLeg !== null) {
+    if (flatLeg !== null || roomsLeg !== null || cedareLeg !== null) {
       lines.push({ label: flatTaxLabel, value: flatTax });
     }
     lines.push({ label: 'Total taxe', value: total });
@@ -852,7 +962,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   const incomeTaxRes = calculatorRegistry['calc-income-tax'](incomeTaxRule, { base: taxable });
   if ('reviewRequired' in incomeTaxRes) return rr(incomeTaxRes.reason, lines);
   lines.push({ label: 'Impozit pe venit (rată de bază 10%)', value: incomeTaxRes.value });
-  if (flatLeg !== null || roomsLeg !== null) {
+  if (flatLeg !== null || roomsLeg !== null || cedareLeg !== null) {
     // alin. (6) + alin. (11) of the flat article: this sum is 10 % of that net and nothing else. It is not
     // reduced by the CAS/CASS deductions the art. 118 composition above applies to the sistem-real source,
     // because „impozitul fiind final" settles it on the net and the ring-fence runs on the tax, not the
@@ -861,7 +971,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   }
   // Art. 66 was already applied to each of the three sums, inside their calculators. Summing the rounded
   // integers is exact, and it is why no second rounding can happen anywhere downstream.
-  const total = sumBani([casRes.value, cassValue, cassLadderValue, incomeTaxRes.value, flatTax]);
+  const total = sumBani([casRes.value, cassValue, cassLadderValue, incomeTaxRes.value, taxDueByOwner]);
   lines.push({ label: 'Total taxe', value: total });
   const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, rules: applicable, calculationLines: lines, output: { total } });
   return {

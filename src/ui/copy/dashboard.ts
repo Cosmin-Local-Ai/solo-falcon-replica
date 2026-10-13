@@ -10,6 +10,8 @@ import type { AttentionSource } from '../../domain/attention';
 import type { CoverageReason } from '../../domain/estimateBasis';
 import type { LegislationItem } from '../../data/dashboard';
 import type { Deadline, DeadlineEventType } from '../../domain/deadlines';
+// B-105 — the declaration scope is a domain answer, not a copy choice; this file only words it.
+import type { SingleDeclarationScope } from '../../domain/models';
 import type { MoneyPrecisionNotice } from '../../data/migration';
 
 export const dashboard = {
@@ -278,7 +280,27 @@ export const deadlineAppliesToLabels: Record<string, string> = {
   // deconturi: a row that calls one a decont tells the taxpayer to file the wrong form.
   vat_mentiuni: 'Mențiuni TVA',
   vat_registration: 'Înregistrare în scop de TVA',
+  // B-105 — the duty on the contract, not on the income. The chip says whose obligation it is; the event
+  // label above says what it is. Neither may read as a tax term: this is discharged with the C168 request at
+  // the tax body, not with a Declarația Unică.
+  lease_contract_registration: 'Contract de locațiune',
 };
+
+/**
+ * B-105 — what a Declarația Unică term covers, for this profile-year.
+ *
+ * The row already says WHEN the return is due; this says WHAT is in it. The distinction is not decoration:
+ * art. 122 alin. (6) lit. a) takes the income tax out of the return when the payer withheld it under art.
+ * 84^1, and art. 122 alin. (7) puts the contributions back in, because CASS on ordinary rent is not withheld
+ * (art. 174^1 alin. (3) reaches only daily wage, arendă and associations). A card that says only „Depunere
+ * D212” therefore tells a landlord whose tax was already withheld to prepare a tax section they do not owe,
+ * and — the worse direction — it can be read as „nothing to file", which is false.
+ */
+export const declarationScopeLabels = {
+  full: 'Declarație unică: impozit pe venit și contribuții sociale',
+  contributions_only:
+    'Declarație unică: contribuții sociale. Impozitul pe venit a fost reținut la sursă de plătitor (art. 122 alin. (6) lit. a)), dar CASS pe chiria obișnuită nu se reține, deci declarația se depune (art. 122 alin. (7))',
+} satisfies Record<SingleDeclarationScope, string>;
 
 /**
  * PG-5 — what a deadline row IS, named for the taxpayer rather than for the rule's audience key.
@@ -348,6 +370,10 @@ export const deadlines = {
     // own identifier.
     vat_return: 'Depunere decont periodic de TVA',
     vat_mentiuni: 'Depunere declarație de mențiuni TVA',
+    // B-105 — art. 83 alin. (5). The label names the duty, not the tax: it is a duty on the contract, it is
+    // discharged by the C168 request under OPANAF 114/2019 as amended (an ANAF order, not the Cod fiscal),
+    // and it does not exist at all for the short-term-rooms regime.
+    lease_contract_registration: 'Înregistrarea contractului de locațiune',
   } satisfies Record<DeadlineEventType, string>,
 } as const;
 

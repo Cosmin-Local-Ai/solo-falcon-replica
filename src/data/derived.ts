@@ -117,6 +117,11 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
       // B-88 — threading only, and identical to `data/dashboard.ts getTaxEstimate` by construction: which
       // flat article a gross belongs to is decided once by the assembler, never at a call site.
       flatRatioMethod: amounts.flatRatioMethod ?? null,
+      // B-105 — threaded, not re-read. The assembler resolved whether art. 84^1 alin. (8) switched the
+      // withholding off; the engine decides from that answer whether the 10 % is the payer's to withhold or
+      // this taxpayer's to pay, and a second reading of the lease facts at a call site is how one register
+      // ends up with two answers about the same tax.
+      flatRatioWithholdingBlocked: amounts.flatRatioWithholdingBlocked ?? false,
       ruleRelease: selection ? selection.release : null,
       rules,
     }).then((result) => {

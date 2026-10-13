@@ -38,6 +38,10 @@ import {
   type ThresholdBases,
 } from '../domain/thresholds';
 import { computeDeadlines, classifyDeadline, filingForDeadline, vatObligationDeadlines, vatReturnForDeadline, resolveDeadlineOutcome, type DeadlineView } from '../domain/deadlines';
+// B-105 — the lease facts and the fact families they put in force. Read from `domain/models.ts`, the one
+// place the cedare regime facts are interpreted: this file is an adapter and a second reading of the same
+// facts here is how the deadline card and the estimate start disagreeing about whose tax is whose.
+import { cedareDeadlineFactFamilies, leaseFactsForYear, singleDeclarationScopeForYear } from '../domain/models';
 // PG-6g — the art. 322 fiscal period and the art. 322/323 filing calendar. Imported from the domain, never
 // re-derived here: `data/dashboard.ts` is an adapter, and a second calendar in this file is how two
 // surfaces start disagreeing about whether a decont is owed.
@@ -453,6 +457,10 @@ export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEsti
     // this gross belongs to, and a call site that left the field out would hand the engine a 30 % ratio
     // with no way to know which article gave it.
     flatRatioMethod: amounts.flatRatioMethod ?? null,
+    // B-105 — whether art. 84^1 alin. (8) switched the withholding off. Threaded, not re-read: the assembler
+    // resolved it from the declared lease facts, and the engine decides with it whether the 10 % is the
+    // payer's to withhold or this taxpayer's to pay.
+    flatRatioWithholdingBlocked: amounts.flatRatioWithholdingBlocked ?? false,
     ruleRelease: selection ? selection.release : null,
     rules,
   }).then((result) => attachEstimateBasis(result, basis, operands.scenarios, operands.inputVat));
@@ -688,6 +696,13 @@ export function getDeadlineRows(data: AppData, asOfDate: string): DeadlineView[]
     // date and must not invent one. Passing it is a data-model fix, not a rule change.
       pfaStartDate: data.profile.pfaStartDate,
       vatExceedanceDate: data.profile.vatExceedanceDate,
+      // B-105 — the two inputs `CEDARE_CONTRACT_REGISTRATION_DEADLINE_2026` had been missing since it was
+      // written. Both are optional and both stay honest when absent: an absent contract date leaves the row
+      // undated and `not_applicable` rather than guessed, and an absent fact family makes the rule emit
+      // NOTHING — which is how art. 83 alin. (5) reaches an ordinary *cedarea folosinței* register and skips
+      // the short-term-rooms register the alineat carves out. The families come from declared facts only.
+      leaseContractDate: leaseFactsForYear(data.profile.leaseFactsYears, data.profile.fiscalYear)?.contractDate,
+      factFamilies: cedareDeadlineFactFamilies(data.profile, data.profile.fiscalYear),
     }),
     ...vatObligationDeadlines(getVatObligations(data, asOfDate), data.profile.fiscalYear),
   ].map((d) => {
@@ -698,6 +713,12 @@ export function getDeadlineRows(data: AppData, asOfDate: string): DeadlineView[]
       done: filing !== null || vatReturn !== null,
       filedOn: filing?.filedOn ?? vatReturn?.filedOn ?? null,
       outcome: resolveDeadlineOutcome(d, filings, asOfDate, vatReturns),
+      // B-105 — the D212 row says what it covers. art. 122 alin. (6) lit. a) takes the income tax out of the
+      // return when the payer withheld it; art. 122 alin. (7) puts the contributions back in, because CASS on
+      // ordinary rent is not withheld (art. 174^1 alin. (3) reaches only daily wage, arendă and associations).
+      // Resolved in `domain/models.ts` from the declared tenant fact — not re-derived here.
+      declarationScope:
+        d.eventType === 'd212_filing' ? singleDeclarationScopeForYear(data.profile, data.profile.fiscalYear) : null,
     };
   });
   return rows;

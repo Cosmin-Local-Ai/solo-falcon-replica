@@ -66,6 +66,12 @@ describe('DEADLINE_EVENT_TYPES', () => {
       'vat_registration', // CF art. 316 alin. (1) lit. b) — „cel târziu la data depășirii plafonului"
       'vat_return',       // CF art. 323 alin. (1) — decontul pe fiecare perioadă fiscală; plată art. 326 alin. (1)
       'vat_mentiuni',     // CF art. 322 alin. (6) și alin. (8) — declarația de mențiuni, nu un decont
+      // B-105 — the duty on the contract rather than on the income. It gets its own type because it falls on
+      // a different date (30 days from the contract, not 25 May), is discharged by a different document (the
+      // C168 request, instituted by OPANAF 114/2019 and amended by 2031/2022 and 161/2025 — an ANAF order,
+      // since the Cod fiscal names no form), and does not exist at all for the short-term-rooms regime the
+      // same alineat carves out.
+      'lease_contract_registration', // CF art. 83 alin. (5) — „în termen de cel mult 30 de zile”
     ]);
   });
 
