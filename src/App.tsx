@@ -145,7 +145,7 @@ function Shell() {
   const [route, setRoute] = useState<Route>(parseRoute);
   const [navOpen, setNavOpen] = useState(false);
   const isMobile = useIsMobile();
-  const { profile, dataOrigin, migration, quarantine, moneyNotices, toast, sandboxActive, unloadSandbox } = useStore();
+  const { profile, dataOrigin, migration, quarantine, moneyNotices, toast, sandboxActive, unloadSandbox, saveFailure, retrySave } = useStore();
 
   // Phase 11 (D1, D-RUN-1): empty storage is a first run, not a demo. `dataOrigin === 'empty'` is the
   // only state that means "nothing this person entered exists yet" — and because the save effect in
@@ -314,6 +314,21 @@ function Shell() {
                 <summary>{disclosure.technicalDetails}</summary>
                 <p>{quarantine.reason} — {quarantine.detail}</p>
                 <p>{shell.savedCopy(quarantine.quarantinedAt)}</p>
+              </details>
+            </div>
+          )}
+          {/* PG-11 (phase 29) — a write that did not happen is now a fact on screen, not a line in a console.
+              `role="alert"`: the person's most recent work is unwritten, and the next reload is where they
+              would otherwise find out. It clears itself on the next write that succeeds. */}
+          {saveFailure && (
+            <div className="banner banner-warn" role="alert" data-save-failure>
+              <strong>{shell.saveFailedTitle}</strong> {shell.saveFailedBody}
+              <button type="button" className="btn" onClick={retrySave} data-save-retry>
+                {shell.saveFailedRetry}
+              </button>
+              <details className="banner-details">
+                <summary>{disclosure.technicalDetails}</summary>
+                <p>{shell.saveFailedAttempts(saveFailure.attempts)} — {saveFailure.message}</p>
               </details>
             </div>
           )}

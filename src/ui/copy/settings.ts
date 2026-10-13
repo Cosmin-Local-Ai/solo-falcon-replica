@@ -489,10 +489,51 @@ export const settings = {
       'Se elimină profilul, veniturile, cheltuielile, declarațiile, documentele, cursurile de schimb inregistrate și copia păstrată a unei sarcini respinse. Aplicația se întoarce la primul pas, fără nicio date.',
     confirmCancel: 'Nu șterg',
     confirmGo: 'Șterge tot',
+    /**
+     * PG-11 (phase 29) — export and import.
+     *
+     * The two sentences that carry the weight are `backupBody` and `importRejected`. The first has to say
+     * what a backup contains, because the whole point of this phase is that the documents are in it even
+     * though they no longer live where the rest of the data does. The second has to say that a refused file
+     * changed nothing, because "import failed" on its own leaves a person wondering what is now on screen.
+     */
+    backupCard: 'Copie de rezervă',
+    backupBody:
+      'Exportul conține tot ce ai înregistrat, inclusiv documentele și versiunea formatului. Importul citește și verifică întregul fișier înainte să scrie orice.',
+    backupExport: 'Exportă o copie',
+    backupImport: 'Importă o copie',
+    backupWorking: 'Se lucrează la fișier…',
+    /** The blob store is connected: the ceiling that document bytes used to hit is gone. */
+    blobConnected: 'Documentele sunt păstrate în afara datelor aplicției.',
+    /**
+     * `'unavailable'` is stated, not hidden. The app is correct in this state — documents keep working — but
+     * the space limit the phase exists to remove is still there, and a person stacking up scans needs to
+     * know that before a save starts failing.
+     */
+    blobUnavailable:
+      'Depozitul de documente nu este disponibil aici. Documentele rămân împreună cu datele și limita de spațiu se aplică în continuare.',
+    blobRelocated: (n: number): string => `${n} documente au fost mutate în depozitul de documente.`,
+    /** The relocation failure path: the bytes stayed where they were, and that is the safe outcome. */
+    blobRelocationFailed: (n: number): string =>
+      `${n} documente și-au păstrat octeții împreună cu datele, pentru că scrierea a eșuat.`,
+    /** Orphans are reported. Nothing here deletes a blob the app did not just lose. */
+    blobOrphans: (n: number): string =>
+      `${n} octeți nu mai au niciun document care să arate la ei. Sunt raportați, nu șterși.`,
+    blobReclaimFailed: (n: number): string =>
+      `${n} documente au fost șterse, dar octeții lor nu au putut fi eliberați.`,
   },
   dataToasts: {
     sandboxLoaded: 'Sandbox încărcat. Nu se salvează și nu ating datele tale.',
     sandboxUnloaded: 'Sandbox eliminat. Datele tale sunt exact cum erau.',
     allCleared: 'Toate datele au fost șterse. Începem de la zero.',
+    /** A backup that omits a document is a corrupt backup, so nothing is written when a read fails. */
+    exportRefused: (n: number): string =>
+      `Nu am exportat nimic: nu am putut citi octeții a ${n} documente. Un rezervă incompletă este mai gravă decât lipsa ei.`,
+    exported: (docs: number): string => `Copia a fost descărcată, cu ${docs} documente în ea.`,
+    imported: (from: number, to: number): string =>
+      `Datele au fost restaurate (format ${from} → ${to}).`,
+    importRejected: 'Fișierul a fost respins și copia lui a fost păstrată. Datele tale nu s-au schimbat.',
+    importBlobPartial: (n: number): string =>
+      `${n} documente au rămas cu octeții împreună cu datele, pentru că depozitul nu le-a primit.`,
   },
 } as const;

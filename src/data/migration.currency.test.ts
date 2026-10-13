@@ -2,11 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   CURRENT_DATA_VERSION,
   DATA_VERSION_RECORD_CURRENCY,
-  DATA_VERSION_FIXED_ASSETS,
-  DATA_VERSION_INPUT_VAT,
-  DATA_VERSION_VAT_RETURNS,
   // B-105 — the version that opens `profile.leaseFactsYears`.
   DATA_VERSION_LEASE_FACTS,
+  // PG-11 — the head of the chain: the shape declaration that lets a document carry a blob pointer.
+  DATA_VERSION_DOCUMENT_BLOB_REF,
   DATA_VERSION_RULE_SET_DIGEST,
   MIGRATION_CHAIN,
   migratePersistedData,
@@ -126,8 +125,11 @@ describe('record-currency is a no-op in value', () => {
     const after = migrateRecordCurrencyV10(v9Payload());
     expect(after.version).toBe(DATA_VERSION_RECORD_CURRENCY);
     // PG-6g re-pin (replaced, not deleted): this step is no longer the head of the chain — v11 … v18, v19
-    // and now v20 follow it. Unchanged is that the step itself stamps exactly 10 and nothing else.
-    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_LEASE_FACTS);
+    // and now v20 and v21 follow it. Unchanged is that the step itself stamps exactly 10 and nothing else.
+    // PG-11 states both edges, because "the head moved by exactly one" is a property worth a test: v20 is
+    // the second-to-last rung and v21 is what this build writes.
+    expect(MIGRATION_CHAIN[MIGRATION_CHAIN.length - 1]!.from).toBe(DATA_VERSION_LEASE_FACTS);
+    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_DOCUMENT_BLOB_REF);
   });
 
   it('is idempotent: running it again on a v10 payload changes nothing', () => {
@@ -222,15 +224,19 @@ describe('the step touches only the two collections it names', () => {
 describe('the chain', () => {
   it('runs record-currency as its own step, from 9 to 10', () => {
     // PG-5 re-pin (replaced, not deleted): this used to assert record-currency was the FINAL step. It is
-    // now step 10 of 19 — the annual-filing, activity-family, accommodation, occupancy-sheet, vehicle-facts,
-    // other-income-ladder, fixed-assets, input-vat-registration, vat-returns and lease-facts steps follow
-    // it — so the assertion moves from "last" to "present at exactly this edge", which is the property this
-    // file cares about. The offset below is counted from the END of the chain, so a step appended by a later
-    // phase moves it by one; that is the whole point of writing it as an offset rather than a literal index.
+    // now step 10 of 21 — the annual-filing, activity-family, accommodation, occupancy-sheet, vehicle-facts,
+    // other-income-ladder, fixed-assets, input-vat-registration, vat-returns, lease-facts and
+    // document-blob-ref steps follow it — so the assertion moves from "last" to "present at exactly this
+    // edge", which is the property this file cares about. The offset below is counted from the END of the
+    // chain, so a step appended by a later phase moves it by one; that is the whole point of writing it as
+    // an offset rather than a literal index.
     const step = MIGRATION_CHAIN.find((s) => s.name === 'record-currency')!;
     expect(step.from).toBe(DATA_VERSION_RULE_SET_DIGEST);
     expect(step.to).toBe(DATA_VERSION_RECORD_CURRENCY);
-    expect(MIGRATION_CHAIN.indexOf(step)).toBe(MIGRATION_CHAIN.length - 11);
+    // PG-11 re-pin (replaced, not deleted): the chain grew by one step again, so the offset from the end
+    // moves by one. The property is unchanged — record-currency still sits at exactly this edge, and the
+    // offset is written from the END on purpose so a later phase only has to move this one number.
+    expect(MIGRATION_CHAIN.indexOf(step)).toBe(MIGRATION_CHAIN.length - 12);
   });
 
   it('a v9 payload needs one step per version above it', () => {
@@ -253,6 +259,8 @@ describe('the chain', () => {
     // B-105 — opens `profile.leaseFactsYears` by writing nothing, so it moves no amount: the property this
     // file guards.
     'lease-facts',
+    // PG-11 — the same property holds for `document-blob-ref`: a shape declaration that touches no amount.
+    'document-blob-ref',
     ]);
   });
 
@@ -271,7 +279,8 @@ describe('the chain', () => {
     const amountsBefore = JSON.stringify(atV10.revenues.map(r => [r.valoareFaraTva, r.tva]));
     const outcome = migratePersistedData(atV10);
     expect(outcome.migrated).toBe(true);
-    expect(outcome.stepsApplied).toEqual(['annual-filing', 'activity-family', 'accommodation-facts', 'occupancy-sheet', 'vehicle-facts', 'other-income-ladder', 'fixed-assets', 'input-vat-registration', 'vat-returns', 'lease-facts']);
+    expect(outcome.stepsApplied).toEqual(['annual-filing', 'activity-family', 'accommodation-facts', 'occupancy-sheet', 'vehicle-facts', 'other-income-ladder', 'fixed-assets', 'input-vat-registration', 'vat-returns', 'lease-facts', // PG-11 — appended after v20; it fills nothing in.
+      'document-blob-ref']);
     expect(JSON.stringify(outcome.data.revenues.map(r => [r.valoareFaraTva, r.tva]))).toBe(amountsBefore);
     expect(outcome.data.version).toBe(CURRENT_DATA_VERSION);
   });

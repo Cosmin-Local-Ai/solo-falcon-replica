@@ -13,6 +13,7 @@ import { localYear, localDateISO, now } from '../domain/date';
 import { getLedgerDisclosure, type LedgerDisclosure } from '../data/dashboard';
 import { Card, Badge, Modal, Empty } from '../components/ui';
 import { copy, documents as documentsCopy, expenses as expensesCopy, moneyDate, occupancy as occupancyCopy, assets as assetsCopy } from '../ui/copy';
+import { resolveBlobContent, getBlobStore } from '../data/blobStore';
 import { isoCalendarDateProblem } from '../domain/date';
 import {
   occupancyStayExceedsShortTermCeiling, isCnpShaped,
@@ -72,8 +73,35 @@ function DocumentSection({ code }: { code: DocTypeCode }) {
   const words = documentsCopy.sections[code];
   const files = companyDocs[code] ?? [];
   const [helperOpen, setHelperOpen] = useState(false);
-  const [preview, setPreview] = useState<CompanyDocument | null>(null);
+  // PG-11: the preview holds resolved bytes, not the record. A record's bytes may live in the blob store,
+  // and an `<img src>` cannot be awaited — so the modal is handed what was read, or it is not opened.
+  const [preview, setPreview] = useState<{ nume: string; content: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * PG-11 — open a document: the inline copy if it still has one, otherwise the blob.
+   *
+   * A record that points at bytes the store cannot produce is reported, not downloaded empty. A truncated
+   * or empty file that opens without complaint is how a taxpayer discovers a document is gone months later,
+   * on the day they need to produce it.
+   */
+  async function openDocument(doc: CompanyDocument) {
+    const bytes = await resolveBlobContent({ kind: 'document', code, record: doc }, getBlobStore());
+    if (!bytes) {
+      toast('error', documentsCopy.bytesUnavailable(doc.nume));
+      return;
+    }
+    downloadDataUrl(bytes, doc.nume);
+  }
+
+  async function showPreview(doc: CompanyDocument) {
+    const bytes = await resolveBlobContent({ kind: 'document', code, record: doc }, getBlobStore());
+    if (!bytes) {
+      toast('error', documentsCopy.bytesUnavailable(doc.nume));
+      return;
+    }
+    setPreview({ nume: doc.nume, content: bytes });
+  }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -163,16 +191,16 @@ function DocumentSection({ code }: { code: DocTypeCode }) {
                   {formatBytes(f.marime)} · {fmtDate(f.data)}
                 </div>
               </div>
-              {(f.tip === 'jpg' || f.tip === 'png') && f.content && (
-                <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12.5 }} onClick={() => setPreview(f)}>
+              {(f.tip === 'jpg' || f.tip === 'png') && (f.content || f.blobRef) && (
+                <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12.5 }} onClick={() => void showPreview(f)}>
                   {documentsCopy.preview}
                 </button>
               )}
-              {f.content && (
+              {(f.content || f.blobRef) && (
                 <button
                   className="btn btn-ghost"
                   style={{ padding: '4px 10px', fontSize: 12.5 }}
-                  onClick={() => downloadDataUrl(f.content!, f.nume)}
+                  onClick={() => void openDocument(f)}
                 >
                   {documentsCopy.download}
                 </button>
@@ -327,6 +355,17 @@ function StatementsTab() {
   const [showAdd, setShowAdd] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<TaxStatement | null>(null);
 
+  /** PG-11: same resolution as the company documents — inline copy first, then the blob. A statement that
+   *  points at bytes the store cannot produce is reported, never downloaded empty. */
+  async function openStatement(statement: TaxStatement) {
+    const bytes = await resolveBlobContent({ kind: 'statement', record: statement }, getBlobStore());
+    if (!bytes) {
+      toast('error', documentsCopy.bytesUnavailable(statement.nume ?? statement.tip));
+      return;
+    }
+    downloadDataUrl(bytes, statement.nume ?? statement.tip);
+  }
+
   const rows = useMemo(
     () => [...statements].sort((a, b) => b.perioada.localeCompare(a.perioada, 'ro')),
     [statements],
@@ -359,11 +398,12 @@ function StatementsTab() {
                   </td>
                   <td style={{ padding: '10px 12px' }}>{s.dataDepunere ? fmtDate(s.dataDepunere) : '—'}</td>
                   <td style={{ padding: '10px 12px' }}>
-                    {s.nume && s.content ? (
+                    {s.nume && (s.content || s.blobRef) ? (
                       <button
                         className="btn btn-ghost"
                         style={{ padding: '3px 8px', fontSize: 12.5 }}
-                        onClick={() => downloadDataUrl(s.content!, s.nume!)}
+                        data-statement-download={s.id}
+                        onClick={() => void openStatement(s)}
                       >
                       ⬇ {s.nume}
                       </button>

@@ -616,6 +616,16 @@ export const documents = {
   uploaded: (name: string): string => `„${name}" a fost încărcat`,
   readFailed: 'Nu am putut citi fișierul',
   deleted: (name: string): string => `„${name}" a fost șters`,
+  /**
+   * PG-11 (phase 29) — a record that points at document bytes the blob store cannot produce.
+   *
+   * Named rather than swallowed. Before this phase a document's bytes were always inside the record, so a
+   * download could not quietly come back empty; now a pointer can outlive the bytes it points at, and the
+   * only honest response is to say so at the moment the person reaches for the file — not months later, on
+   * the day they have to produce it.
+   */
+  bytesUnavailable: (name: string): string =>
+    `Nu am putut deschide „${name}”: nu găsim octeții lui în depozitul de documente.`,
   declaration: {
     addTitle: 'Adaugă declarație depusă',
     // One wording for "this field is required": the shared validation keys, not a second spelling.

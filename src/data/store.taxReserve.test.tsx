@@ -158,7 +158,8 @@ describe('a payload with no reserve field loads as null, not 0', () => {
     expect(storeRef!.dataOrigin).toBe('persisted');
     // PG-5 re-pin: the chain grew by the `annual-filing` step; the reserve contract is untouched.
     // Re-pinned again for PG-6h-2's `accommodation-facts` step, again for PG-6h-3's `occupancy-sheet`
-    // step, again for PG-6f's `input-vat-registration` step, and again for B-105's `lease-facts` step — the
+    // step, again for PG-6f's `input-vat-registration` step, again for B-105's `lease-facts` step, and again
+    // for PG-11's `document-blob-ref` step — the
     // list grows by one entry each time, and the guarded property is the one on the next line: a payload with
     // no reserve still loads as null, and a payload with no declared VAT registration still loads with the
     // field absent. `lease-facts` opens `profile.leaseFactsYears` by writing nothing, so it cannot mint a
@@ -179,6 +180,9 @@ describe('a payload with no reserve field loads as null, not 0', () => {
     'vat-returns',
     // B-105 — appended after v19, never renumbered.
     'lease-facts',
+    // PG-11 — appended after v20, never renumbered. It opens no collection and fills nothing in, so it
+    // cannot mint a reserve either: the property on the next line is what this list guards.
+    'document-blob-ref',
     ]);
     expect(storeRef!.reservedAmount).toBeNull();
     // And the next write stamps the current version — the upgrade is one-way and additive.

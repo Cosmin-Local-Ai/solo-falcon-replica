@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { leiInputValue, parseLeiInput } from '../domain/money';
 import { useStore } from '../data/store';
+import { downloadText } from '../data/types';
+import { datasetExportFileName } from '../data/datasetExport';
 import { Card, Badge, Modal } from '../components/ui';
 import { Disclosure } from '../components/ui/Disclosure';
 import { InterpretationNote } from '../components/ui/InterpretationNote';
@@ -30,7 +32,7 @@ import {
   regimeRefusalReason,
   selectableRegimes,
 } from '../domain/regimes';
-import { epochMs, formatRoCalendarDate, isoCalendarDateProblem, isoCalendarDateProblemText, localDateISO } from '../domain/date';
+import { epochMs, formatRoCalendarDate, isoCalendarDateProblem, isoCalendarDateProblemText, localDateISO, now } from '../domain/date';
 import type { Bani } from '../domain/money';
 // PG-6b (B-29) — the declared activity family. The type comes from the classifier that reads the fact, so
 // the option list on this form and the rule condition cannot drift into two vocabularies.
@@ -501,9 +503,78 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
   // `settings` itself stays live for what is genuinely settings: e-Factura
   // behaviour and the bank-account list.
   const store = useStore();
-  const { settings, updateSettings, profile, updateProfile, toast, fxRates, dataOrigin, sandboxActive, loadSandbox, unloadSandbox, resetAllData } = store;
+  const { settings, updateSettings, profile, updateProfile, toast, fxRates, dataOrigin, sandboxActive, loadSandbox, unloadSandbox, resetAllData, exportDataset, importDataset, blobStoreStatus, blobRelocation, blobReclaimFailures, orphanBlobIds } = store;
   const identity = profile.identity;
   const [wipeOpen, setWipeOpen] = useState(false);
+  // PG-11 — export/import. `backupBusy` keeps a second click off the file while one is being read or written;
+  // `orphanCount` is the reported-but-not-removed state, and it is `null` until it has actually been asked.
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [orphanCount, setOrphanCount] = useState<number | null>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * PG-11 — export. The refusal branch is the one that matters: `buildDatasetExport` returns no file at all
+   * when a document's bytes cannot be read, because a backup with a silently missing document is a corrupt
+   * backup, and the person would otherwise believe they were safe.
+   */
+  async function onExportDataset() {
+    setBackupBusy(true);
+    try {
+      const result = await exportDataset();
+      if (!result.ok) {
+        toast('error', settingsCopy.dataToasts.exportRefused(result.unreadable.length));
+        return;
+      }
+      downloadText(result.file, datasetExportFileName(now(), localDateISO()));
+      toast('success', settingsCopy.dataToasts.exported(result.embeddedBlobs + result.inlineBlobs));
+    } finally {
+      setBackupBusy(false);
+    }
+  }
+
+  /**
+   * PG-11 — import. This is **not** the document upload path and shares nothing with it: one adds a file to
+   * a record, the other replaces the person's whole world. The store validates the entire payload before it
+   * writes anything, and a refused file goes to quarantine under the D-3 contract.
+   */
+  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file
+    if (!file) return;
+    setBackupBusy(true);
+    try {
+      const raw = await file.text();
+      const outcome = await importDataset(raw);
+      if (outcome.status === 'rejected') {
+        toast('error', settingsCopy.dataToasts.importRejected);
+        return;
+      }
+      toast('success', settingsCopy.dataToasts.imported(outcome.fromVersion, outcome.toVersion));
+      if (outcome.blobFailures.length > 0) {
+        toast('error', settingsCopy.dataToasts.importBlobPartial(outcome.blobFailures.length));
+      }
+      setOrphanCount(null);
+    } catch {
+      // A file that cannot be read at all never reaches the store, so nothing was written either way.
+      toast('error', settingsCopy.dataToasts.importRejected);
+    } finally {
+      setBackupBusy(false);
+    }
+  }
+
+  // PG-11 — orphans are counted once the blob store is connected, and only reported. Nothing here deletes a
+  // blob: these are retained documents, and an orphan is usually a crash between "bytes written" and
+  // "dataset saved", not a thing the app is entitled to throw away.
+  useEffect(() => {
+    if (blobStoreStatus !== 'connected') return;
+    let cancelled = false;
+    void orphanBlobIds().then(ids => {
+      if (!cancelled) setOrphanCount(ids.length);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [blobStoreStatus, blobRelocation, orphanBlobIds]);
   const [tab, setTab] = useState<TabKey>(
     TABS.some(t => t.key === initialTab) ? (initialTab as TabKey) : 'company'
   );
@@ -2387,6 +2458,61 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                   <button className="btn btn-primary" onClick={() => { unloadSandbox(); toast('success', settingsCopy.dataToasts.sandboxUnloaded); }}>
                     {settingsCopy.data.sandboxUnload}
                   </button>
+                )}
+              </div>
+            </div>
+          </Card>
+
+          {/* PG-11 (phase 29) — the backup the app did not have. The card states what the file contains,
+              because the documents are in it even though they no longer live where the rest of the data is. */}
+          <Card title={settingsCopy.data.backupCard}>
+            <div className="stack">
+              <p className="hint">{settingsCopy.data.backupBody}</p>
+              <div className="row">
+                <button
+                  className="btn"
+                  data-export-dataset
+                  disabled={backupBusy}
+                  onClick={() => void onExportDataset()}
+                >
+                  {settingsCopy.data.backupExport}
+                </button>
+                <input
+                  ref={importFileRef}
+                  type="file"
+                  accept="application/json,.json"
+                  style={{ display: 'none' }}
+                  data-import-file
+                  aria-label={settingsCopy.data.backupImport}
+                  onChange={onImportFile}
+                />
+                <button
+                  className="btn btn-ghost"
+                  data-import-dataset
+                  disabled={backupBusy}
+                  onClick={() => importFileRef.current?.click()}
+                >
+                  {settingsCopy.data.backupImport}
+                </button>
+              </div>
+              <div className="stack" data-backup-status>
+                {blobStoreStatus === 'connected' && <p className="hint">{settingsCopy.data.blobConnected}</p>}
+                {blobStoreStatus === 'unavailable' && <p className="hint">{settingsCopy.data.blobUnavailable}</p>}
+                {blobRelocation && blobRelocation.moved > 0 && (
+                  <p className="hint" data-blob-relocated>{settingsCopy.data.blobRelocated(blobRelocation.moved)}</p>
+                )}
+                {blobRelocation && blobRelocation.failed.length > 0 && (
+                  <p className="hint" role="status" data-blob-relocation-failed>
+                    {settingsCopy.data.blobRelocationFailed(blobRelocation.failed.length)}
+                  </p>
+                )}
+                {blobReclaimFailures.length > 0 && (
+                  <p className="hint" role="status" data-blob-reclaim-failed>
+                    {settingsCopy.data.blobReclaimFailed(blobReclaimFailures.length)}
+                  </p>
+                )}
+                {orphanCount !== null && orphanCount > 0 && (
+                  <p className="hint" data-blob-orphans>{settingsCopy.data.blobOrphans(orphanCount)}</p>
                 )}
               </div>
             </div>

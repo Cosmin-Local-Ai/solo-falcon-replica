@@ -33,7 +33,7 @@ import {
   relocateInlineBlobs,
   type RelocationFailure,
 } from './blobRelocation';
-import { connectDefaultBlobStore, getBlobStore } from './blobStore';
+import { connectDefaultBlobStore, getBlobStore, hasIndexedDB } from './blobStore';
 import { buildDatasetExport, type DatasetExportResult } from './datasetExport';
 import { validateDatasetImport } from './datasetImport';
 
@@ -468,7 +468,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [saveNonce, setSaveNonce] = useState(0);
 
   // ── PG-11: document bytes ─────────────────────────────────────────────────────────────────────────
-  const [blobStoreStatus, setBlobStoreStatus] = useState<BlobStoreStatus>('unknown');
+  // The initial value is decided synchronously: a runtime with no `indexedDB` global never had a chance of
+  // connecting, so saying so at once is both honest and free — it keeps an asynchronous `setState` out of
+  // every render of the store in environments that cannot have a blob store (which is every jsdom test).
+  const [blobStoreStatus, setBlobStoreStatus] = useState<BlobStoreStatus>(() =>
+    hasIndexedDB() ? 'unknown' : 'unavailable',
+  );
   const [blobRelocation, setBlobRelocation] = useState<BlobRelocationSummary | null>(null);
   const [blobReclaimFailures, setBlobReclaimFailures] = useState<BlobReclaimFailure[]>([]);
   // The dataset as it is right now, for the asynchronous paths that cannot close over a render's value.

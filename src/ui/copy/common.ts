@@ -198,6 +198,18 @@ export const shell = {
   sandboxBody:
     'Ce vezi mai jos este un sandbox cu date de exemplu, nu datele tale. Nu se salvează și dispar la reîncărcare.',
   sandboxRemove: 'Elimină sandboxul',
+  /**
+   * PG-11 (phase 29) — a write to storage that did not happen.
+   *
+   * The defect this sentence closes was silent: the save effect answered a failed write with `console.warn`,
+   * so the screen kept showing the record the person had just typed while the bytes on disk stayed the ones
+   * from before it. Nothing on screen was untrue, and everything on screen was about to be lost.
+   */
+  saveFailedTitle: 'Ultima modificare nu a fost salvată pe acest dispozitiv.',
+  saveFailedBody:
+    'Ce vezi pe ecran este ce ai introdus, dar nu a ajuns în memoria aplicației. Încearcă dinainte să închizi fereastra.',
+  saveFailedRetry: 'Încearcă din nou',
+  saveFailedAttempts: (n: number): string => `${n} scrieri eșuate la rând`,
   /** Where the topbar would otherwise print an empty name: an empty profile has no name to show. */
   noProfile: 'Profil incomplet',
 } as const;
