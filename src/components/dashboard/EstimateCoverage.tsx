@@ -30,6 +30,17 @@ interface ReasonGroup {
    */
   amount: string | null;
   href: string;
+  /**
+   * The assembler's own sentences, shown when the group is small enough that they are also the whole
+   * answer. B-106 is the reason this exists: a refusal the user cannot read is not a refusal, it is a dead
+   * end, and the conflict sentence is the one that names the asset.
+   *
+   * The limit is not decoration. A group of nine uncategorised invoices is one thing to fix and nine
+   * near-identical sentences, and nine rows would bury it — the same reason the rows group by REASON at
+   * all. A group of two conflicting assets is two assets that each have to be named, so the sentences are
+   * shown there. Three is where the first case starts and the second ends.
+   */
+  details: string[];
 }
 
 function groupByReason(coverage: readonly EstimateCoverageGap[]): ReasonGroup[] {
@@ -55,6 +66,7 @@ function groupByReason(coverage: readonly EstimateCoverageGap[]): ReasonGroup[] 
         ? formatMoney(money(sumBani(amounts), items[0].currency))
         : null,
       href: items[0].fixTarget,
+      details: items.length <= 3 ? items.map(i => i.detail).filter(d => d !== '') : [],
     };
   });
 }
@@ -86,6 +98,9 @@ export default function EstimateCoverageRows({ coverage }: EstimateCoverageRowsP
           <a className="btn btn-sm" href={g.href}>{coverageCopy.open}</a>
         </div>
       ))}
+      {groups.flatMap(g => g.details.map((d, i) => (
+        <div className="hint" key={`detail-${g.reason}-${i}`} data-coverage-detail={g.reason}>{d}</div>
+      )))}
       <div className="hint">{coverageCopy.amountUnitNote}</div>
     </div>
   );

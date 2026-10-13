@@ -16,6 +16,7 @@ import { selectProjectionV1, type ProjectionV1 } from '../domain/projection';
 import {
   attachEstimateBasis,
   coverageFromUnconverted,
+  depreciationCoverageGaps,
   estimateBasisOf,
   isGapReason,
   scenarioCoverageGaps,
@@ -429,7 +430,9 @@ export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEsti
   const rules = selection ? [...selection.rules] : [];
   const operands = selectEstimateOperands(data, asOfDate, rules);
   if (operands.kind === 'refused') {
-    return Promise.resolve(attachEstimateBasis(operands.result, operands.basis, operands.scenarios));
+    return Promise.resolve(
+      attachEstimateBasis(operands.result, operands.basis, operands.scenarios, undefined, operands.depreciation),
+    );
   }
   const { basis, amounts } = operands;
   // TASK 6 also closes a drift Scout-level review found: this path used to hand the UNFILTERED package to
@@ -463,7 +466,9 @@ export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEsti
     flatRatioWithholdingBlocked: amounts.flatRatioWithholdingBlocked ?? false,
     ruleRelease: selection ? selection.release : null,
     rules,
-  }).then((result) => attachEstimateBasis(result, basis, operands.scenarios, operands.inputVat));
+  }).then((result) =>
+    attachEstimateBasis(result, basis, operands.scenarios, operands.inputVat, operands.depreciation),
+  );
 }
 
 /**
@@ -1070,6 +1075,12 @@ export function buildDashboardData(
     // all keep reading one channel. The scenarios themselves were produced once, by the assembler, and
     // travel here on the estimate; nothing in this file runs the registry.
     ...scenarioCoverageGaps(estimate?.scenarios ?? []),
+    // B-93 — the depreciation half, read off the leg the assembler already struck rather than by walking
+    // `fixedAssets` a second time. A second walk is how the figure and the coverage rows come to disagree
+    // about the same asset — the B-70 defect class. This is where a withheld schedule becomes visible: the
+    // refusal exists on the leg whether or not anything renders it, and B-106 is the standing example of a
+    // refusal that reached no surface.
+    ...depreciationCoverageGaps(estimate?.depreciation),
   ];
   // PG-5: the deadline engine runs ONCE per build. The card, the snapshot's attention rows and the
   // completeness check's filing term all read this one list, so they cannot disagree about whether a

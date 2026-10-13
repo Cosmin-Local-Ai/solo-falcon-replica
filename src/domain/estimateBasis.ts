@@ -46,6 +46,16 @@ import {
 } from './fiscal/deductibility';
 import type { FiscalRule } from './fiscal/rules';
 import { selectApplicableRules } from './fiscal/select';
+// B-93 — the depreciation schedule reaches the estimate through the one seam the engine already uses.
+// This module does not compute any amortisation: it asks `depreciation.ts` for the year's figure per asset
+// and decides, here, whether that figure may join the expense leg at all. The reconciliation lives on this
+// side because it is a question about `Expense` rows, and `depreciation.ts` has never read one.
+import {
+  depreciationForFiscalYear,
+  FISCAL_DEPRECIATION_RULE_ID,
+  type AssetDepreciationRefusal,
+  type AssetDepreciationYear,
+} from './fiscal/depreciation';
 import { strikeCapCeiling, type CapCeilingStrike } from './fx/capCeiling';
 // PG-6f (B-30) — the per-line input-VAT decision, and the two candidate expense bases D-VAT-2 keeps
 // apart. The assembler does not decide anything about VAT here: it runs the one decision function over
@@ -870,7 +880,17 @@ export type CoverageReason =
   | 'non_deductible'
   | 'rejected'
   | 'pending'
-  | 'fact_missing';
+  | 'fact_missing'
+  /**
+   * B-93 — the register computes a depreciation schedule for an asset **and** the taxpayer has recorded a
+   * `depreciation_business_asset` expense by hand. Both routes reach the expense side of art. 68 alin. (4)
+   * lit. d) for the same asset, and adding them would deduct the same depreciation twice.
+   *
+   * It is a gap and not an exclusion: nothing was settled here, a contradiction was left standing. It is
+   * also not `asset_not_modelled` — that reason says the register is missing, and here the register is
+   * present and a second, unverified figure is in the way.
+   */
+  | 'depreciation_conflict';
 
 /**
  * The reasons that make an estimate INCOMPLETE, as opposed to merely exclusive.
@@ -887,6 +907,7 @@ const GAP_REASONS: readonly CoverageReason[] = [
   'missing_fx_rate',
   'cap_unresolved',
   'fact_missing',
+  'depreciation_conflict',
 ];
 
 export function isGapReason(reason: CoverageReason): boolean {
@@ -994,6 +1015,189 @@ export function selectEstimateCoverage(
       currency: 'RON',
       fixTarget: estimateFixTarget('expense', x.id),
       detail: x.detail,
+    });
+  }
+  return out;
+}
+
+/**
+ * B-93 — one asset's depreciation for the fiscal year, as the estimate sees it.
+ *
+ * `deductible` is already the figure that survived the art. 28 alin. (14) 1.500 lei/lună ceiling — it is
+ * `DepreciationYear.deductible`, handed over by `depreciation.ts` and never recomputed here. `uncapped` and
+ * `lost` travel beside it so the ceiling is visible on the same row that posts the deduction: a leg shown
+ * without the part the law refuses reads as a schedule that ignored alin. (14).
+ */
+export interface DepreciationLegLine {
+  assetId: string;
+  label: string;
+  months: number;
+  uncapped: Bani;
+  deductible: Bani;
+  lost: Bani;
+  branch: AssetDepreciationYear['branch'];
+}
+
+/**
+ * B-93 — an asset whose computed schedule was **withheld** because a hand-recorded depreciation expense is
+ * already in the period.
+ *
+ * `expenseIds` names the expenses that collide, `label` names the asset. Both are required by the same rule
+ * that closed B-106: a refusal the user cannot read is not a refusal, it is a dead end.
+ */
+export interface DepreciationConflict {
+  assetId: string;
+  label: string;
+  /** The hand-recorded `depreciation_business_asset` expenses that make the schedule unsafe to post. */
+  expenseIds: string[];
+  /** What posting this asset's schedule would have added. Reported, never added. */
+  withheld: Bani;
+}
+
+export interface DepreciationLeg {
+  fiscalYear: number;
+  /** The schedules the estimate posts. Empty whenever `conflicts` is non-empty. */
+  lines: DepreciationLegLine[];
+  conflicts: DepreciationConflict[];
+  /** Assets whose schedule refused for want of a declared fact. The reason is the schedule's own. */
+  refused: AssetDepreciationRefusal[];
+  /** What the estimate adds to the expense leg. `0` while a conflict stands. */
+  total: Bani;
+}
+
+/**
+ * B-93 — the reconciliation between the computed schedule and the hand-recorded expense.
+ *
+ * There are two routes to the expense side of a capital asset and this is the only place they meet:
+ *
+ * - `depreciation_business_asset` — art. 68 alin. (4) lit. d), an amount the taxpayer typed;
+ * - `depreciationSchedule` — the figure derived from the asset's declared facts and art. 28.
+ *
+ * **The rule: never let both reach the estimate for the same asset.** Not summed, not resolved by picking
+ * the larger, not silently preferred. Where both exist the app refuses, names the asset and names the
+ * expenses, and posts nothing from the register — so the estimate stays exactly where it was and the user
+ * is told what to fix rather than being quietly moved.
+ *
+ * **Why the conflict is register-wide rather than per asset.** `Expense` carries a `vehicleId` and no
+ * `assetId`: the app holds no link between a typed expense and an asset, and inventing one by matching
+ * amounts or dates would be an inference from the register to the expense side that art. 68 alin. (4)
+ * lit. d) does not license. Without attribution the app cannot say *which* asset a typed depreciation
+ * expense covers, so it cannot say that any one schedule is safe to post on top of it. It therefore
+ * withholds every schedule while any typed depreciation expense stands in the period, and says so.
+ *
+ * **Why the hand-recorded expense is not deleted here.** It is an ordinary register row and the classifier
+ * decides its treatment; `EXPENSE_DEPRECIATION_BUSINESS_ASSET_2026` is correct and untouched. Withholding
+ * the *computed* leg is the only reconciliation that leaves the figure unmoved — which is what makes the
+ * refusal safe to raise: it can never change a number, only explain one.
+ */
+export function selectAssetDepreciation(
+  data: AppData,
+  asOfDate: string,
+  rules: readonly FiscalRule[],
+): DepreciationLeg {
+  const fiscalYear = data.profile?.fiscalYear ?? 0;
+  const empty: DepreciationLeg = { fiscalYear, lines: [], conflicts: [], refused: [], total: lei(0) };
+  // No rule package selected for this year means no expensing threshold, no ceiling and no coefficients.
+  // The year's own missing-release refusal already says that; this adds a second `durata_lipsa`-shaped
+  // message about every asset, which would be a second producer for one finding.
+  const rule = rules.find((r) => r.ruleId === FISCAL_DEPRECIATION_RULE_ID);
+  if (rule === undefined) return empty;
+
+  const schedule = depreciationForFiscalYear(rule, data.fixedAssets ?? [], fiscalYear);
+  if (schedule.posted.length === 0) {
+    return { ...empty, refused: schedule.refused };
+  }
+
+  // The hand-recorded half, counted over the SAME period filter the deductible set uses, so the two paths
+  // cannot disagree about which records are in the year. Counted, not summed: the collision is a fact about
+  // existence, and the amounts are not compared — comparing them would be picking the larger by another name.
+  const handIds = (data.expenses ?? [])
+    .filter(
+      (e) =>
+        e.status === 'inregistrata' &&
+        e.category === 'depreciation_business_asset' &&
+        inPeriod(expenseFiscalDate(e), asOfDate, fiscalYear),
+    )
+    .map((e) => e.id);
+
+  if (handIds.length > 0) {
+    return {
+      fiscalYear,
+      lines: [],
+      conflicts: schedule.posted.map((p) => ({
+        assetId: p.assetId,
+        label: p.label,
+        expenseIds: handIds,
+        withheld: p.deductible,
+      })),
+      refused: schedule.refused,
+      total: lei(0),
+    };
+  }
+
+  const lines = schedule.posted.map((p) => ({
+    assetId: p.assetId,
+    label: p.label,
+    months: p.months,
+    uncapped: p.uncapped,
+    deductible: p.deductible,
+    lost: p.lost,
+    branch: p.branch,
+  }));
+  return {
+    fiscalYear,
+    lines,
+    conflicts: [],
+    refused: schedule.refused,
+    total: sumBani(lines.map((l) => l.deductible)),
+  };
+}
+
+/**
+ * B-93 — the depreciation half of the coverage, projected onto PG-1's one channel.
+ *
+ * `kind: 'profile'` and `amount: null` are the same pair PG-6a chose for a scenario gap, and for the same
+ * reason: no register row answers to `recordId`, and the withheld schedule is not a sum that left the
+ * figure — it is a sum that was never in it. `completeness.ts amountCoverage` therefore leaves these rows
+ * out of the weighted denominator by the existing `eligible.has(recordId)` test rather than by a new one,
+ * which is what keeps the percentage from moving when a refusal that changes no figure is raised.
+ *
+ * A refused asset is reported too. Before B-93 a missing *punere în funcțiune* date was visible only on the
+ * Assets page; once the register feeds the estimate, the same missing fact is a reason the estimate is not
+ * complete, and it belongs on the same surface as every other such reason.
+ */
+export function depreciationCoverageGaps(leg: DepreciationLeg | null | undefined): EstimateCoverageGap[] {
+  if (leg === null || leg === undefined) return [];
+  const out: EstimateCoverageGap[] = [];
+  for (const c of leg.conflicts) {
+    out.push({
+      recordId: `asset:${c.assetId}`,
+      kind: 'profile',
+      reason: 'depreciation_conflict',
+      amount: null,
+      currency: 'RON',
+      fixTarget: '/assets',
+      detail:
+        `Mijlocul fix „${c.label}” are un plan de amortizare calculat din faptele declarate, iar ` +
+        `registrul conține deja cheltuieli cu amortizarea înregistrate manual (${c.expenseIds.join(', ')}). ` +
+        'Ambele căi ajung la partea de cheltuieli a aceluiași bun prin art. 68 alin. (4) lit. d); adunate, ' +
+        'aceeași amortizare s-ar deduce de două ori. Aplicația nu adună cele două, nu alege valoarea mai ' +
+        'mare și nu preferă în tăcere niciuna: planul calculat nu este postat, iar cifra estimării nu se ' +
+        'mișcă. Inregistrarea nu face legătura dintre o cheltuială și un mijloc fix, deci aplicația nu poate ' +
+        'să spună ce bun acoperă cheltuiala tastată; până când această legătură există, niciun plan din ' +
+        'registru nu este postat. Ce poți face: șterge cheltuiala cu amortizarea înregistrată manual și ' +
+        'lasă registrul să calculeze, sau păstrează cheltuiala și nu mai aștepta nimic din registru.',
+    });
+  }
+  for (const r of leg.refused) {
+    out.push({
+      recordId: `asset:${r.assetId}`,
+      kind: 'profile',
+      reason: 'fact_missing',
+      amount: null,
+      currency: 'RON',
+      fixTarget: '/assets',
+      detail: `Mijlocul fix „${r.label}”: ${r.reason}`,
     });
   }
   return out;
@@ -1848,6 +2052,11 @@ export type EstimateOperands =
        * evaluation point, and travels with the estimate so no surface runs the registry again.
        */
       scenarios: ScenarioOutcome[];
+      /**
+       * B-93 — the depreciation leg, produced once here for the same reason `scenarios` is: the register
+       * must not be walked twice, or the figure and the coverage rows disagree about the same asset.
+       */
+      depreciation: DepreciationLeg;
     }
   | {
       kind: 'refused';
@@ -1858,6 +2067,7 @@ export type EstimateOperands =
       capAdjustments: AnnualCapAdjustment[];
       conversions: LedgerConversion[];
       scenarios: ScenarioOutcome[];
+      depreciation: DepreciationLeg;
     };
 
 export function selectEstimateOperands(
@@ -1898,6 +2108,11 @@ export function selectEstimateOperands(
     conversions: ledger.conversions,
     unconverted: ledger.unconverted,
   };
+  // B-93 — the depreciation leg, struck once here and BEFORE the scenario registry, so a refused estimate
+  // still carries it: the collision between a computed schedule and a hand-recorded depreciation expense is
+  // a finding the user has to see whether or not the engine ran. It changes no arithmetic — it reads the
+  // register through `depreciation.ts` and decides only whether the figure may join the expense leg.
+  const depreciation = selectAssetDepreciation(ledger.data, asOfDate, rules);
 
   // PG-6a — the scenario registry, run once, here.
   //
@@ -1964,6 +2179,7 @@ export function selectEstimateOperands(
       capAdjustments: [],
       conversions: ledger.conversions,
       scenarios,
+      depreciation,
     };
   }
 
@@ -1986,6 +2202,16 @@ export function selectEstimateOperands(
         : flatRatioGrossFromYtd(ytd, ledger.data) ?? undefined;
   const projection = selectProjectionV1(scoped, asOfDate);
   const basisBeforeCaps = selectTaxEstimateBasis(projection, ytd, asOfDate);
+  // B-93 — folding the leg in, and folding it in AFTER the ceiling pass on purpose: art. 68 alin. (6)
+  // strikes the protocol and private-school ceilings on a base built from the register's own expenses, and
+  // moving an amortisation figure into that base would change cap arithmetic this phase may not change.
+  // `expenses` is the VAT-inclusive measure and `expensesNet` the VAT-exclusive one; a depreciation
+  // deduction carries no input VAT of its own, so both rise by the same amount and `applyVatToExpenseBase`
+  // keeps the `divergent` answer it reached about the *vehicle* lines it was reading.
+  const withDepreciation = (a: EstimateAmounts): EstimateAmounts =>
+    depreciation.total === 0
+      ? a
+      : { ...a, expenses: addBani(a.expenses, depreciation.total), expensesNet: addBani(a.expensesNet, depreciation.total) };
 
   // PG-6f (B-30) — the input-VAT decision, run ONCE here over the same normalised ledger the totals come
   // from. Two things about the population it runs on, both deliberate:
@@ -2035,11 +2261,13 @@ export function selectEstimateOperands(
     applyVatToExpenseBase(inputVat, amounts.expensesNet, deductibleForVat);
 
   if (deductible.annualCapped.length === 0) {
-    const amounts = withFlatRatioGross(
-      amountsForEstimate(basisBeforeCaps),
-      flatRatioGross,
-      method,
-      cedareWithholdingBlocked,
+    const amounts = withDepreciation(
+      withFlatRatioGross(
+        amountsForEstimate(basisBeforeCaps),
+        flatRatioGross,
+        method,
+        cedareWithholdingBlocked,
+      ),
     );
     return {
       kind: 'run',
@@ -2051,6 +2279,7 @@ export function selectEstimateOperands(
       capAdjustments: [],
       conversions: ledger.conversions,
       scenarios,
+      depreciation,
     };
   }
 
@@ -2062,7 +2291,9 @@ export function selectEstimateOperands(
     claimed: claimAnnualMeasure(line),
   }));
   const { basis, adjustments } = applyAnnualDeductibilityCaps(basisBeforeCaps, claims);
-  const amounts = withFlatRatioGross(amountsForEstimate(basis), flatRatioGross, method, cedareWithholdingBlocked);
+  const amounts = withDepreciation(
+    withFlatRatioGross(amountsForEstimate(basis), flatRatioGross, method, cedareWithholdingBlocked),
+  );
   return {
     kind: 'run',
     basis,
@@ -2073,6 +2304,7 @@ export function selectEstimateOperands(
     capAdjustments: adjustments,
     conversions: ledger.conversions,
     scenarios,
+    depreciation,
   };
 }
 
@@ -2099,6 +2331,15 @@ export type TaxEstimateWithBasis = TaxEstimateResult & {
    * refused estimate has none either — the refusal happened before the decision ran.
    */
   inputVat?: InputVatDecision;
+  /**
+   * B-93 — the depreciation leg the estimate was built with, including the schedules it **withheld**.
+   *
+   * Optional for the same reason `scenarios` and `inputVat` are: a result that never went through
+   * `selectEstimateOperands` has no depreciation answer rather than an empty one. It travels rather than
+   * being re-derived at the surface because a second walk of the register is how the figure and the
+   * coverage rows come to disagree about the same asset — the B-70 defect class in a new costume.
+   */
+  depreciation?: DepreciationLeg;
 };
 
 export function attachEstimateBasis(
@@ -2106,11 +2347,13 @@ export function attachEstimateBasis(
   basis: TaxEstimateBasis,
   scenarios?: readonly ScenarioOutcome[],
   inputVat?: InputVatDecision,
+  depreciation?: DepreciationLeg,
 ): TaxEstimateWithBasis {
   const attached: TaxEstimateWithBasis = scenarios === undefined
     ? { ...result, basis }
     : { ...result, basis, scenarios: [...scenarios] };
-  return inputVat === undefined ? attached : { ...attached, inputVat };
+  const withVat = inputVat === undefined ? attached : { ...attached, inputVat };
+  return depreciation === undefined ? withVat : { ...withVat, depreciation };
 }
 
 /** The recorded basis, or `null` when this result never had one. */

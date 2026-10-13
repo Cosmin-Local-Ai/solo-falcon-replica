@@ -47,6 +47,10 @@ import {
   type M1ExceptionCategory,
   type AssetDisposalKind,
 } from '../domain/fiscal/depreciation';
+// B-93 — the page shows what the estimate does with this asset's schedule, so it asks the same question the
+// assembler asks, through the same function. It is not a second implementation of the reconciliation: one
+// rule, one producer, called from two surfaces — the same shape `selectEstimateCoverage` already has.
+import { selectAssetDepreciation, type DepreciationLeg } from '../domain/estimateBasis';
 
 // The rule the arithmetic reads its parameters from — **selected, never imported by year name**. The
 // registry guard in `domain/fiscal/registry.test.ts` forbids a `PFA_2026_*` import outside
@@ -284,7 +288,7 @@ function Fact({ label, value }: { label: string; value: string | undefined }) {
   );
 }
 
-function AssetCard({ asset }: { asset: FixedAsset }) {
+function AssetCard({ asset, leg }: { asset: FixedAsset; leg: DepreciationLeg }) {
   const { deleteFixedAsset, toast, profile } = useStore();
   const rule = depreciationRule(profile.fiscalYear);
 
@@ -386,6 +390,30 @@ function AssetCard({ asset }: { asset: FixedAsset }) {
               </tfoot>
             </table>
             <div className="text-sm muted" style={{ marginTop: 8 }}>{assetsCopy.schedule.notDeductibleYet}</div>
+            {leg.conflicts.some(c => c.assetId === asset.id) && (
+              <div className="card" style={{ padding: '12px 14px', marginTop: 8 }} data-testid={`asset-conflict-${asset.id}`}>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>{assetsCopy.posting.conflictHeading}</div>
+                <div className="text-sm">{assetsCopy.posting.conflict}</div>
+                <div className="text-sm" data-testid={`asset-conflict-expenses-${asset.id}`}>
+                  {assetsCopy.posting.conflictExpenses.replace(
+                    '{ids}',
+                    leg.conflicts.find(c => c.assetId === asset.id)?.expenseIds.join(', ') ?? '',
+                  )}
+                </div>
+                <div className="text-sm muted" style={{ marginTop: 6 }}>{assetsCopy.posting.conflictWhyAll}</div>
+                <div className="text-sm" style={{ marginTop: 6 }}>{assetsCopy.posting.conflictFix}</div>
+              </div>
+            )}
+            {leg.lines.some(l => l.assetId === asset.id) && (
+              <div className="text-sm" style={{ marginTop: 6 }} data-testid={`asset-posted-${asset.id}`}>
+                {assetsCopy.posting.posted
+                  .replace('{year}', String(profile.fiscalYear))
+                  .replace('{amount}', formatBani(leg.lines.find(l => l.assetId === asset.id)!.deductible))}
+              </div>
+            )}
+            {leg.lines.some(l => l.assetId === asset.id) && (
+              <div className="text-sm muted" style={{ marginTop: 6 }}>{assetsCopy.posting.ceilingTravels}</div>
+            )}
             {outcome.years.some(y => y.proRated) && (
               <div className="text-sm" style={{ marginTop: 6 }}>{assetsCopy.schedule.firstYearProRated}</div>
             )}
@@ -440,8 +468,18 @@ function gapText(gap: DepreciationGap): string {
 }
 
 export default function Assets() {
-  const { fixedAssets, addFixedAsset, toast } = useStore();
+  const store = useStore();
+  const { fixedAssets, addFixedAsset, toast } = store;
   const [editing, setEditing] = useState<FixedAsset | 'new' | null>(null);
+
+  // B-93 — one leg for the whole page, not one per card. The reconciliation between a computed schedule and
+  // a hand-recorded depreciation expense is a question about the register AND the expense list together; a
+  // per-card call would answer it once per asset against the same two lists.
+  const leg = useMemo(() => {
+    const asOf = localDateISO(now());
+    const selection = selectRuleSet(store.profile.fiscalYear, asOf);
+    return selectAssetDepreciation(store, asOf, selection ? [...selection.rules] : []);
+  }, [store]);
 
   const rows = useMemo(
     () => [...fixedAssets].sort((a, b) => a.entryDate.localeCompare(b.entryDate)),
@@ -491,7 +529,7 @@ export default function Assets() {
           />
         </Card>
       ) : (
-        rows.map(a => <AssetCard key={a.id} asset={a} />)
+        rows.map(a => <AssetCard key={a.id} asset={a} leg={leg} />)
       )}
 
       {editing && (

@@ -671,6 +671,91 @@ function disposalFigure(
   };
 }
 
+// ── B-93: the one year of the schedule that reaches the estimate ─────────────
+
+/**
+ * One asset's contribution to one fiscal year, taken from its own schedule.
+ *
+ * `deductible` is the figure that may be posted, and it is **already the post-ceiling figure**: it is
+ * `DepreciationYear.deductible`, the amount that survived art. 28 alin. (14). `uncapped` and `lost` ride
+ * beside it so the ceiling is visible rather than implied — a leg posted without `lost` would hide the part
+ * of the cost the law refuses, and `research/36` §12.13 records that part as definitively gone.
+ */
+export interface AssetDepreciationYear {
+  assetId: string;
+  /** The person's own name for the asset — a refusal that does not name it is a dead end (B-106). */
+  label: string;
+  fiscalYear: number;
+  months: number;
+  uncapped: Bani;
+  deductible: Bani;
+  lost: Bani;
+  branch: DepreciationYear['branch'];
+}
+
+/** One asset whose schedule refused for this year, with the gap and the schedule's own sentence. */
+export interface AssetDepreciationRefusal {
+  assetId: string;
+  label: string;
+  gap: DepreciationGap;
+  reason: string;
+}
+
+export interface AssetDepreciationForYear {
+  fiscalYear: number;
+  /** Assets whose schedule produced a figure for this year. */
+  posted: AssetDepreciationYear[];
+  /** Assets that refused. The refusal is the schedule's, verbatim — nothing is filled in here. */
+  refused: AssetDepreciationRefusal[];
+}
+
+/**
+ * B-93 — read the register for one fiscal year.
+ *
+ * This is the seam between the schedule and the estimate. It changes no arithmetic: it calls
+ * `depreciationSchedule` per asset and takes the year row for `fiscalYear`. Three things it deliberately
+ * does not do:
+ *
+ * - **It does not fill in a missing fact.** An asset whose schedule refuses lands in `refused` with the
+ *   schedule's own `gap` and `reason`. No default life, no default method, no default *punere în funcțiune*.
+ * - **It does not lift the ceiling.** The figure it hands out is `deductible`, the post-art. 28 alin. (14)
+ *   amount, so a caller cannot post an uncapped schedule by accident.
+ * - **It does not read the expense register.** Whether a hand-recorded `depreciation_business_asset`
+ *   expense already covers this asset is a question about `Expense` rows, and this module has never read
+ *   one. That reconciliation lives in `../estimateBasis.ts`, the layer that owns the expense leg.
+ *
+ * An asset with no year row for `fiscalYear` is in neither list. That is a fact about the schedule — the
+ * asset had not been put in function yet, or had already been fully amortised — not a gap to report.
+ */
+export function depreciationForFiscalYear(
+  rule: FiscalRule,
+  assets: readonly (FixedAssetFacts & { id: string })[],
+  fiscalYear: number,
+): AssetDepreciationForYear {
+  const posted: AssetDepreciationYear[] = [];
+  const refused: AssetDepreciationRefusal[] = [];
+  for (const asset of assets) {
+    const outcome = depreciationSchedule(rule, asset);
+    if (outcome.status === 'review_required') {
+      refused.push({ assetId: asset.id, label: asset.label, gap: outcome.gap, reason: outcome.reason });
+      continue;
+    }
+    const year = outcome.years.find((y) => y.fiscalYear === fiscalYear);
+    if (year === undefined) continue;
+    posted.push({
+      assetId: asset.id,
+      label: asset.label,
+      fiscalYear,
+      months: year.months,
+      uncapped: year.uncapped,
+      deductible: year.deductible,
+      lost: year.lost,
+      branch: year.branch,
+    });
+  }
+  return { fiscalYear, posted, refused };
+}
+
 /**
  * The art. 28 alin. (2) lit. b) classification for one asset: is it a depreciable fixed asset at all?
  *

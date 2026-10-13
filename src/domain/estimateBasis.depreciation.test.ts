@@ -1,0 +1,376 @@
+/**
+ * B-93 — the computed depreciation schedule reaches the estimate, and the hand-recorded expense is never
+ * added on top of it.
+ *
+ * Before this phase the app computed the right number, showed it on `pages/Assets.tsx` and printed it in
+ * `data/fixedAssetDocuments.ts`, and then deducted a different number — the one the taxpayer had typed into
+ * a `depreciation_business_asset` expense. Three routes reached the expense side of a capital asset and only
+ * one of them was arithmetic:
+ *
+ * - `depreciation_business_asset` — art. 68 alin. (4), a typed amount;
+ * - `depreciable_asset_purchase` — art. 68 alin. (7) lit. h), which keeps the purchase OUT;
+ * - `depreciationSchedule` — the schedule, reaching nothing that filed.
+ *
+ * The hazard that decides the design is the double count. These tests are the proof that it cannot happen:
+ * the schedule posts when it stands alone, and where a typed depreciation expense also stands, the schedule
+ * is withheld, named, and **the estimate does not move**.
+ *
+ * Every figure below is asserted in exact bani, because "roughly the schedule" is the claim that was already
+ * true of the screen and still wrong in the return.
+ */
+import { describe, expect, it } from 'vitest';
+import { lei, ron, sumBani } from '../domain/money';
+import { seedData } from '../data/seed';
+import { getTaxEstimate } from '../data/dashboard';
+import type { Expense, FixedAsset } from '../data/types';
+import {
+  depreciationForFiscalYear,
+  FISCAL_DEPRECIATION_RULE_ID,
+} from '../domain/fiscal/depreciation';
+import {
+  depreciationCoverageGaps,
+  selectAssetDepreciation,
+  selectEstimateOperands,
+} from '../domain/estimateBasis';
+import { PFA_2026_SYSTEM_REAL_PACKAGE } from '../domain/fiscal/package2026';
+
+const RULES = PFA_2026_SYSTEM_REAL_PACKAGE;
+const AS_OF = '2026-12-31';
+const depreciationRule = RULES.find((r) => r.ruleId === FISCAL_DEPRECIATION_RULE_ID)!;
+
+/**
+ * A degresiv asset put in function in February 2026: 120.000 lei, 60 months, coefficient 1,5 for a
+ * 2–5-year duration (art. 28 alin. (7)).
+ *
+ * The arithmetic, so the expected figure below is not a magic number:
+ * cota liniară 1/5 = 20 %; degresivă 20 % × 1,5 = 30 % anual = 3.600.000 bani; art. 28 alin. (12) lit. a)
+ * starts with the month after *punerea în funcțiune*, so 2026 carries 10 months (March–December);
+ * 3.600.000 × 10/12 = **3.000.000 bani = 30.000 lei**.
+ */
+const LAPTOP: FixedAsset = {
+  id: 'asset-laptop',
+  label: 'Laptop de lucru',
+  entryDate: '2026-02-10',
+  putInFunctionDate: '2026-02-15',
+  fiscalValue: lei(120000),
+  normalLifeMonths: 60,
+  method: 'degresiv',
+  acquisition: 'cumparare',
+  paymentState: 'achitat',
+  paidOn: '2026-02-11',
+};
+
+/**
+ * An M1 passenger vehicle, liniară: 120.000 lei over 60 months is 24.000 lei/an = 2.000 lei/lună, which is
+ * **over** the art. 28 alin. (14) ceiling of 1.500 lei/lună. Ten months in 2026 therefore post
+ * 1.500 × 10 = 15.000 lei = 1.500.000 bani, not 20.000 lei = 2.000.000 bani, and the 5.000 lei difference is
+ * lost definitively (`research/36` §12.13).
+ */
+const M1_CAR: FixedAsset = {
+  id: 'asset-m1',
+  label: 'Autoturism M1',
+  entryDate: '2026-02-10',
+  putInFunctionDate: '2026-02-15',
+  fiscalValue: lei(120000),
+  normalLifeMonths: 60,
+  method: 'liniar',
+  acquisition: 'cumparare',
+  paymentState: 'achitat',
+  paidOn: '2026-02-11',
+  isM1Vehicle: true,
+};
+
+/** An asset with no declared duration and no declared method — the schedule must refuse, not assume. */
+const INCOMPLETE_ASSET: FixedAsset = {
+  id: 'asset-bare',
+  label: 'Bun fără durată',
+  entryDate: '2026-02-10',
+  putInFunctionDate: '2026-02-15',
+  fiscalValue: lei(120000),
+  acquisition: 'cumparare',
+  paymentState: 'achitat',
+  paidOn: '2026-02-11',
+};
+
+/** The hand-recorded half: an amount the taxpayer typed, art. 68 alin. (4) lit. d). */
+const TYPED_DEPRECIATION: Expense = {
+  id: 'exp-amortizare-tipita',
+  tip: 'factura',
+  nr: 'Înreg-2026-0001',
+  date: '2026-12-10',
+  paid: '2026-12-10',
+  furnizor: 'Registrul de amortizare',
+  cui: 'RO00000000',
+  valoareFaraTva: ron(70000),
+  tva: ron(0),
+  status: 'inregistrata',
+  category: 'depreciation_business_asset',
+};
+
+/**
+ * The seed's own expenses are KEPT. Replacing them would move the estimate for a reason unrelated to this
+ * phase, and the first version of this file did exactly that — which is how a fixture bug came to look like
+ * a defect.
+ */
+const withAssets = (assets: FixedAsset[], expenses: Expense[] = []) => ({
+  ...seedData,
+  fixedAssets: assets,
+  expenses: [...seedData.expenses, ...expenses],
+});
+
+describe('acceptance 1 — a computed schedule reaches the estimate, in exact bani', () => {
+  it('the register produces one line for the laptop, at 3.000.000 bani', () => {
+    const leg = selectAssetDepreciation(withAssets([LAPTOP]), AS_OF, RULES);
+    expect(leg.conflicts).toEqual([]);
+    expect(leg.refused).toEqual([]);
+    expect(leg.lines).toHaveLength(1);
+    expect(leg.lines[0]!.assetId).toBe('asset-laptop');
+    expect(leg.lines[0]!.months).toBe(10);
+    expect(leg.lines[0]!.deductible).toBe(lei(30000));
+    expect(leg.total).toBe(lei(30000));
+  });
+
+  it('the expense leg the engine is fed rises by exactly that figure, and nothing else moves', () => {
+    const bare = selectEstimateOperands(seedData, AS_OF, RULES);
+    const posted = selectEstimateOperands(withAssets([LAPTOP]), AS_OF, RULES);
+    expect(bare.kind).toBe('run');
+    expect(posted.kind).toBe('run');
+    if (bare.kind !== 'run' || posted.kind !== 'run') throw new Error('both must run');
+
+    expect(posted.amounts.expenses - bare.amounts.expenses).toBe(lei(30000));
+    expect(posted.amounts.expensesNet - bare.amounts.expensesNet).toBe(lei(30000));
+    // The gross is untouched: a schedule is a cost, not a receipt.
+    expect(posted.amounts.revenues).toBe(bare.amounts.revenues);
+    // A depreciation deduction carries no input VAT, so the two candidate bases rise by the same amount and
+    // the D-VAT-2 divergence answer about the *vehicle* lines is unchanged by this leg.
+    expect(posted.expenseBase.netFirst - bare.expenseBase.netFirst).toBe(lei(30000));
+    expect(posted.expenseBase.divergent).toBe(bare.expenseBase.divergent);
+  });
+
+  it('the leg is produced once and travels on the estimate, so no surface re-walks the register', () => {
+    const posted = selectEstimateOperands(withAssets([LAPTOP]), AS_OF, RULES);
+    if (posted.kind !== 'run') throw new Error('expected a run');
+    expect(posted.depreciation.total).toBe(lei(30000));
+    expect(posted.depreciation.lines.map(l => l.assetId)).toEqual(['asset-laptop']);
+  });
+
+  it('the capital purchase itself is still not deducted — only its amortisation is', () => {
+    const posted = selectEstimateOperands(withAssets([LAPTOP]), AS_OF, RULES);
+    const bare = selectEstimateOperands(seedData, AS_OF, RULES);
+    if (posted.kind !== 'run' || bare.kind !== 'run') throw new Error('both must run');
+    // 120.000 lei of asset, 30.000 lei of deduction. If the purchase leaked in, the delta would be 150.000.
+    expect(posted.amounts.expensesNet - bare.amounts.expensesNet).toBe(lei(30000));
+  });
+});
+
+describe('acceptance 4 — the art. 28 alin. (14) ceiling travels with the schedule', () => {
+  it('an M1 schedule posts the capped figure, not the computed one', () => {
+    const leg = selectAssetDepreciation(withAssets([M1_CAR]), AS_OF, RULES);
+    expect(leg.lines).toHaveLength(1);
+    expect(leg.lines[0]!.uncapped).toBe(lei(20000));
+    expect(leg.lines[0]!.deductible).toBe(lei(15000));
+    expect(leg.lines[0]!.lost).toBe(lei(5000));
+    expect(leg.total).toBe(lei(15000));
+  });
+
+  it('the estimate moves by the CAPPED amount, so a ceiling cannot be dropped on the way to the engine', () => {
+    const bare = selectEstimateOperands(seedData, AS_OF, RULES);
+    const posted = selectEstimateOperands(withAssets([M1_CAR]), AS_OF, RULES);
+    if (bare.kind !== 'run' || posted.kind !== 'run') throw new Error('both must run');
+    expect(posted.amounts.expensesNet - bare.amounts.expensesNet).toBe(lei(15000));
+  });
+
+  it('the ceiling is per vehicle („pentru fiecare"), so two M1 cars each get their own 1.500 lei/lună', () => {
+    const second: FixedAsset = { ...M1_CAR, id: 'asset-m1-b', label: 'Al doilea autoturism M1' };
+    const leg = selectAssetDepreciation(withAssets([M1_CAR, second]), AS_OF, RULES);
+    expect(leg.lines).toHaveLength(2);
+    expect(leg.total).toBe(lei(30000));
+  });
+
+  it('a claimed alin. (14) exception lifts the ceiling, and that is the taxpayer\'s claim, not an inference', () => {
+    const exempt: FixedAsset = { ...M1_CAR, m1ExceptionCategory: 'transport_persoane_cu_plata_inclusiv_taxi' };
+    const leg = selectAssetDepreciation(withAssets([exempt]), AS_OF, RULES);
+    expect(leg.lines[0]!.deductible).toBe(lei(20000));
+    expect(leg.lines[0]!.lost).toBe(lei(0));
+  });
+});
+
+describe('acceptance 2 — the double-count refusal fires, and the estimate does not move when it does', () => {
+  const both = withAssets([LAPTOP], [TYPED_DEPRECIATION]);
+
+  it('a typed depreciation expense and a computed schedule for the same register cannot both post', () => {
+    const leg = selectAssetDepreciation(both, AS_OF, RULES);
+    expect(leg.lines).toEqual([]);
+    expect(leg.total).toBe(lei(0));
+    expect(leg.conflicts).toHaveLength(1);
+    expect(leg.conflicts[0]!.assetId).toBe('asset-laptop');
+    expect(leg.conflicts[0]!.label).toBe('Laptop de lucru');
+    expect(leg.conflicts[0]!.expenseIds).toEqual(['exp-amortizare-tipita']);
+    // What it WOULD have added, reported rather than added.
+    expect(leg.conflicts[0]!.withheld).toBe(lei(30000));
+  });
+
+  it('the estimate is byte-for-byte the figure it was with the typed expense alone', async () => {
+    // The comparison that answers acceptance 2: the asset is the only difference between these two payloads,
+    // so anything that moves here moved because a schedule was posted — and none may be.
+    const typedOnly = { ...seedData, expenses: [...seedData.expenses, TYPED_DEPRECIATION] };
+    const withBoth = await getTaxEstimate(both, AS_OF);
+    const withoutAsset = await getTaxEstimate(typedOnly, AS_OF);
+    expect(withoutAsset.status).toBe('computed');
+    expect(withBoth.status).toBe('computed');
+    if (withoutAsset.status !== 'computed' || withBoth.status !== 'computed') {
+      throw new Error('both must compute');
+    }
+    expect(withBoth.output.total).toBe(withoutAsset.output.total);
+    expect(JSON.stringify(withBoth.lines)).toBe(JSON.stringify(withoutAsset.lines));
+    expect(JSON.stringify(withBoth.bases)).toBe(JSON.stringify(withoutAsset.bases));
+  });
+
+  it('the typed expense alone still deducts exactly what was typed — the refusal does not delete it', () => {
+    const typedOnly = selectEstimateOperands({ ...seedData, expenses: [...seedData.expenses, TYPED_DEPRECIATION] }, AS_OF, RULES);
+    const bare = selectEstimateOperands(seedData, AS_OF, RULES);
+    const withBoth = selectEstimateOperands(both, AS_OF, RULES);
+    if (typedOnly.kind !== 'run' || bare.kind !== 'run' || withBoth.kind !== 'run') {
+      throw new Error('all three must run');
+    }
+    expect(typedOnly.amounts.expensesNet - bare.amounts.expensesNet).toBe(lei(70000));
+    expect(withBoth.amounts.expensesNet - bare.amounts.expensesNet).toBe(lei(70000));
+  });
+
+  it('the two are never summed and never resolved by picking the larger', () => {
+    const leg = selectAssetDepreciation(both, AS_OF, RULES);
+    // Summing would be 100.000; picking the larger (the typed 70.000) would be 70.000. Neither appears.
+    expect(leg.total).toBe(lei(0));
+    expect(leg.conflicts[0]!.withheld).toBe(lei(30000));
+  });
+
+  it('a refusal raised for one asset withholds every schedule, because no link names the asset', () => {
+    const second: FixedAsset = { ...LAPTOP, id: 'asset-second', label: 'Al doilea laptop' };
+    const leg = selectAssetDepreciation(withAssets([LAPTOP, second], [TYPED_DEPRECIATION]), AS_OF, RULES);
+    expect(leg.lines).toEqual([]);
+    expect(leg.conflicts.map(c => c.assetId).sort()).toEqual(['asset-laptop', 'asset-second']);
+  });
+
+  it('a typed depreciation expense outside the period does not collide with the schedule', () => {
+    const outside = { ...TYPED_DEPRECIATION, date: '2025-12-10', paid: '2025-12-10' };
+    const leg = selectAssetDepreciation(withAssets([LAPTOP], [outside]), AS_OF, RULES);
+    expect(leg.conflicts).toEqual([]);
+    expect(leg.total).toBe(lei(30000));
+  });
+
+  it('a rejected typed expense is not a deduction, so it cannot collide either', () => {
+    const rejected = { ...TYPED_DEPRECIATION, status: 'respinsa' as const };
+    const leg = selectAssetDepreciation(withAssets([LAPTOP], [rejected]), AS_OF, RULES);
+    expect(leg.conflicts).toEqual([]);
+    expect(leg.total).toBe(lei(30000));
+  });
+});
+
+describe('acceptance 3 — the refusal is visible, and names the asset', () => {
+  const both = withAssets([LAPTOP], [TYPED_DEPRECIATION]);
+
+  it('the conflict reaches the one coverage channel, with its own reason', () => {
+    const leg = selectAssetDepreciation(both, AS_OF, RULES);
+    const gaps = depreciationCoverageGaps(leg);
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0]!.reason).toBe('depreciation_conflict');
+    expect(gaps[0]!.recordId).toBe('asset:asset-laptop');
+    expect(gaps[0]!.fixTarget).toBe('/assets');
+  });
+
+  it('the sentence names the asset and the colliding expense, in the user\'s language', () => {
+    const [gap] = depreciationCoverageGaps(selectAssetDepreciation(both, AS_OF, RULES));
+    expect(gap!.detail).toContain('Laptop de lucru');
+    expect(gap!.detail).toContain('exp-amortizare-tipita');
+    expect(gap!.detail).toContain('de două ori');
+    // B-106 is the standing counter-example: a refusal with no reason attached.
+    expect(gap!.detail.length).toBeGreaterThan(120);
+  });
+
+  it('the conflict carries no amount, so the weighted percentage does not move for a refusal that moves no figure', () => {
+    const [gap] = depreciationCoverageGaps(selectAssetDepreciation(both, AS_OF, RULES));
+    expect(gap!.amount).toBeNull();
+    expect(gap!.kind).toBe('profile');
+  });
+
+  it('the leg travels on the estimate, so the dashboard reads it instead of re-walking the register', async () => {
+    const estimate = await getTaxEstimate(both, AS_OF);
+    expect(estimate.depreciation).toBeDefined();
+    expect(estimate.depreciation!.conflicts).toHaveLength(1);
+    expect(estimate.depreciation!.total).toBe(lei(0));
+  });
+});
+
+describe('acceptance 5 — a missing-fact asset still refuses', () => {
+  it('no default life and no default method: the schedule\'s own refusal is carried, not replaced', () => {
+    const leg = selectAssetDepreciation(withAssets([INCOMPLETE_ASSET]), AS_OF, RULES);
+    expect(leg.lines).toEqual([]);
+    expect(leg.total).toBe(lei(0));
+    expect(leg.refused).toHaveLength(1);
+    expect(leg.refused[0]!.assetId).toBe('asset-bare');
+    expect(leg.refused[0]!.gap).toBe('durata_lipsa');
+    expect(leg.refused[0]!.reason).toContain('durata normală');
+  });
+
+  it('the estimate does not move for an asset that refused — a refusal is not a zero deduction', async () => {
+    const bare = await getTaxEstimate(seedData, AS_OF);
+    const refused = await getTaxEstimate(withAssets([INCOMPLETE_ASSET]), AS_OF);
+    if (bare.status !== 'computed' || refused.status !== 'computed') throw new Error('both must compute');
+    expect(refused.output.total).toBe(bare.output.total);
+  });
+
+  it('the missing fact is reported on the same channel as every other missing fact', () => {
+    const gaps = depreciationCoverageGaps(selectAssetDepreciation(withAssets([INCOMPLETE_ASSET]), AS_OF, RULES));
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0]!.reason).toBe('fact_missing');
+    expect(gaps[0]!.detail).toContain('Bun fără durată');
+  });
+
+  it('an asset with no *punere în funcțiune* refuses rather than borrowing the entry date', () => {
+    const noStart: FixedAsset = { ...LAPTOP, putInFunctionDate: undefined };
+    const leg = selectAssetDepreciation(withAssets([noStart]), AS_OF, RULES);
+    expect(leg.refused[0]!.gap).toBe('punere_in_functiune_absenta');
+    expect(leg.total).toBe(lei(0));
+  });
+
+  it('an aport of a personally-owned asset refuses and names both texts, instead of choosing', () => {
+    const aport: FixedAsset = { ...LAPTOP, acquisition: 'aport' };
+    const leg = selectAssetDepreciation(withAssets([aport]), AS_OF, RULES);
+    expect(leg.refused[0]!.gap).toBe('aport_contra_k1');
+    expect(leg.refused[0]!.reason).toContain('k¹');
+    expect(leg.refused[0]!.reason).toContain('art. 7 pct. 44 lit. c)');
+  });
+});
+
+describe('the seam itself', () => {
+  it('depreciationForFiscalYear hands out post-ceiling figures and nothing else', () => {
+    const out = depreciationForFiscalYear(depreciationRule, [M1_CAR, LAPTOP], 2026);
+    expect(out.posted.map(p => p.deductible)).toEqual([lei(15000), lei(30000)]);
+    for (const p of out.posted) {
+      expect(p.deductible).toBeLessThanOrEqual(p.uncapped);
+      expect(p.uncapped - p.deductible).toBe(p.lost);
+    }
+  });
+
+  it('a year the asset does not touch is neither a posting nor a gap', () => {
+    const out = depreciationForFiscalYear(depreciationRule, [LAPTOP], 2032);
+    expect(out.posted).toEqual([]);
+    expect(out.refused).toEqual([]);
+  });
+
+  it('the whole schedule never exceeds the fiscal value, year by year or in total', () => {
+    const out = depreciationForFiscalYear(depreciationRule, [LAPTOP], 2026);
+    expect(out.posted).toHaveLength(1);
+    const allYears = [2026, 2027, 2028, 2029, 2030, 2031].map(
+      y => depreciationForFiscalYear(depreciationRule, [LAPTOP], y).posted[0]?.deductible ?? lei(0),
+    );
+    expect(sumBani(allYears)).toBe(lei(120000));
+  });
+
+  it('no rule package for the year yields no leg, and does not invent a second refusal per asset', () => {
+    const leg = selectAssetDepreciation(withAssets([LAPTOP]), AS_OF, []);
+    expect(leg.total).toBe(lei(0));
+    expect(leg.refused).toEqual([]);
+    expect(leg.conflicts).toEqual([]);
+  });
+});

@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { fixedInstant } from '../src/test/fixedInstant';
 import { seedBrowser, seedPayload, type SeedPayload } from './fixtures';
+import { ron } from '../src/domain/money';
 import {
   SYNTHETIC_ASSET_INCOMPLETE,
   SYNTHETIC_ASSET_M1,
@@ -19,13 +20,14 @@ import { assets as assetsCopy } from '../src/ui/copy/assets';
  *
  * What is proven here, in order:
  *
- *   1. **an asset in the register moves no fiscal figure** — the dashboard estimate is the same figure,
- *      with the same coverage state, with and without the register populated (acceptance 9, in the
- *      browser rather than only in the digest test);
+ *   1. **an asset in the register now moves the fiscal figure** — B-93 re-premises what PG-6e pinned. The
+ *      register used to be inert: the schedule was computed, shown on screen and printed in the register,
+ *      and the estimate deducted a typed amount instead. It now posts its own figure, and the hero moves
+ *      (acceptance 1). The seed profile itself is unchanged, because the seed declares no asset;
  *   2. **the M1 ceiling is per vehicle** — two cars each lose their own excess, and the screen calls it
  *      definitively lost rather than deferred (acceptance 5);
- *   3. **a missing declared duration refuses and names the gap**, next to schedules that did compute
- *      (acceptance 8);
+ *   3. **a missing declared duration refuses, names the gap, and now also holds the estimate open** — the
+ *      silence reaches the coverage channel, so the hero reads incomplete beside it (acceptance 8);
  *   4. **the constructions are labelled on screen** — the first-year pro-rating and the degresive switch
  *      appear with the sentence that says they are ours (acceptance 3, 4);
  *   5. **the two retained documents exist, carry the current retention rule, and are produced on an
@@ -40,48 +42,106 @@ function payloadWith(over: Partial<SeedPayload> = {}): SeedPayload {
   return { ...seedPayload(), ...over };
 }
 
-test.describe('PG-6e acceptance 9 — an asset moves no fiscal figure', () => {
-  test('the demo taxpayer with no register and a taxpayer with a full register get the same figure', async ({
+/**
+ * A payload with enough recorded income for a 31.500-lei deduction to land somewhere short of zero. The
+ * demo taxpayer recorded 7.700 lei of receipts; two synthetic cars depreciate 31.500 lei across 2026, which
+ * drives net income negative and floors the estimate at zero — a true result, but a figure that cannot show
+ * a delta. The added receipt is labelled synthetic in its own id.
+ */
+function payloadWithIncome(over: Partial<SeedPayload> = {}): SeedPayload {
+  const base = payloadWith(over);
+  return {
+    ...base,
+    revenues: [
+      ...base.revenues,
+      {
+        id: 'r-b93-synthetic',
+        tip: 'factura',
+        nr: 'B93-SINTETIC',
+        date: '2026-04-10',
+        client: 'Client de test',
+        cui: 'RO11111111',
+        valoareFaraTva: ron(120000),
+        tva: ron(0),
+        status: 'inregistrata',
+      },
+    ],
+  };
+}
+
+/**
+ * Two browser contexts, not two navigations: the store reads localStorage once per document and
+ * `addInitScript` re-runs on every navigation, so a single page could not hold both states.
+ */
+async function heroOf(browser: import('@playwright/test').Browser, payload: SeedPayload): Promise<string> {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await seedBrowser(page, payload);
+  await fixClock(page);
+  await page.goto('/dashboard');
+  const figure = (await page.locator('.tax-hero-value').first().textContent()) ?? '';
+  await context.close();
+  return figure;
+}
+
+test.describe('B-93 — an asset in the register now moves the estimate', () => {
+  test('the seed profile still reads 3.112,00 RON, because the seed declares no asset', async ({
     browser,
   }) => {
-    // Two browser contexts, not two navigations: the store reads localStorage once per document and
-    // `addInitScript` re-runs on every navigation, so a single page could not hold both states.
-    const open = async (payload: SeedPayload) => {
-      const context = await browser.newContext();
-      const page = await context.newPage();
-      await seedBrowser(page, payload);
-      await fixClock(page);
-      await page.goto('/dashboard');
-      await expect(page.locator('.badge[data-estimate-state="complete"]')).toHaveCount(1);
-      const figure = (await page.locator('.tax-hero-value').first().textContent()) ?? '';
-      await context.close();
-      return figure;
-    };
-
-    const bare = await open(payloadWith());
-    const withAssets = await open(payloadWith({ fixedAssets: [...SYNTHETIC_FIXED_ASSETS] }));
-
-    // Not vacuous: the hero actually carries a figure.
-    expect(bare).not.toBe('');
+    const bare = await heroOf(browser, payloadWith());
     expect(bare).toBe('3.112,00 RON');
-    expect(withAssets).toBe(bare);
   });
 
-  test('with three assets stored, the estimate stays complete and the register renders', async ({
+  test('two M1 schedules post their capped figures and the hero moves by the tax on them', async ({
+    browser,
+  }) => {
+    const bare = await heroOf(browser, payloadWithIncome());
+    const withAssets = await heroOf(browser, payloadWithIncome({
+      fixedAssets: [SYNTHETIC_ASSET_M1, SYNTHETIC_ASSET_M1_SECOND],
+    }));
+
+    // Not vacuous: the hero carries a figure, and it moved.
+    expect(bare).not.toBe('');
+    expect(bare).toBe('46.110,00 RON');
+    expect(withAssets).toBe('29.190,00 RON');
+    // The arithmetic that explains the move, so the new figure is derived rather than re-baselined.
+    // a1: 120.000 lei / 24 luni liniar, punere în funcțiune 31 ian 2026 -> 11 luni în 2026, 5.000 lei/lună
+    //     peste plafonul de 1.500 lei/lună din art. 28 alin. (14) -> 16.500 lei deductibil.
+    // a2: 96.000 lei / 24 luni, punere 28 feb 2026 -> 10 luni, 4.000 lei/lună peste plafon -> 15.000 lei.
+    // 31.500 lei în plus la cheltuiala deductibilă, 16.920 lei în minus la totalul estimat.
+    expect(withAssets).not.toBe(bare);
+  });
+
+  test('a register with an incomplete asset holds the estimate open, and says why', async ({
     page,
   }) => {
-    await seedBrowser(page, payloadWith({ fixedAssets: [...SYNTHETIC_FIXED_ASSETS] }));
+    await seedBrowser(page, payloadWithIncome({ fixedAssets: [...SYNTHETIC_FIXED_ASSETS] }));
     await fixClock(page);
 
     await page.goto('/dashboard');
-    await expect(page.locator('.badge[data-estimate-state="complete"]')).toHaveCount(1);
-    // No coverage row appeared for the assets: an asset is not an unanswered expense, and the estimate
-    // does not read the register at all.
-    await expect(page.locator('[data-estimate-coverage]')).toHaveCount(0);
+    // a3 declares no duration. Before B-93 that silence lived only on the Assets page; once the register
+    // feeds the estimate it is a reason the estimate is not complete, and it rides the same channel as
+    // every other such reason rather than starting a second one.
+    await expect(page.locator('.badge[data-estimate-state="incomplete"]')).toHaveCount(1);
+    await expect(page.locator('[data-coverage-reason="fact_missing"]')).toHaveCount(1);
 
     await page.goto('/assets');
     await expect(page.getByTestId('asset-total-a1')).toBeVisible();
     await expect(page.getByTestId('asset-total-a2')).toBeVisible();
+  });
+
+  test('a complete register posts, and the card names the figure that entered the estimate', async ({
+    page,
+  }) => {
+    await seedBrowser(page, payloadWithIncome({
+      fixedAssets: [SYNTHETIC_ASSET_M1, SYNTHETIC_ASSET_M1_SECOND],
+    }));
+    await fixClock(page);
+    await page.goto('/assets');
+    // The posted figure is the post-ceiling one, not the schedule's gross.
+    await expect(page.getByTestId('asset-posted-a1')).toContainText('16.500');
+    await expect(page.getByTestId('asset-posted-a2')).toContainText('15.000');
+    await expect(page.getByTestId('asset-conflict-a1')).toHaveCount(0);
   });
 });
 

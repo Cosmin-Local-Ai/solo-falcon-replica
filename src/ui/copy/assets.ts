@@ -165,8 +165,36 @@ export const assets = {
       'contribuabil. Lunile rămase se calculează din durata pe care ai declarat-o aici, nu dintr-o ' +
       'clasă de catalog.',
     notDeductibleYet:
-      'Cifrele de mai jos nu sunt încă o cheltuială. Ele devin deductibile prin înregistrarea amortizării ' +
-      'în registru, bun cu bun.',
+      'Cifrele de mai jos intră în estimare ca cheltuială cu amortizarea, bun cu bun, pentru anul fiscal ' +
+      'afisat. Nu sunt o înregistrare în registrul de cheltuieli: sunt calculate din faptele declarate ' +
+      'aici și din art. 28.',
+  },
+
+  // ── B-93: whether this asset's schedule actually reaches the estimate ──────
+  /**
+   * Before B-93 the schedule was computed, shown here and printed in the register, and the estimate then
+   * deducted a different figure — one the taxpayer had typed. These are the sentences that say which of
+   * the two the estimate used, and why a schedule can be withheld.
+   */
+  posting: {
+    posted: 'Planul acestui bun intră în estimare pentru {year}: {amount}.',
+    ceilingTravels:
+      'Suma de mai sus este cea de după plafonul de 1.500 lei pe lună din art. 28 alin. (14), nu ' +
+      'amortizarea brută. Cifra de dinainte de plafon și diferența pierdută definitiv sunt în tabel.',
+    conflictHeading: 'Planul nu intră în estimare',
+    conflict:
+      'Ai înregistrat deja o cheltuială cu amortizarea pe locație. Planul calculat din faptele acestui ' +
+      'bun nu este adăugat peste ea: adunate, aceeași amortizare s-ar deduce de două ori. Aplicația nu ' +
+      'adună cele două, nu alege valoarea mai mare și nu preferă în tăcere niciuna — planul este reținut ' +
+      'iar cifra estimării nu se mișcă.',
+    conflictExpenses: 'Cheltuieli înregistrate manual: {ids}.',
+    conflictWhyAll: 
+      'Înregistrarea de cheltuială nu face legătura dintre o sumă și un mijloc fix, deci aplicația nu poate ' +
+      'să spună ce bun acoperă cheltuiala tastată. Cât timp există o astfel de cheltuială în perioadă, ' +
+      'niciun plan din registru nu este postat.',
+    conflictFix:
+      'Ce poți face: șterge cheltuiala cu amortizarea înregistrată manual și lasă registrul să calculeze, ' +
+      'sau păstreaz-o și nu mai aștepta nicio deducere din registru pentru acest an.',
   },
 
   // ── The three silences ───────────────────────────────────────────────────

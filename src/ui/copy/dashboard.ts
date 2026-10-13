@@ -109,6 +109,12 @@ export const dashboard = {
         rejected: 'document respins',
         pending: 'transmitere în așteptare',
         fact_missing: 'faptă de profil care lipsește',
+        /**
+         * B-93 — the register computes a schedule for an asset **and** a depreciation expense is already
+         * recorded by hand. The row names what collides, not which one won: neither was preferred and the
+         * computed schedule was withheld rather than added on top of the typed one.
+         */
+        depreciation_conflict: 'amortizare calculată și amortizare înregistrată manual',
       } satisfies Record<CoverageReason, string>,
       countOne: 'o înregistrare',
       countMany: (n: number): string => `${n} înregistrări`,

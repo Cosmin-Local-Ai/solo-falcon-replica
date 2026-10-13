@@ -87,7 +87,9 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
       // PG-6a: the refusal is no longer composed here or in the assembler as a special case — the
       // scenario registry decided it, and the scenario travels on the estimate so the hero can name it
       // and link to the control that fixes it.
-      setEstimate(attachEstimateBasis(operands.result, operands.basis, operands.scenarios));
+      setEstimate(
+        attachEstimateBasis(operands.result, operands.basis, operands.scenarios, undefined, operands.depreciation),
+      );
       setLoading(false);
       return;
     }
@@ -126,7 +128,9 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
       rules,
     }).then((result) => {
       if (!cancelled) {
-        setEstimate(attachEstimateBasis(result, basis, operands.scenarios, operands.inputVat));
+        setEstimate(
+          attachEstimateBasis(result, basis, operands.scenarios, operands.inputVat, operands.depreciation),
+        );
         setLoading(false);
       }
     });
