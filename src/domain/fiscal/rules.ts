@@ -10,6 +10,14 @@
 // Titlul V rules those contributions are actually computed under. The 68^3 rule supplies neither a
 // contribution rule nor a rate for another regime; it supplies the flat-ratio METHOD, and tax.ts reads
 // it as a fourth, separate lookup.
+// 'short-term-rooms-flat-ratio' (B-88) is a fresh string for the same reason, and it carries the SAME
+// hazard as 'accommodation-flat-ratio' in a sharper form: CF art. 85 alin. (2) and art. 68^3 alin. (2) both
+// say 30 %, and both are taxed at 10 % under alin. (6) of their own article. Reusing the regime string would
+// have made `applicable.find(r => r.taxRegime === 'accommodation-flat-ratio')` in tax.ts resolve whichever
+// of the two ruleIds sorts first, and the two articles are not interchangeable: art. 85 measures a cash-basis
+// gross from a personal dwelling and puts its net in the art. 170 alin. (4) cumul (art. 155 alin. (1) lit. e)),
+// while art. 68^3 measures a tourism operator's register and puts its net in the art. 170 alin. (1) basin
+// (lit. b)). Same percentage, different income category, different contribution route, different citation.
 // 'fiscal-depreciation' (PG-6e) is a fresh string for the same reason and with the same hazard: the
 // figures it carries — the 5.000-lei threshold of art. 28 alin. (2) lit. b), the 1.500 lei/lună M1 ceiling
 // of alin. (14) and the three degresivity coefficients of alin. (7) — are Titlul II *method* figures, not
@@ -26,6 +34,7 @@ export type FiscalRegime =
   | 'wage-reference'
   | 'expense-deductibility'
   | 'accommodation-flat-ratio'
+  | 'short-term-rooms-flat-ratio'
   | 'fiscal-depreciation';
 
 /**

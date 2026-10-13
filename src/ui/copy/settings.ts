@@ -262,7 +262,7 @@ export const settings = {
      * leaves it blank teaches the person that an unanswered question still has a title.
      */
     accommodationTitleCedarea: (year: number): string =>
-      `Pentru ${year} venitul înregistrat este sub titlul „cedarea folosinței bunurilor”: art. 83 alin. (2) și art. 85 din Codul fiscal. Nu este activitate independentă, iar metoda forfetară din art. 68^3 nu i se aplică.`,
+      `Pentru ${year} venitul înregistrat este sub titlul „cedarea folosinței bunurilor”: art. 83 alin. (2) și art. 85 din Codul fiscal. Nu este activitate independentă, iar metoda forfetară din art. 68^3 nu i se aplică. Pentru acest titlu aplicația aplică regula lui art. 85: brutul cât sumele încasate în an, cheltuială forfetară 30 %, impozit 10 % din net și impozit final (art. 85 alin. (2) și (6)), iar CASS se alege din treptele de 6 / 12 / 24 de salarii minime (art. 170 alin. (2)-(4)), nu din net. Celelalte venituri din cedarea folosinței rămân la 20 % — art. 84 alin. (3).`,
     accommodationTitleIndependent: (year: number): string =>
       `Pentru ${year} venitul înregistrat este sub titlul „activitate independentă”: art. 83 alin. (4) și art. 68^3 din Codul fiscal, pentru că numărul de camere este peste 7.`,
     accommodationTitleUnknown: (year: number): string =>

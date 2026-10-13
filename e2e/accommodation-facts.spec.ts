@@ -45,6 +45,31 @@ function cazareWithRooms(rooms: number): SeedPayload {
   });
 }
 
+/**
+ * B-88 — the five ladder categories the app cannot compute, declared as zeros.
+ *
+ * An art. 85 register supplies the sixth (cedarea folosinței) itself, from its own receipts, so without these
+ * five the art. 170 alin. (4) sum is unknown and the engine stops there. A declared zero is a fact; an empty
+ * box is not — that is the B-41 rule, and the second test below is the same profile without these answers.
+ */
+function ladderZeros(): SeedPayload {
+  return profileWith({
+    activityFamily: 'cazare',
+    accommodationRoomCounts: [{ fiscalYear: 2026, rooms: 3 }],
+    cassLadderYears: [
+      {
+        fiscalYear: 2026,
+        proprietateIntelectuala: 0,
+        asocierePersoanaJuridica: 0,
+        activitatiAgricole: 0,
+        investitii: 0,
+        alteSurse: 0,
+        cedareaSursa: 'patrimoniu_personal',
+      },
+    ],
+  });
+}
+
 test.describe('PG-6h-2 — an unrecorded room count stays unknown (acceptance 1)', () => {
   test('a cazare profile with no room count is refused, with both rule questions open and no figure', async ({
     page,
@@ -84,28 +109,52 @@ test.describe('PG-6h-2 — an unrecorded room count stays unknown (acceptance 1)
   });
 });
 
-test.describe('PG-6h-2 — the room count switches the income title (acceptance 2)', () => {
-  test('3 rooms refuses on the title, and the screen says cedarea folosinței with the articles', async ({
+test.describe('B-88 — 1–7 camere is measured under art. 85, not refused for want of a rule', () => {
+  test('3 rooms with the other five ladder categories declared produces a figure, on art. 85 lines', async ({
+    page,
+  }) => {
+    await seedBrowserOnce(page, ladderZeros());
+    await fixClock(page);
+    await page.goto('/dashboard');
+
+    // The title refusal used to be this register's answer because the package had no art. 85 rule. The rule
+    // exists for FY2026, so nothing refuses at the scenario layer.
+    await expect(page.locator('[data-scenario-refusal]')).toHaveCount(0);
+
+    const hero = page.locator('.tax-hero-value').first();
+    await expect(hero).not.toHaveText('—');
+
+    // The engine's own lines name the article, so the screen cannot present a 68^3 calculation for a
+    // cedarea folosinței income. The rows are the engine's, opened through the existing disclosure.
+    await page.getByText('Cum am ajuns la această sumă').click();
+    const rows = page.locator('.estimate-breakdown .breakdown-table th');
+    await expect(rows.filter({ hasText: 'Venit net art. 85' })).toHaveCount(1);
+    await expect(rows.filter({ hasText: 'Cheltuieli forfetare 30 % (art. 85 alin. (2))' })).toHaveCount(1);
+    await expect(rows.filter({ hasText: 'Impozit art. 85 (10 %, impozitul fiind final)' })).toHaveCount(1);
+    // And the line that must NOT be there: the sistem-real expense line, which this taxpayer never kept.
+    await expect(rows.filter({ hasText: 'Cheltuieli deductibile' })).toHaveCount(0);
+  });
+
+  test('3 rooms with the ladder left unanswered stops on the ladder, not on a scenario refusal', async ({
     page,
   }) => {
     await seedBrowserOnce(page, cazareWithRooms(3));
     await fixClock(page);
     await page.goto('/dashboard');
 
-    const block = page.locator('[data-scenario-refusal="accommodation-title-cedarea-folosintei"]');
-    await expect(block).toBeVisible();
-    await expect(block.locator('.hint').first()).toContainText('cedarea folosinței bunurilor');
-    await expect(block.locator('.hint').first()).toContainText('art. 83 alin. (2)');
-    await expect(block.locator('.hint').first()).toContainText('art. 85');
-    await expect(block.locator('.hint').first()).toContainText('peste 7');
-    // The unsettled-gross refusal is not this register's answer, and two refusals on one page would leave
-    // the reader guessing which one the app means.
-    await expect(page.locator('[data-scenario-refusal]')).toHaveCount(1);
-
+    await expect(page.locator('[data-scenario-refusal]')).toHaveCount(0);
+    const note = page.locator('.estimate-state-note');
+    await expect(note).toHaveAttribute('data-estimate-state', 'review_required');
+    // `review_required` and `refused` are different states and the badge says so: an engine ran and
+    // withheld a conclusion, which is not the same sentence as a register the app would not compute at all.
+    await expect(page.locator('.badge[data-estimate-state]')).toHaveAttribute('data-estimate-state', 'review_required');
+    // No figure is offered while the art. 170 alin. (4) sum is unknown.
     const hero = page.locator('section.card').filter({ has: page.locator('.tax-hero-value') });
     await expect(hero.locator('.tax-hero-value')).toHaveText('—');
   });
+});
 
+test.describe('PG-6h-2 — the room count switches the income title (acceptance 2)', () => {
   test('9 rooms is the other title, and the refusal is the unsettled gross', async ({ page }) => {
     await seedBrowserOnce(page, cazareWithRooms(9));
     await fixClock(page);
@@ -155,9 +204,12 @@ test.describe('PG-6h-2 — the count is per fiscal year (acceptance 3)', () => {
     await page.reload();
     await page.goto('/dashboard');
 
-    // The answer survived the reload — it is a stored per-year fact, not form state — and it moved the
-    // register from one refusal to the other.
-    await expect(page.locator('[data-scenario-refusal="accommodation-title-cedarea-folosintei"]')).toHaveCount(1);
+    // The answer survived the reload — it is a stored per-year fact, not form state. B-88 changed what it
+    // moves: a 1–7 count used to switch this register from the unsettled-gross refusal to the title refusal,
+    // and now it selects the art. 85 rule instead, so no scenario refuses it. What still stops the figure is
+    // the art. 170 alin. (4) sum, which the app cannot complete from the register alone.
+    await expect(page.locator('[data-scenario-refusal]')).toHaveCount(0);
+    await expect(page.locator('.badge[data-estimate-state]')).toHaveAttribute('data-estimate-state', 'review_required');
     await page.goto('/settings#!/fiscal');
     await expect(page.locator('[data-accommodation-rooms]')).toHaveValue('3');
   });

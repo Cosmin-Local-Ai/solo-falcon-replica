@@ -233,11 +233,33 @@ describe('the new entry obeys the framework contract', () => {
 });
 
 describe('the assembler threads the facts from stored data, not from a hand-built context', () => {
-  it('a stored cazare profile with 3 rooms reaches the title refusal through selectEstimateOperands', () => {
+  it('a stored cazare profile with 3 rooms is no longer refused — the art. 85 rule decides the method (B-88)', () => {
+    // This is the move B-88 was for. Until `ACCOMMODATION_ART85_ROOMS_2026` existed, a 1–7 room register
+    // had no rule to be measured under and the title entry refused it. The rule now exists for FY2026, so
+    // the assembler selects the art. 85 method and hands the engine a gross with that method attached.
     const operands = selectEstimateOperands(
       profileWith({ activityFamily: 'cazare', accommodationRoomCounts: [{ fiscalYear: 2026, rooms: 3 }] }),
       AS_OF,
       [...PFA_2026_SYSTEM_REAL_PACKAGE],
+    );
+    expect(operands.kind).toBe('run');
+    if (operands.kind !== 'run') return;
+    expect(operands.scenarios.filter(s => s.effect === 'refuse')).toEqual([]);
+    expect(operands.amounts.flatRatioMethod).toBe('short-term-rooms-art85');
+    expect(typeof operands.amounts.flatRatioGross).toBe('number');
+  });
+
+  it('a 1–7 room count in a year with no art. 85 rule still refuses on the title', () => {
+    // The rule is year-scoped. A 2027 profile has no FY2027 package, so the sentence that says the package
+    // carries no rule for art. 85 is still the true one there.
+    const operands = selectEstimateOperands(
+      profileWith({
+        fiscalYear: 2027,
+        activityFamily: 'cazare',
+        accommodationRoomCounts: [{ fiscalYear: 2027, rooms: 3 }],
+      }),
+      '2027-10-31',
+      [],
     );
     expect(operands.kind).toBe('refused');
     if (operands.kind !== 'refused') return;

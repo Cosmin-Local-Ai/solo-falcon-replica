@@ -82,7 +82,7 @@ export const scenarios = {
      * (c) is a separate rule with a separate citation, not the same rule under another number.
      */
     accommodationTitleCedareaFolosintei:
-      'Numărul de camere înregistrat pentru acest an fiscal este între 1 și 7, iar legea pune venitul acesta sub un alt titlu decât activitatea independentă: art. 83 alin. (2) din Codul fiscal îl dă în cedarea folosinței bunurilor, iar art. 85 alin. (1) îl tratează ca categorie de sine stătătoare. Trecerea la art. 68^3 se face abia din anul fiscal în care numărul camerelor este peste 7 — art. 83 alin. (4). Metoda forfetară pe care aplicația o calculează aparține celuilalt titlu, iar o regulă pentru art. 85 nu există în acest pachet de reguli, așa că aplicația refuză o cifră în loc să aplice unor venituri din închiriere regulile altei categorii.',
+      'Numărul de camere înregistrat pentru acest an fiscal este între 1 și 7, iar legea pune venitul acesta sub un alt titlu decât activitatea independentă: art. 83 alin. (2) din Codul fiscal îl dă în cedarea folosinței bunurilor, iar art. 85 alin. (1) îl tratează ca categorie de sine stătătoare. Trecerea la art. 68^3 se face abia din anul fiscal în care numărul camerelor este peste 7 — art. 83 alin. (4). Pentru anul fiscal pe care îl privești, pachetul de reguli al aplicației nu conține regula de art. 85; metoda forfetară pe care o calculează aparține celuilalt titlu, așa că aplicația refuză o cifră în loc să aplice unor venituri din închiriere regulile altei categorii.',
     /**
      * PG-6h-2b — the register's receipts cannot be attributed to a determination method (B-85).
      *

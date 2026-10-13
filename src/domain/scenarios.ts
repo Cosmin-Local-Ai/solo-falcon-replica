@@ -383,10 +383,23 @@ const accommodationGrossScenario: ScenarioSupport = {
     if (facts.flatRatioMethodAvailable !== true) return null;
     const questions = facts.flatRatioOpenQuestions ?? null;
     if (questions === null) return null;
-    // 1–7 rooms is not a gross this entry cannot settle — it is a different title altogether, and the
-    // entry below owns it. Leaving both firing would put two refusals on one register and make the reader
-    // guess which one the app means.
-    if (facts.accommodationIncomeTitle === 'cedarea_folosintei') return null;
+    // B-88 — this suppression used to read the TITLE, because until the art. 85 rule existed a register in
+    // the 1–7 room range could never be an art. 68^3 register. That stopped being true: art. 85 alin. (1)
+    // excludes „cei care realizează venituri din activități independente pentru care sunt aplicabile
+    // prevederile art. 68^3”, so a person who has declared they are a tourism-sector operator is measured
+    // under art. 68^3 even with 3 rooms, and the rule's own open questions are the questions they have.
+    // The entry is therefore keyed to the resolved METHOD, which is the thing it is actually about.
+    //
+    // What has not changed is the invariant the entry was written to protect: one refusal per register.
+    // The assembler selects exactly one determination method, and each accommodation entry is keyed to a
+    // different one. Where no method was supplied at all — a hand-built fixture that never went through
+    // `selectEstimateOperands` — the title keeps doing the job it did before, so silence cannot produce two
+    // refusals on one register.
+    if (facts.incomeDeterminationMethod !== undefined) {
+      if (facts.incomeDeterminationMethod !== 'accommodation-flat-ratio') return null;
+    } else if (facts.accommodationIncomeTitle === 'cedarea_folosintei') {
+      return null;
+    }
     const open = openAccommodationQuestions(questions, facts);
     return { detail: accommodationOpenQuestionDetail(open) };
   },
@@ -403,15 +416,32 @@ const accommodationGrossScenario: ScenarioSupport = {
  * camerelor … este de peste 7”**, and art. 68^3 alin. (12) is the route by which that activity is measured
  * on the flat ratio.
  *
+ * The room count says this income is *cedarea folosinței bunurilor*, and this build has no rule that
+ * measures it (PG-6h-2, B-82; narrowed by B-88).
+ *
+ * This is the category switch the room count exists to make, and it is the reason the count must never be
+ * modelled as a number feeding a formula. CF art. 83 alin. (2) places a „proprietar, uzufructuar sau alt
+ * deținător legal” who lets **1–7 camere** in a personal dwelling under Titlul *cedarea folosinței
+ * bunurilor*, and art. 85 alin. (1) treats that taxpayer as a category of its own; art. 83 alin. (4)
+ * moves the same person into a activitate independentă only **„începând cu anul fiscal în care numărul
+ * camerelor … este de peste 7”**, and art. 68^3 alin. (12) is the route by which that activity is measured
+ * on the flat ratio.
+ *
  * So a 3-room register and a 9-room register are not two magnitudes of one calculation: they are two
  * titles, and the flat-ratio arithmetic PG-6h-1 built belongs to the second one only. Applying it to the
  * first would produce a figure under rules that are not this taxpayer's — the B-29 defect in a new
- * costume. D-CAZ-1 path (c) — that the 1–7 room case is *also* on a 30 % flat expense basis from 2026,
- * under art. 85 alin. (1)-(2) rather than art. 68^3 — is a separate rule with a separate citation, and no
- * art. 85 rule exists in this package. Refusing, and naming the title, is the honest answer.
+ * costume.
  *
- * The detector reads the resolved title and compares nothing. It does not read the count, the CAEN list,
- * the revenue amounts or the room boundary, and it is total: no profile, no outcome.
+ * **B-88 changed what this entry is for.** It used to be the permanent home of the 1–7 room case, refusing
+ * because no art. 85 rule existed in the package. `ACCOMMODATION_ART85_ROOMS_2026` now exists, so the
+ * entry fires only while the statement it makes is still true — for a fiscal year whose rule set does not
+ * carry that rule (FY2027 today), where refusing and naming the title remains the honest answer. When the
+ * assembler selected the art. 85 method, this sentence would be a lie about a rule that is sitting in the
+ * package the estimate is running on.
+ *
+ * The detector reads the resolved title and the resolved method and compares nothing else. It does not read
+ * the count, the CAEN list, the revenue amounts or the room boundary, and it is total: no profile, no
+ * outcome.
  */
 const accommodationTitleScenario: ScenarioSupport = {
   id: 'accommodation-title-cedarea-folosintei',
@@ -422,6 +452,8 @@ const accommodationTitleScenario: ScenarioSupport = {
     if (!facts.data?.profile) return null;
     if (effectiveActivityFamily(facts) !== 'cazare') return null;
     if (facts.accommodationIncomeTitle !== 'cedarea_folosintei') return null;
+    // B-88 — the rule exists for this year, so the title is no longer a reason to stop.
+    if (facts.incomeDeterminationMethod === 'short-term-rooms-art85') return null;
     return {};
   },
 };
@@ -450,9 +482,20 @@ const accommodationTitleScenario: ScenarioSupport = {
  * reason the person sees. This one is the backstop for the day the gross question is retired: resolving
  * B-80, building 6h-3 or adding the art. 85 rule must not be what lets two methods meet over one register.
  *
- * `detect` is total: no profile, no outcome; an empty register has no receipts to misattribute, and a
- * register with no receipts has no figure to get wrong either way. It reads the recorded status the same
- * way `selectYtd` and `selectDeductibleExpenses` do, and it reads no amount, no CAEN code and no room count.
+ * **What B-88 found when the art. 85 rule was added, recorded rather than papered over.** A third
+ * accommodation path now exists, and it does NOT widen this entry. The reason is that the 1,7 × was never
+ * an arithmetic accident waiting to be repeated — it is prevented structurally in `domain/tax.ts`, where
+ * the flat leg is resolved before the leg list exists and the list is built to exactly one entry (zero
+ * entries for art. 85, whose net is art. 155 alin. (1) lit. e), not lit. b)). Adding a method cannot add a
+ * second leg, and `domain/tax.singleLeg.test.ts` now pins that for the art. 85 path too. So the thing this
+ * entry guards — two legs computed from one revenue — is not reachable from the new path.
+ *
+ * What the new path does inherit is the OTHER half of the gap, and it is still open as B-89: a `Revenue`
+ * record carries no attribution, so a `cazare` register that also holds receipts from a different activity
+ * would be measured wholly under art. 85. That risk is not new — the classifier already applies the
+ * declared family's rules to every expense in the register — but the art. 85 path makes it visible for the
+ * first time, and it is stated here so the next task does not read a computed figure as proof the register
+ * was attributable.
  */
 const accommodationAttributionScenario: ScenarioSupport = {
   id: 'accommodation-method-attribution-missing',
@@ -462,9 +505,9 @@ const accommodationAttributionScenario: ScenarioSupport = {
   detect(facts) {
     if (!facts.data?.profile) return null;
     if (facts.incomeDeterminationMethod !== 'accommodation-flat-ratio') return null;
-    // 1–7 camere is a different title, and the entry above owns it. Leaving both firing would put two
-    // refusals on one register and make the reader guess which one the app means.
-    if (facts.accommodationIncomeTitle === 'cedarea_folosintei') return null;
+    // B-88: keyed to the art. 68^3 method, not to the presence of any flat gross. An art. 85 register is a
+    // different title and a different basin, and the entries above own it — leaving this one firing there
+    // too would put two refusals on one register and make the reader guess which one the app means.
     const receipts = facts.data.revenues.filter((r) => r.status === 'inregistrata');
     if (receipts.length === 0) return null;
     return {};

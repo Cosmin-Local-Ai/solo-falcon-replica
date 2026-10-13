@@ -18,6 +18,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { fixedInstant } from '../test/fixedInstant';
 import { pinClock, unpinClock } from '../test/clock';
 import { buildDashboardData, getTaxEstimate } from './dashboard';
+import { lei } from '../domain/money';
 import { seedData } from './seed';
 import type { AppData } from './types';
 
@@ -101,15 +102,67 @@ describe('a cazare profile with no room count stays unknown, and no title is ass
 });
 
 describe('the room count decides which refusal a cazare register gets, from stored data (acceptance 2)', () => {
-  it('3 rooms for the declared year refuses on the title', async () => {
+  it('3 rooms for the declared year is no longer refused at the scenario layer (B-88)', () => {
+    // The title refusal used to be this register's answer because the package carried no art. 85 rule. It
+    // carries one now, so the assembler runs the register and the engine measures it. What the engine still
+    // refuses is the CASS ladder — see the next case — and that is a different refusal with a different
+    // shape: an engine `review_required`, not a scenario refusal.
+  });
+
+  it('3 rooms computes once the other five ladder categories are declared, and the lit. e) line is the app\'s own net', async () => {
+    pinClock(fixedInstant());
+    const data = profileData({
+      activityFamily: 'cazare',
+      accommodationRoomCounts: [{ fiscalYear: 2026, rooms: 3 }],
+      // Five declared zeros. A declared zero is a fact the person gave; an empty box is not, and art. 170
+      // alin. (4) sums across all six litera — B-41. The sixth is deliberately left blank: the app computes
+      // it from the register under art. 85 alin. (2), and it is the point of this case.
+      cassLadderYears: [
+        {
+          fiscalYear: 2026,
+          proprietateIntelectuala: lei(0),
+          asocierePersoanaJuridica: lei(0),
+          activitatiAgricole: lei(0),
+          investitii: lei(0),
+          alteSurse: lei(0),
+          cedareaSursa: 'patrimoniu_personal',
+        },
+      ],
+    });
+    const estimate = await getTaxEstimate(data, '2026-10-31');
+    if (estimate.basis.kind === 'refused') throw new Error('the art. 85 register must not be refused');
+    if (estimate.status !== 'computed') throw new Error(`expected a computed figure, got: ${'reason' in estimate ? estimate.reason : '?'}`);
+    // The engine ran the art. 85 leg, not the sistem-real one: the flat line is labelled with art. 85, and
+    // the ladder ran on the net the engine determined rather than on a declared amount.
+    const labels = estimate.lines.map(l => l.label);
+    expect(labels).toContain('Venit net art. 85');
+    expect(labels).toContain('Cheltuieli forfetare 30 % (art. 85 alin. (2))');
+    expect(labels).toContain('Impozit art. 85 (10 %, impozitul fiind final)');
+    expect(labels).not.toContain('Cheltuieli deductibile');
+    // No CAS on rent income, and no art. 170 alin. (1) CASS either: the register supplies no
+    // art. 155 alin. (1) lit. b) source.
+    expect(estimate.lines.find(l => l.label === 'CAS (25%)')?.value).toBe(0);
+    expect(estimate.lines.find(l => l.label === 'CASS (10%)')?.value).toBe(0);
+    // The ladder ran on the net the engine determined, and the demo register's letting net is BELOW the
+    // art. 170 alin. (2) threshold of 6 salarii minime brute (2.430.000 bani), so nothing is owed on this
+    // basin at all and the base it reports is 0 — not the net, and not the 6-SM rung. The rung cases live in
+    // `domain/art85.rooms.test.ts`, where the register is sized to cross each threshold.
+    expect(estimate.bases.bazaDeCalculCassArt155LitCH).toBe(0);
+  });
+
+  it('3 rooms with the ladder left unanswered refuses the ladder, not the income tax', async () => {
     pinClock(fixedInstant());
     const data = profileData({
       activityFamily: 'cazare',
       accommodationRoomCounts: [{ fiscalYear: 2026, rooms: 3 }],
     });
     const estimate = await getTaxEstimate(data, '2026-10-31');
-    if (estimate.basis.kind !== 'refused') throw new Error('expected a refused basis');
-    expect(estimate.basis.scenario.id).toBe('accommodation-title-cedarea-folosintei');
+    if (estimate.basis.kind === 'refused') throw new Error('the register itself is not refused');
+    if (estimate.status !== 'review_required') throw new Error('expected the ladder to refuse');
+    // It names the litera that are missing rather than defaulting them — the B-41 rule, now reached through
+    // a figure the app computed rather than through a declared amount.
+    expect(estimate.reason).toContain('lipsesc 5');
+    expect(estimate.reason).toContain('art. 170 alin. (4)');
   });
 
   it('9 rooms for the declared year refuses on the gross instead', async () => {

@@ -8,22 +8,24 @@ import { ruleSetDigest } from './ruleSetDigest';
  * `releaseId` and `createdAt` used to be the whole identity, and neither moved across the Phase 3 (CAS),
  * Phase 4 (CASS) and Phase 5 (income tax) corrections: the arithmetic changed, the identity did not. Two
  * snapshots carrying `PFA_2026_SYSTEM_REAL` could therefore encode different law. `contentHash` is what
- * closes that — it is the SHA-256 of the canonical serialisation of the 48 rules this release names
+ * closes that — it is the SHA-256 of the canonical serialisation of the 51 rules this release names
  * (`./ruleSetDigest`), so any change to a formula-bearing parameter produces a different release.
  *
  * `createdAt` is now a real instant, not the effective date repeated. It is the commit instant of the
- * last change to this rule set's content — the PG-6h-1 addition of `ACCOMMODATION_68X3_2026` (art. 68^3,
- * 2026-10-11), which added a rule and therefore moved the content hash; before that it was `431afaf`
- * (TASK 2d, 2026-10-09T09:05:44+03:00), and the last change to an arithmetic parameter before that was
- * `1583d9e` (TASK 2a, which added the 39 art. 68 rules). Derivation and the full history are recorded in
+ * last change to this rule set's content — the B-88 addition of `ACCOMMODATION_ART85_ROOMS_2026` (art. 85,
+ * 2026-10-13), which added a rule and therefore moved the content hash; before that it was the PG-6h-2
+ * accommodation-facts change (2026-10-12), and before that the PG-6h-1 addition of
+ * `ACCOMMODATION_68X3_2026` (art. 68^3, 2026-10-11). Derivation and the full history are recorded in
  * `docs/ai/phases/20_rule_release_immutability.md` §4. `effectiveFrom: '2026-01-01'` is when the law
  * bites; `createdAt` is when this record was made. A test now pins that they differ.
  *
- * PG-6h-1 moved `version` from 1 to 2 for one reason: the rule set grew, so `contentHash` moved, and the
- * governance in `docs/ai/phases/20_rule_release_immutability.md` §6 makes the version a *consequence* of
+ * PG-6h-1 moved `version` from 1 to 2, PG-6h-2 to 3 and B-88 to 4, each time for one reason: the rule set
+ * grew, so `contentHash` moved, and the governance in
+ * `docs/ai/phases/20_rule_release_immutability.md` §6 makes the version a *consequence* of
  * a content change rather than a display number. No existing rule was edited — `CAS_2026`, `CASS_2026`,
- * `INCOME_TAX_2026` and the 39 deductibility rules keep their parameters, citations and `version: 1`
- * byte-for-byte; the registry's per-rule digest check would have thrown otherwise.
+ * `INCOME_TAX_2026`, `ACCOMMODATION_68X3_2026` and the 39 deductibility rules keep their parameters,
+ * citations and `version: 1` byte-for-byte; the registry's per-rule digest check would have thrown
+ * otherwise.
  */
 export const PFA_2026_RELEASE: RuleRelease = {
   releaseId: 'PFA_2026_SYSTEM_REAL',
@@ -32,7 +34,7 @@ export const PFA_2026_RELEASE: RuleRelease = {
   entityType: 'PFA',
   taxYear: 2026,
   lifecycle: 'ACTIVE',
-  version: 3,
+  version: 4,
   contentHash: ruleSetDigest(PFA_2026_SYSTEM_REAL_PACKAGE),
   ruleIds: [
     'PFA_2026_TAX_REFERENCE',
@@ -45,6 +47,12 @@ export const PFA_2026_RELEASE: RuleRelease = {
     // FY2026 incomes). Its own regime, so none of the three `taxRegime` lookups in tax.ts can see or be
     // shadowed by it. See docs/ai/phases/37_pg6h1_art68x3_arithmetic.md.
     'ACCOMMODATION_68X3_2026',
+    // B-88 — the art. 85 flat-ratio rule for 1–7 rooms let pe termen scurt in a personal dwelling (Legea
+    // 239/2025 art. XII pct. 10, from FY2026 incomes). A SECOND flat-ratio regime, deliberately not a reuse
+    // of 'accommodation-flat-ratio': same 30 %, different income category (art. 155 alin. (1) lit. e), not
+    // lit. b)), different gross rule (cash basis, commission outside the gross), different contribution
+    // route (the art. 170 alin. (4) cumul, base = the rung), different citations.
+    'ACCOMMODATION_ART85_ROOMS_2026',
     // PG-6e — the Titlul II amortisation figures a Titlul IV PFA inherits through art. 68 alin. (4) lit. d).
     // Its own regime, so it is read only by `domain/fiscal/depreciation.ts` and cannot be mistaken for an
     // art. 68 treatment or for a contribution rule. See docs/ai/phases/43_pg6e_fixed_assets.md.
@@ -99,7 +107,7 @@ export const PFA_2026_RELEASE: RuleRelease = {
   status: 'SAFE_ACTIVATION',
   effectiveFrom: '2026-01-01',
   effectiveTo: null,
-  createdAt: '2026-10-12T12:56:28+03:00',
+  createdAt: '2026-10-13T12:00:00+03:00',
   evidence: [
     // Cod fiscal, consolidated (Portal Legislativ doc 312601, consolidation history newest 08.08.2026)
     // — art. 68, 118, 122 alin. (3), 123 alin. (1), 135^1 alin. (3), 148 alin. (2), 170 alin. (1),

@@ -139,9 +139,27 @@ describe('the entry stays narrow, total, and free of inference', () => {
     expect(ENTRY.detect(factsFor({}, {}, [receipt({ status: 'annulata' as never })]))).toBeNull();
   });
 
-  it('1–7 camere is a different title, and the title entry owns it alone', () => {
-    const facts = factsFor({}, { accommodationIncomeTitle: 'cedarea_folosintei' });
+  it('the art. 85 method is not this entry\'s register — a different title, a different basin', () => {
+    // B-88. An art. 85 register is *cedarea folosinței bunurilor* (art. 155 alin. (1) lit. e)), and
+    // `domain/tax.ts` gives it no lit. b) leg at all, so there is no pair of legs over one revenue for this
+    // entry to refuse. The entries above own that register.
+    const facts = factsFor(
+      { accommodationRoomCounts: [{ fiscalYear: 2026, rooms: 3 }] },
+      { accommodationIncomeTitle: 'cedarea_folosintei', incomeDeterminationMethod: 'short-term-rooms-art85' },
+    );
     expect(ENTRY.detect(facts)).toBeNull();
+  });
+
+  it('a cedarea title measured under art. 68^3 is still this entry\'s register (B-88, alin. (1) carve-out)', () => {
+    // The title used to be the suppression, and B-88 removed it. art. 85 alin. (1) excludes „cei care
+    // realizează venituri din activități independente pentru care sunt aplicabile prevederile art. 68^3”, so
+    // a person in the 1–7 room range who has declared they are a tourism operator is measured under
+    // art. 68^3 — and a 68^3 register over receipts is exactly the one whose receipts cannot be split.
+    const facts = factsFor(
+      { accommodationRoomCounts: [{ fiscalYear: 2026, rooms: 3 }], accommodationTourismEligibility: 'da' },
+      { accommodationIncomeTitle: 'cedarea_folosintei' },
+    );
+    expect(ENTRY.detect(facts)).not.toBeNull();
   });
 
   it('detect is total: no profile, no revenues array, no crash', () => {

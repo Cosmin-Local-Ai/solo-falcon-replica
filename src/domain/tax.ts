@@ -63,6 +63,17 @@ export interface TaxCalculationInput {
    */
   flatRatioGross?: Bani | null;
   /**
+   * B-88 — WHICH flat-ratio article that gross is a gross of.
+   *
+   * The number cannot say it: art. 68^3 alin. (2) and art. 85 alin. (2) both take 30 % of a gross, and the
+   * two articles then send the net to different contribution basins (art. 155 alin. (1) lit. b) measured
+   * under art. 170 alin. (1), versus lit. e) feeding the cumul at art. 170 alin. (4) lit. c) where the base
+   * is the rung). The assembler decided which one applies, from facts the person declared; the engine reads
+   * that decision rather than making its own. Absent means a call site that predates B-88 — a hand-built
+   * fixture or a stored snapshot — and for those the only flat method that has ever existed is art. 68^3.
+   */
+  flatRatioMethod?: IncomeDeterminationMethodTag | null;
+  /**
    * TASK 6: the release the calculation is bound to, or `null` when this build registers none for the
    * profile's fiscal year. `null` makes the engine refuse instead of writing a snapshot that names no law
    * — the old behaviour was to hand in the 2026 release whatever the year said, which is how a call site
@@ -142,7 +153,7 @@ export interface TaxAmountBases {
  * methods over one source are not two legs — that is defect B-85, and the method gate in
  * `computeTaxEstimate` is what keeps the list at one entry per register.
  */
-export type IncomeDeterminationMethodTag = 'sistem-real' | 'accommodation-flat-ratio';
+export type IncomeDeterminationMethodTag = 'sistem-real' | 'accommodation-flat-ratio' | 'short-term-rooms-art85';
 
 export interface ContributionLeg {
   method: IncomeDeterminationMethodTag;
@@ -248,7 +259,7 @@ export const CASS_FLAG_REVIEW_REASON =
   + 'rămâne valoarea calculată, dar nu poate fi prezentată ca o scutire dovedită.';
 
 export async function computeTaxEstimate(input: TaxCalculationInput): Promise<TaxEstimateResult> {
-  const { inputs, profile, revenues, expenses, revenuesNet, expensesNet, expenseBase, flatRatioGross, ruleRelease, rules } = input;
+  const { inputs, profile, revenues, expenses, revenuesNet, expensesNet, expenseBase, flatRatioGross, flatRatioMethod, ruleRelease, rules } = input;
   // `leiText`, not the raw value: these sentences are read by a person, and a person reads leu.
   if (!Number.isFinite(revenues) || revenues < 0) return rr(`Veniturile trebuie să fie >= 0, s-a obținut ${leiText(revenues)}`);
   if (!Number.isFinite(expenses) || expenses < 0) return rr(`Cheltuielile trebuie să fie >= 0, s-a obținut ${leiText(expenses)}`);
@@ -275,6 +286,10 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // year-scoping guard. A fiscal year with no art. 68^3 rule (FY2027 today) must refuse a 68^3 gross
   // rather than compute it under 2026 percentages it was never given.
   const flatRatioRule = applicable.find((r) => r.taxRegime === 'accommodation-flat-ratio');
+  // B-88: the art. 85 rule for 1–7 rooms let pe termen scurt. A FIFTH regime string, and the reason it is
+  // not a reuse of the one above is the whole point of this block: the two articles share a percentage and
+  // share nothing else, and a single lookup would resolve whichever ruleId sorts first.
+  const shortTermRoomsRule = applicable.find((r) => r.taxRegime === 'short-term-rooms-flat-ratio');
   if (!casRule) return rr(`Regula CAS nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}`, lines);
   if (!cassRule) return rr(`Regula CASS nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}`, lines);
   if (!incomeTaxRule) return rr(`Regula de impozit pe venit nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}`, lines);
@@ -383,52 +398,107 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   //     INCOME TAX only: contributions cumulate, the tax does not. So this tax is 10 % of this net and
   //     is not routed through the art. 118 alin. (2) deduction composition below.
   let flatLeg: FlatRatioLeg | null = null;
+  // B-88 — the art. 85 leg. Same shape, separate rule, separate calculator, separate citations.
+  let roomsLeg: FlatRatioLeg | null = null;
   if (typeof flatRatioGross === 'number') {
-    if (!flatRatioRule) {
-      return rr(
-        `Regula de stabilire a venitului din prestarea de servicii de cazare (art. 68^3) nu a fost găsită ` +
-          `pentru anul fiscal ${inputs.fiscalYear}; un venit brut din art. 68^3 nu poate fi calculat după ` +
-          'regulile unui alt an.',
-        lines,
-      );
+    // Which article this gross belongs to is read off the operand, never re-derived here: the assembler
+    // decided it once from the declared room count and the declared answer to the art. 85 alin. (1)
+    // exclusion. Absent means a call site that predates B-88, and for those art. 68^3 is the only flat
+    // method that has ever existed — the default is stated, not implied by a fallthrough.
+    const flatMethod: IncomeDeterminationMethodTag =
+      flatRatioMethod === 'short-term-rooms-art85' ? 'short-term-rooms-art85' : 'accommodation-flat-ratio';
+    if (flatMethod === 'short-term-rooms-art85') {
+      if (!shortTermRoomsRule) {
+        return rr(
+          `Regula de stabilire a venitului din închirierea pe termen scurt a 1–7 camere în locuință proprietate ` +
+            `personală (art. 85) nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}; un venit brut din ` +
+            'art. 85 nu poate fi calculat după regulile unui alt an.',
+          lines,
+        );
+      }
+      const roomsRes = calculatorRegistry['calc-short-term-rooms-flat-ratio'](shortTermRoomsRule, {
+        gross: flatRatioGross,
+      });
+      if ('reviewRequired' in roomsRes) return rr(roomsRes.reason, lines);
+      if (typeof roomsRes.determinedNet !== 'number') {
+        return rr(
+          'Regula art. 85 nu a raportat venitul net determinat; compoziția nu îl recalculează pe cont propriu.',
+          lines,
+        );
+      }
+      roomsLeg = { gross: flatRatioGross, net: roomsRes.determinedNet, tax: roomsRes.value };
+    } else {
+      if (!flatRatioRule) {
+        return rr(
+          `Regula de stabilire a venitului din prestarea de servicii de cazare (art. 68^3) nu a fost găsită ` +
+            `pentru anul fiscal ${inputs.fiscalYear}; un venit brut din art. 68^3 nu poate fi calculat după ` +
+            'regulile unui alt an.',
+          lines,
+        );
+      }
+      const flatRes = calculatorRegistry['calc-accommodation-flat-ratio'](flatRatioRule, {
+        gross: flatRatioGross,
+      });
+      if ('reviewRequired' in flatRes) return rr(flatRes.reason, lines);
+      if (typeof flatRes.determinedNet !== 'number') {
+        // Defensive, and reported rather than assumed: the composition needs the net the rule determined,
+        // and re-deriving it here by subtracting a ratio this file does not hold is exactly how a figure
+        // and the sentence beside it start disagreeing.
+        return rr(
+          'Regula art. 68^3 nu a raportat venitul net determinat; compoziția nu îl recalculează pe cont propriu.',
+          lines,
+        );
+      }
+      flatLeg = { gross: flatRatioGross, net: flatRes.determinedNet, tax: flatRes.value };
     }
-    const flatRes = calculatorRegistry['calc-accommodation-flat-ratio'](flatRatioRule, {
-      gross: flatRatioGross,
-    });
-    if ('reviewRequired' in flatRes) return rr(flatRes.reason, lines);
-    if (typeof flatRes.determinedNet !== 'number') {
-      // Defensive, and reported rather than assumed: the composition needs the net the rule determined,
-      // and re-deriving it here by subtracting a ratio this file does not hold is exactly how a figure
-      // and the sentence beside it start disagreeing.
-      return rr(
-        'Regula art. 68^3 nu a raportat venitul net determinat; compoziția nu îl recalculează pe cont propriu.',
-        lines,
-      );
-    }
-    flatLeg = { gross: flatRatioGross, net: flatRes.determinedNet, tax: flatRes.value };
   }
+  // One label for the ring-fenced tax, so the three return paths below cannot print the wrong article.
+  const flatTaxLabel =
+    roomsLeg !== null
+      ? 'Impozit art. 85 (10 %, impozitul fiind final)'
+      : 'Impozit art. 68^3 (10 %, impozitul fiind final)';
 
   // THE GATE. One leg per source, and the operand the assembler supplied decides which one this register
   // is. `flatRatioGross` is attached by `estimateBasis.ts withFlatRatioGross` only when
-  // `selectIncomeDeterminationMethod` answered `accommodation-flat-ratio`, so its presence IS the method
+  // `selectIncomeDeterminationMethod` answered a flat-ratio method, so its presence IS the method
   // decision — read here, not re-derived. When it is present the sistem-real operands do not become a leg:
   // they are the same receipts seen twice, and adding them would be the 1,7 × again.
+  //
+  // B-88 added a THIRD possibility, and it is the one that had to be thought about rather than copied.
+  // An art. 85 register supplies **no lit. b) leg at all**. art. 155 alin. (1) puts *cedarea folosinței
+  // bunurilor* at lit. e), not lit. b), so the art. 85 net never joins the cumulated amount that art. 148
+  // alin. (3) and art. 170 alin. (1) measure — it goes to the art. 170 alin. (4) cumul instead, below.
+  // Putting it in the leg list beside the sistem-real difference would have been the 1,7 × in a new
+  // costume; putting it in the leg list alone would have made it a lit. b) source, which is the same
+  // mistake under a different sign. The list is empty for this method, and that is a statement about the
+  // law, not an omission: CAS is not owed on rent income, and art. 170 alin. (1) does not reach it.
   const legs: ContributionLeg[] =
-    flatLeg === null
-      ? [{ method: 'sistem-real', net: subBani(sistemRealGross, sistemRealExpenseBase) }]
-      : [{ method: 'accommodation-flat-ratio', net: flatLeg.net }];
+    roomsLeg !== null
+      ? []
+      : flatLeg !== null
+        ? [{ method: 'accommodation-flat-ratio', net: flatLeg.net }]
+        : [{ method: 'sistem-real', net: subBani(sistemRealGross, sistemRealExpenseBase) }];
+  // True whenever a flat-ratio method ran, whichever article supplied it. The art. 118 alin. (2) composition
+  // below must not run for either of them, and `legs[0].method` cannot express that for art. 85 — there is
+  // no leg to read.
+  const flatMethodRan = roomsLeg !== null || flatLeg !== null;
 
   // The three quantities every consumer reads, stated once per method so `gross - deductibleBase === net`
-  // holds on either branch and no surface has to know which method ran in order to read them. For the
-  // flat method the expense here is the deemed ratio, not a recorded cost: art. 68^3 alin. (2) replaces
-  // the register's expenses with it, which is precisely why the sistem-real expense leg is not run beside it.
-  const net = legs[0].net;
-  const gross = flatLeg === null ? sistemRealGross : flatLeg.gross;
+  // holds on either branch and no surface has to know which method ran in order to read them. For a flat
+  // method the expense here is the deemed ratio, not a recorded cost: art. 68^3 alin. (2) and art. 85
+  // alin. (2) each replace the register's expenses with it, which is precisely why the sistem-real expense
+  // leg is not run beside either.
+  const net = roomsLeg?.net ?? flatLeg?.net ?? subBani(sistemRealGross, sistemRealExpenseBase);
+  const gross = roomsLeg?.gross ?? flatLeg?.gross ?? sistemRealGross;
   const deductibleBase =
-    flatLeg === null ? sistemRealExpenseBase : subBani(flatLeg.gross, flatLeg.net);
-  const flatTax: Bani = flatLeg === null ? lei(0) : flatLeg.tax;
+    roomsLeg !== null
+      ? subBani(roomsLeg.gross, roomsLeg.net)
+      : flatLeg !== null
+        ? subBani(flatLeg.gross, flatLeg.net)
+        : sistemRealExpenseBase;
+  const flatTax: Bani = roomsLeg?.tax ?? flatLeg?.tax ?? lei(0);
 
-  if (flatLeg === null) {
+  if (flatLeg === null && roomsLeg === null) {
     lines.push({ label: 'Venit brut', value: gross });
     // B-16: this used to be `Math.min(deductibleBase, gross)`. That clamp forced the net to stay >= 0, so
     // a fiscal loss was UNREPRESENTABLE — an expense-heavy year came out as "no tax, no loss" and the
@@ -440,6 +510,10 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     lines.push({ label: 'Cheltuieli deductibile', value: deductibleBase });
     // `subBani`, not `-`: integer minus integer stays integer, and the Bani brand survives.
     lines.push({ label: 'Venit net din activitate', value: net });
+  } else if (roomsLeg !== null) {
+    lines.push({ label: 'Venit brut art. 85 (încasări în cursul anului fiscal)', value: gross });
+    lines.push({ label: 'Cheltuieli forfetare 30 % (art. 85 alin. (2))', value: deductibleBase });
+    lines.push({ label: 'Venit net art. 85', value: net });
   } else {
     lines.push({ label: 'Venit brut art. 68^3 (încasări)', value: gross });
     lines.push({ label: 'Cheltuieli forfetare 30 % (art. 68^3 alin. (2))', value: deductibleBase });
@@ -528,21 +602,47 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // lines rather than reporting a wrong number.
   if (inputs.socialInsuranceStatus === 'obligatoriu') {
     const ladderYear = cassLadderForYear(inputs.cassLadderYears, inputs.fiscalYear);
-    if (ladderYear !== undefined) {
+    // B-88 — the art. 85 net is a lit. e) amount this app COMPUTED, and art. 170 alin. (4) lit. c) names it
+    // by article: „venitul net pentru veniturile din cedarea folosinței bunurilor, stabilite potrivit
+    // art. 84-85”. So the ladder runs when either the person declared the six amounts or the engine holds
+    // one of them, and the rung it chooses is the base (art. 170 alin. (3)) — never the net itself.
+    //
+    // Two things this deliberately does not do. It does not merge the two CASS basins: the art. 85 net goes
+    // to the ladder and never to the art. 170 alin. (1) base, and the PFA's own net never enters the
+    // 6/12/24 test — a person with both has two parallel computations, which is what acceptance of this
+    // task exists to keep true. And it does not silently overwrite a declared amount: if the person typed a
+    // cedarea folosinței figure for this year and the engine computed a different one, two producers are
+    // claiming one figure, and the engine reports that rather than picking a winner.
+    const computedCedareNet = roomsLeg?.net;
+    if (ladderYear !== undefined || computedCedareNet !== undefined) {
+      const declaredCedare = ladderYear?.cedareaFolosinteiBunurilor;
+      if (computedCedareNet !== undefined && declaredCedare !== undefined && declaredCedare !== computedCedareNet) {
+        return rr(
+          `Venitul net din cedarea folosinței bunurilor pentru ${inputs.fiscalYear} are doi producători care nu ` +
+            `cad de acord: persoana a declarat ${leiText(declaredCedare)} lei, iar regula art. 85 a determinat ` +
+            `${leiText(computedCedareNet)} lei din încasările registrului. Scara de la art. 170 alin. (2)-(4) ` +
+            'cumulează o singură sumă per categorie, deci aplicația nu alege între ele.',
+          lines,
+        );
+      }
       const ladderRes = calculatorRegistry['calc-cass-ladder'](cassRule, {
         cassLadder: {
           amounts: {
-            proprietate_intelectuala: ladderYear.proprietateIntelectuala,
-            asociere_persoana_juridica: ladderYear.asocierePersoanaJuridica,
-            cedarea_folosintei_bunurilor: ladderYear.cedareaFolosinteiBunurilor,
-            activitati_agricole: ladderYear.activitatiAgricole,
-            investitii: ladderYear.investitii,
-            alte_surse: ladderYear.alteSurse,
+            proprietate_intelectuala: ladderYear?.proprietateIntelectuala,
+            asociere_persoana_juridica: ladderYear?.asocierePersoanaJuridica,
+            cedarea_folosintei_bunurilor: computedCedareNet ?? declaredCedare,
+            activitati_agricole: ladderYear?.activitatiAgricole,
+            investitii: ladderYear?.investitii,
+            alte_surse: ladderYear?.alteSurse,
           },
-          neimpozabil: ladderYear.neimpozabil,
-          cassRetinutLaSursa: ladderYear.cassRetinutLaSursa,
-          alteSurseArt114: ladderYear.alteSurseArt114,
-          cedareaSursa: ladderYear.cedareaSursa,
+          neimpozabil: ladderYear?.neimpozabil,
+          cassRetinutLaSursa: ladderYear?.cassRetinutLaSursa,
+          alteSurseArt114: ladderYear?.alteSurseArt114,
+          // Read as declared, never inferred. The gate inside `calcCassLadder` refuses a cedarea amount
+          // declared as the PFA's own activity (art. 83 alin. (1)), and an art. 85 register that carried
+          // that answer is exactly the contradiction the gate is for — the app does not repair it by
+          // overwriting the person's declaration with the opposite one.
+          cedareaSursa: ladderYear?.cedareaSursa,
         },
       });
       if ('reviewRequired' in ladderRes) return rr(ladderRes.reason, lines);
@@ -619,14 +719,19 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   }
 
   // B-85 — the second half of the gate. With no sistem-real leg there is no art. 118 alin. (2) composition
-  // to run: alin. (6) settles the art. 68^3 tax on its own net, „impozitul fiind final", and the
+  // to run: alin. (6) of each flat article settles the tax on its own net, „impozitul fiind final", and the
   // alin. (2^2)-(2^3) ratios apportion a deduction onto the SISTEM-REAL base, which this register does not
   // have. Returning here is what makes "the sistem-real leg does not run" true of the code path and not
   // merely true of the arithmetic — a reader who deletes the gate above still cannot reach a 1,7 × base,
   // because there is no place left for a second leg to be added.
-  if (legs[0].method === 'accommodation-flat-ratio') {
+  //
+  // B-88 widened the test from `legs[0].method` to "a flat-ratio method ran", because an art. 85 register
+  // has no leg to read: its net is art. 155 alin. (1) lit. e), not lit. b), so it never enters the leg list
+  // at all. The guard is on the method, not on the presence of a leg — which is the difference between
+  // guarding the arithmetic and guarding the code path.
+  if (flatMethodRan) {
     const total = sumBani([casRes.value, cassValue, cassLadderValue, flatTax]);
-    lines.push({ label: 'Impozit art. 68^3 (10 %, impozitul fiind final)', value: flatTax });
+    lines.push({ label: flatTaxLabel, value: flatTax });
     lines.push({ label: 'Total taxe', value: total });
     const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, rules: applicable, calculationLines: lines, output: { total } });
     return {
@@ -719,8 +824,8 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     }
     const total = sumBani([casRes.value, cassValue, cassLadderValue, flatTax]);
     lines.push({ label: 'Impozit pe venit (fără bază impozabilă)', value: lei(0) });
-    if (flatLeg !== null) {
-      lines.push({ label: 'Impozit art. 68^3 (10 %, impozitul fiind final)', value: flatTax });
+    if (flatLeg !== null || roomsLeg !== null) {
+      lines.push({ label: flatTaxLabel, value: flatTax });
     }
     lines.push({ label: 'Total taxe', value: total });
     const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, rules: applicable, calculationLines: lines, output: { total } });
@@ -738,12 +843,12 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   const incomeTaxRes = calculatorRegistry['calc-income-tax'](incomeTaxRule, { base: taxable });
   if ('reviewRequired' in incomeTaxRes) return rr(incomeTaxRes.reason, lines);
   lines.push({ label: 'Impozit pe venit (rată de bază 10%)', value: incomeTaxRes.value });
-  if (flatLeg !== null) {
-    // alin. (6) + alin. (11): this sum is 10 % of the 68^3 net and nothing else. It is not reduced by the
-    // CAS/CASS deductions the art. 118 composition above applies to the sistem-real source, because
-    // „impozitul fiind final" settles it on the net and the ring-fence runs on the tax, not the
+  if (flatLeg !== null || roomsLeg !== null) {
+    // alin. (6) + alin. (11) of the flat article: this sum is 10 % of that net and nothing else. It is not
+    // reduced by the CAS/CASS deductions the art. 118 composition above applies to the sistem-real source,
+    // because „impozitul fiind final" settles it on the net and the ring-fence runs on the tax, not the
     // contributions.
-    lines.push({ label: 'Impozit art. 68^3 (10 %, impozitul fiind final)', value: flatTax });
+    lines.push({ label: flatTaxLabel, value: flatTax });
   }
   // Art. 66 was already applied to each of the three sums, inside their calculators. Summing the rounded
   // integers is exact, and it is why no second rounding can happen anywhere downstream.
@@ -762,11 +867,13 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
 /**
  * The `bases` block, built in one place so the return paths cannot report different quantities.
  *
- * `venitulNetCumulatPentruContributii` is written only when a second lit. b) SOURCE was actually in play.
+ * `venitulNetCumulatPentruContributii` is written whenever the register is NOT a single lit. b) source.
  * Writing it always would put two numbers on screen for one quantity whenever there is only one source —
  * and a consumer that reads the wrong one of two always-present fields is a defect waiting to be picked.
- * B-85 is why the test is `legs.length > 1` and not "a flat ratio was supplied": one register is one leg,
- * whichever method determined it.
+ * B-85 is why the test is the leg count and not "a flat ratio was supplied": one register is one leg,
+ * whichever method determined it. B-88 adds the other side of the same test: an art. 85 register supplies
+ * no lit. b) leg at all, and the amount the engine measured CAS and CASS on is then zero — a row that read
+ * the rent net instead would test a different amount than the engine did.
  */
 function contributionBases(
   venitulBrut: Bani,
@@ -775,8 +882,25 @@ function contributionBases(
   legs: readonly ContributionLeg[],
   cassLadderBase?: Bani,
 ): TaxAmountBases {
-  const bases: TaxAmountBases = { venitulBrut, cheltuieliDeductibile, venitulNetDinActivitate };
-  if (legs.length > 1) bases.venitulNetCumulatPentruContributii = cumulateContributionBase(legs);
+  // B-88 — the one field whose meaning the art. 85 register changes. `venitulNetDinActivitate` is the
+  // art. 155 alin. (1) lit. b) net: it is what art. 148 alin. (3) and art. 170 alin. (1) measure, and
+  // `data/dashboard.ts buildThresholdBases` reads it for the CAS and CASS threshold rows. A register
+  // determined under art. 85 supplies no lit. b) net at all — its net is art. 155 alin. (1) lit. e), which
+  // goes to the art. 170 alin. (4) cumul instead — so the amount beside that name is 0, not the letting net
+  // the caller holds. Reporting the letting net here would put a row and a figure in disagreement about the
+  // same money, which is the B-71 defect this field exists to prevent.
+  const bases: TaxAmountBases = {
+    venitulBrut,
+    cheltuieliDeductibile,
+    venitulNetDinActivitate: legs.length === 0 ? lei(0) : venitulNetDinActivitate,
+  };
+  if (legs.length !== 1) {
+    // B-88: with NO lit. b) source the cumulated amount the contributions were measured on is zero, and
+    // the threshold rows have to read that zero rather than the rent net sitting beside it. Writing it is
+    // the B-71 discipline — a row and a figure disagreeing about the same money is the defect, not the
+    // extra field.
+    bases.venitulNetCumulatPentruContributii = cumulateContributionBase(legs);
+  }
   if (cassLadderBase !== undefined) bases.bazaDeCalculCassArt155LitCH = cassLadderBase;
   return bases;
 }

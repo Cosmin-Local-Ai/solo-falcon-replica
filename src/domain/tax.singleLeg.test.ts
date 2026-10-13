@@ -32,7 +32,7 @@ import {
 } from './tax';
 import type { TaxInputsReference } from './derived';
 import type { ExpenseBaseWithVat } from './fiscal/vat';
-import type { PfaProfile } from './models';
+import type { PfaProfile, CassLadderYear } from './models';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal/package2026';
 import { PFA_2026_RELEASE } from './fiscal/release2026';
 import { lei, type Bani } from './money';
@@ -108,12 +108,16 @@ function engine(over: {
   revenuesNet?: Bani;
   expensesNet?: Bani;
   flatRatioGross?: Bani | null;
+  /** B-88 — which flat article the gross belongs to. Absent means the art. 68^3 default. */
+  flatRatioMethod?: 'accommodation-flat-ratio' | 'short-term-rooms-art85' | null;
+  /** B-88 — the five ladder categories an art. 85 register cannot supply from its own receipts. */
+  ladderYears?: CassLadderYear[];
   /** PG-6f (D-VAT-2) — pass a divergent pair to reach the ordering refusal instead of a figure. */
   expenseBase?: ExpenseBaseWithVat;
 }) {
   const expensesNet = over.expensesNet ?? RECORDED_EXPENSES;
   return computeTaxEstimate({
-    inputs: inputs(),
+    inputs: inputs({ cassLadderYears: over.ladderYears ?? [] }),
     profile: profile(),
     revenues: over.revenues ?? RECEIPTS,
     expenses: over.expenses ?? RECORDED_EXPENSES,
@@ -124,6 +128,7 @@ function engine(over: {
     // ordering question passes `expenseBase` with the two figures apart.
     expenseBase: over.expenseBase ?? { netFirst: expensesNet, grossFirst: expensesNet, divergent: false },
     flatRatioGross: over.flatRatioGross ?? null,
+    flatRatioMethod: over.flatRatioMethod ?? null,
     ruleRelease: PFA_2026_RELEASE,
     rules: PFA_2026_SYSTEM_REAL_PACKAGE,
   });
@@ -254,6 +259,66 @@ describe('B-85 keeps the contributions cumulation, because two SOURCES still cum
     const oneRegister: readonly ContributionLeg[] = [{ method: 'accommodation-flat-ratio', net: FLAT_NET }];
     expect(cumulateContributionBase(oneRegister)).toBe(FLAT_NET);
     expect(cumulateContributionBase(oneRegister)).not.toBe(DEFECT_CUMULATED);
+  });
+});
+
+describe('B-88 — an art. 85 register supplies no art. 155 alin. (1) lit. b) leg at all', () => {
+  /**
+   * The third accommodation path, pinned on the same fixture the B-85 cases use so the comparison is exact.
+   *
+   * A 1–7 room letting is *cedarea folosinței bunurilor* — art. 155 alin. (1) lit. e), not lit. b) — so the
+   * engine's leg list is empty for it, and the amount art. 148 alin. (3) and art. 170 alin. (1) would be
+   * handed is zero. The net does not disappear: it goes to the art. 170 alin. (4) cumul, where it selects a
+   * rung. Same 130.000 lei of receipts as the 68^3 cases above, and the same money produces a different
+   * contribution because it enters through a different litera.
+   */
+  const fiveZeros: CassLadderYear[] = [
+    {
+      fiscalYear: 2026,
+      proprietateIntelectuala: lei(0),
+      asocierePersoanaJuridica: lei(0),
+      activitatiAgricole: lei(0),
+      investitii: lei(0),
+      alteSurse: lei(0),
+      cedareaSursa: 'patrimoniu_personal',
+    },
+  ];
+
+  it('the leg list is empty, so the lit. b) base is zero and the ladder carries the net instead', async () => {
+    const res = await engine({ flatRatioGross: RECEIPTS, flatRatioMethod: 'short-term-rooms-art85', ladderYears: fiveZeros });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+
+    // The quantity the B-85 cases above pin at FLAT_NET is zero here, and that is the law rather than an
+    // omission: no lit. b) source exists in this register.
+    expect(res.bases.venitulNetDinActivitate).toBe(lei(0));
+    expect(res.bases.venitulNetDinActivitate).not.toBe(FLAT_NET);
+    expect(res.bases.venitulNetCumulatPentruContributii).toBe(lei(0));
+    expect(res.bases.venitulNetCumulatPentruContributii).not.toBe(DEFECT_CUMULATED);
+
+    // CAS: no lit. b) amount, so art. 148 alin. (1) is not engaged. CASS: the art. 170 alin. (1) route is
+    // zero, and the ladder runs on the letting net — 91.000 lei cumulated is at least 12 SM (48.600) and
+    // below 24 SM (97.200), so the base is the 12-SM rung, not the net.
+    expect(line(res, 'CAS (25%)')!.value).toBe(lei(0));
+    expect(line(res, 'CASS (10%)')!.value).toBe(lei(0));
+    expect(res.bases.bazaDeCalculCassArt155LitCH).toBe(lei(48_600));
+    expect(line(res, 'CASS pe veniturile')!.value).toBe(lei(4_860));
+
+    // One income tax, on the art. 85 net: 10 % × 91.000, „impozitul fiind final" — and the sistem-real
+    // composition never ran.
+    expect(line(res, 'Impozit art. 85')!.value).toBe(lei(9_100));
+    expect(res.lines.filter((l) => l.label.startsWith('Impozit'))).toHaveLength(1);
+    expect(line(res, 'Impozit pe venit')).toBeUndefined();
+    expect(line(res, 'Cheltuieli deductibile')).toBeUndefined();
+    expect(res.output.total).toBe(lei(13_960));
+  });
+
+  it('the same register with the ladder left unanswered withholds the figure instead of guessing a base', async () => {
+    const res = await engine({ flatRatioGross: RECEIPTS, flatRatioMethod: 'short-term-rooms-art85' });
+    expect(res.status).toBe('review_required');
+    if (res.status !== 'review_required') return;
+    expect(res.reason).toContain('art. 170 alin. (4)');
+    expect(line(res, 'Impozit art. 85')).toBeUndefined();
   });
 });
 

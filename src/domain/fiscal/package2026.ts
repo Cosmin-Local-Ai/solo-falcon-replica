@@ -370,6 +370,200 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     // Re-verified 2026-10-11 against the 08.08.2026 consolidation and Legea 239/2025 in research/38.
     verifiedAt: '2026-10-11',
   },
+  // ── B-88: art. 85 — the 1–7 room short-term regime. The same 30 % as art. 68^3, in a different title.
+  //
+  // This rule exists because the two 30 % rules are not one rule. CF art. 85 was WHOLLY REPLACED by
+  // Legea 239/2025 art. XII pct. 10 (MO 1160/15.12.2025) — „Articolul 85 se modifică și va avea următorul
+  // cuprins” — and applies from the FY2026 incomes. Its subject is a natural person who lets **1–7 camere
+  // pe termen scurt situate în locuințe proprietate personală**, which art. 83 alin. (2) places under
+  // *cedarea folosinței bunurilor*, not a tourism operator's register under art. 68^3. `docs/ai/research/
+  // 44_art85_short_term_rooms_1_7.md` §1 is the source for the verbatim text; §3 is the source for the scope
+  // correction below.
+  //
+  // **The scope correction, stated here because it is the thing a later reader will otherwise get wrong:**
+  // the 30 % belongs to this sub-category and to art. 68^3 only. Every OTHER *cedarea folosinței* income —
+  // long-term lease, sublease, movable goods — keeps **20 %** (art. 84 alin. (3), art. 84^1 alin. (3), both
+  // amended by the same act to carve the short-term-rooms case out explicitly; ANAF Cluj CJR_DEC_10225/
+  // 18.05.2026 says so in terms). This package deliberately carries **no rule for the 20 % case**, so the
+  // 30 % below cannot be reached by ordinary rent income: there is no code path that applies a forfetar
+  // ratio to it. Adding one means a new rule with art. 84 alin. (3) as its citation, not a second parameter
+  // on this one.
+  //
+  // **What is NOT cited here, deliberately:** pre-2026 art. 85 (normă anuală de venit, 1–5 camere, with its
+  // own „30 %” at old alin. (4^2) meaning a *reduction of the normă* — a false friend, not an expense ratio)
+  // and art. 87 (Abrogat from 2026 incomes by L239/2025 art. XII pct. 11 — the former *cedarea folosinței*
+  // tax-establishment article, so any rule anchored there is dead).
+  {
+    ...PROVENANCE_2026,
+    ruleId: 'ACCOMMODATION_ART85_ROOMS_2026',
+    name: 'Venit din închirierea pe termen scurt a 1–7 camere în locuință proprietate personală — cotă forfetară 30 %, cota 10 % (art. 85)',
+    taxRegime: 'short-term-rooms-flat-ratio',
+    effectiveFrom: '2026-01-01',
+    effectiveTo: null,
+    parameters: [
+      {
+        id: 'expense_ratio',
+        label: 'Cotă forfetară de cheltuieli (procente din venitul brut)',
+        value: 30,
+        unit: 'percent',
+        // art. 85 alin. (2): „Venitul net anual … se determină prin deducerea din venitul brut a
+        // cheltuielilor determinate prin aplicarea cotei forfetare de 30% asupra venitului brut.” Same
+        // number as art. 68^3 alin. (2), different article, different title, different contribution route.
+        // It is an EXPENSE ratio: the net is 70 % of gross, and 30 is not a rate applied to gross.
+        description:
+          'art. 85 alin. (2): cheltuieli forfetare = 30 % din venitul brut, deci venitul net = 70 % din venitul brut. Nu este o cotă de impozitare. Celelalte venituri din cedarea folosinței bunurilor rămân la 20 % — art. 84 alin. (3) și art. 84^1 alin. (3), modificate prin același act pentru a scoate explicit închirierea pe termen scurt.',
+      },
+      {
+        id: 'tax_rate',
+        label: 'Cota de impozitare aplicată venitului net (procente)',
+        value: 10,
+        unit: 'percent',
+        // art. 85 alin. (6): „Impozitul anual datorat se calculează prin aplicarea cotei de 10% asupra
+        // venitului net anual, determinat potrivit alin. (2), impozitul fiind final.” The same article is
+        // anchored a second time at art. 123 alin. (2) as amended by L239/2025 art. XII pct. 16.
+        // „impozitul fiind final” is what makes the effective burden 7 % of gross: CAS și CASS nu se scad
+        // din această bază.
+        description:
+          'art. 85 alin. (6) (și art. 123 alin. (2)): 10 % asupra venitului net, „impozitul fiind final” — efectiv 7 % din venitul brut; CAS și CASS nu se scad din această bază.',
+      },
+      {
+        id: 'gross_basis',
+        label: 'Măsura venitului brut',
+        value: 'cash_receipts_in_fiscal_year',
+        unit: 'text',
+        // The difference from ordinary rent, and the second-most-likely way to get this rule wrong.
+        // art. 85 alin. (2): „Venitul brut reprezintă totalitatea sumelor în bani și/sau echivalentul în lei
+        // al veniturilor în natură **încasate în cursul anului fiscal**.” Ordinary rent is the contract rent
+        // „pentru fiecare an fiscal, indiferent de momentul încasării” (art. 84 alin. (1)-(2)). Using the
+        // contract rule here overstates the gross; using this rule there understates it.
+        description:
+          'art. 85 alin. (2): venit brut = sumele **încasate în cursul anului fiscal**. Nu regula contractului de la art. 84 alin. (1)-(2) („indiferent de momentul încasării”), care guvernează închirierea obișnuită.',
+      },
+      {
+        id: 'commission_excluded_from_gross',
+        label: 'Comisionul reținut: exclus din venitul brut, nu dedus după forfetar',
+        value:
+          'art. 85 alin. (3): „Nu se cuprinde în venitul brut comisionul reținut de către entitățile care facilitează închirierea … inclusiv interfețele electronice, cum ar fi o piață online, o platformă, un portal sau alte mijloace similare.” Este o reducere a BRUTULUI, nu o cheltuială deductibilă după forfetar: dacă comisionul ar fi scăzut după cota de 30 %, cifra ar fi alta. Aici textul nu are tensiunea din art. 68^3 alin. (3), pentru că articolul întreg are ca subiect o locuință proprietate personală — spre deosebire de art. 68^3, unde alin. (3) stă într-un articol al cărui subiect la alin. (1) este un operator economic din turism (B-80, research/38 §3).',
+        unit: 'text',
+        description:
+          'B-88. Spre deosebire de `gross_scope_open_question` de pe ACCOMMODATION_68X3_2026, aceasta nu este o întrebare deschisă: aceleași cuvinte, într-un articol al cărui subiect este chiar închirierea dintr-o locuință proprietate personală, nu mai au cele două lecturi. Aplicația nu adaugă și nu scade niciun comision din sume — înregistrările de venit păstrează sumele încasate (alin. (2)), iar un comision reținut de platformă nu a fost încasat, deci nu intră în brut.',
+      },
+      {
+        id: 'fx_basis',
+        label: 'Temeiul de conversie pentru veniturile în valută',
+        value: 'last_banking_day_before_collection',
+        unit: 'text',
+        // art. 85 alin. (4): „cursul de schimb valutar comunicat de Banca Națională a României în ultima zi
+        // bancară anterioară încasării”. Mechanically the same basis the Phase 10c ledger pass already
+        // implements for art. 68^3 alin. (4) (`fx/ledger.ts`, `payment_date_daily`), so the pass is reused,
+        // not reimplemented. Ordinary rent converts differently again — art. 84 alin. (3^1) curs mediu anual,
+        // art. 84^1 alin. (2) cursul din ziua precedentă plății.
+        description:
+          'art. 85 alin. (4): cursul BNR din ultima zi bancară anterioară fiecărei încasări. Închirierea obișnuită are alte temeiuri — art. 84 alin. (3^1) (media anuală) și art. 84^1 alin. (2) (cursul din ziua precedentă plății).',
+      },
+      {
+        id: 'no_proration',
+        label: 'Fracțiune de an',
+        value: 'fraction_of_year_is_annual_income',
+        unit: 'text',
+        // art. 85 alin. (5): „Veniturile … realizate într-o fracțiune de an sau în perioade diferite ce
+        // reprezintă fracțiuni ale aceluiași an, se consideră venit anual.” Nothing is prorated — and the
+        // CASS rungs are not cut either, which is a separate rule (art. 151 alin. (2) for CAS).
+        description:
+          'art. 85 alin. (5): o fracțiune de an este considerată venit anual; nimic nu este proratat.',
+      },
+      {
+        id: 'room_count_min',
+        label: 'Număr minim de camere pentru acest titlu',
+        value: 1,
+        unit: 'count',
+        description:
+          'art. 85 alin. (1): „între 1 și 7 camere inclusiv, indiferent de numărul de locuințe în care sunt situate acestea”. Numerele sunt un comutator de titlu, nu o mărime într-o formulă; comparația o face `domain/models.ts accommodationIncomeTitleForYear`, singurul loc în care se citește pragul din art. 83 alin. (4).',
+      },
+      {
+        id: 'room_count_max',
+        label: 'Număr maxim de camere pentru acest titlu',
+        value: 7,
+        unit: 'count',
+        description:
+          'art. 85 alin. (1) până la 7 camere inclusiv; art. 83 alin. (4): „Începând cu anul fiscal în care numărul camerelor … este de peste 7 camere, veniturile realizate reprezintă venituri din activități independente” — deci trecerea se face pe an fiscal, nu în luna în care apare a opta cameră.',
+      },
+      {
+        id: 'eligibility_exclusion',
+        label: 'Excluderea din alin. (1): cine NU este sub acest articol',
+        value:
+          'art. 85 alin. (1) exclude „pe cei care realizează venituri din activități independente pentru care sunt aplicabile prevederile art. 68^3”. Un PFA autorizat ca operator turistic (ONRC cazare, CAEN 5520) rămâne sub art. 68^3 și cu 3 camere — numărul de camere nu îl salvează. Răspunsul persoanei la `accommodationTourismEligibility` este fapta pe care o citește aplicația; aplicația nu o decide și nu o citește din codul CAEN.',
+        unit: 'text',
+        description:
+          'B-88, boundary 2. Cercetarea (`docs/ai/research/44_art85_short_term_rooms_1_7.md` §5) nu a găsit nicio propoziție legală expresă despre un PFA care are și venituri din cedarea folosinței; răspunsul este INFERENȚĂ din text (art. 83 alin. (1^1), art. 83 alin. (4), art. 85 alin. (1)) plus practica ANAF, și așa este etichetat și în cod.',
+      },
+      {
+        id: 'short_term_definition',
+        label: 'Definiția „pe termen scurt”',
+        value:
+          'art. 83 alin. (3): „închirierea neîntreruptă a unei camere aceleiași persoane, pentru perioade de maximum 30 de zile, într-un an calendaristic. În situația în care închirierea se realizează pentru o fracție de zi, se consideră închiriere pentru o zi.” Nu este o noțiune vagă de „Airbnb”. Aplicația cunoaște aceeași limită de 30 de zile doar ca fanion definitoriu în fișa de ocupare, și nimic de aici nu o citește.',
+        unit: 'text',
+        description:
+          'B-88, boundary 4. Definiția este un prag de calificare, nu o cifră care intră în calcul; aplicația nu o folosește ca să decidă dacă o încasare este sau nu pe termen scurt.',
+      },
+      {
+        id: 'cass_route',
+        label: 'Unde intră venitul net la contribuții',
+        value:
+          'Venitul net al art. 85 intră în cumularea de la art. 170 alin. (4) lit. c) — „venitul net pentru veniturile din cedarea folosinței bunurilor, stabilite potrivit art. 84-85” — iar baza pe care o alege acea cumulare este TREAPTA (6 / 12 / 24 SM, art. 170 alin. (3)), nu netul propriu-zis. Nu intră în scara de la art. 170 alin. (1), care mărginește venitul din art. 155 alin. (1) lit. b) la 72 SM: închirierea este lit. e), nu lit. b). CAS nu se datorează pe acest venit (art. 137 alin. (1); coroborat cu ANAF Ploiești 2026 — articolul nu a fost recuperat verbatim, deci this app îl tratează ca CORROBORATED, nu ca FACT).',
+        unit: 'text',
+        description:
+          'B-88, consequence 3. O persoană care are și un PFA (lit. b) și are și 1–7 camere (lit. e)) are două calcule CASS PARALELE, nu o singură scară: alin. (1) cu plafon de 72 SM pe de o parte, alin. (2)-(4) cu treapta de 6 / 12 / 24 SM pe de altă parte. Că textele dau două căi este FACT; că în practică cele două se țin separate în acest motor este consecința acelei lecturi.',
+      },
+      {
+        id: 'filing_deadline',
+        label: 'Termen de depunere a declarației unice',
+        value: '2027-05-25',
+        unit: 'date',
+        description:
+          'art. 85 alin. (10) cu art. 122 alin. (3): „până la data de 25 mai inclusiv a anului următor celui de realizare a veniturilor”. Faptul că impozitul este „final” NU scutește de declarație: art. 122 alin. (6) lit. a) scutește numai venitul la care impozitul „se reține la sursă și reprezintă impozit final”, iar aici impozitul este stabilit de contribuabil (alin. (10)), nu reținut. NU art. 121.',
+      },
+      {
+        id: 'payment_deadline',
+        label: 'Termen de plată',
+        value: '2027-05-25',
+        unit: 'date',
+        description:
+          'art. 85 alin. (11) (integral la bugetul de stat) cu art. 123 alin. (7) și art. 122 alin. (3): același termen, 25 mai. NU art. 121.',
+      },
+      {
+        id: 'form_section_open_question',
+        label: 'Întrebare deschisă: secțiunea din declarația 212',
+        value:
+          'Modelul formularului 212 pentru veniturile anului 2026 (depus în 2027) nu este publicat încă. Termenul — 25 mai 2027, art. 85 alin. (10) cu art. 122 alin. (3) — este cert; în care secțiune a declarației se înscrie acest venit nu este. Aplicația raportează termenul și nu inventează secțiunea.',
+        unit: 'text',
+        description:
+          'B-88, research/44 Gaps-2. Modelul în vigoare astăzi este OPANAF 2.736/23.12.2025, care nu acoperă încă venitul pe 2026. Că termenul există este FACT (alin. (10)); că secțiunea este cunoscută nu este.',
+      },
+    ],
+    calculatorId: 'calc-short-term-rooms-flat-ratio',
+    // Introduced by Legea nr. 239 din 15.12.2025 (MO 1160/15.12.2025), art. XII pct. 10, aplicabil
+    // „începând cu veniturile aferente anului 2026”. The text was read from the amending act itself and
+    // cross-checked against three consolidated mirrors in `docs/ai/research/44_art85_short_term_rooms_1_7.md`
+    // §1 (Gaps-1 records that no single official consolidated page for art. 85 was retrievable).
+    //
+    // NOT ENCODED, deliberately:
+    //  - alin. (7) — the Registrul de evidență fiscală obligation, income part only. The app has no REF
+    //    model; ordinary *cedarea folosinței* has no REF obligation at all (art. 84 alin. (10)), so this
+    //    is a real difference between the two titles and it is recorded here rather than silently dropped.
+    //  - alin. (8)-(9) — fișa de ocupare a capacității de cazare (OPANAF 381/2026, MO I 250/31.03.2026,
+    //    which abrogates OPANAF 398/2021). Already modelled for the >7 case as a retained form in
+    //    `data/types.ts`; the same order covers this article. It is not an operand of anything here.
+    //  - The 20 % forfetar of art. 84 alin. (3) / art. 84^1 alin. (3). No rule for it exists in this
+    //    package, and none may be added as a parameter on this one.
+    //  - Any SM multiple. The 6 / 12 / 24-SM rungs this net touches are year-scoped on CASS_2026.
+    sourceAct: 'Cod fiscal — Legea nr. 239/2025, Art. XII pct. 10 (MO 1160/15.12.2025)',
+    sourceArticle:
+      'art. 85 alin. (1) (1–7 camere în locuințe proprietate personală, exclusiv cei aflați sub art. 68^3); art. 85 alin. (2) (cotă forfetară 30 % din venitul brut; venitul brut = sumele încasate în cursul anului fiscal); art. 85 alin. (3) (comisionul reținut nu se cuprinde în venitul brut); art. 85 alin. (4) (curs BNR din ultima zi bancară anterioară încasării); art. 85 alin. (5) (fracțiune de an considerată venit anual); art. 85 alin. (6) (cota 10 % asupra venitului net, „impozitul fiind final”); art. 85 alin. (10)-(11) cu art. 122 alin. (3) și art. 123 alin. (7) (declarație și plată până la 25 mai); art. 83 alin. (2)-(4) (titlul venitului și comutatorul pe anul fiscal); art. 83 alin. (3) (definiția închirierii pe termen scurt); art. 84 alin. (3) (20 % pentru celelalte venituri din cedarea folosinței bunurilor); art. 170 alin. (4) lit. c) și alin. (3) (venitul net alimentează cumularea, baza este treapta); art. 122 alin. (6) lit. a) (scutirea de declarație vizează doar impozitul reținut la sursă)',
+    sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/305208',
+    // Verified 2026-10-12 against the amending act and three consolidated mirrors — research/44 §1.
+    verifiedAt: '2026-10-12',
+  },
   // PG-6e (B-31, D-FA-1) — the Titlul II amortisation figures a Titlul IV PFA inherits through art. 68
   // alin. (4) lit. d) („să respecte regulile privind amortizarea, prevăzute în titlul II, după caz”).
   // Read only by `domain/fiscal/depreciation.ts`. It supplies no treatment and no rate: the treatments of a

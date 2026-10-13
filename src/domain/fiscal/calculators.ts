@@ -129,9 +129,13 @@ export type CalculatorInput = {
    * cursul anului fiscal”), already converted to lei per alin. (4).
    *
    * Deliberately a separate field and NOT `base`. In `calcCas` and `calcCass`, `base` means the NET the
-   * contributions are measured on; in `calcAccommodationFlatRatio` the input is the GROSS the flat ratio
-   * is applied to. One variable meaning gross in one calculator and net in another is precisely the
-   * mistake that would turn the 68^3 net into the CAS base, which art. 148 alin. (2) does not allow.
+   * contributions are measured on; in `calcAccommodationFlatRatio` and in `calcShortTermRoomsFlatRatio`
+   * (B-88) the input is the GROSS the flat ratio is applied to. One variable meaning gross in one
+   * calculator and net in another is precisely the mistake that would turn the 68^3 net into the CAS base,
+   * which art. 148 alin. (2) does not allow. The two flat-ratio calculators share this field because both
+   * inputs really are a gross; they do NOT share a rule, a calculator id or a citation, because art. 68^3
+   * and art. 85 measure that gross differently (art. 85 alin. (2)-(3) is cash basis with the retained
+   * commission outside the gross) and send its net to different contribution basins.
    */
   gross?: Bani;
   /**
@@ -884,6 +888,92 @@ function calcAccommodationFlatRatio(rule: FiscalRule, input?: CalculatorInput): 
 }
 
 /**
+ * B-88 — CF art. 85: the 1–7 room short-term letting of rooms in a personal dwelling.
+ *
+ * This is a SEPARATE calculator from `calcAccommodationFlatRatio`, and the reason is not style. The two
+ * articles happen to state the same 30 % and the same 10 %, and that coincidence is exactly what makes
+ * reusing one calculator the tempting wrong answer: what differs is everything around the arithmetic.
+ *
+ *   - **The gross is measured differently.** art. 85 alin. (2) takes „sumele … încasate în cursul anului
+ *     fiscal” — cash basis — while ordinary rent takes the contract rent „indiferent de momentul
+ *     încasării” (art. 84 alin. (1)-(2)). art. 85 alin. (3) puts the retained platform commission outside
+ *     the gross, which is a reduction of the gross, not a cost deducted after the 30 %: netting it after
+ *     the ratio produces a different number, and this calculator has no commission parameter for exactly
+ *     that reason.
+ *   - **The net goes to a different basin.** art. 68^3 income is art. 155 alin. (1) lit. b) and is measured
+ *     under art. 170 alin. (1) (capped at 72 SM). art. 85 income is lit. e) and feeds the cumul at art. 170
+ *     alin. (4) lit. c), where the base is the RUNG (6 / 12 / 24 SM, alin. (3)), not the net. No CAS.
+ *   - **The citations differ, and a shared calculator would have to print the wrong ones.**
+ *
+ * It does not prorate anything: art. 85 alin. (5) makes a fraction-of-year amount the annual amount.
+ *
+ * Rounding follows the house boundary: art. 66 alin. (1) rounds the sums that are DUE, so the tax is
+ * rounded once here; the net is a BASE, and an inexact base is reported, never repaired.
+ */
+function calcShortTermRoomsFlatRatio(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
+  const expenseRatioPercent = paramNumber(rule, 'expense_ratio'); // unscaled integer percent
+  const taxRatePercent = paramNumber(rule, 'tax_rate'); // unscaled integer percent
+  const gross = input?.gross;
+  if (typeof gross !== 'number') {
+    return {
+      reviewRequired: true,
+      reason:
+        'art. 85 alin. (2): cota forfetară de 30 % se aplică asupra venitului brut, iar niciun venit brut ' +
+        'nu a fost furnizat. Fără brut nu există bază de calcul — aplicația refuză în loc să presupună unul.',
+    };
+  }
+  if (gross < 0) {
+    return {
+      reviewRequired: true,
+      reason: `art. 85: venitul brut nu poate fi negativ; s-a primit ${leiText(gross)} lei.`,
+    };
+  }
+
+  // One multiplication, not a subtraction of two separately-derived halves — the same discipline as the
+  // 68^3 calculator, for the same reason: the deemed expense and the net must not be able to disagree by
+  // a ban.
+  const netDec = applyRateDecimal(gross, 100 - expenseRatioPercent);
+  if (!netDec.isInteger()) {
+    return {
+      reviewRequired: true,
+      reason:
+        `art. 85 alin. (2): venitul net rezultat din ${leiText(gross)} lei × ${(100 - expenseRatioPercent) / 100} ` +
+        'nu este un număr întreg de bani. art. 66 alin. (1) rotește sumele datorate, nu bazele, deci ' +
+        'aplicația nu rotunjește o bază ca să obțină un număr rotund — raportează în schimb.',
+    };
+  }
+  const net = netDec.toNumber() as Bani;
+  // CF art. 66 alin. (1) — the one rounding, on the sum that is due.
+  const tax = roundArt66(applyRateDecimal(net, taxRatePercent));
+
+  const filingDeadline = paramValue(rule, 'filing_deadline');
+  const paymentDeadline = paramValue(rule, 'payment_deadline');
+  const breakdown = [
+    `venit brut (art. 85 alin. (2): sumele încasate în cursul anului fiscal): ${leiText(gross)} lei`,
+    'venitul brut este pe ÎNCASĂRI, nu pe contract: art. 84 alin. (1)-(2) („indiferent de momentul încasării”) guvernează închirierea obișnuită, nu aceasta',
+    `cheltuieli forfetare = ${expenseRatioPercent}% din venitul brut = ${leiText(subBani(gross, net))} lei — art. 85 alin. (2). Pentru celelalte venituri din cedarea folosinței bunurilor cota rămâne 20 % (art. 84 alin. (3))`,
+    `venit net = ${leiText(gross)} × ${(100 - expenseRatioPercent) / 100} = ${leiText(net)} lei`,
+    `impozit = ${leiText(net)} × ${taxRatePercent / 100} = ${leiText(tax)} lei — art. 85 alin. (6), „impozitul fiind final”`,
+    'comisionul reținut de platformă nu intră în venitul brut deloc (art. 85 alin. (3)) — este o reducere a brutului, nu o cheltuială dedusă după forfetar; dacă ar fi scăzut după cota de 30 %, cifra ar fi alta',
+    'art. 85 alin. (4): sumele în valută se convertesc la cursul BNR din ultima zi bancară anterioară încasării',
+    'art. 85 alin. (5): o fracțiune de an este considerată venit anual; nimic de aici nu este proratat',
+    'venitul net de aici alimentează CUMULAREA din art. 170 alin. (4) lit. c) (cedarea folosinței bunurilor, art. 155 alin. (1) lit. e)), iar baza pe care o alege este TREAPTA de 6 / 12 / 24 SM — art. 170 alin. (3). Nu este baza de la art. 170 alin. (1), care mărginește la 72 SM venitul din art. 155 alin. (1) lit. b); CAS nu se datorează pe acest venit',
+    'un PFA cu venituri din activitate independentă și închiriere de 1–7 camere are două calcule CASS paralele, nu o singură scară: alin. (1) pe lit. b) și alin. (2)-(4) pe lit. c)-h)',
+  ];
+  if (typeof filingDeadline === 'string') {
+    breakdown.push(
+      `depunerea declarației unice: ${filingDeadline} — art. 85 alin. (10) cu art. 122 alin. (3). Faptul că impozitul este final nu scutește de declarație: art. 122 alin. (6) lit. a) scutește numai impozitul reținut la sursă, iar aici impozitul este stabilit de contribuabil`,
+    );
+  }
+  if (typeof paymentDeadline === 'string') {
+    breakdown.push(
+      `plata: ${paymentDeadline} — art. 85 alin. (11) cu art. 123 alin. (7) și art. 122 alin. (3), integral la bugetul de stat`,
+    );
+  }
+  return { value: tax, determinedNet: net, breakdown };
+}
+
+/**
  * PG-6e — the fiscal depreciation of one asset for one fiscal year.
  *
  * It is a thin wrapper over `depreciationSchedule`, and the reason it exists at all is the house rule that
@@ -974,6 +1064,7 @@ export const calculatorRegistry: Record<string, CalculatorFunction> = {
   'calc-cass-ladder': calcCassLadder,
   'calc-income-tax': calcIncomeTax,
   'calc-accommodation-flat-ratio': calcAccommodationFlatRatio,
+  'calc-short-term-rooms-flat-ratio': calcShortTermRoomsFlatRatio,
   'calc-fiscal-depreciation': calcFiscalDepreciation,
   'calc-vat-threshold': calcVatThreshold,
   'calc-deadline': calcDeadline,

@@ -114,6 +114,9 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
       // read the field the assembler decided, so the rendered figure and the tested figure cannot disagree
       // about whether an art. 68^3 source exists.
       flatRatioGross: amounts.flatRatioGross ?? null,
+      // B-88 — threading only, and identical to `data/dashboard.ts getTaxEstimate` by construction: which
+      // flat article a gross belongs to is decided once by the assembler, never at a call site.
+      flatRatioMethod: amounts.flatRatioMethod ?? null,
       ruleRelease: selection ? selection.release : null,
       rules,
     }).then((result) => {

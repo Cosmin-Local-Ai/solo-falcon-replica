@@ -449,6 +449,10 @@ export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEsti
     // PG-6h-1 — threading only. The assembler decided whether this register has an art. 68^3 source and
     // measured its gross on the same ledger pass as every other operand; this call site only hands it over.
     flatRatioGross: amounts.flatRatioGross ?? null,
+    // B-88 — threading only, same discipline as the line above: the assembler decided which flat article
+    // this gross belongs to, and a call site that left the field out would hand the engine a 30 % ratio
+    // with no way to know which article gave it.
+    flatRatioMethod: amounts.flatRatioMethod ?? null,
     ruleRelease: selection ? selection.release : null,
     rules,
   }).then((result) => attachEstimateBasis(result, basis, operands.scenarios, operands.inputVat));
