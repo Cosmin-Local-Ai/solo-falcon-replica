@@ -109,6 +109,79 @@ describe('import — an older file runs the existing chain (acceptance 3)', () =
   });
 });
 
+/*
+ * B-109 — does the backup carry the new digest, and did anything have to change to make it? 
+ *
+ * It already does, and neither `datasetExport.ts` nor `datasetImport.ts` was touched to make that true. The
+ * export embeds the dataset verbatim and never enumerates snapshot fields; the import validates through
+ * `persistedAppDataSchema` and then runs the same migration chain the load path runs. So the only thing that
+ * decides whether `assetRegisterHash` survives a backup is whether the key is declared in the schema — which
+ * is why it is, and why these tests exist. Remove the declaration and the digest silently vanishes from
+ * every restored file; this is the test that says so.
+ */
+const B109_RELEASE = {
+  releaseId: 'rel-2025-001',
+  name: 'PFA 2025 rules',
+  jurisdiction: 'RO',
+  entityType: 'PFA',
+  taxYear: 2025,
+  ruleIds: ['rule-2025-1'],
+  status: 'SAFE_ACTIVATION',
+  effectiveFrom: '2025-01-01',
+  createdAt: '2025-01-01T00:00:00.000Z',
+  evidence: ['https://example.com/legis-2025'],
+};
+
+describe('import — a calculation snapshot\'s digests travel through the backup (B-109)', () => {
+  it('carries assetRegisterHash and inputsHash through the validator and the chain', () => {
+    const snapshot = {
+      calculationId: 'calc-2025-b109',
+      taxYear: 2025,
+      calculatedAt: '2026-10-14T15:56:00.672Z',
+      ruleRelease: B109_RELEASE,
+      ruleSetHash: 'df6ec4fcf54864070ff7e1f264f15e41046ffd68cd6742770e75d935a2892724',
+      assetRegisterHash: '8f31fbe721e377fcce1fc4671f115f61d4646c6cb21d5e3b76ca825c1ede896c',
+      inputSnapshot: { profile: seedData.profile, revenues: 100000, expenses: 40000 },
+      inputsHash: '88215ab2b0aa3b03fd87f17225234f24458a494768da0b66ecb4f433a27b7b0a',
+      calculationLines: [],
+      output: { total: 0 },
+      status: 'computed',
+    };
+    const outcome = validateDatasetImport(
+      envelope({ ...seedData, version: CURRENT_DATA_VERSION, snapshots: [snapshot] }),
+    );
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    const restored = outcome.data.snapshots?.[0];
+    expect(restored?.assetRegisterHash).toBe('8f31fbe721e377fcce1fc4671f115f61d4646c6cb21d5e3b76ca825c1ede896c');
+    expect(restored?.inputsHash).toBe('88215ab2b0aa3b03fd87f17225234f24458a494768da0b66ecb4f433a27b7b0a');
+  });
+
+  it('accepts a backup whose snapshot predates B-109, and does not mint a digest for it', () => {
+    const preChange = {
+      calculationId: 'calc-2025-pre-b109',
+      taxYear: 2025,
+      calculatedAt: '2026-10-14T15:56:00.672Z',
+      ruleRelease: B109_RELEASE,
+      inputSnapshot: { profile: seedData.profile, revenues: 100000, expenses: 40000 },
+      inputsHash: '88215ab2b0aa3b03fd87f17225234f24458a494768da0b66ecb4f433a27b7b0a',
+      calculationLines: [],
+      output: { total: 0 },
+      status: 'computed',
+    };
+    const outcome = validateDatasetImport(
+      envelope({ ...seedData, version: CURRENT_DATA_VERSION, snapshots: [preChange] }),
+    );
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    const restored = outcome.data.snapshots?.[0];
+    // Absent stays absent. No step fills it in, because a digest minted from today's register would claim
+    // that today's register produced a record this build never addressed.
+    expect(restored?.assetRegisterHash).toBeUndefined();
+    expect(restored?.inputsHash).toBe('88215ab2b0aa3b03fd87f17225234f24458a494768da0b66ecb4f433a27b7b0a');
+  });
+});
+
 describe('import — validating writes nothing', () => {
   it('leaves the stored payload byte-identical, whatever the verdict', () => {
     const stored = JSON.stringify({ ...seedData, version: CURRENT_DATA_VERSION });
