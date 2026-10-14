@@ -483,3 +483,173 @@ describe('createCalculationSnapshot — ruleSetHash', () => {
     expect(snap.inputsHash).toBe(before);
   });
 });
+
+/*
+ * B-109 — the digest that must NOT move, and the digest that had to be added.
+ *
+ * The values below are genuine pre-change values. They were captured from the tree at commit `72b50c5`,
+ * before any B-109 edit existed, by a throwaway probe that called the PRE-CHANGE `createCalculationSnapshot`
+ * with exactly this fixture and printed what came out; the probe is recorded in commit `4bb68d3` and was
+ * deleted by this change. That provenance is the whole point: a digest assertion generated in the same
+ * commit it validates proves nothing, and this step exists to remove exactly that circularity. If the
+ * fixture below is edited, the pinned value will move and the edit has to say so — it is not a value to be
+ * re-baselined.
+ */
+describe('inputsHash — pinned PRE-CHANGE digest (B-109)', () => {
+  const PRE_CHANGE_INPUTS_HASH = '88215ab2b0aa3b03fd87f17225234f24458a494768da0b66ecb4f433a27b7b0a';
+  const PRE_CHANGE_RULE_SET_HASH = 'df6ec4fcf54864070ff7e1f264f15e41046ffd68cd6742770e75d935a2892724';
+
+  it('is byte-identical to what the pre-change code produced for the same { profile, revenues, expenses }', async () => {
+    const snap = await createCalculationSnapshot({
+      profile,
+      revenues: lei(1000),
+      expenses: lei(400),
+      ruleRelease: release2025,
+      rules: rules2025,
+      depreciation: leg,
+      calculationLines: [],
+      output: { total: lei(0) },
+    });
+    expect(snap.inputsHash).toBe(PRE_CHANGE_INPUTS_HASH);
+    // The digest is reproducible from the stored subset by both implementations, exactly as before.
+    expect(await computeInputsHash(snap.inputSnapshot)).toBe(PRE_CHANGE_INPUTS_HASH);
+    expect(computeInputsHashSync({ profile, revenues: lei(1000), expenses: lei(400) })).toBe(
+      PRE_CHANGE_INPUTS_HASH,
+    );
+    // TASK 6's sibling digest did not move either: adding a third sibling changed no existing byte.
+    expect(snap.ruleSetHash).toBe(PRE_CHANGE_RULE_SET_HASH);
+  });
+
+  it('inputSnapshot is still exactly the three pinned keys, and the new digest is not among them', async () => {
+    const snap = await createCalculationSnapshot({
+      profile,
+      revenues: lei(1000),
+      expenses: lei(400),
+      ruleRelease: release2025,
+      rules: rules2025,
+      depreciation: leg,
+      calculationLines: [],
+      output: { total: lei(0) },
+    });
+    expect(Object.keys(snap.inputSnapshot).sort()).toEqual(['expenses', 'profile', 'revenues']);
+    expect(JSON.stringify(snap.inputSnapshot)).not.toContain('assetRegisterHash');
+    expect(snap.assetRegisterHash).toBeDefined();
+  });
+});
+
+/*
+ * B-109 — the register is now addressable.
+ *
+ * The defect in one line: since B-93 the engine consumes a depreciation leg derived from the asset register,
+ * but `inputSnapshot` is still `{ profile, revenues, expenses }`, where the last two are aggregate bani
+ * totals. Two registers that add up to the same total therefore produced records that were byte-identical
+ * in every field that could explain them. These tests make that state unforgivable.
+ */
+describe('createCalculationSnapshot — assetRegisterHash', () => {
+  it('records a 64-char hex digest of the asset leg the number was built from', async () => {
+    const snap = await createCalculationSnapshot({
+      profile,
+      revenues: lei(1000),
+      expenses: lei(400),
+      ruleRelease: release2025,
+      rules: rules2025,
+      depreciation: leg,
+      calculationLines: [],
+      output: { total: lei(0) },
+    });
+    expect(snap.assetRegisterHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(snap.assetRegisterHash).toBe(assetRegisterDigest(leg));
+  });
+
+  it('two snapshots with identical inputsHash but different asset registers now differ in a named field', async () => {
+    // Same year, same posted total (6.000 lei), different register: one asset, or two. Before B-109 these
+    // two records were indistinguishable — the digest that exists to make a number explainable could not
+    // name the difference, because the register was nowhere in it.
+    const splitLeg: DepreciationLeg = {
+      fiscalYear: 2025,
+      lines: [
+        { assetId: 'asset-laptop-a', label: 'Laptop A', months: 12, uncapped: lei(3000), deductible: lei(3000), lost: lei(0), branch: 'liniar' },
+        { assetId: 'asset-laptop-b', label: 'Laptop B', months: 12, uncapped: lei(3000), deductible: lei(3000), lost: lei(0), branch: 'liniar' },
+      ],
+      conflicts: [],
+      refused: [],
+      total: lei(6000),
+    };
+    const a = await createCalculationSnapshot({
+      profile,
+      revenues: lei(1000),
+      expenses: lei(400),
+      ruleRelease: release2025,
+      rules: rules2025,
+      depreciation: leg,
+      calculationLines: [],
+      output: { total: lei(0) },
+    });
+    const b = await createCalculationSnapshot({
+      profile,
+      revenues: lei(1000),
+      expenses: lei(400),
+      ruleRelease: release2025,
+      rules: rules2025,
+      depreciation: splitLeg,
+      calculationLines: [],
+      output: { total: lei(0) },
+    });
+    // Identical inputs — the half that used to be indistinguishable, and still is, correctly.
+    expect(b.inputsHash).toBe(a.inputsHash);
+    // Different register — and now distinguishable.
+    expect(b.assetRegisterHash).not.toBe(a.assetRegisterHash);
+  });
+
+  it('the asset digest lives BESIDE inputSnapshot: moving the register moves no inputsHash', async () => {
+    // The guard against "fixing" B-109 by widening the subset. Doing that would move every digest a real
+    // user has stored, which is the landmine TASK 3 named and TASK 6 worked around the same way.
+    const before = await computeInputsHash({ profile, revenues: lei(1000), expenses: lei(400) });
+    const snap = await createCalculationSnapshot({
+      profile,
+      revenues: lei(1000),
+      expenses: lei(400),
+      ruleRelease: release2025,
+      rules: rules2025,
+      depreciation: { ...leg, total: lei(99999) },
+      calculationLines: [],
+      output: { total: lei(0) },
+    });
+    expect(snap.inputsHash).toBe(before);
+    expect(snap.assetRegisterHash).not.toBe(assetRegisterDigest(leg));
+  });
+
+  it('an empty register is a digest, not a silence: the number can say it had no asset leg', async () => {
+    const snap = await createCalculationSnapshot({
+      profile,
+      revenues: lei(1000),
+      expenses: lei(400),
+      ruleRelease: release2025,
+      rules: rules2025,
+      depreciation: emptyLeg,
+      calculationLines: [],
+      output: { total: lei(0) },
+    });
+    expect(snap.assetRegisterHash).toBe(assetRegisterDigest(emptyLeg));
+    expect(snap.assetRegisterHash).not.toBeNull();
+  });
+
+  it('a call site with no leg in hand records null, never an empty-register digest', async () => {
+    // `null` and the empty-leg digest are different claims, and conflating them would be the same mistake
+    // in reverse: saying the register was consulted and found empty, when it was never consulted.
+    const snap = await createCalculationSnapshot({
+      profile,
+      revenues: lei(1000),
+      expenses: lei(400),
+      ruleRelease: release2025,
+      rules: rules2025,
+      depreciation: null,
+      calculationLines: [],
+      output: { total: lei(0) },
+    });
+    expect(snap.assetRegisterHash).toBeNull();
+    expect(snap.assetRegisterHash).not.toBe(assetRegisterDigest(emptyLeg));
+    // And the pinned inputsHash is untouched by any of this.
+    expect(snap.inputsHash).toBe('88215ab2b0aa3b03fd87f17225234f24458a494768da0b66ecb4f433a27b7b0a');
+  });
+});

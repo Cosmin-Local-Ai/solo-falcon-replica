@@ -110,6 +110,12 @@ function Probe() {
   return null;
 }
 
+/** The seeded dataset as storage holds it, so a test can re-write it with one field overridden. */
+function seededPayload(): Record<string, unknown> {
+  seedStorage();
+  return JSON.parse(localStorage.getItem(STORAGE_KEY)!) as Record<string, unknown>;
+}
+
 async function makeSnapshot(over: Partial<{ revenues: Bani; expenses: Bani }>): Promise<TaxCalculationSnapshot> {
   return createCalculationSnapshot({
     profile,
@@ -238,5 +244,60 @@ describe('snapshot persistence (Step 12)', () => {
     expect(reparsed).not.toBeNull();
     expect(reparsed!.snapshots?.[0].ruleSetHash).toBe(snap.ruleSetHash);
     expect(reparsed!.snapshots?.[0].inputsHash).toBe(snap.inputsHash);
+  });
+
+  /*
+   * B-109 — the same failure mode, one field over. `assetRegisterHash` is declared in
+   * `taxCalculationSnapshotSchema` precisely because zod strips undeclared keys: a digest that exists in
+   * memory and vanishes on load cannot explain a stored number, which is the entire point of adding it.
+   * This test is what fails if the declaration is ever removed.
+   */
+  it('the assetRegisterHash survives the save path and the zod gate', async () => {
+    seedStorage();
+    render(
+      <StoreProvider>
+        <Probe />
+      </StoreProvider>,
+    );
+    const store = storeRef!;
+    const snap = await makeSnapshot({});
+    expect(snap.assetRegisterHash).toMatch(/^[0-9a-f]{64}$/);
+
+    act(() => {
+      store.addSnapshot(snap);
+    });
+
+    // Written to storage…
+    const raw = localStorage.getItem(STORAGE_KEY)!;
+    const persisted = JSON.parse(raw) as { snapshots: { assetRegisterHash?: string | null }[] };
+    expect(persisted.snapshots[0].assetRegisterHash).toBe(snap.assetRegisterHash);
+    // …and still there after the zod gate on read.
+    const reparsed = parseAppData(raw);
+    expect(reparsed).not.toBeNull();
+    expect(reparsed!.snapshots?.[0].assetRegisterHash).toBe(snap.assetRegisterHash);
+    // The digest that was already there did not move on the way through.
+    expect(reparsed!.snapshots?.[0].inputsHash).toBe(snap.inputsHash);
+  });
+
+  it('a stored snapshot written before B-109 loads with no asset digest, and its inputsHash intact', () => {
+    // Absence must stay representable: the load path must not default the new key to `null` or to a digest
+    // minted from whatever register the app holds today.
+    const preChange = {
+      calculationId: 'calc-2025-pre-b109',
+      taxYear: 2025,
+      calculatedAt: '2026-10-14T15:56:00.672Z',
+      ruleRelease: release2025,
+      ruleSetHash: ruleSetDigest(rules2025),
+      inputSnapshot: { profile, revenues: lei(1000), expenses: lei(400) },
+      inputsHash: '88215ab2b0aa3b03fd87f17225234f24458a494768da0b66ecb4f433a27b7b0a',
+      calculationLines: [],
+      output: { total: lei(0) },
+      status: 'computed',
+    };
+    const reparsed = parseAppData(JSON.stringify({ ...seededPayload(), snapshots: [preChange] }));
+    expect(reparsed).not.toBeNull();
+    const snap = reparsed!.snapshots?.[0];
+    expect(snap?.assetRegisterHash).toBeUndefined();
+    expect(snap?.inputsHash).toBe('88215ab2b0aa3b03fd87f17225234f24458a494768da0b66ecb4f433a27b7b0a');
   });
 });

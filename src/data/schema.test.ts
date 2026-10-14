@@ -215,6 +215,90 @@ describe('parseAppData — valid payloads', () => {
     expect(parsed?.snapshots).toHaveLength(1);
   });
 
+  /*
+   * B-109 — the load-bearing test for adding `assetRegisterHash` as an optional key with NO chain step.
+   *
+   * The payload below is not authored for this test. It is a snapshot produced by the PRE-CHANGE code at
+   * commit `72b50c5` — captured by a throwaway probe recorded in commit `4bb68d3`, then pasted here verbatim
+   * — so it is a real record from the tree before the key existed, with no `assetRegisterHash` key at all.
+   * It must still parse, still round-trip, and still carry the same `inputsHash`. If a later edit makes the
+   * new key required, or moves it into `inputSnapshot`, this test is what fails.
+   */
+  const PRE_CHANGE_SNAPSHOT = {
+    calculationId: 'calc-2025-003f86de-2b94-462d-9a52-253f7ef78d82',
+    taxYear: 2025,
+    calculatedAt: '2026-10-14T15:56:00.672Z',
+    ruleRelease: {
+      releaseId: 'rel-2025-001',
+      name: 'PFA 2025 rules',
+      jurisdiction: 'RO',
+      entityType: 'PFA',
+      taxYear: 2025,
+      ruleIds: ['rule-2025-1'],
+      status: 'SAFE_ACTIVATION',
+      effectiveFrom: '2025-01-01',
+      createdAt: '2025-01-01T00:00:00.000Z',
+      evidence: ['https://example.com/legis-2025'],
+    },
+    ruleSetHash: 'df6ec4fcf54864070ff7e1f264f15e41046ffd68cd6742770e75d935a2892724',
+    inputSnapshot: {
+      profile: {
+        id: 'pfa-test',
+        pfaStartYear: 2020,
+        fiscalYear: 2025,
+        regime: 'impozit_pe_venit',
+        caen: '6201',
+        salaryStatus: 'nu',
+        pensionerStatus: 'nu',
+        socialInsuranceStatus: 'obligatoriu',
+        vatRegistration: { status: 'scutit_art310' },
+        cashFloorLei: 0,
+        identity: {
+          nume: 'Enache Sorin',
+          cnp: '0123456789012',
+          adresa: 'Str. Test 1, Bucuresti',
+          telefon: '0700000000',
+          email: 'sorin@example.com',
+          denumire: '',
+          cui: '',
+          formaJuridica: 'PFA',
+          numarRegComert: '',
+          adresaSocietate: '',
+          telefonSocietate: '',
+          emailSocietate: '',
+          contBancar: '',
+          banca: '',
+        },
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      },
+      revenues: 100000,
+      expenses: 40000,
+    },
+    inputsHash: '88215ab2b0aa3b03fd87f17225234f24458a494768da0b66ecb4f433a27b7b0a',
+    calculationLines: [],
+    output: { total: 0 },
+    status: 'computed',
+  };
+
+  it('a pre-B-109 snapshot payload with no assetRegisterHash key still parses, and its inputsHash is unchanged', () => {
+    // The key is absent, not null: this record was written before the register was ever addressed, and no
+    // digest added later can honestly supply one.
+    expect('assetRegisterHash' in PRE_CHANGE_SNAPSHOT).toBe(false);
+    const raw = write({ snapshots: [PRE_CHANGE_SNAPSHOT] });
+    const parsed = parseAppData(raw);
+    expect(parsed).not.toBeNull();
+    const snap = parsed!.snapshots?.[0];
+    expect(snap).toBeDefined();
+    expect(snap!.assetRegisterHash).toBeUndefined();
+    // The stored digest is untouched — this is the whole reason the new field is a sibling and not a member.
+    expect(snap!.inputsHash).toBe('88215ab2b0aa3b03fd87f17225234f24458a494768da0b66ecb4f433a27b7b0a');
+    expect(Object.keys(snap!.inputSnapshot).sort()).toEqual(['expenses', 'profile', 'revenues']);
+    // And it round-trips: re-serialising what parse produced parses to the same record, with nothing added.
+    const again = parseAppData(JSON.stringify({ ...baseline(), snapshots: [snap] }));
+    expect(again).not.toBeNull();
+    expect(again!.snapshots?.[0]).toEqual(snap);
+  });
+
   // B-19: the marker that tells a consumer a CASS figure is not grounded in a rule must survive the
   // load path. zod strips unknown keys by default, so an undeclared marker would be erased on load
   // and the unverified zero would come back as a plain fact — the exact failure this phase closes.
