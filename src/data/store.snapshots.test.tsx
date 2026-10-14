@@ -4,6 +4,7 @@ import { StoreProvider, useStore } from './store';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import { createCalculationSnapshot } from '../domain/snapshots/snapshot';
 import { ruleSetDigest } from '../domain/fiscal/ruleSetDigest';
+import type { DepreciationLeg } from '../domain/estimateBasis';
 import { parseAppData } from './schema';
 import { seedStorage } from '../test/storage';
 import type { PfaProfile } from '../domain/models';
@@ -11,6 +12,27 @@ import type { FiscalRule, RuleRelease } from '../domain/fiscal/rules';
 import { lei, type Bani } from '../domain/money';
 
 const STORAGE_KEY = 'pfa-app-data-v2';
+
+// B-109 — the asset leg the fixture calculation consumed, in the shape `estimateBasis.ts`
+// `selectAssetDepreciation` hands to the engine. A leg rather than a `FixedAsset` list, because that is what
+// `assetRegisterHash` addresses: the register as the year's arithmetic consumed it.
+const legFixture: DepreciationLeg = {
+  fiscalYear: 2025,
+  lines: [
+    {
+      assetId: 'asset-laptop',
+      label: 'Laptop',
+      months: 12,
+      uncapped: lei(6000),
+      deductible: lei(6000),
+      lost: lei(0),
+      branch: 'liniar',
+    },
+  ],
+  conflicts: [],
+  refused: [],
+  total: lei(6000),
+};
 
 // --- Fixtures ---------------------------------------------------------------
 
@@ -95,6 +117,9 @@ async function makeSnapshot(over: Partial<{ revenues: Bani; expenses: Bani }>): 
     expenses: over.expenses ?? lei(400),
     ruleRelease: release2025,
     rules: rules2025,
+    // B-109: a real leg, so the digest this snapshot carries is a real digest — the save-path tests below
+    // are precisely about a digest surviving the zod gate, and `null` would pass them vacuously.
+    depreciation: legFixture,
     calculationLines: [],
     output: { total: lei(0) },
   });

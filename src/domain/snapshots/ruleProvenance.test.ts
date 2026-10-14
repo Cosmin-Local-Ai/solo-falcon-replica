@@ -41,6 +41,10 @@ async function snapshotOf(
     expenses: lei(400),
     ruleRelease: { ...PFA_2026_RELEASE, releaseId },
     rules: effective2026,
+    // B-109: this fixture is about rule provenance and has no asset leg in hand, so it records `null` — the
+    // value that says "this number's register was never addressed" — rather than an empty-register digest,
+    // which would claim the register was checked and found empty.
+    depreciation: null,
     calculationLines: [],
     output: { total: lei(0) },
   });

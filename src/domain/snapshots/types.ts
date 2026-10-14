@@ -88,6 +88,26 @@ export interface TaxCalculationSnapshot {
   /** SHA-256 hex digest of the canonical serialization of inputSnapshot. */
   inputsHash: string;
   /**
+   * B-109 — SHA-256 hex over the canonical serialisation of the **asset leg** the calculation consumed
+   * (`src/domain/snapshots/assetRegisterDigest.ts`). Like `ruleSetHash`, this is a sibling of `inputsHash`,
+   * never a member of it: `inputSnapshot` is the enumerated subset `{ profile, revenues, expenses }` that
+   * TASK 3 pinned, and widening it would move every digest a real user has stored.
+   *
+   * The analogy with `ruleSetHash` is deliberate but not exact, and the difference matters. The rule set is
+   * the engine that consumed the inputs; the asset register is **user data the user gave**, which is why it
+   * arguably belonged in `inputSnapshot`. It sits beside it for **stored-data compatibility, not conceptual
+   * correctness** — that is the honest reason, recorded rather than glossed.
+   *
+   * Three states, and they mean different things:
+   *  - a digest — the register was addressed at calculation time; an empty leg digests to a well-defined
+   *    value, which says "this number had no asset leg", a named cause rather than a silence;
+   *  - `null` — the call site had no leg in hand (a hand-built fixture, or a caller that predates B-109);
+   *  - absent — the record was written before B-109 and its register was never addressed at all. No digest
+   *    added later can retroactively supply one: minting it from today's register would claim that today's
+   *    register produced a years-old number.
+   */
+  assetRegisterHash?: string | null;
+  /**
    * The digest this snapshot carried BEFORE a persisted-data migration rewrote
    * its embedded `inputSnapshot` (Phase 7 step v0→v1 backfills identity fields
    * into stored snapshots, and `canonicalize` serializes every key, so the

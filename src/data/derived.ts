@@ -126,6 +126,10 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
       flatRatioWithholdingBlocked: amounts.flatRatioWithholdingBlocked ?? false,
       ruleRelease: selection ? selection.release : null,
       rules,
+      // B-109 — threading only, and identical to `data/dashboard.ts getTaxEstimate` by construction: the
+      // assembler struck the asset leg once, over the same ledger pass, and this hands that same leg to the
+      // engine so the snapshot can content-address it as `assetRegisterHash`. Nothing is re-derived here.
+      depreciation: operands.depreciation,
     }).then((result) => {
       if (!cancelled) {
         setEstimate(

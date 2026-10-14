@@ -466,6 +466,10 @@ export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEsti
     flatRatioWithholdingBlocked: amounts.flatRatioWithholdingBlocked ?? false,
     ruleRelease: selection ? selection.release : null,
     rules,
+    // B-109 — threading only, identical to `data/derived.ts useLatestTaxEstimate` by construction: both hand
+    // the engine the one leg the assembler struck, so the snapshot's `assetRegisterHash` addresses the same
+    // leg the figure was built from. A second reading of the register here would be the B-70 defect class.
+    depreciation: operands.depreciation,
   }).then((result) =>
     attachEstimateBasis(result, basis, operands.scenarios, operands.inputVat, operands.depreciation),
   );

@@ -1,9 +1,11 @@
 import type { PfaProfile } from '../models';
 import type { FiscalRule, RuleRelease } from '../fiscal/rules';
+import type { DepreciationLeg } from '../estimateBasis';
 import type { Bani } from '../money';
 import type { CalculationInput, CalculationLine, CalculationOutput, SnapshotStatus, TaxCalculationSnapshot } from './types';
 import { computeInputsHash } from './hash';
 import { ruleSetDigest } from '../fiscal/ruleSetDigest';
+import { assetRegisterDigest } from './assetRegisterDigest';
 import { toInstantISO } from '../date';
 
 export interface CreateSnapshotParams {
@@ -23,6 +25,15 @@ export interface CreateSnapshotParams {
    * sets apart, and it did not even change when the arithmetic did.
    */
   rules: readonly FiscalRule[];
+  /**
+   * B-109: the asset leg the calculation actually consumed — the register as `estimateBasis.ts`
+   * `selectAssetDepreciation` filtered it for the year, not the raw `FixedAsset` rows. Required, for the
+   * same reason `rules` is: a snapshot that does not record the register its number came from is the
+   * defect this closes. `null` is the honest answer for a call site that genuinely has no leg in hand (a
+   * hand-built fixture, a caller that predates B-109); it is never filled in by guessing, and an empty leg
+   * is NOT `null` — an empty leg digests, and says the number had no asset leg.
+   */
+  depreciation: DepreciationLeg | null;
   calculationLines: CalculationLine[];
   output: CalculationOutput;
   /** Defaults to now (ISO 8601). */
@@ -45,6 +56,14 @@ export interface CreateSnapshotParams {
  * `ruleSetHash`, beside `inputsHash` — because the rules are the engine that produced the number, not an
  * input the user gave. See `docs/ai/phases/20_rule_release_immutability.md` §3 for the decision and its
  * reasoning.
+ *
+ * B-109 adds a third digest on the same shape, for the same reason and with one honest difference. Since
+ * B-93 the engine also consumes a depreciation leg derived from the **asset register**, and the register is
+ * not in `inputSnapshot` either — so a stored number could move for a cause the record could not name.
+ * `assetRegisterHash` goes beside `inputsHash` exactly as `ruleSetHash` did. The difference: the rules are
+ * the engine, while the register is **user data the user gave**, so it is a sibling for stored-data
+ * compatibility, not because it is conceptually not an input. That is recorded here so nobody reads the
+ * parallel as cleaner than it is.
  */
 export async function createCalculationSnapshot(p: CreateSnapshotParams): Promise<TaxCalculationSnapshot> {
   const inputSnapshot: CalculationInput = {
@@ -60,6 +79,8 @@ export async function createCalculationSnapshot(p: CreateSnapshotParams): Promis
     ruleSetHash: ruleSetDigest(p.rules),
     inputSnapshot,
     inputsHash: await computeInputsHash(inputSnapshot),
+    // B-109: beside `inputsHash`, never inside it. `inputSnapshot` keeps its three keys byte for byte.
+    assetRegisterHash: p.depreciation === null ? null : assetRegisterDigest(p.depreciation),
     calculationLines: p.calculationLines,
     output: p.output,
     status: p.status ?? 'computed',

@@ -459,6 +459,13 @@ export const taxCalculationSnapshotSchema = z.object({
     expenses: bani(z.number()),
   }),
   inputsHash: z.string(),
+  // B-109: the digest of the asset leg the calculation consumed. Declared for the same reason `ruleSetHash`
+  // is — zod STRIPS undeclared keys, and a digest that lives in memory but vanishes on load is the exact
+  // failure mode this record exists to prevent. Nullable-optional, and deliberately NOT backfilled: absent
+  // means the record predates B-109 and its register was never addressed, `null` means the call site had no
+  // leg in hand. No chain step writes either value — minting a digest from today's register would claim that
+  // today's register produced a years-old number.
+  assetRegisterHash: z.string().nullable().optional(),
   // TASK 6: the digest of the rules that produced this record. Declared, because zod strips undeclared
   // keys and a silently dropped digest is the failure mode this phase is about. Nullable-optional so a
   // pre-v9 payload parses (parse runs before migration) and so the v9 step can write `null` — the record

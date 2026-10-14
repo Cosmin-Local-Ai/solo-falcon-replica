@@ -4,7 +4,10 @@ import type { FiscalRule, RuleRelease } from '../fiscal/rules';
 import { ruleSetDigest } from '../fiscal/ruleSetDigest';
 import { canonicalize } from './serialize';
 import { computeInputsHash } from './hash';
+import { computeInputsHashSync } from './hashSync';
+import { assetRegisterDigest } from './assetRegisterDigest';
 import { createCalculationSnapshot } from './snapshot';
+import type { DepreciationLeg } from '../estimateBasis';
 import { lei } from '../money';
 
 // --- Fixtures -------------------------------------------------------------
@@ -90,6 +93,34 @@ const rule2025: FiscalRule = {
 const rules2025: FiscalRule[] = [rule2025];
 const rules2026: FiscalRule[] = [{ ...rule2025, ruleId: 'rule-2026-1', taxYear: 2026 }];
 
+/*
+ * B-109 — the asset leg the calculation consumed.
+ *
+ * A leg, not a `FixedAsset` list: `assetRegisterHash` addresses the register as `estimateBasis.ts`
+ * `selectAssetDepreciation` filtered it for the year — the same judgement that makes `rules` the EFFECTIVE
+ * rule set rather than the whole package. Hand-building one here is what the assembler produces, field for
+ * field; `depreciation.ts` is not re-run in these tests.
+ */
+const leg: DepreciationLeg = {
+  fiscalYear: 2025,
+  lines: [
+    {
+      assetId: 'asset-laptop',
+      label: 'Laptop',
+      months: 12,
+      uncapped: lei(6000),
+      deductible: lei(6000),
+      lost: lei(0),
+      branch: 'liniar',
+    },
+  ],
+  conflicts: [],
+  refused: [],
+  total: lei(6000),
+};
+
+const emptyLeg: DepreciationLeg = { fiscalYear: 2025, lines: [], conflicts: [], refused: [], total: lei(0) };
+
 // --- Tests ------------------------------------------------------------------
 
 describe('canonicalize', () => {
@@ -146,13 +177,14 @@ describe('computeInputsHash', () => {
 });
 
 describe('createCalculationSnapshot', () => {
-  it('builds a snapshot with all 10 fields, default status, and a tax-year-prefixed id', async () => {
+  it('builds a snapshot with all 11 fields, default status, and a tax-year-prefixed id', async () => {
     const snap = await createCalculationSnapshot({
       profile,
       revenues: lei(1000),
       expenses: lei(400),
       ruleRelease: release2025,
       rules: rules2025,
+      depreciation: leg,
       calculationLines: [{ label: 'Venit net imposable', value: lei(600) }],
       output: { total: lei(600) },
     });
@@ -163,6 +195,7 @@ describe('createCalculationSnapshot', () => {
         'calculationLines',
         'inputSnapshot',
         'inputsHash',
+        'assetRegisterHash',
         'output',
         'ruleRelease',
         'ruleSetHash',
@@ -182,6 +215,7 @@ describe('createCalculationSnapshot', () => {
       expenses: lei(400),
       ruleRelease: release2025,
       rules: rules2025,
+      depreciation: leg,
       calculationLines: [],
       output: { total: lei(0) },
     });
@@ -195,6 +229,7 @@ describe('createCalculationSnapshot', () => {
       expenses: lei(400),
       ruleRelease: release2025,
       rules: rules2025,
+      depreciation: leg,
       calculationLines: [],
       output: { total: lei(0) },
     });
@@ -204,6 +239,7 @@ describe('createCalculationSnapshot', () => {
       expenses: lei(400),
       ruleRelease: release2025,
       rules: rules2025,
+      depreciation: leg,
       calculationLines: [],
       output: { total: lei(0) },
     });
@@ -217,6 +253,7 @@ describe('createCalculationSnapshot', () => {
       expenses: lei(400),
       ruleRelease: release2025,
       rules: rules2025,
+      depreciation: leg,
       calculationLines: [],
       output: { total: lei(0) },
     });
@@ -227,6 +264,7 @@ describe('createCalculationSnapshot', () => {
       expenses: lei(800),
       ruleRelease: release2026,
       rules: rules2026,
+      depreciation: leg,
       calculationLines: [],
       output: { total: lei(0) },
     });
@@ -241,6 +279,7 @@ describe('createCalculationSnapshot', () => {
       expenses: lei(400),
       ruleRelease: release2025,
       rules: rules2025,
+      depreciation: leg,
       calculationLines: [],
       output: { total: lei(0) },
       status: 'superseded',
@@ -334,6 +373,7 @@ describe('createCalculationSnapshot — rule-release identity preservation', () 
       expenses: lei(400),
       ruleRelease: release2025,
       rules: rules2025,
+      depreciation: leg,
       calculationLines: [{ label: 'Venit net imposable', value: lei(600) }],
       output: { total: lei(600) },
     });
@@ -351,6 +391,7 @@ describe('createCalculationSnapshot — rule-release identity preservation', () 
       expenses: lei(400),
       ruleRelease: laterRelease,
       rules: rules2025,
+      depreciation: leg,
       calculationLines: [],
       output: { total: lei(0) },
     });
@@ -380,6 +421,7 @@ describe('createCalculationSnapshot — ruleSetHash', () => {
       expenses: lei(400),
       ruleRelease: release2025,
       rules: rules2025,
+      depreciation: leg,
       calculationLines: [],
       output: { total: lei(0) },
     });
@@ -402,6 +444,7 @@ describe('createCalculationSnapshot — ruleSetHash', () => {
       expenses: lei(400),
       ruleRelease: release2025,
       rules: rules2025,
+      depreciation: leg,
       calculationLines: [],
       output: { total: lei(0) },
     });
@@ -411,6 +454,7 @@ describe('createCalculationSnapshot — ruleSetHash', () => {
       expenses: lei(400),
       ruleRelease: release2025,
       rules: revisedRules,
+      depreciation: leg,
       calculationLines: [],
       output: { total: lei(0) },
     });
@@ -431,6 +475,7 @@ describe('createCalculationSnapshot — ruleSetHash', () => {
       expenses: lei(400),
       ruleRelease: release2025,
       rules: [{ ...rule2025, parameters: [{ id: 'rate', label: 'Rata', value: 26, unit: 'percent' }] }],
+      depreciation: leg,
       calculationLines: [],
       output: { total: lei(0) },
     });

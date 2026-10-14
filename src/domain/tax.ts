@@ -6,6 +6,7 @@
 import type { PfaProfile } from './models';
 import { cassLadderForYear } from './models';
 import type { FiscalRule, RuleRelease } from './fiscal/rules';
+import type { DepreciationLeg } from './estimateBasis';
 import type { TaxInputsReference } from './derived';
 import type { CalculationLine, CalculationOutput, TaxCalculationSnapshot } from './snapshots/types';
 import { selectApplicableRules } from './fiscal/select';
@@ -91,6 +92,19 @@ export interface TaxCalculationInput {
    */
   ruleRelease: RuleRelease | null;
   rules: FiscalRule[];
+  /**
+   * B-109 — the asset leg the assembler struck for this calculation, threaded and not re-read: the same
+   * discipline as `expenseBase`, `flatRatioMethod` and `flatRatioWithholdingBlocked`. The engine does not
+   * consult the register; it hands the leg to the snapshot, which content-addresses it as
+   * `assetRegisterHash` beside `inputsHash`.
+   *
+   * Optional, and that is a deliberate difference from `expenseBase`: the leg changes no arithmetic here, so
+   * a call site that predates B-109 still computes the same number it always did. What it cannot do is
+   * pretend the register was addressed — with no leg supplied the snapshot records `assetRegisterHash: null`,
+   * which says out loud that this number's register was never addressed. Both production call sites
+   * (`data/derived.ts`, `data/dashboard.ts`) pass the leg the assembler produced.
+   */
+  depreciation?: DepreciationLeg | null;
 }
 
 /** CF art. 118 alin. (2) lit. a) + alin. (4)-(5): a fiscal loss on this source, surfaced for
@@ -278,7 +292,7 @@ export const CASS_FLAG_REVIEW_REASON =
   + 'rămâne valoarea calculată, dar nu poate fi prezentată ca o scutire dovedită.';
 
 export async function computeTaxEstimate(input: TaxCalculationInput): Promise<TaxEstimateResult> {
-  const { inputs, profile, revenues, expenses, revenuesNet, expensesNet, expenseBase, flatRatioGross, flatRatioMethod, flatRatioWithholdingBlocked, ruleRelease, rules } = input;
+  const { inputs, profile, revenues, expenses, revenuesNet, expensesNet, expenseBase, flatRatioGross, flatRatioMethod, flatRatioWithholdingBlocked, ruleRelease, rules, depreciation } = input;
   // `leiText`, not the raw value: these sentences are read by a person, and a person reads leu.
   if (!Number.isFinite(revenues) || revenues < 0) return rr(`Veniturile trebuie să fie >= 0, s-a obținut ${leiText(revenues)}`);
   if (!Number.isFinite(expenses) || expenses < 0) return rr(`Cheltuielile trebuie să fie >= 0, s-a obținut ${leiText(expenses)}`);
@@ -852,7 +866,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
       });
     }
     lines.push({ label: 'Total taxe', value: total });
-    const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, rules: applicable, calculationLines: lines, output: { total } });
+    const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, rules: applicable, depreciation: depreciation ?? null, calculationLines: lines, output: { total } });
     return {
       status: 'computed',
       lines,
@@ -947,7 +961,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
       lines.push({ label: flatTaxLabel, value: flatTax });
     }
     lines.push({ label: 'Total taxe', value: total });
-    const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, rules: applicable, calculationLines: lines, output: { total } });
+    const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, rules: applicable, depreciation: depreciation ?? null, calculationLines: lines, output: { total } });
     const computed: TaxEstimateResult = {
       status: 'computed',
       lines,
@@ -973,7 +987,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // integers is exact, and it is why no second rounding can happen anywhere downstream.
   const total = sumBani([casRes.value, cassValue, cassLadderValue, incomeTaxRes.value, taxDueByOwner]);
   lines.push({ label: 'Total taxe', value: total });
-  const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, rules: applicable, calculationLines: lines, output: { total } });
+  const snap = await createCalculationSnapshot({ profile, revenues: gross, expenses: deductibleBase, ruleRelease, rules: applicable, depreciation: depreciation ?? null, calculationLines: lines, output: { total } });
   return {
     status: 'computed',
     lines,
