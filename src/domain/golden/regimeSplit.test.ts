@@ -101,24 +101,35 @@ describe('FIXTURE 1 (FACT — ANAF DGFP București DU-2026 deck, income year 202
     // 24 SMN (97.200) → base 97.200 → 9.720 lei.
     // The two never merge: the PFA net never enters the 6/12/24 test, and the ladder never enters the 72-SM
     // cap. This is the regime split in a single official example.
-    const res = computed(
-      await driveSistemReal({
-        gross: lei(100_000),
-        expenses: lei(32_000),
-        ladderYears: answeredLadder({
-          proprietateIntelectuala: lei(50_000), // DPI net, art. 155 alin. (1) lit. c)
-          investitii: lei(48_000), // dividende, art. 155 alin. (1) lit. g)
-          cedareaFolosinteiBunurilor: lei(0), // this taxpayer has none; declared, not defaulted
-        }),
+    //
+    // **B-112 stage 2 — why this reads a refusal and still asserts the CASS figures.** The year now stops
+    // before the income tax, because the art. 118 alin. (2²) proration has no settled rounding policy
+    // (B-118). That refusal sits **downstream** of both CASS limbs, and `rr` carries the lines computed so
+    // far, so the two tracks are still observable and are asserted here unchanged. What is asserted
+    // differently is *where* they are read from, not *what* they are. The one figure that used to come from
+    // `bases` — the rung the ladder chose — is now a printed line, precisely so a refusal cannot hide it.
+    const res = await driveSistemReal({
+      gross: lei(100_000),
+      expenses: lei(32_000),
+      ladderYears: answeredLadder({
+        proprietateIntelectuala: lei(50_000), // DPI net, art. 155 alin. (1) lit. c)
+        investitii: lei(48_000), // dividende, art. 155 alin. (1) lit. g)
+        cedareaFolosinteiBunurilor: lei(0), // this taxpayer has none; declared, not defaulted
       }),
-    );
+    });
+    // The refusal is the B-118 proration, not a CASS failure — asserted first so a reader cannot mistake
+    // the shape of the result for the subject of the test.
+    expect(res.status).toBe('review_required');
+    if (res.status !== 'review_required') throw new Error('unreachable: status was just asserted');
+    expect(res.reason).toContain('art. 118 alin. (2²)');
 
     expect(lineValue(res, 'CASS (10%)')).toBe(lei(6_800));
     expect(lineValue(res, 'CASS pe veniturile')).toBe(lei(9_720));
     // The rung the ladder chose is 24 SMN, and it is a base, not the 98.000 lei cumulated.
-    expect(res.bases.bazaDeCalculCassArt155LitCH).toBe(lei(97_200));
-    // And the PFA's own net is a separate quantity, not swept into that base.
-    expect(res.bases.venitulNetDinActivitate).toBe(lei(68_000));
+    expect(lineValue(res, 'Baza de calcul CASS art. 155 alin. (1) lit. c)-h)')).toBe(lei(97_200));
+    // And the PFA's own net is a separate quantity, not swept into that base. This is the CASS cumulation
+    // line of art. 170 alin. (1) — printed because B-112 stage 2 made it differ from the CAS one.
+    expect(lineValue(res, 'Venit cumulat pentru CASS')).toBe(lei(68_000));
     // One income tax, on the sistem-real composition — the ladder contribution is not deducted from it
     // (art. 118 alin. (2^3) prorates the art. 174 alin. (1) contribution, not the art. 174¹ one).
     expect(lineOf(res, 'Impozit art.')).toBeUndefined();
@@ -127,24 +138,46 @@ describe('FIXTURE 1 (FACT — ANAF DGFP București DU-2026 deck, income year 202
 
 describe('FIXTURE 1 — FINDING: the same ANAF example pins a CAS figure the engine does not produce', () => {
   /**
-   * **This fixture fails against the published value, and it is left failing on purpose.**
+   * **This fixture still fails against the published value, and it is left failing on purpose. The cause
+   * has changed, and the change is the progress.**
    *
    * SOURCE — the same ANAF deck, Exemplul 3, income year 2025, SMN 4.050 lei.
    * PUBLISHED — „AI+DPI 118.000 → bază CAS 97.200 (24 SMN) → CAS 24.300 → diferență 12.150".
-   * ENGINE — CAS 12.150 lei, i.e. the 12-SMN base of 48.600 lei.
    *
-   * The cause is a rule gap, not an arithmetic slip: CF art. 148 alin. (3) cumulates the base across art.
-   * 137 alin. (1) **lit. b) și b^1)**, and *drepturi de proprietate intelectuală* is lit. b^1). The engine's
-   * `cumulateContributionBase` in `domain/tax.ts` sums only the art. 155 alin. (1) lit. b) legs it holds —
-   * sistem-real and art. 68^3 — and the app has no DPI income path at all. So the DPI 50.000 lei reaches the
-   * CASS ladder (where it belongs, art. 170 alin. (4) lit. c)) and never reaches the CAS cumulation (where
-   * it also belongs). 68.000 lei selects the 12-SMN tier; 118.000 lei selects the 24-SMN tier.
+   * **Before B-112 stage 2** the engine computed a CAS of 12.150 lei: `cumulateContributionBase` summed
+   * only the art. 155 alin. (1) lit. b) legs, so the DPI 50.000 lei reached the CASS ladder (where it
+   * belongs, art. 170 alin. (4) lit. c)) and never the CAS ceiling test (where it also belongs, art. 148
+   * alin. (3) cumulating art. 137 alin. (1) **lit. b) și b^1)**). 68.000 lei selected the 12-SMN tier.
    *
-   * Per the phase rule, the expected value stays ANAF's. `it.fails` keeps the published literal as the
-   * assertion — if the CAS cumulation is ever widened to lit. b^1), this test starts failing for the
-   * opposite reason and whoever fixes it has to come and read this comment.
+   * **Now** the DPI amount enters the CAS cumulation — `casCumulationBase` in `domain/tax.ts` — the
+   * cumulation is 118.000 lei, the 24-SMN tier is selected, and the CAS line the engine builds is
+   * **24.300 lei, ANAF's figure**. The test below asserts exactly that, on the partial lines the engine
+   * returns alongside its refusal.
+   *
+   * **Why the fixture still cannot flip, and what is actually blocking it.** The engine refuses before it
+   * returns a result, one step later: CF art. 118 alin. (2²) prorates the deductible CAS by „ponderea
+   * venitului net anual determinat în sistem real în total venituri cumulate potrivit art. 148 alin. (3)”.
+   * With DPI in that denominator the ratio is 68.000 ÷ 118.000, and 24.300 lei × 68/118 is not a whole
+   * number of bani. A deduction is not one of the three sums art. 66 alin. (1) rounds — rounding it would
+   * change the taxable base, which is a base — so `exactBani` reports rather than repairs, and
+   * `computeTaxEstimate` returns `review_required`. That refusal was unreachable before B-112 stage 2,
+   * because a sistem-real register with one leg always had ratio exactly 1.
+   *
+   * **B-118 — the blocker is a precision question, and it is sharper than "round or refuse".** The exact
+   * proration is 24.300 × 68.000 ÷ 118.000 = **14.003,389830… lei**, nearest ban **14.003 lei**. ANAF's own
+   * deck prints **13.997 lei**. The two differ by **6 lei**, and the reason is that ANAF rounds the
+   * *ratio* first: 68.000 ÷ 118.000 = 57,627… %, shown as **57,6 %**, and 24.300 × 57,6 % = 13.996,80 →
+   * **13.997 lei**. So the open question is not whether to round but **at what precision the ponderea is
+   * carried**, and that is a two-step inference from a single worked example. Adopting it silently would
+   * bake one example into a rule — the exact thing `exactBani` was written to stop — so the engine now
+   * computes both candidates, names them in the refusal, and uses neither.
+   *
+   * So the remaining gap is **not** a missing income category any more. It is a rounding decision the Cod
+   * fiscal does not state and this repository has deliberately refused to infer from one example. Closing
+   * it is tracked as **B-118**, and the authority (D212 instructions, a Norme metodologică, or ANAF
+   * filling-in guidance on how *ponderea* is rounded) is being sought before any code picks a side.
    */
-  it.fails('FINDING — ANAF Exemplul 3 CAS: published 24.300 lei, engine 12.150 lei (art. 148 alin. (3) cumulates lit. b^1); the engine does not)', async () => {
+  it.fails('FINDING — ANAF Exemplul 3 CAS: published 24.300 lei; the engine now builds that figure but refuses the result (art. 118 alin. (2^2) proration is fractional)', async () => {
     const res = computed(
       await driveSistemReal({
         gross: lei(100_000),
@@ -156,24 +189,56 @@ describe('FIXTURE 1 — FINDING: the same ANAF example pins a CAS figure the eng
         }),
       }),
     );
-    expect(lineValue(res, 'CAS (25%)')).toBe(lei(24_300)); // ANAF's figure, verbatim. The engine says 12.150.
+    expect(lineValue(res, 'CAS (25%)')).toBe(lei(24_300)); // ANAF's figure, verbatim.
   });
 
-  it('the engine value the failing fixture above disagrees with, pinned so the divergence cannot drift silently', async () => {
+  it('the CAS cumulation now selects ANAF\'s tier — the refusal carries the 24.300 lei line it built before refusing', async () => {
+    // The companion to the fixture above, and the reason the finding is narrower than it was. The engine
+    // refuses, so `computed()` cannot be used; the partial lines it hands back are read directly, because
+    // a refusal that names no figure is a dead end and a refusal that carries the figure says exactly how
+    // far the arithmetic got.
+    const res = await driveSistemReal({
+      gross: lei(100_000),
+      expenses: lei(32_000),
+      ladderYears: answeredLadder({
+        proprietateIntelectuala: lei(50_000),
+        investitii: lei(48_000),
+        cedareaFolosinteiBunurilor: lei(0),
+      }),
+    });
+    expect(res.status).toBe('review_required');
+    if (res.status !== 'review_required') throw new Error('unreachable: the status was just asserted');
+    // The cumulation ANAF prints, and the tier it selects — 118.000 lei over 24 SMN (97.200 lei).
+    const casLine = res.lines.find((l) => l.label.startsWith('CAS (25%)'));
+    expect(casLine?.value).toBe(lei(24_300));
+    expect(res.lines.find((l) => l.label.startsWith('Venit cumulat pentru CAS'))?.value).toBe(lei(118_000));
+    // The old wrong answer, asserted absent so it cannot return quietly: 25 % of the 12-SMN floor.
+    expect(casLine?.value).not.toBe(lei(12_150));
+    // And the refusal itself, quoted so the blocker is on the record rather than inferred from a diff.
+    expect(res.reason).toContain('art. 118 alin. (2²)');
+    // The refusal names both candidate readings, because a person facing it should learn the app will not
+    // guess, not that the app is broken. These are the two numbers B-118 turns on: 14.003,39 lei is the
+    // exact proration rounded at the ban, and 13.996,80 lei is what ANAF's own deck produces by rounding the
+    // ponderea to 57,6 % first — 13.996,80 lei is the deck's 13.997 lei at the nearest leu.
+    expect(res.reason).toContain('14003.39');
+    expect(res.reason).toContain('13996.8');
+  });
+
+  it('without the DPI amount the year still computes, so the refusal is the DPI path and not the register', async () => {
+    // The counterfactual that makes the test above mean something. Same register, same expenses, the DPI
+    // amount removed: the cumulation is 68.000 lei, the ratio is 68.000 ÷ 68.000 = 1, the proration is
+    // whole, and the engine computes — at the 12-SMN tier, which is the correct CAS for 68.000 lei alone.
     const res = computed(
       await driveSistemReal({
         gross: lei(100_000),
         expenses: lei(32_000),
         ladderYears: answeredLadder({
-          proprietateIntelectuala: lei(50_000),
+          proprietateIntelectuala: lei(0),
           investitii: lei(48_000),
           cedareaFolosinteiBunurilor: lei(0),
         }),
       }),
     );
-    // This is the ENGINE's number, not a published one, and it is asserted only to make the gap visible:
-    // 12.150 lei is 25 % of 48.600 lei (12 SMN), where ANAF measures 25 % of 97.200 lei (24 SMN).
     expect(lineValue(res, 'CAS (25%)')).toBe(lei(12_150));
-    expect(lineValue(res, 'CAS (25%)')).not.toBe(lei(24_300));
   });
 });

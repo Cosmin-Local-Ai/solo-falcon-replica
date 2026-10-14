@@ -27,6 +27,9 @@ import { describe, expect, it } from 'vitest';
 import {
   computeTaxEstimate,
   cumulateContributionBase,
+  // B-112 stage 2 — the CAS ceiling test of art. 148 alin. (3) cumulates a wider set than the CASS one of
+  // art. 170 alin. (1): art. 137 alin. (1) lit. b^1) (DPI) belongs to CAS and not to CASS.
+  casCumulationBase,
   sistemRealContributionRatio,
   type ContributionLeg,
 } from './tax';
@@ -239,15 +242,56 @@ describe('B-85 keeps the contributions cumulation, because two SOURCES still cum
     expect(cumulateContributionBase([sistemReal, flatRatio])).toBe(lei(100_000));
   });
 
+  // B-112 stage 2 — `casCumulationBase` is the art. 148 alin. (3) set, and it is WIDER than
+  // `cumulateContributionBase`: art. 137 alin. (1) lit. b^1) (DPI) belongs to the CAS ceiling test and not
+  // to the CASS one. With no DPI the two agree, which is what the first assertion below pins — the whole
+  // pre-B-112 build sits in that case, and it must not move by a ban.
+  it('the CAS cumulation equals the CASS one while there is no DPI income, and widens when there is', () => {
+    expect(casCumulationBase([sistemReal, flatRatio], null)).toBe(cumulateContributionBase([sistemReal, flatRatio]));
+    // 30.000 AI + 50.000 DPI: the ceiling test ANAF's Exemplul 3 runs, on the helper rather than on a
+    // register, so the tier boundary is pinned where the arithmetic lives.
+    expect(casCumulationBase([sistemReal], lei(50_000))).toBe(lei(80_000));
+    // A DPI amount of zero is a declared zero, not an absent fact: it keeps the year in the multi-source
+    // branch, which is what floors a negative art. 68 net out of the ceiling test.
+    expect(casCumulationBase([sistemReal], lei(0))).toBe(lei(30_000));
+  });
+
+  it('a negative art. 68 net is floored out of the CAS ceiling test once a DPI source is present', () => {
+    // art. 148 alin. (3) cumulates the net incomes realised in the year. ANAF's own Exemplul 3 states a
+    // „Pierdere fiscală reportată = 20.000” and still cumulates the full 118.000 lei, so an art. 118 loss
+    // carried into the year does not shrink the ceiling test.
+    const loss: ContributionLeg = { method: 'sistem-real', net: lei(-20_000) as Bani };
+    expect(casCumulationBase([loss], lei(50_000))).toBe(lei(50_000));
+    // With no DPI the single leg keeps its sign, because `calcCass` reads it as the art. 174 alin. (2)
+    // zero/loss case rather than as a base it has to be told about.
+    expect(casCumulationBase([loss], null)).toBe(lei(-20_000));
+    expect(sistemRealContributionRatio([loss], lei(-20_000)).toString()).toBe('1');
+  });
+
   it('the sistem-real deduction is prorated over the cumulated base, not inherited whole', () => {
-    // art. 118 alin. (2^2) and (2^3): 30.000 ÷ 100.000 = 0,3 of each contribution.
-    const ratio = sistemRealContributionRatio([sistemReal, flatRatio]);
+    // art. 118 alin. (2^2) and (2^3): 30.000 ÷ 100.000 = 0,3 of each contribution. The denominator is an
+    // argument now, because the two letters divide by two different cumulations once DPI exists.
+    const ratio = sistemRealContributionRatio([sistemReal, flatRatio], lei(100_000));
     expect(ratio.toString()).toBe('0.3');
   });
 
   it('one source leaves both ratios at exactly 1, so no profile that computed before moves', () => {
     expect(cumulateContributionBase([sistemReal])).toBe(lei(30_000));
-    expect(sistemRealContributionRatio([sistemReal]).toString()).toBe('1');
+    expect(sistemRealContributionRatio([sistemReal], lei(30_000)).toString()).toBe('1');
+  });
+
+  it('a DPI source lowers the sistem-real proration, because the denominator grew and the numerator did not', () => {
+    // The half of B-112 that reaches the income tax: art. 118 alin. (2^2) prorates the CAS deduction by the
+    // pondere of the sistem-real net in the art. 148 alin. (3) cumulation, and DPI enlarges that
+    // cumulation without ever receiving a deduction of its own.
+    const ratio = sistemRealContributionRatio([sistemReal], casCumulationBase([sistemReal], lei(50_000)));
+    // 30.000 lei of sistem-real net over a 80.000 lei cumulation (30.000 AI + 50.000 DPI).
+    expect(ratio.toString()).toBe('0.375');
+    // 0,375 × 24.300 lei CAS = 9.112,5 lei deductible, against 24.300 lei with no DPI in the denominator.
+    // The fraction is the point, and it is the reason Stage 2 cannot close the golden fixture on its own:
+    // a deduction is not one of the three sums art. 66 alin. (1) rounds, so the engine refuses rather than
+    // inventing a rounding rule — see `tax.dpiCas.test.ts`.
+    expect(ratio.times(24_300).toString()).toBe('9112.5');
   });
 
   it('a single sistem-real source keeps its sign, because art. 174 alin. (2) reads a loss, not a base', () => {
@@ -255,7 +299,7 @@ describe('B-85 keeps the contributions cumulation, because two SOURCES still cum
     // alin. (2) zero/loss case and must reach `calcCass` as one.
     const loss: ContributionLeg = { method: 'sistem-real', net: lei(-20_000) as Bani };
     expect(cumulateContributionBase([loss])).toBe(lei(-20_000));
-    expect(sistemRealContributionRatio([loss]).toString()).toBe('1');
+    expect(sistemRealContributionRatio([loss], lei(-20_000)).toString()).toBe('1');
   });
 
   it('a flat-ratio register supplies one leg, not two', () => {

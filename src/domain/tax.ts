@@ -24,7 +24,7 @@ import {
 import { formatBani } from './money';
 import { createCalculationSnapshot } from './snapshots/snapshot';
 import Decimal from 'decimal.js-light';
-import { lei, leiText, subBani, sumBani, type Bani } from './money';
+import { addBani, lei, leiText, subBani, sumBani, type Bani } from './money';
 
 export interface TaxCalculationInput {
   inputs: TaxInputsReference;
@@ -223,6 +223,53 @@ export function cumulateContributionBase(legs: readonly ContributionLeg[]): Bani
 }
 
 /**
+ * B-112 STAGE 2 — the CAS cumulation of CF art. 148 alin. (3), which is a WIDER set than the CASS one.
+ *
+ * The two ceiling tests have looked identical in this build until now, and they are not the same test:
+ *
+ * - **CASS, art. 170 alin. (1)** cumulates art. 155 alin. (1) **lit. b)** sources only. That is
+ *   `cumulateContributionBase(legs)`, and it does not change here.
+ * - **CAS, art. 148 alin. (3)** cumulates *„veniturile nete … din activități independente determinate
+ *   potrivit **art. 68, 68³ și 69**, a venitului brut realizat în baza contractelor de activitate sportivă
+ *   potrivit **art. 68¹**, precum și a **veniturilor nete din drepturi de proprietate intelectuală
+ *   determinate potrivit art. 72, art. 72¹ și art. 73**”*. DPI is art. 137 alin. (1) **lit. b¹)**, and it
+ *   belongs in this one and not in the other.
+ *
+ * That single missing litera is defect B-112 in its arithmetic half. ANAF DGRFP București's Exemplul 3
+ * cumulates 68.000 lei AI + 50.000 lei DPI = 118.000 lei, which clears 24 SMN (97.200 lei) and gives CAS
+ * 24.300 lei; the engine saw 68.000 lei, selected the 12-SMN tier, and produced 12.150 lei. The tier
+ * function was right throughout — 12.150 = 25 % × 48.600 is the correct CAS for 68.000 alone. What was
+ * missing was an input.
+ *
+ * **Why the DPI amount is a parameter and not another `ContributionLeg`.** A leg is one *register* under
+ * one determination method, and `IncomeDeterminationMethodTag` is the tag for that. DPI is not a register
+ * and has no determination method in that sense — it has a quota (art. 72 alin. (2)) or an election
+ * (art. 73). Adding a fake method tag would put art. 70 income into the leg list, and the leg list is what
+ * `computeTaxEstimate`'s method gate counts to keep B-85's one-method-per-register invariant true. Keeping
+ * DPI outside it means the gate keeps meaning what it says.
+ *
+ * **Sign.** Same rule as `cumulateContributionBase`: with a DPI amount present there are at least two
+ * sources, so a negative art. 68 net is floored at zero rather than carried. That is also what ANAF's own
+ * worked example shows — Exemplul 3 states a *„Pierdere fiscală reportată = 20.000”* and still cumulates
+ * the full 118.000 lei, because art. 148 alin. (3) cumulates the net incomes realised in the year, not the
+ * art. 118 losses carried into it.
+ *
+ * **What this does NOT decide, and says so rather than guessing.** CF art. 150 alin. (2) exempts salaried
+ * persons from CAS *for art. 137 alin. (1) lit. b¹) income only*. Whether that exemption removes the DPI
+ * amount from the art. 148 alin. (3) ceiling test, or only from the contribution the payer withholds, is
+ * not resolved by the text: alin. (3) speaks of the ceiling test and names DPI without carve-out, while
+ * alin. (2) speaks of the contribution. This function always cumulates, which is the literal reading of
+ * alin. (3); the exemption bites at the withholding step (art. 151 alin. (5), Stage 4). Recorded as an
+ * inference, not a fact, and `tax.dpiCas.test.ts` pins the reading so a later change is a decision.
+ */
+export function casCumulationBase(legs: readonly ContributionLeg[], dpiNet: Bani | null): Bani {
+  const independent = cumulateContributionBase(legs);
+  if (dpiNet === null) return independent;
+  const independentPart = legs.length === 0 ? lei(0) : independent > 0 ? independent : lei(0);
+  return addBani(independentPart, dpiNet > 0 ? dpiNet : lei(0));
+}
+
+/**
  * CF art. 118 alin. (2^2) and (2^3): the share of each contribution the sistem-real source may deduct.
  *
  * Both letters divide the same numerator — „venit net anual determinat în sistem real” — by a cumulated
@@ -238,11 +285,18 @@ export function cumulateContributionBase(legs: readonly ContributionLeg[]): Bani
  * receiving a deduction. With NO sistem-real leg there is nothing to apportion and 1 is the honest answer
  * rather than 0: a ratio is not a deduction, and 0 would read like one.
  */
-export function sistemRealContributionRatio(legs: readonly ContributionLeg[]): Decimal {
+export function sistemRealContributionRatio(
+  legs: readonly ContributionLeg[],
+  // B-112 stage 2 — the denominator is now passed in, because the two ratios the law states have two
+  // different denominators once DPI exists in the build: art. 118 alin. (2^2) divides by the art. 148
+  // alin. (3) cumulation (lit. b) **and** b^1)) and alin. (2^3) divides by the art. 170 alin. (1) one
+  // (lit. b) only). They were the same quantity while the app held no DPI income; passing it keeps the two
+  // call sites honest about which one each ratio answers.
+  denominator: Bani,
+): Decimal {
   const sistemReal = legs.find((leg) => leg.method === 'sistem-real');
   if (sistemReal === undefined) return new Decimal(1);
-  const total = cumulateContributionBase(legs);
-  if (total > 0) return new Decimal(sistemReal.net > 0 ? sistemReal.net : lei(0)).div(total);
+  if (denominator > 0) return new Decimal(sistemReal.net > 0 ? sistemReal.net : lei(0)).div(denominator);
   return new Decimal(1);
 }
 
@@ -271,6 +325,16 @@ function rr(reason: string, lines: CalculationLine[] = []): TaxEstimateResult {
  */
 function exactBani(value: Decimal): Bani | null {
   return value.isInteger() ? (value.toNumber() as Bani) : null;
+}
+
+/**
+ * Bani held as a Decimal → the lei text a refusal sentence shows. B-118 uses it for the two candidate
+ * readings of the art. 118 alin. (2²) proration, which are Decimals that have already been reduced to a
+ * whole ban for display. It is deliberately a *display* helper: it returns a string, never a `Bani`, so it
+ * cannot become a rounding path by accident the way a `Decimal → Bani` conversion would.
+ */
+function leiFromDecimal(bani: Decimal): string {
+  return leiText(bani.toNumber() as Bani);
 }
 
 /**
@@ -640,13 +704,38 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     lines.push({ label: 'Fracțiune de an (art. 118 alin. (3)): venit anual', value: net });
   }
 
-  // art. 148 alin. (3) (CAS) and art. 170 alin. (1) (CASS) both measure the contributions on the amount
-  // CUMULATED across art. 155 alin. (1) lit. b) SOURCES — see `cumulateContributionBase`. With one source
-  // this is that source's net itself, sign included; the cumulation only becomes a sum when a second
-  // genuine source exists, and B-85 is the reason one register never supplies two.
+  // art. 148 alin. (3) (CAS) and art. 170 alin. (1) (CASS) both measure the contributions on a CUMULATED
+  // amount, but they cumulate DIFFERENT sets — see `cumulateContributionBase` and `casCumulationBase`.
+  // CASS cumulates art. 155 alin. (1) lit. b) sources. CAS cumulates those **plus** the net income from
+  // drepturi de proprietate intelectuală determined under art. 72 / 72¹ / 73, because art. 137 alin. (1)
+  // lit. b¹) is inside the art. 148 alin. (3) ceiling test and outside the art. 170 alin. (1) one.
+  // With one source and no DPI the two are the same number, sign included; the cumulation only becomes a
+  // sum when a second genuine source exists, and B-85 is the reason one register never supplies two.
   const cumulatedNet = cumulateContributionBase(legs);
-  if (legs.length > 1) {
-    lines.push({ label: 'Venit cumulat pentru contribuții (art. 148 alin. (3), art. 170 alin. (1))', value: cumulatedNet });
+  // B-112 STAGE 2 — the art. 137 alin. (1) lit. b¹) amount. Read, not derived: `CassLadderYear`'s
+  // `proprietateIntelectuala` is documented as „lit. c) venitul net after the art. 72 / 72¹ forfetar, or
+  // net per art. 73”, which is the same quantity art. 148 alin. (3) asks for, so one stored figure answers
+  // both the CASS ladder (art. 170 alin. (4) lit. c)) and the CAS ceiling test (art. 148 alin. (3)) —
+  // legitimately, because those are two different tests over one amount, not one test counted twice.
+  //
+  // The B-116 hazard is the other direction: if a recorded DPI document ALSO reached this cumul, the same
+  // income would enter twice and select a higher tier. It cannot, and that is structural rather than a
+  // check added here — `estimateBasis.ts selectEstimateOperands` scopes recorded DPI receipts out of the
+  // engine's record set entirely, so the ladder amount is the only DPI quantity the engine can see. Pinned
+  // in `tax.dpiCas.test.ts`, because a future stage that routes recorded DPI into the engine has to come
+  // and break that test on purpose.
+  const dpiNet = cassLadderForYear(inputs.cassLadderYears, inputs.fiscalYear)?.proprietateIntelectuala ?? null;
+  const casCumulatedNet = casCumulationBase(legs, dpiNet);
+  // Two lines, because they are now two quantities. They are only printed when they differ from the net
+  // the block above already shows, so a single-source year still says nothing it has no figure for.
+  if (legs.length > 1 || casCumulatedNet !== cumulatedNet) {
+    lines.push({
+      label: 'Venit cumulat pentru CAS (art. 148 alin. (3): art. 68, 68³, 69, 68¹ și art. 72/72¹/73)',
+      value: casCumulatedNet,
+    });
+  }
+  if (legs.length > 1 || casCumulatedNet !== cumulatedNet) {
+    lines.push({ label: 'Venit cumulat pentru CASS (art. 170 alin. (1))', value: cumulatedNet });
   }
 
   // CF art. 150 alin. (1): pensioners and persons insured in their own social insurance system owe no
@@ -661,10 +750,16 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   const pensionerStatus = readPensionerStatus(inputs);
   const cassFacts = readCassExceptionFacts(inputs, inputs.fiscalYear);
   const casRes = calculatorRegistry['calc-cas'](casRule, {
-    // PG-6h-1: the CUMULATED lit. b) amount, per art. 148 alin. (3). With one source this is exactly the
+    // PG-6h-1: the CUMULATED amount, per art. 148 alin. (3). With one source and no DPI this is exactly the
     // value this call always received. It is an amount that SELECTS the statutory tier — `calcCas` never
     // makes it the base, which is what art. 148 alin. (2) forbids.
-    base: cumulatedNet,
+    //
+    // B-112 STAGE 2: this is where the defect lived. The set art. 148 alin. (3) cumulates includes art.
+    // 137 alin. (1) lit. b¹) — DPI — and the engine only ever had the lit. b) legs, so ANAF's Exemplul 3
+    // (68.000 lei AI + 50.000 lei DPI = 118.000 lei, over 24 SMN, CAS 24.300 lei) came out at 12.150 lei.
+    // The tier function is untouched: 12.150 lei is the correct CAS for 68.000 lei alone. The fix is the
+    // input, not the arithmetic.
+    base: casCumulatedNet,
     pensionerStatus,
   });
   if ('reviewRequired' in casRes) return rr(casRes.reason, lines);
@@ -778,6 +873,14 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
       lines.push({
         label: 'CASS pe veniturile din art. 155 alin. (1) lit. c)-h) (10 %, art. 174¹ alin. (1))',
         value: cassLadderValue,
+      });
+      // B-118: the rung the ladder selected is printed beside the contribution it produced. It used to live
+      // only in `bases`, which the `computed` branch alone carries — so a year that later refused on the
+      // art. 118 proration lost the one figure that shows the ladder ran correctly, and a refusal that
+      // carries no numbers reads as a broken calculation rather than as an undecided rule.
+      lines.push({
+        label: 'Baza de calcul CASS art. 155 alin. (1) lit. c)-h) (scara art. 170 alin. (2)-(4))',
+        value: cassLadderBase,
       });
     }
     const cassRes = calculatorRegistry['calc-cass'](cassRule, {
@@ -900,8 +1003,8 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // numerator while deducting a contribution from a base that was itself double-counted.
   // Phase 10: the ratios and their products are Decimal, not float. A float ratio is exactly how the
   // fractional line values `7_128.1` and `52_002.9` got into this engine in the first place.
-  const ratioCas = sistemRealContributionRatio(legs); // art. 118 alin. (2^2), denominator art. 148 alin. (3)
-  const ratioCass = sistemRealContributionRatio(legs); // art. 118 alin. (2^3), denominator art. 170 alin. (1)
+  const ratioCas = sistemRealContributionRatio(legs, casCumulatedNet); // art. 118 alin. (2^2), denominator art. 148 alin. (3)
+  const ratioCass = sistemRealContributionRatio(legs, cumulatedNet); // art. 118 alin. (2^3), denominator art. 170 alin. (1)
   const casDeductibilaDec = ratioCas.times(casRes.value);
   // B-13: the art. 174 alin. (6) difference up to the 6 SM floor is OWED but never deductible — art. 118
   // alin. (2) lit. b) deducts the contributions „datorate potrivit prevederilor titlului V” „cu
@@ -919,9 +1022,37 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   const casDeductibila = exactBani(casDeductibilaDec);
   const cassDeductibila = exactBani(cassDeductibilaDec);
   if (casDeductibila === null || cassDeductibila === null) {
+    // B-118 — the refusal names its cause, and it names it because a bare „nu putem calcula” tells the
+    // person the app is broken when in fact the app is refusing to guess. The precedent is B-93's
+    // `depreciation_conflict`: two routes to one fiscal quantity, both defensible, no authority saying
+    // which, and the app states the conflict instead of picking one silently.
+    //
+    // What is undecided is NOT whether to round. It is **at what precision the ponderea of art. 118 alin.
+    // (2^2) is carried**, and the two readings give different money:
+    //
+    //   A. round the product to the nearest ban            — exact ratio, rounded result
+    //   B. round the ratio first (to 0,1 %), then multiply  — what ANAF's own worked example appears to do
+    //
+    // On ANAF DGRFP București's Exemplul 3 (ratio 68.000 ÷ 118.000 over a CAS of 24.300 lei) A gives
+    // 14.003 lei and B gives 13.997 lei — **6 lei apart, inferred from a single example.** Adopting either
+    // here would bake one worked case into a rule, which is the exact thing `exactBani` exists to prevent.
+    // So both candidates are computed and shown, and neither is used.
+    const ratioPct = ratioCas.times(100);
+    const produsRotunjit = casDeductibilaDec.toDecimalPlaces(0);
+    const pondereRotunjita = ratioCas.toDecimalPlaces(3).times(casRes.value).toDecimalPlaces(0);
+    const diferenta = produsRotunjit.minus(pondereRotunjita).abs();
     return rr(
-      'Deducerile CAS/CASS prorotate (art. 118 alin. (2^2) și (2^3)) nu sunt numere întregi de bani; '
-      + 'art. 66 alin. (1) rotunjește sumele datorate, nu deducerile sau bazele, deci nu se aplică nicio rotunjire aici.',
+      'Nu putem stabili partea din contribuția de asigurări sociale care se deduce din impozit '
+      + '(art. 118 alin. (2²)). '
+      + `Ponderea venitului net anual în sistem real în veniturile cumulate potrivit art. 148 alin. (3) este `
+      + `${ratioPct.toFixed(4)} %, iar Codul fiscal nu spune cu ce precizie se păstrează acea pondere. `
+      + 'Cele două lecturi posibile dau sume diferite: rotunjind produsul la banul cel mai apropiat rezultă '
+      + `${leiFromDecimal(produsRotunjit)} lei, iar rotunjind întâi ponderea la 0,1 % rezultă ${leiFromDecimal(pondereRotunjita)} lei — `
+      + `${leiFromDecimal(diferenta)} lei diferență pe o singură deducere. `
+      + 'Contribuțiile calculate mai sus sunt corecte; deducerea este cea care nu poate fi stabilită. '
+      + 'Art. 66 alin. (1) rotunjește sumele datorate, nu deducerile sau bazele, deci o regulă de rotunjire '
+      + 'luată dintr-un singur exemplu ar modifica baza impozabilă în funcție de acel exemplu. Aplicația nu '
+      + 'ghicește: așteptăm îndrumarea oficială despre precizia ponderii.',
       lines,
     );
   }

@@ -368,11 +368,15 @@ describe('alin. (11) — contributions cumulate across sources, the income tax i
       { method: 'accommodation-flat-ratio', net: lei(70_000) },
     ];
     expect(cumulateContributionBase(legs)).toBe(lei(100_000));
-    expect(sistemRealContributionRatio(legs).toString()).toBe('0.3');
+    // B-112 stage 2 — the denominator is now an argument. art. 118 alin. (2^2) divides by the art. 148
+    // alin. (3) cumulation (lit. b) **and** b^1)) and alin. (2^3) by the art. 170 alin. (1) one (lit. b)
+    // only); those two sets stopped being the same quantity once DPI income existed. This fixture has no
+    // DPI, so both denominators are 100.000 lei and the ratio is unchanged.
+    expect(sistemRealContributionRatio(legs, lei(100_000)).toString()).toBe('0.3');
     // 0,3 × 24.300 CAS = 7.290 and 0,3 × 10.000 CASS = 3.000 — the two figures the pre-B-85 engine printed
     // for a two-source year, now reachable only from two actual sources.
-    expect(sistemRealContributionRatio(legs).times(24_300).toString()).toBe('7290');
-    expect(sistemRealContributionRatio(legs).times(10_000).toString()).toBe('3000');
+    expect(sistemRealContributionRatio(legs, lei(100_000)).times(24_300).toString()).toBe('7290');
+    expect(sistemRealContributionRatio(legs, lei(100_000)).times(10_000).toString()).toBe('3000');
   });
 
   it('with no 68^3 source the sistem-real figures do not move by a single ban', async () => {

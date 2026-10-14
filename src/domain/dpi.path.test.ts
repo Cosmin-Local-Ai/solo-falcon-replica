@@ -3,6 +3,7 @@ import type { AppData, Revenue, SettingsState } from '../data/types';
 import type { PfaIdentity, PfaProfile } from './models';
 import { selectYtd } from './aggregation';
 import { dpiCoverageGaps, selectEstimateOperands } from './estimateBasis';
+import { getThresholdStatuses } from '../data/dashboard';
 import { selectRuleSet } from './fiscal';
 import { PFA_2026_DPI_RELEASE_ID } from './fiscal/release2026dpi';
 import { lei, money, type Bani } from './money';
@@ -241,6 +242,59 @@ describe('B-112 — the same DPI income from the register AND from Settings is r
     const plain = selectEstimateOperands(aiOnly(), AS_OF, rulesFor(aiOnly()));
     if (doubled.kind !== 'run' || plain.kind !== 'run') throw new Error('expected both to run');
     expect(doubled.amounts.revenues).toBe(plain.amounts.revenues);
+  });
+});
+
+describe('B-112 — the DPI part is a subset, and the art. 310 ceiling still measures the whole turnover', () => {
+  /**
+   * **This test protects the Stage 1 design decision, and it exists because that decision is easy to undo
+   * by accident.** The scoping that keeps DPI out of the engine's sistem-real operands reads like an
+   * omission, and the tidy-up that "simplifies" it is to drop DPI receipts from `revenue` and `revenueNet`
+   * altogether. That would be a new defect, not a fix:
+   *
+   * - `revenueNet` is **cifră de afaceri**, and CF art. 310 alin. (1) measures the VAT registration plafon
+   *   on it. Authorship is a *prestare de servicii* for Titlul VII purposes — art. 292 defines it as one,
+   *   and nothing in Titlul VII carves DPI out — so an author who passes 395.000 lei of turnover has a
+   *   registration duty whether the receipts came from art. 67 work or from art. 70 rights.
+   * - Removing DPI from the turnover would **understate the VAT plafon** in order to fix an income-tax
+   *   defect: one wrong number traded for another.
+   *
+   * So the category is marked as a **part of** the same totals (`dpiGross` / `dpiGrossNet`), and the
+   * exclusion happens once, downstream, where the engine's record set is scoped. A refactor that moves the
+   * exclusion upstream has to break this test on purpose first.
+   */
+  it('the art. 310 plafon row measures the DPI-inclusive turnover, not the art. 67 part of it', () => {
+    // 300.000 lei of activitate independentă + 120.000 lei of DPI = 420.000 lei of cifră de afaceri, over
+    // the 395.000 lei plafon. On the art. 67 part alone (300.000 lei) the year would read as comfortably
+    // below the ceiling, and the registration duty would vanish from the screen.
+    const data = makeData({
+      revenues: [
+        rev('ai-big', lei(300_000)),
+        rev('dpi-big', lei(120_000), { incomeCategory: 'drepturi_de_proprietate_intelectuala' }),
+      ],
+    });
+    const row = getThresholdStatuses(data, AS_OF, null).find((t) => t.thresholdId === 'VAT_REGISTRATION');
+    expect(row).toBeDefined();
+    expect(row!.currentValue).toBe(lei(420_000));
+    // The DPI part is exactly what would have gone missing, named so a reader can see the size of the trade.
+    expect(row!.currentValue).not.toBe(lei(300_000));
+    expect(selectYtd(data, AS_OF).dpiGrossNet).toBe(lei(120_000));
+  });
+
+  it("and the engine's own revenue operands still exclude the DPI part, in the same year", () => {
+    // The other half, asserted beside the first so the two cannot drift: the ceiling row measures 420.000
+    // lei and the engine measures 300.000 lei. That is not a contradiction — it is two articles measuring
+    // two different things over one record set, and it is the reason the exclusion lives in the assembler
+    // rather than in the aggregation.
+    const data = makeData({
+      revenues: [
+        rev('ai-big', lei(300_000)),
+        rev('dpi-big', lei(120_000), { incomeCategory: 'drepturi_de_proprietate_intelectuala' }),
+      ],
+    });
+    const ops = selectEstimateOperands(data, AS_OF, rulesFor(data));
+    if (ops.kind !== 'run') throw new Error('expected the engine to run');
+    expect(ops.amounts.revenuesNet).toBe(lei(300_000));
   });
 });
 

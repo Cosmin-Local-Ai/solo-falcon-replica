@@ -114,11 +114,19 @@ describe('the lit. c)-h) ladder is a second track, not a second input to the fir
     expect(line(withLadder, LADDER_LINE)).toBe(lei(4_860));
     expect(withLadder.bases.bazaDeCalculCassArt155LitCH).toBe(lei(48_600));
 
-    // The lit. b) figures are untouched by the second basin: same net, same CAS, same CASS.
+    // The lit. b) CASS figures are untouched by the second basin: same net, same CASS on the activity.
     expect(withLadder.bases.venitulNetDinActivitate).toBe(FLAT_NET);
-    expect(line(withLadder, 'CAS (25%)')).toBe(line(without, 'CAS (25%)'));
     expect(line(withLadder, 'CASS (10%)')).toBe(line(without, 'CASS (10%)'));
-    // And the ladder base is a separate quantity, never written over the activity net.
+    // B-112 STAGE 2 — but CAS DOES move, and that is the defect being fixed, not a regression. CF
+    // art. 148 alin. (3) cumulates art. 137 alin. (1) **lit. b) and lit. b^1)** into ONE ceiling test,
+    // while art. 170 alin. (1) cumulates lit. b) only. So the same declared DPI amount is inside the CAS
+    // threshold test and outside the CASS base, and a test that asserted "CAS does not move" was pinning
+    // B-112 in place. 91.000 lei of lit. b) net alone selects the 12-SMN floor (48.600 → 12.150 lei);
+    // with 30.000 lei of DPI the cumulation is 121.000 lei, over 24 SMN (97.200), so the floor is 97.200
+    // and CAS is 24.300 lei.
+    expect(line(without, 'CAS (25%)')).toBe(lei(12_150));
+    expect(line(withLadder, 'CAS (25%)')).toBe(lei(24_300));
+    // And the CASS ladder's own base is a separate quantity, never written over the activity net.
     expect(withLadder.bases.bazaDeCalculCassArt155LitCH).not.toBe(withLadder.bases.venitulNetDinActivitate);
   });
 
@@ -132,7 +140,15 @@ describe('the lit. c)-h) ladder is a second track, not a second input to the fir
     if (small.status !== 'computed' || large.status !== 'computed') return;
 
     expect(large.bases.venitulNetDinActivitate).toBe(lei(182_000));
-    expect(line(large, 'CAS (25%)')).not.toBe(line(small, 'CAS (25%)'));
+    // B-112 stage 2 sharpened the assertion rather than weakening it. The CAS cumulation now carries the
+    // DPI 30.000 lei as well, so the two years cumulate to 121.000 and 212.000 lei — both above the 24-SMN
+    // rung (97.200), so CAS is 24.300 lei in both and the old `not.toBe` no longer holds. What still
+    // separates them is the cumulation itself, and what must NOT move is the ladder: the PFA's own net
+    // never enters the 6/12/24 SM test, whichever direction the CAS rung happens to move.
+    expect(line(large, 'Venit cumulat pentru CAS')).toBe(lei(212_000));
+    expect(line(small, 'Venit cumulat pentru CAS')).toBe(lei(121_000));
+    expect(line(large, 'CAS (25%)')).toBe(lei(24_300));
+    expect(line(small, 'CAS (25%)')).toBe(lei(24_300));
     expect(line(large, LADDER_LINE)).toBe(line(small, LADDER_LINE));
     expect(large.bases.bazaDeCalculCassArt155LitCH).toBe(small.bases.bazaDeCalculCassArt155LitCH);
   });
