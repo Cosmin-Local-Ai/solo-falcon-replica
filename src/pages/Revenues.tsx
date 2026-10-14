@@ -4,6 +4,10 @@ import { useStore } from '../data/store';
 import { fmtDate, total, statusBadge } from '../data/types';
 import type { Revenue } from '../data/types';
 import { revenueFiscalDate, type FiscalDateField } from '../domain/aggregation';
+// B-112 — the income-category vocabulary and its predicates, imported from the one layer that owns them
+// (B-70: a vocabulary spelled twice drifts). `DEFAULT_INCOME_CATEGORY` in particular is imported rather
+// than restated, so the form and the domain read a key-less record the same way.
+import { DEFAULT_INCOME_CATEGORY, dpiRecordConflict, isDpiIncome } from '../domain/dpi';
 import { isoCalendarDateProblem, isoCalendarDateProblemText, localDateISO } from '../domain/date';
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
 import { FiscalDateNote } from '../components/ui/FiscalDateNote';
@@ -69,6 +73,14 @@ function RevenueForm({ initial, onSave, onClose }: {
     currency: (initial?.valoareFaraTva.currency ?? 'RON') as CurrencyCode,
     status: initial?.status ?? 'inregistrata',
     statusDetail: initial?.statusDetail ?? '',
+    // B-112 — the income category and the two DPI facts beside it. Stored as '' when absent and mapped to
+    // `undefined` on save, for the same reason `collected` is: an empty string fails the load gate and
+    // would quarantine the payload, and the absence of a declared fact is not itself a fact. The category
+    // is the one field here that changes which law applies to the money, so it is offered rather than
+    // inferred — see `domain/dpi.ts` for why the app is not entitled to infer it.
+    incomeCategory: initial?.incomeCategory ?? DEFAULT_INCOME_CATEGORY,
+    dpiContractType: initial?.dpiContractType ?? '',
+    dpiExcludedKind: initial?.dpiExcludedKind ?? '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -103,6 +115,19 @@ function RevenueForm({ initial, onSave, onClose }: {
       valoareFaraTva: v, tva: t, status: f.status as Revenue['status'],
       statusDetail: f.statusDetail || undefined,
       eFacturaStatus: f.status === 'inregistrata' ? 'Acceptată' : f.status === 'in-asteptare' ? 'În așteptare' : 'Respinsă',
+      // B-112. The category is written explicitly rather than left absent, because the form is showing the
+      // person a choice and a record that silently carries no key is how the pre-B-112 ambiguity survived.
+      // The two DPI facts are cleared when the record is not DPI: an art. 72 alin. (3) flag on an art. 67
+      // receipt has no legal effect, and leaving one behind would be a contradiction stored on purpose.
+      incomeCategory: f.incomeCategory as Revenue['incomeCategory'],
+      dpiContractType:
+        f.incomeCategory === 'drepturi_de_proprietate_intelectuala' && f.dpiContractType !== ''
+          ? (f.dpiContractType as Revenue['dpiContractType'])
+          : undefined,
+      dpiExcludedKind:
+        f.incomeCategory === 'drepturi_de_proprietate_intelectuala' && f.dpiExcludedKind !== ''
+          ? (f.dpiExcludedKind as Revenue['dpiExcludedKind'])
+          : undefined,
     });
   };
 
@@ -123,6 +148,41 @@ function RevenueForm({ initial, onSave, onClose }: {
             <option value="notafactura">{revenuesCopy.documentTypes.nota}</option>
           </select>
         </div>
+        {/* B-112 — WHICH income this receipt is. Placed beside the document type rather than at the bottom,
+            because `tip` says what the paper is and this says what the money is, and conflating the two is
+            precisely the defect: a `factura` can be art. 67 income or art. 70 income, and the estimate runs
+            a different quota, a different CAS limb and a different CASS limb on each. */}
+        <div className="field">
+          <label>{revenuesCopy.incomeCategory.field} <span className="req">*</span></label>
+          <select name="revenue-income-category" value={f.incomeCategory} onChange={e => set('incomeCategory', e.target.value)}>
+            <option value="activitate_independenta">{revenuesCopy.incomeCategory.activitate_independenta}</option>
+            <option value="drepturi_de_proprietate_intelectuala">{revenuesCopy.incomeCategory.drepturi_de_proprietate_intelectuala}</option>
+          </select>
+          <span className="text-sm muted">{revenuesCopy.incomeCategory.hint}</span>
+        </div>
+        {f.incomeCategory === 'drepturi_de_proprietate_intelectuala' && (
+          <>
+            <div className="field full">
+              <label>{revenuesCopy.dpiContractType.field} <span className="muted">{moneyDate.optionalTag}</span></label>
+              <select name="revenue-dpi-contract-type" value={f.dpiContractType} onChange={e => set('dpiContractType', e.target.value)}>
+                <option value="">{revenuesCopy.dpiContractType.none}</option>
+                <option value="cesiune_licenta">{revenuesCopy.dpiContractType.cesiune_licenta}</option>
+                <option value="contract_de_comanda">{revenuesCopy.dpiContractType.contract_de_comanda}</option>
+              </select>
+              <span className="text-sm muted">{revenuesCopy.dpiContractType.hint}</span>
+            </div>
+            <div className="field full">
+              <label>{revenuesCopy.dpiExcludedKind.field} <span className="muted">{moneyDate.optionalTag}</span></label>
+              <select name="revenue-dpi-excluded-kind" value={f.dpiExcludedKind} onChange={e => set('dpiExcludedKind', e.target.value)}>
+                <option value="">{revenuesCopy.dpiExcludedKind.none}</option>
+                <option value="mostenitori">{revenuesCopy.dpiExcludedKind.mostenitori}</option>
+                <option value="drept_de_suita">{revenuesCopy.dpiExcludedKind.drept_de_suita}</option>
+                <option value="remuneratie_copia_privata">{revenuesCopy.dpiExcludedKind.remuneratie_copia_privata}</option>
+              </select>
+              <span className="text-sm muted">{revenuesCopy.dpiExcludedKind.hint}</span>
+            </div>
+          </>
+        )}
         <div className="field">
           <label>{fields.documentNumber} <span className="req">*</span></label>
           <input className={errors.nr ? 'invalid' : ''} value={f.nr} onChange={e => set('nr', e.target.value)} placeholder={revenuesCopy.documentNumberPlaceholder} />
@@ -313,7 +373,24 @@ export default function Revenues({ initialTab, onTabChange, focusRecord }: Reven
                     onClick={() => setEditing(r)}
                   >
                     <td style={{ fontWeight: 500, color: 'var(--text)' }}>{r.nr}</td>
-                    <td>{r.tip === 'factura' ? revenuesCopy.documentTypeCell.factura : revenuesCopy.documentTypeCell.nota}</td>
+                    <td>
+                      {r.tip === 'factura' ? revenuesCopy.documentTypeCell.factura : revenuesCopy.documentTypeCell.nota}
+                      {/* B-112 — only the non-default category is marked. Every pre-B-112 record is
+                          activitate independentă, and putting „art. 67” on all of them would read as a
+                          finding on records that carry none. A DPI row is marked because it is measured by
+                          a different article, and a contradictory row is marked because the app has
+                          declined to post it. */}
+                      {isDpiIncome(r) && (
+                        <div className="text-sm muted" style={{ marginTop: 3 }}>
+                          {revenuesCopy.categoryCell.drepturi_de_proprietate_intelectuala}
+                        </div>
+                      )}
+                      {isDpiIncome(r) && dpiRecordConflict(r) !== null && (
+                        <div className="text-sm" style={{ marginTop: 3, color: 'var(--warn, #b45309)' }}>
+                          {revenuesCopy.dpiConflictTag}
+                        </div>
+                      )}
+                    </td>
                     <td>{r.client}</td>
                     <td className="muted">{r.cui}</td>
                     <td>

@@ -34,6 +34,9 @@ import { selectApplicableRules } from './select';
 import { PFA_2026_RELEASE } from './release2026';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './package2026';
 import { PFA_2026_DPI_RELEASE, PFA_2026_DPI_RELEASE_ID } from './release2026dpi';
+// B-112 stage 1 — the delta the revision adds, named rather than counted, so the assertion says which
+// rules may appear on a FY2026 revision and not merely how many.
+import { DPI_RULES_2026, DPI_RULE_IDS_2026 } from './dpi2026';
 import { computeTaxEstimate } from '../tax';
 import { resolveSnapshotRules, snapshotRuleState } from '../snapshots/ruleProvenance';
 import type { TaxCalculationSnapshot } from '../snapshots/types';
@@ -300,25 +303,40 @@ describe('B-112 stage 0 — a snapshot pinned to v5 still selects v5 and reprodu
   });
 });
 
-// ── 4. The staged state, stated as a fact rather than left to be discovered ───────────────────────────
-describe('B-112 stage 0 — the revision is content-identical to v5 until the DPI rules land', () => {
-  it('both FY2026 releases share one content hash, and entryByContentHash resolves the first registered', () => {
+// ── 4. The staged state, and the state that replaced it ───────────────────────────────────────────────
+describe('B-112 — the revision separates from v5 once the DPI rules land', () => {
+  it('the two FY2026 releases now have different content hashes, and each resolves to itself', () => {
     const v5 = defaultRuleReleaseRegistry.entryByReleaseId(V5)!;
     const v6 = defaultRuleReleaseRegistry.entryByReleaseId(PFA_2026_DPI_RELEASE_ID)!;
-    // This is a staged state, not a defect: the DPI rules are added on top of this release in the following
-    // stages, and until they are, the two rule sets hash alike. Pinned here so that when the digests
-    // separate, the separation is a change someone chose rather than one someone noticed.
-    expect(v6.digest).toBe(v5.digest);
-    expect(PFA_2026_DPI_RELEASE.contentHash).toBe(v5.digest);
-    // The consequence of the shared digest, asserted rather than assumed: a content-address lookup finds
-    // the release registered first. Release-id lookup is what distinguishes them, and that is what
-    // snapshots use (`resolveSnapshotRules` reads `entryByReleaseId`).
+    // Stage 0 minted v6 carrying v5's 54 rules byte-for-byte, so the two shared one digest and only
+    // `releaseId`/`version` told them apart. Stage 1 adds `DPI_ART72_2026`, which ends that. Asserted in
+    // both directions: the digests must differ, and a content-address lookup must now find each release.
+    expect(v6.digest).not.toBe(v5.digest);
+    expect(PFA_2026_DPI_RELEASE.contentHash).toBe(v6.digest);
     expect(defaultRuleReleaseRegistry.entryByContentHash(v5.digest)!.release.releaseId).toBe(V5);
+    expect(defaultRuleReleaseRegistry.entryByContentHash(v6.digest)!.release.releaseId).toBe(
+      PFA_2026_DPI_RELEASE_ID,
+    );
   });
 
   it('the revision names its whole rule set, not a DPI-only fragment', () => {
+    const v5 = defaultRuleReleaseRegistry.entryByReleaseId(V5)!;
     const v6 = defaultRuleReleaseRegistry.entryByReleaseId(PFA_2026_DPI_RELEASE_ID)!;
     expect(v6.release.ruleIds).toEqual(v6.rules.map((r) => r.ruleId));
-    expect(v6.rules.length).toBe(PFA_2026_SYSTEM_REAL_PACKAGE.length);
+    // A revision ADDS; it does not re-cut. Every v5 rule id is still named by v6, and the only ids v6
+    // adds are the DPI ones — so a reader can see the whole delta without diffing two files.
+    expect(v6.release.ruleIds).toEqual([...v5.release.ruleIds, ...DPI_RULE_IDS_2026]);
+    expect(v6.rules.length).toBe(PFA_2026_SYSTEM_REAL_PACKAGE.length + DPI_RULES_2026.length);
+  });
+
+  it('every rule inherited from v5 is byte-for-byte unchanged, so v5 was not edited in place', () => {
+    const v5 = defaultRuleReleaseRegistry.rulesOf(V5)!;
+    const v6 = defaultRuleReleaseRegistry.rulesOf(PFA_2026_DPI_RELEASE_ID)!;
+    const v6ById = new Map(v6.map((r) => [r.ruleId, r]));
+    for (const rule of v5) {
+      // Deep equality on the whole object, not on the digest: the claim is that no parameter, citation or
+      // version moved on a rule that v5 already carried.
+      expect(v6ById.get(rule.ruleId)).toEqual(rule);
+    }
   });
 });

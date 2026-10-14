@@ -191,7 +191,7 @@ describe('selectYtd', () => {
 
   it('returns zeros for empty data', () => {
     const ytd = selectYtd(makeData(), '2026-06-30');
-    expect(ytd).toEqual({ revenue: lei(0), expenses: lei(0), net: lei(0), revenueNet: 0, expenseNet: 0 });
+    expect(ytd).toEqual({ revenue: lei(0), expenses: lei(0), net: lei(0), revenueNet: 0, expenseNet: 0, dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [] });
   });
 
   it('computes negative net when expenses exceed revenue (zero income)', () => {
@@ -244,7 +244,7 @@ describe('selectYtd', () => {
     });
 
     const ytd = selectYtd(data, '2025-06-15');
-    expect(ytd).toEqual({ revenue: lei(0), expenses: lei(0), net: lei(0), revenueNet: 0, expenseNet: 0 });
+    expect(ytd).toEqual({ revenue: lei(0), expenses: lei(0), net: lei(0), revenueNet: 0, expenseNet: 0, dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [] });
   });
 });
 
@@ -265,9 +265,9 @@ describe('selectMonthly', () => {
     });
 
     const monthly = selectMonthly(data, '2026-12-31');
-    expect(monthly.get('2026-01')).toEqual({ revenue: lei(178.5), expenses: lei(47.4), net: lei(131.1) });
-    expect(monthly.get('2026-02')).toEqual({ revenue: lei(238), expenses: lei(119), net: lei(119) });
-    expect(monthly.get('2026-03')).toEqual({ revenue: lei(357), expenses: lei(0), net: lei(357) });
+    expect(monthly.get('2026-01')).toEqual({ revenue: lei(178.5), expenses: lei(47.4), net: lei(131.1), dpiGross: lei(0) });
+    expect(monthly.get('2026-02')).toEqual({ revenue: lei(238), expenses: lei(119), net: lei(119), dpiGross: lei(0) });
+    expect(monthly.get('2026-03')).toEqual({ revenue: lei(357), expenses: lei(0), net: lei(357), dpiGross: lei(0) });
     expect(monthly.size).toBe(3);
   });
 
@@ -283,7 +283,7 @@ describe('selectMonthly', () => {
 
     const monthly = selectMonthly(data, '2026-03-31');
     expect(monthly.size).toBe(1);
-    expect(monthly.get('2026-02')).toEqual({ revenue: lei(476), expenses: lei(0), net: lei(476) });
+    expect(monthly.get('2026-02')).toEqual({ revenue: lei(476), expenses: lei(0), net: lei(476), dpiGross: lei(0) });
   });
 
   it('is deterministic for the same data and asOfDate', () => {
@@ -311,8 +311,8 @@ describe('selectMonthly', () => {
     const monthly = selectMonthly(data, '2026-12-31');
     expect(monthly.size).toBe(2);
     expect(monthly.has('2026-02')).toBe(false);
-    expect(monthly.get('2026-01')).toEqual({ revenue: lei(119), expenses: lei(0), net: lei(119) });
-    expect(monthly.get('2026-03')).toEqual({ revenue: lei(238), expenses: lei(0), net: lei(238) });
+    expect(monthly.get('2026-01')).toEqual({ revenue: lei(119), expenses: lei(0), net: lei(119), dpiGross: lei(0) });
+    expect(monthly.get('2026-03')).toEqual({ revenue: lei(238), expenses: lei(0), net: lei(238), dpiGross: lei(0) });
   });
 
   it('groups by calendar month across the Jan/Dec boundary', () => {
@@ -324,8 +324,8 @@ describe('selectMonthly', () => {
     });
     const monthly = selectMonthly(data, '2026-12-31');
     expect(monthly.size).toBe(2);
-    expect(monthly.get('2026-12')).toEqual({ revenue: lei(119), expenses: lei(0), net: lei(119) });
-    expect(monthly.get('2026-01')).toEqual({ revenue: lei(238), expenses: lei(0), net: lei(238) });
+    expect(monthly.get('2026-12')).toEqual({ revenue: lei(119), expenses: lei(0), net: lei(119), dpiGross: lei(0) });
+    expect(monthly.get('2026-01')).toEqual({ revenue: lei(238), expenses: lei(0), net: lei(238), dpiGross: lei(0) });
   });
 });
 
@@ -426,7 +426,7 @@ describe('fiscal date (collected / paid)', () => {
     const monthly = selectMonthly(makeData({ revenues: [r], expenses: [e] }), '2026-12-31');
     // The document month never appears; the collected/paid month does.
     expect(monthly.has('2026-03')).toBe(false);
-    expect(monthly.get('2026-04')).toEqual({ revenue: lei(119), expenses: lei(59.5), net: lei(59.5) });
+    expect(monthly.get('2026-04')).toEqual({ revenue: lei(119), expenses: lei(59.5), net: lei(59.5), dpiGross: lei(0) });
   });
 
   it('a collected date earlier than the document date still attributes normally', () => {

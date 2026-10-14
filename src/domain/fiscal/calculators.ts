@@ -1121,6 +1121,91 @@ function calcCedareArt84x1Withheld(rule: FiscalRule, input?: CalculatorInput): C
 }
 
 /**
+ * B-112 STAGE 1 — CF art. 72 / art. 72¹: the DPI flat quota, and the final tax on the net it leaves.
+ *
+ * The arithmetic is the same two multiplications as every other flat-ratio calculator here, and the reason
+ * it is a separate calculator with a separate rule is the same as the reason art. 85 is separate from
+ * art. 68^3 and art. 84^1 is separate from art. 84: the **percentages are different and nothing about the
+ * regime is shared**. Here the quota is **40 %** (art. 72 alin. (2), art. 72¹ alin. (1)) — not the 20 % of
+ * art. 84/art. 84¹ and not the 30 % of art. 68^3/art. 85 — and the net it leaves is 0,6 × brut.
+ *
+ * Three things this calculator states, because each is a place the rule gets silently got wrong:
+ *
+ * 1. **The quota is automatic, not elective.** The payer applies it. What IS elective is the opposite —
+ *    art. 73 lets the taxpayer opt into real expenses instead, binding for 2 consecutive fiscal years and
+ *    auto-renewing. That election is a recorded fact the caller reads; this calculator only applies the
+ *    quota it was asked to apply, and it carries no `election` flag because deciding whether the election
+ *    is in force is not this module's question.
+ * 2. **CAS and CASS are inside the 40 %, not beside it.** ANAF DGRFP Cluj, 12 Feb 2026: *„În cheltuielile
+ *    forfetare se includ, printre altele: contribuțiile sociale datorate…”*. So the contributions the author
+ *    owes are already inside the deemed expense, and deducting them again from this net would take the same
+ *    leu twice. The art. 118 alin. (2^2)-(2^3) proration belongs to the sistem-real base, not to this one.
+ * 3. **The tax is the payer's to withhold, and it is final.** art. 72 alin. (4)-(5): 10 % of the net,
+ *    reținut la sursă la momentul plății, virat până la 25 a lunii următoare, *„impozitul fiind final”*. The
+ *    effective burden is 6 % of gross. art. 72 alin. (6) switches the withholding off for asocieri fără
+ *    personalitate juridică and for entities keeping their own accounting, and then the taxpayer self-assesses
+ *    the same 10 % under art. 123 alin. (2). Which of those two applies is a fact about the payer the caller
+ *    holds; this calculator returns the sum and the caller decides whose sum it is — exactly the split
+ *    `calcCedareArt84x1Withheld` and `tax.ts` already use for art. 84^1 alin. (8).
+ *
+ * Rounding follows the house boundary: art. 66 alin. (1) rounds the sums that are DUE, so the tax is rounded
+ * once here; the net is a BASE, and an inexact base is reported, never repaired.
+ */
+function calcDpiFlatQuota(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
+  const expenseRatioPercent = paramNumber(rule, 'expense_ratio'); // unscaled integer percent
+  const taxRatePercent = paramNumber(rule, 'tax_rate'); // unscaled integer percent
+  const gross = input?.gross;
+  if (typeof gross !== 'number') {
+    return {
+      reviewRequired: true,
+      reason:
+        'art. 72 alin. (2) / art. 72^1 alin. (1): cota forfetară de 40 % se aplică asupra venitului brut, iar ' +
+        'niciun venit brut din drepturi de proprietate intelectuală nu a fost furnizat. Fără brut nu există ' +
+        'bază de calcul — aplicația refuză în loc să presupună unul.',
+    };
+  }
+  if (gross < 0) {
+    return {
+      reviewRequired: true,
+      reason: `art. 72: venitul brut din drepturi de proprietate intelectuală nu poate fi negativ; s-a primit ${leiText(gross)} lei.`,
+    };
+  }
+
+  // One multiplication, not `gross − 40 % × gross`: the deemed expense and the net must not be able to
+  // disagree by a ban, and here they would be read as two different legal quantities.
+  const netDec = applyRateDecimal(gross, 100 - expenseRatioPercent);
+  if (!netDec.isInteger()) {
+    return {
+      reviewRequired: true,
+      reason:
+        `art. 72 alin. (2): venitul net rezultat din ${leiText(gross)} lei × ${(100 - expenseRatioPercent) / 100} ` +
+        'nu este un număr întreg de bani. art. 66 alin. (1) rotește sumele datorate, nu bazele, deci ' +
+        'aplicația nu rotunjește o bază ca să obțină un număr rotund — raportează în schimb.',
+    };
+  }
+  const net = netDec.toNumber() as Bani;
+  const tax = roundArt66(applyRateDecimal(net, taxRatePercent));
+
+  const withholdingDeadline = paramValue(rule, 'withholding_deadline');
+  const noWithholding = paramValue(rule, 'no_withholding_cases');
+  const insideQuota = paramValue(rule, 'contributions_inside_quota');
+  const breakdown = [
+    `venit brut din DPI (art. 70; sumele datorate autorului de plătitorul de venit): ${leiText(gross)} lei`,
+    `cheltuieli forfetare = ${expenseRatioPercent}% din venitul brut = ${leiText(subBani(gross, net))} lei — art. 72 alin. (2) / art. 72^1 alin. (1). Cota este de 40 %, nu de 20 %: 20 % aparține cedării folosinței bunurilor (art. 84 alin. (2) / art. 84^1 alin. (3))`,
+    `venit net = ${leiText(gross)} × ${(100 - expenseRatioPercent) / 100} = ${leiText(net)} lei`,
+    `impozit = ${leiText(net)} × ${taxRatePercent / 100} = ${leiText(tax)} lei — art. 72 alin. (1) și (4), „impozitul fiind final”`,
+    `povara efectivă = ${taxRatePercent * (100 - expenseRatioPercent) / 100}% din venitul brut`,
+    'venitul net din DPI intră în testul de plafon de la art. 148 alin. (3) (CAS, art. 137 alin. (1) lit. b^1)) și în cumularea de la art. 170 alin. (4) lit. a) (CASS, art. 155 alin. (1) lit. c)) — două litere diferite pentru același venit, și cele două căi CASS nu se cumulează niciodată între ele',
+  ];
+  if (typeof insideQuota === 'string') breakdown.push(insideQuota);
+  if (typeof withholdingDeadline === 'string') {
+    breakdown.push(`virare de către plătitor: ${withholdingDeadline} — art. 72 alin. (5). Este termenul plătitorului, nu al contribuabilului`);
+  }
+  if (typeof noWithholding === 'string') breakdown.push(noWithholding);
+  return { value: tax, determinedNet: net, breakdown };
+}
+
+/**
  * PG-6e — the fiscal depreciation of one asset for one fiscal year.
  *
  * It is a thin wrapper over `depreciationSchedule`, and the reason it exists at all is the house rule that
@@ -1214,6 +1299,10 @@ export const calculatorRegistry: Record<string, CalculatorFunction> = {
   'calc-short-term-rooms-flat-ratio': calcShortTermRoomsFlatRatio,
   'calc-cedare-art84-flat-ratio': calcCedareArt84FlatRatio,
   'calc-cedare-art84x1-withheld': calcCedareArt84x1Withheld,
+  // B-112 stage 1 — the DPI flat quota. Registered beside the other flat-ratio calculators, and deliberately
+  // not sharing one with any of them: same 10 % rate as three of them, different quota, different gross
+  // rule, different payer duty, different contribution basin.
+  'calc-dpi-flat-quota': calcDpiFlatQuota,
   'calc-fiscal-depreciation': calcFiscalDepreciation,
   'calc-vat-threshold': calcVatThreshold,
   'calc-deadline': calcDeadline,

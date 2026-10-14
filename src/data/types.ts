@@ -1,5 +1,8 @@
 import type { PfaProfile } from '../domain/models';
 import type { ExpenseCategory, VehicleYearFacts } from '../domain/fiscal/deductibility';
+// B-112 stage 1 — the DPI income-category vocabularies come from the layer that reads them, for the same
+// standing reason (B-70): a vocabulary spelled twice drifts.
+import type { DpiContractType, DpiExcludedKind, IncomeCategory } from '../domain/dpi';
 // PG-6f (B-30) — the VAT fact vocabularies come from the layer that reads them, for the standing reason
 // in this repository: a vocabulary spelled twice drifts (B-70).
 import type { ExpenseVatFacts, VatVehicleYearFacts } from '../domain/fiscal/vat';
@@ -45,6 +48,46 @@ export interface Revenue {
   status: RevenueStatus;
   statusDetail?: string;
   eFacturaStatus?: EFacturaStatus;
+  /**
+   * B-112 — which income category this receipt is: art. 67 activitate independentă, or art. 70 drepturi de
+   * proprietate intelectuală.
+   *
+   * `tip` is a **document type** (`factura` | `notafactura`), not an income category, and the app used to
+   * have nothing else. That is the whole of B-112: with no category on the record the engine could not
+   * represent DPI income, so an entire income category was silently absent from the CAS cumulation of
+   * art. 148 alin. (3) — ANAF's Exemplul 3 pays CAS of 24.300 lei on it and the engine produced 12.150.
+   *
+   * Optional, never defaulted in storage. Absent reads as `DEFAULT_INCOME_CATEGORY`
+   * (`domain/dpi.ts`), which is a statement about history — a payload written before B-112 could only hold
+   * activitate-independentă receipts — not a guess about this record. No chain step backfills it, because a
+   * backfill would mint a legal classification nobody recorded.
+   *
+   * The category is an INPUT and never an inference. DPI vs activitate independentă turns on the object of
+   * the contract under Legea 8/1996, and ÎCCJ dec. nr. 1793 din 23 martie 2021 refused DPI characterisation
+   * for contracts merely labelled as such. The taxpayer holding a PFA settles nothing: neither art. 70 nor
+   * art. 72 carves out PFA holders, and ANAF's own Exemplul 3 is one taxpayer holding both categories.
+   */
+  incomeCategory?: IncomeCategory;
+  /**
+   * B-112 — the object of the contract, as the person declares it: a *cesiune / licență* of patrimonial
+   * copyright (Legea 8/1996 art. 40 → DPI) or a *contract de comandă / antrepriză* (art. 47 L. 8/1996,
+   * art. 185¹ C. civ. → activitate independentă).
+   *
+   * It is a second answer to the same question the category answers, and that is deliberate: the pair is
+   * checkable. Where the two disagree, `domain/dpi.ts dpiRecordConflict` reports the contradiction and the
+   * app declines to post the income — it does not pick a winner between two facts the person recorded.
+   */
+  dpiContractType?: DpiContractType;
+  /**
+   * B-112 — the art. 72 alin. (3) / art. 72¹ alin. (2) exclusion set: *moștenitori*, *drept de suită*,
+   * *remunerație compensatorie pentru copia privată*.
+   *
+   * **One stored flag, two consequences**, both read from the single predicate `isDpiArt72Alin3Excluded`:
+   * the sum gets **no 40 % forfetară quota** (art. 72 alin. (2)-(3), art. 72¹ alin. (1)-(2)) and it is
+   * **outside CAS** (art. 137 alin. (1) lit. b¹) excludes „veniturile prevăzute la art. 72 alin. (3)”).
+   * Two predicates would be two chances to get one legal fact wrong.
+   */
+  dpiExcludedKind?: DpiExcludedKind;
 }
 
 // ── Cheltuieli ────────────────────────────────────────────

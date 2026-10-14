@@ -17,6 +17,9 @@ import {
   attachEstimateBasis,
   coverageFromUnconverted,
   depreciationCoverageGaps,
+  // B-112 stage 1 — the DPI half of the coverage, produced by the same module that scopes the engine's
+  // record set, so the receipts left out of the figure and the rows naming them come from one place.
+  dpiCoverageGaps,
   estimateBasisOf,
   isGapReason,
   scenarioCoverageGaps,
@@ -1070,8 +1073,12 @@ export function buildDashboardData(
   // that disclosure instead of walking the records for a second time. A second currency pass would
   // drift from the first the moment either changed, which is what Phase 10c's handoff warned about.
   const ledger = getLedgerDisclosure(data);
+  // The rule set the estimate runs on, resolved once. Both coverage producers below read this same list:
+  // a coverage row that explained a gap under a different rule set than the one that produced the figure
+  // would be a second answer to one question, and B-112's DPI rows quote the rule's own quota.
+  const rules = selectionRules(data, asOfDate);
   const coverage: EstimateCoverageGap[] = [
-    ...selectEstimateCoverage(data, asOfDate, selectionRules(data, asOfDate)),
+    ...selectEstimateCoverage(data, asOfDate, rules),
     ...coverageFromUnconverted(ledger.unconverted),
     // PG-6a — a scenario whose effect is `incomplete` joins this same list rather than starting a second
     // warning surface beside it (brief 28 §0 rule 6). It is projected onto the `fact_missing` reason PG-1
@@ -1085,6 +1092,11 @@ export function buildDashboardData(
     // refusal exists on the leg whether or not anything renders it, and B-106 is the standing example of a
     // refusal that reached no surface.
     ...depreciationCoverageGaps(estimate?.depreciation),
+    // B-112 — the DPI half. A receipt marked art. 70 is deliberately out of the engine's record set (the
+    // sistem-real path is the wrong path for it, and this build has no art. 72 path yet), so it must arrive
+    // here or the omission becomes silent again — which is exactly how B-112 survived 2,332 green tests.
+    // The rows read the ids `selectYtd` summed, so the period, status and currency tests run in one place.
+    ...dpiCoverageGaps(data, asOfDate, rules),
   ];
   // PG-5: the deadline engine runs ONCE per build. The card, the snapshot's attention rows and the
   // completeness check's filing term all read this one list, so they cannot disagree about whether a

@@ -240,8 +240,18 @@ export function selectProjectionV1(data: AppData, asOfDate: string): ProjectionV
   for (let m = 1; m <= 12; m++) {
     const month = `${fiscalYear}-${String(m).padStart(2, '0')}`;
     if (month <= asOfMonth) {
-      const actual = monthly.get(month) ?? { revenue: 0 as Bani, expenses: 0 as Bani, net: 0 as Bani };
-      series.push({ month, ...actual, kind: 'actual' });
+      // Fields picked, not spread. `ProjectionMonth extends Totals`, so `...actual` would let any field the
+      // aggregation grows join the forecast series and its exhaustive renderers — which is how a B-112 DPI
+      // subtotal would end up inside a chart that does not distinguish it. Picking keeps the row's shape
+      // owned by this module rather than by whichever selector fed it.
+      const actual = monthly.get(month);
+      series.push({
+        month,
+        revenue: actual?.revenue ?? (0 as Bani),
+        expenses: actual?.expenses ?? (0 as Bani),
+        net: actual?.net ?? (0 as Bani),
+        kind: 'actual',
+      });
     } else {
       const i = projectedIndex++;
       series.push({

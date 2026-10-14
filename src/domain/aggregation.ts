@@ -1,4 +1,7 @@
 import type { AppData, Expense, Revenue } from '../data/types';
+// B-112 stage 1 — the income-category predicate is imported from the one layer that owns it, so the
+// aggregation pass and the estimate assembler cannot answer "is this receipt DPI?" differently.
+import { isDpiIncome } from './dpi';
 import { isISOCalendarDate, isoCalendarDateProblem, isoCalendarDateProblemText } from './date';
 import { addBani, isRon, lei, subBani, sumBani, type Bani, type CurrencyCode, type Money } from './money';
 import type { ThresholdKind, ThresholdSeverity } from './thresholds';
@@ -40,12 +43,39 @@ export interface YtdTotals {
   revenueNet: Bani;
   /** Deductible expense excluding VAT: `valoareFaraTva` only. */
   expenseNet: Bani;
+  /**
+   * B-112 — the part of `revenue` that is art. 70 *drepturi de proprietate intelectuală* income, and the
+   * part of `revenueNet` that is the same receipts without VAT.
+   *
+   * A **subset marked on the same pass**, not a replacement, and that choice is deliberate. `revenue` is
+   * cash collected and `revenueNet` is *cifră de afaceri* — the base the art. 310 alin. (1) VAT plafon row
+   * measures — and authorship is a *prestare de servicii* for Titlul VII purposes, so moving DPI receipts
+   * out of those two totals would understate the VAT registration duty in order to fix an income-tax one.
+   * What the income side needs is not a smaller total but a named part of it, and that is what these two
+   * fields are. `estimateBasis.ts` scopes the **engine's** sistem-real operands to the non-DPI record set;
+   * the split is decided once, by `incomeCategoryOf`, and nowhere else.
+   *
+   * Zero when the register holds no DPI receipts, which is every payload written before B-112.
+   */
+  dpiGross: Bani;
+  dpiGrossNet: Bani;
+  /**
+   * B-112 — the ids of the receipts that make up `dpiGross`, in register order.
+   *
+   * They travel with the totals so a coverage row can point at a DPI receipt **without re-deciding which
+   * receipts fall in the year**. That is the whole reason this field exists rather than a separate selector:
+   * `selectYtd` is the one place the period, status and currency tests run, and a second walk applying them
+   * again is the B-70 defect class — two producers that drift the moment either changes.
+   */
+  dpiRecordIds: readonly string[];
 }
 
 export interface MonthlyTotals {
   revenue: Bani;
   expenses: Bani;
   net: Bani;
+  /** B-112 — the art. 70 DPI part of `revenue` for this month. Same subset-marking rule as `YtdTotals`. */
+  dpiGross: Bani;
 }
 
 /**
@@ -323,6 +353,9 @@ export function selectYtd(data: AppData, asOfDate: string): YtdTotals {
   let expenses: Bani = lei(0);
   let revenueNet: Bani = lei(0);
   let expenseNet: Bani = lei(0);
+  let dpiGross: Bani = lei(0);
+  let dpiGrossNet: Bani = lei(0);
+  const dpiRecordIds: string[] = [];
 
   for (const r of data.revenues) {
     const fiscalDate = revenueFiscalDate(r);
@@ -331,6 +364,14 @@ export function selectYtd(data: AppData, asOfDate: string): YtdTotals {
     if (r.status === 'inregistrata' && total !== null && net !== null && inPeriod(fiscalDate, asOfDate, fiscalYear)) {
       revenue = addBani(revenue, total);
       revenueNet = addBani(revenueNet, net);
+      // B-112 — the DPI part is marked here, inside the same pass and under the same period and status
+      // filter, because a second walk over the register would be a second producer of "which receipts fall
+      // in this year" — the B-70 defect class. `incomeCategoryOf` is the one place that question is answered.
+      if (isDpiIncome(r)) {
+        dpiGross = addBani(dpiGross, total);
+        dpiGrossNet = addBani(dpiGrossNet, net);
+        dpiRecordIds.push(r.id);
+      }
     }
   }
   for (const e of data.expenses) {
@@ -343,7 +384,7 @@ export function selectYtd(data: AppData, asOfDate: string): YtdTotals {
     }
   }
 
-  return { revenue, expenses, net: subBani(revenue, expenses), revenueNet, expenseNet };
+  return { revenue, expenses, net: subBani(revenue, expenses), revenueNet, expenseNet, dpiGross, dpiGrossNet, dpiRecordIds };
 }
 
 /**
@@ -354,8 +395,8 @@ export function selectMonthly(data: AppData, asOfDate: string): Map<string, Mont
   const fiscalYear = data.profile.fiscalYear;
   const monthly = new Map<string, MonthlyTotals>();
 
-  const add = (key: string, field: 'revenue' | 'expenses', amount: Bani): void => {
-    const entry = monthly.get(key) ?? { revenue: lei(0), expenses: lei(0), net: lei(0) };
+  const add = (key: string, field: 'revenue' | 'expenses' | 'dpiGross', amount: Bani): void => {
+    const entry = monthly.get(key) ?? { revenue: lei(0), expenses: lei(0), net: lei(0), dpiGross: lei(0) };
     entry[field] = addBani(entry[field], amount);
     entry.net = subBani(entry.revenue, entry.expenses);
     monthly.set(key, entry);
@@ -366,6 +407,9 @@ export function selectMonthly(data: AppData, asOfDate: string): Map<string, Mont
     const total = recordTotal(r);
     if (r.status === 'inregistrata' && total !== null && inPeriod(fiscalDate, asOfDate, fiscalYear)) {
       add(monthKey(fiscalDate), 'revenue', total);
+      // B-112 — same single pass, same filter. `net` is not derived from the monthly figures, so marking a
+      // subset of `revenue` here cannot move it.
+      if (isDpiIncome(r)) add(monthKey(fiscalDate), 'dpiGross', total);
     }
   }
   for (const e of data.expenses) {

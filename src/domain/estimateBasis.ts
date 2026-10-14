@@ -83,8 +83,13 @@ import { addBani, applyRateDecimal, isRon, lei, leiText, money, requireRon, subB
 import {
   accommodationIncomeTitleForYear,
   art84x1WithholdingBlocked,
+  cassLadderForYear,
   leaseFactsForYear,
 } from './models';
+// B-112 stage 1 — the DPI category vocabulary, imported from the one layer that owns it (B-70: a vocabulary
+// spelled twice drifts). `dpiQuotaPercentOf` reads the 40 % out of the rule rather than restating it here.
+import { dpiRecordConflict, isDpiIncome } from './dpi';
+import { dpiQuotaPercentOf } from './fiscal/dpi2026';
 // B-105 — the two ordinary-rent regimes convert at two different anchors, so the gross they measure has to
 // be struck through the FX boundary that already exists: `convertToRon` over `recordedRateProvider(data)`.
 // This module does not touch `domain/fx/` internals and does not write a second rate lookup — it names the
@@ -890,7 +895,30 @@ export type CoverageReason =
    * also not `asset_not_modelled` — that reason says the register is missing, and here the register is
    * present and a second, unverified figure is in the way.
    */
-  | 'depreciation_conflict';
+  | 'depreciation_conflict'
+  /**
+   * B-112 — the register holds art. 70 *drepturi de proprietate intelectuală* receipts, and the estimate does
+   * not yet compute their contributions or their final tax, so they are outside the figure.
+   *
+   * This is the honest half of fixing B-112. The defect was never that the number was small; it was that the
+   * number was small **and said nothing**. A DPI receipt that reaches the register and not the estimate must
+   * make the estimate incomplete, not merely cheaper — otherwise the app has traded a silent omission for a
+   * silent omission with a new field on it.
+   *
+   * It is not `asset_not_modelled` (that says the register is missing) and not `fact_missing` (the facts are
+   * recorded; what is missing is the rule path that consumes them).
+   */
+  | 'dpi_income_not_modelled'
+  /**
+   * B-112 — the same DPI income reaches the app by two routes at once: DPI receipts in the register, and a
+   * hand-declared `proprietateIntelectuala` net on the art. 170 alin. (4) ladder in Settings.
+   *
+   * `calcCassLadder` cumulates the category **once**, so counting both would select a higher rung of the
+   * art. 170 alin. (3) ladder and bill CASS on money received once. This is B-93's `depreciation_conflict`
+   * in a different coat: two producers of one fiscal quantity, where the app posts neither and names the two
+   * inputs that disagree. It does not sum them, does not take the larger, and does not prefer one quietly.
+   */
+  | 'dpi_income_double_represented';
 
 /**
  * The reasons that make an estimate INCOMPLETE, as opposed to merely exclusive.
@@ -908,6 +936,11 @@ const GAP_REASONS: readonly CoverageReason[] = [
   'cap_unresolved',
   'fact_missing',
   'depreciation_conflict',
+  // B-112 — both DPI reasons are gaps, not settled exclusions. The law has not answered anything about this
+  // income; the app has not finished representing it. Counting either as `non_deductible`-like (a legal
+  // answer) would let the hero read „Calculat” over a register with a whole income category missing from it.
+  'dpi_income_not_modelled',
+  'dpi_income_double_represented',
 ];
 
 export function isGapReason(reason: CoverageReason): boolean {
@@ -1198,6 +1231,110 @@ export function depreciationCoverageGaps(leg: DepreciationLeg | null | undefined
       currency: 'RON',
       fixTarget: '/assets',
       detail: `Mijlocul fix „${r.label}”: ${r.reason}`,
+    });
+  }
+  return out;
+}
+
+/**
+ * B-112 STAGE 1 — the DPI half of the coverage, projected onto PG-1's one channel.
+ *
+ * **Why a gap row and not a silent zero.** B-112 survived 2,332 green tests because the estimate omitted an
+ * entire income category and said nothing: ANAF's Exemplul 3 pays CAS of 24.300 lei on AI net 68.000 plus
+ * DPI net 50.000, and the engine produced 12.150. Making DPI *recordable* without making it *visible in the
+ * estimate* would reproduce that failure with a nicer form field. So while the CAS cumulation of
+ * art. 148 alin. (3) and the two CASS limbs of art. 170 land in stages 2-4, a DPI receipt that reaches the
+ * register and not the figure makes the estimate **incomplete**, and the row says which receipt and why.
+ *
+ * **Why the record ids come from `selectYtd`.** The period, status and currency tests run in exactly one
+ * place — `aggregation.ts selectYtd` — and it hands back the ids it summed. Re-walking the register here and
+ * applying `inPeriod` again would be a second producer of "which receipts fall in this year", which is the
+ * B-70 defect class this repository has been correcting all the way through.
+ *
+ * **The double-representation row is checked first and short-circuits.** Where the person has *also* typed a
+ * DPI net onto the art. 170 alin. (4) ladder in Settings, the same income has two producers. Per-record rows
+ * would understate that: the hazard is not that one receipt is missed, it is that the ladder cumulates the
+ * category twice and selects a higher rung of art. 170 alin. (3). One row naming both inputs is the honest
+ * shape, and it is the same shape B-93 chose for `depreciation_conflict`.
+ */
+export function dpiCoverageGaps(
+  data: AppData,
+  asOfDate: string,
+  rules: FiscalRule[],
+): EstimateCoverageGap[] {
+  const ledger = normaliseStoredLedger(data);
+  const ytd = selectYtd(ledger.data, asOfDate);
+  if (ytd.dpiRecordIds.length === 0) return [];
+
+  const fiscalYear = ledger.data.profile.fiscalYear;
+  const declaredNet = cassLadderForYear(ledger.data.profile.cassLadderYears, fiscalYear)?.proprietateIntelectuala;
+  const quotaPercent = dpiQuotaPercentOf(rules, fiscalYear);
+  const quotaWords =
+    quotaPercent === null
+      ? `Setul de reguli selectat pentru ${fiscalYear} nu conține regula de stabilire a venitului din drepturi `
+        + 'de proprietate intelectuală, deci aplicația nu are o cotă forfetară de aplicat și nu inventează una.'
+      : `Cota forfetară pe care regula o declară este ${quotaPercent}% din venitul brut (art. 72 alin. (2) / `
+        + 'art. 72^1 alin. (1)), deci venitul net este 0,6 din brut — nu 20 %, care aparține cedării folosinței ';
+
+  if (declaredNet !== undefined) {
+    return [
+      {
+        recordId: `dpi:${fiscalYear}`,
+        kind: 'profile',
+        reason: 'dpi_income_double_represented',
+        amount: null,
+        currency: 'RON',
+        fixTarget: '/settings',
+        detail:
+          `Venitul din drepturi de proprietate intelectuală pentru ${fiscalYear} are doi producători. ` +
+          `Registrul conține ${ytd.dpiRecordIds.length} document(e) de venit marcate ca art. 70, însumând ` +
+          `${leiText(ytd.dpiGross)} lei brut, din care ${quotaWords}` +
+          `încă o dată. Settings conține în plus un venit net tastat manual pentru aceeași categorie — ` +
+          `${leiText(declaredNet)} lei — la „Drepturi de proprietate intelectuală” din scara de la art. 170 ` +
+          'alin. (4). Scara cumulează o singură sumă per categorie: adunate, aceleași bani ar urca o treaptă ' +
+          'mai sus în plafonele de la art. 170 alin. (3) și ar produce CASS pe o sumă încasată o singură ' +
+          'dată. Aplicația nu adună cele două, nu alege valoarea mai mare și nu preferă în tăcere niciuna: ' +
+          'niciun venit din DPI nu este postat cât timp ambele există. Ce poți face: șterge suma tastată ' +
+          'manual în Settings și lasă registrul să determine venitul net, sau nu marca documentele ca art. 70 ' +
+          'și păstrează suma declarată.',
+      },
+    ];
+  }
+
+  const byId = new Map(ledger.data.revenues.map((r) => [r.id, r]));
+  const out: EstimateCoverageGap[] = [];
+  for (const id of ytd.dpiRecordIds) {
+    const record = byId.get(id);
+    if (record === undefined || !isRon(record.valoareFaraTva)) continue;
+    const conflict = dpiRecordConflict(record);
+    if (conflict !== null) {
+      out.push({
+        recordId: id,
+        kind: 'revenue',
+        reason: 'fact_missing',
+        amount: record.valoareFaraTva.amount,
+        currency: record.valoareFaraTva.currency,
+        fixTarget: estimateFixTarget('revenue', id),
+        detail: conflict,
+      });
+      continue;
+    }
+    out.push({
+      recordId: id,
+      kind: 'revenue',
+      reason: 'dpi_income_not_modelled',
+      amount: record.valoareFaraTva.amount,
+      currency: record.valoareFaraTva.currency,
+      fixTarget: estimateFixTarget('revenue', id),
+      detail:
+        `Documentul „${record.nr}” este înregistrat ca venit din drepturi de proprietate intelectuală ` +
+        `(art. 70 din Codul fiscal), iar estimarea nu îl include încă. ${quotaWords}` +
+        'bunurilor (art. 84 alin. (2) / art. 84^1 alin. (3)). Venitul net de aici alimentează testul de ' +
+        'plafon de la art. 148 alin. (3) (CAS, art. 137 alin. (1) lit. b^1)) și cumularea de la art. 170 ' +
+        'alin. (4) lit. a) (CASS, art. 155 alin. (1) lit. c)) — iar impozitul de 10 % este reținut de ' +
+        'plătitor și este final (art. 72 alin. (4)-(5)). Acele căi nu sunt încă implementate în acest build, ' +
+        'deci cifra estimării nu acoperă acest venit; aplicația nu îl include parțial și nu îl prezintă ca ' +
+        'venit din activitate independentă (art. 67), care ar merge pe altă cale și cu altă bază.',
     });
   }
   return out;
@@ -2187,7 +2324,21 @@ export function selectEstimateOperands(
   // annual ceiling: art. 68 alin. (6) removes burse private and protocol from its own base, so the base
   // must be struck on exactly this set. `selectProjectionV1` re-runs `selectYtd` internally, so both
   // selectors get the SAME object — a subset applied to only one of them is the Phase 10 drift class.
-  const scoped: AppData = { ...ledger.data, expenses: deductible.records };
+  //
+  // B-112 adds a second exclusion to the same line, for the same reason. art. 70 DPI receipts are a
+  // different income category with a different quota (40 %, art. 72 alin. (2)), a different contribution
+  // limb for each contribution (CAS art. 137 alin. (1) lit. b^1), CASS art. 155 alin. (1) lit. c)) and a
+  // tax the PAYER withholds and that is final (art. 72 alin. (4)-(5)). None of those paths exists in this
+  // build yet, so leaving the receipts in this set would run them through the art. 68 sistem-real engine
+  // as if they were art. 67 income — which is a second, quieter form of the B-112 defect rather than a fix
+  // for it. Scoping the set is also why no subtraction appears anywhere downstream: the category question
+  // is answered once, here, by `isDpiIncome`, and `selectYtd` never sees a DPI receipt at all.
+  //
+  // What is NOT removed is the register itself: `dpiCoverageGaps` reports these same receipts as a coverage
+  // gap, so the estimate gets smaller AND says why. A DPI receipt that reaches neither the figure nor the
+  // gap list is the failure mode this stage exists to prevent.
+  const systemRealRevenues = ledger.data.revenues.filter((r) => !isDpiIncome(r));
+  const scoped: AppData = { ...ledger.data, revenues: systemRealRevenues, expenses: deductible.records };
   const ytd = selectYtd(scoped, asOfDate);
   // PG-6h-1 — the flat-ratio gross, struck on the SAME ledger pass and the SAME record set as every other
   // operand here. A second FX walk would be the B-70 defect class and would drift from the first. B-88

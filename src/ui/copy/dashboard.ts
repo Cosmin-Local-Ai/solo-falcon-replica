@@ -115,6 +115,19 @@ export const dashboard = {
          * computed schedule was withheld rather than added on top of the typed one.
          */
         depreciation_conflict: 'amortizare calculată și amortizare înregistrată manual',
+        /**
+         * B-112 — the register holds art. 70 DPI receipts and the estimate does not yet compute them. The
+         * phrase must say the income is *in the register* and *outside the figure*; anything softer would
+         * read as a legal exclusion, and the whole defect was that an omitted category looked like a
+         * settled answer.
+         */
+        dpi_income_not_modelled: 'venit din drepturi de proprietate intelectuală neincluși în estimare',
+        /**
+         * B-112 — the same DPI income arrives from the register *and* from a hand-typed net on the
+         * art. 170 alin. (4) ladder. The phrase names both producers, because the finding is the collision,
+         * not a missing input. Same wording shape as `depreciation_conflict` above, for the same reason.
+         */
+        dpi_income_double_represented: 'același venit din DPI, din registru și din suma tastată în Settings',
       } satisfies Record<CoverageReason, string>,
       countOne: 'o înregistrare',
       countMany: (n: number): string => `${n} înregistrări`,

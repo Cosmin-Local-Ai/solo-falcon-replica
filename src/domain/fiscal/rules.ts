@@ -49,6 +49,16 @@ export type FiscalRegime =
   // declaration duty answer for all three, and the three totals agree only at 31 December.
   | 'cedare-art84-flat-ratio'
   | 'cedare-art84x1-withheld'
+  // B-112 (DPI) adds the *drepturi de proprietate intelectuală* quota regime, and it is a fresh string for
+  // the same reason every other one above is: `tax.ts` resolves a regime with `applicable.find(r =>
+  // r.taxRegime === ...)`, so a rule sharing one of the existing strings would be silently shadowed by
+  // whichever ruleId sorts first. DPI's rate is 10 % — the same number art. 68^3 alin. (6), art. 85 alin. (6)
+  // and art. 84^1 alin. (5) all carry — and the regimes share nothing else. The quota is 40 % (art. 72 alin.
+  // (2) / art. 72^1 alin. (1)), not the 20 % of art. 84/84^1 and not the 30 % of art. 68^3/art. 85; the gross
+  // is the sum the payer owes the author; the tax is computed and withheld BY THE PAYER at payment and is
+  // final (art. 72 alin. (4)-(6)); and the net goes to a different contribution basin from every one of them
+  // — CAS art. 137 alin. (1) lit. b^1) and CASS art. 155 alin. (1) lit. c), not lit. b) and not lit. e).
+  | 'dpi-flat-quota'
   | 'fiscal-depreciation';
 
 /**

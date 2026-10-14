@@ -39,6 +39,78 @@ export const revenues = {
     nota: 'Notă f. factură',
   },
   documentNumberPlaceholder: 'FCT-2025-0045',
+  /**
+   * B-112 — the income category, now a field the person can set.
+   *
+   * The label must not read as a formality. Until B-112 the app had `tip` (a document type) and nothing
+   * else, so a DPI receipt was indistinguishable from an activitate-independentă one and the estimate
+   * omitted an entire income category — ANAF's Exemplul 3 pays CAS of 24.300 lei on it and the engine
+   * produced 12.150. The hint therefore says what the choice changes, and says plainly that the app does
+   * not guess it: DPI vs activitate independentă turns on the object of the contract under Legea 8/1996,
+   * and ÎCCJ dec. nr. 1793 din 23 martie 2021 refused DPI characterisation for contracts merely labelled
+   * as such. The taxpayer having a PFA settles nothing.
+   */
+  incomeCategory: {
+    field: 'Categoria de venit',
+    activitate_independenta: 'Activitate independentă — art. 67',
+    drepturi_de_proprietate_intelectuala: 'Drepturi de proprietate intelectuală — art. 70',
+    hint:
+      'Cele două categorii nu se impun laolaltă. Venitul din art. 70 are cota forfetară de cheltuieli de ' +
+      '40 % din brut (art. 72 alin. (2)), se cumulează cu venitul din art. 67 la un singur test de plafon ' +
+      'pentru CAS (art. 148 alin. (3)) și merge pe o altă literă la CASS (art. 155 alin. (1) lit. c), nu ' +
+      'lit. b)). Aplicația nu ghicește categoria: linează pe ce ați declarat.',
+  },
+  /**
+   * B-112 — the object of the contract, which is the fact the category turns on. Recorded beside the
+   * category so the pair is checkable; where the two disagree the app reports the contradiction and posts
+   * nothing, rather than choosing between two answers the person gave.
+   */
+  dpiContractType: {
+    field: 'Obiectul contractului',
+    none: '— nu declar —',
+    cesiune_licenta: 'Cesiune / licență de drepturi patrimoniale (art. 40 din Legea 8/1996)',
+    contract_de_comanda: 'Contract de comandă / antrepriză (art. 47 din Legea 8/1996)',
+    hint:
+      'Limita dintre art. 70 și art. 67 trece prin obiectul contractului, nu prin titlul hârtiei. Cesiunea ' +
+      'și licența transferă drepturi patrimoniale și produc venit de la art. 70; contractul de comandă îl ' +
+      'plătește pe autor să creeze și să predea, fără transfer de drepturi, și este venit din art. 67. ' +
+      'ÎCCJ, secția de contencios administrativ și fiscal, decizia nr. 1793 din 23 martie 2021 a refuzat ' +
+      'calificarea de drepturi de proprietate intelectuală pentru contracte intitulate „cesiune de drepturi ' +
+      'de autor” care acopereau, în fapt, activitate de tip cold-call.',
+  },
+  /**
+   * B-112 — the art. 72 alin. (3) / art. 72¹ alin. (2) exclusion set. One field, two consequences, and the
+   * hint says both, because a person who reads only „fără cotă forfetară” would not see that the same flag
+   * also takes the sum out of CAS.
+   */
+  dpiExcludedKind: {
+    field: 'Exceptie de la cota forfetară',
+    none: '— niciuna —',
+    mostenitori: 'Venit încasat de moștenitori / de reprezentanții legali ai autorului',
+    drept_de_suita: 'Drept de suită',
+    remuneratie_copia_privata: 'Remunerație compensatorie pentru copia privată',
+    hint:
+      'Același set are două consecințe, și aplicația le citește dintr-un singur câmp: sumele de mai jos nu ' +
+      'primesc cota forfetară de 40 % (art. 72 alin. (3) și art. 72^1 alin. (2)) și, în plus, sunt excluse ' +
+      'de la CAS — art. 137 alin. (1) lit. b^1) spune „cu excepția veniturilor prevăzute la art. 72 alin. ' +
+      '(3)”. Nu sunt două întrebări separate și nu pot fi răspunse diferit.',
+  },
+  /**
+   * B-112 — the category shown on the row. The activitate-independentă wording is deliberately the shorter
+   * one: it is what every pre-B-112 record is, and a row that shouted about the default would read as a
+   * warning on records that carry no finding.
+   */
+  categoryCell: {
+    activitate_independenta: 'art. 67',
+    drepturi_de_proprietate_intelectuala: 'art. 70 · DPI',
+  },
+  /**
+   * B-112 — the marker on a row whose declared category and declared contract object contradict each other.
+   * It says the row is not posted, because that is the consequence the person needs before they read the
+   * totals; which of the two fields is wrong is for them to say, and `dpiRecordConflict` spells it out in
+   * the coverage row.
+   */
+  dpiConflictTag: 'declarație contradictorie — venit nepostat',
   clientSelectPlaceholder: '— alege clientul —',
   columns: {
     document: 'Document',

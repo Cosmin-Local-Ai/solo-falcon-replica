@@ -8,6 +8,10 @@ import { fxRateRecordSchema, type FxRateRecord } from '../domain/fx/rates';
 import type { MoneyPrecisionNotice } from './migration';
 import type { RuleRelease } from '../domain/fiscal/rules';
 import { EXPENSE_CATEGORIES, VEHICLE_EXCEPTION_CATEGORIES, VEHICLE_USE_VALUES } from '../domain/fiscal/deductibility';
+// B-112 stage 1 — the DPI income-category vocabularies, imported rather than restated for the same reason
+// as the deductibility and VAT lists above: the persisted token space and the decision layer must be one
+// spelling, or a stored category and the code that reads it can drift apart and the drift is invisible.
+import { DPI_CONTRACT_TYPES, DPI_EXCLUDED_KINDS, INCOME_CATEGORIES } from '../domain/dpi';
 import type { VehicleYearFacts } from '../domain/fiscal/deductibility';
 // PG-6f (B-30) — the VAT fact vocabularies, imported rather than restated, for the same reason as the
 // deductibility lists above: the persisted token space and the decision layer must be one spelling.
@@ -123,6 +127,24 @@ export const revenueSchema = z.object({
   status: z.enum(['inregistrata', 'in-asteptare', 'respinsa']),
   statusDetail: z.string().optional(),
   eFacturaStatus: z.enum(['Acceptată', 'În așteptare', 'Respinsă']).optional(),
+  // B-112 — WHICH income category this receipt is. Declared because **zod strips undeclared keys**: an
+  // undeclared category would be erased on the next load and the receipt would silently revert to
+  // activitate independentă, which is the exact defect B-112 is about. Optional, never nullable, never
+  // defaulted, and no chain step: a payload written before B-112 has no key, parses unchanged, and reads as
+  // `DEFAULT_INCOME_CATEGORY` — the one reading that does not require backfilling a legal fact nobody
+  // recorded. `tip` above is a DOCUMENT type, not an income category; that conflation is why the app could
+  // not represent DPI income at all.
+  incomeCategory: z.enum(INCOME_CATEGORIES).optional(),
+  // B-112 — the object of the contract, as the person declares it. The DPI / activitate independentă line
+  // runs through it (Legea 8/1996 art. 40 cesiune/licență vs art. 47 contract de comandă), and ÎCCJ dec.
+  // 1793/2021 is why the app records the answer instead of inferring a category from the taxpayer having a
+  // PFA. It is a second answer to the same question, so `domain/dpi.ts dpiRecordConflict` checks the pair
+  // and reports a contradiction rather than breaking the tie.
+  dpiContractType: z.enum(DPI_CONTRACT_TYPES).optional(),
+  // B-112 — the art. 72 alin. (3) / art. 72¹ alin. (2) exclusion set. ONE stored flag, TWO consequences
+  // (no 40 % forfetară quota, and outside CAS under art. 137 alin. (1) lit. b¹)); both are read from the one
+  // predicate `isDpiArt72Alin3Excluded`, so the legal fact is stated once.
+  dpiExcludedKind: z.enum(DPI_EXCLUDED_KINDS).optional(),
 });
 
 export const expenseSchema = z.object({

@@ -1,5 +1,7 @@
 import type { FiscalRule, RuleRelease } from './rules';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './package2026';
+// B-112 stage 1 — the DPI rules land on this release, which is what the release exists for.
+import { DPI_RULES_2026 } from './dpi2026';
 import { ruleSetDigest } from './ruleSetDigest';
 
 /**
@@ -16,12 +18,18 @@ import { ruleSetDigest } from './ruleSetDigest';
  * **What this package carries at the moment of minting: the same 54 rules as v5, byte-for-byte.** That is
  * deliberate and staged. The DPI rules arrive on top of this release in the following stages; minting the
  * release first is what keeps v5 frozen at the digest it already has. The consequence is stated plainly
- * rather than hidden: while the two rule sets are identical, `ruleSetDigest` gives them the **same** digest,
- * so `entryByContentHash` resolves to whichever was registered first (v5) and the two releases are
- * distinguishable only by `releaseId` and `version`. `release2026dpi.test.ts` pins that fact so it cannot be
- * mistaken for a bug once the DPI rules separate the digests. The registry does **not** reject a
- * content-identical release under a new id — it only rejects a *different* rule set under an id already
- * registered — and no filler rule was added to force a difference.
+ * rather than hidden: while the two rule sets were identical, `ruleSetDigest` gave them the **same** digest,
+ * so `entryByContentHash` resolved to whichever was registered first (v5) and the two releases were
+ * distinguishable only by `releaseId` and `version`. The registry does **not** reject a content-identical
+ * release under a new id — it only rejects a *different* rule set under an id already registered — and no
+ * filler rule was added to force a difference. That staged state is pinned by a test rather than left to be
+ * rediscovered.
+ *
+ * **Stage 1 ends that state.** `DPI_ART72_2026` (see `./dpi2026`) now rides on this package, which separates
+ * the two digests: the FY2026 revision is addressable by content as well as by name, and a snapshot can be
+ * pinned to a rule set that actually contains the DPI rule. Nothing inherited from v5 was edited — each of
+ * the 54 keeps its parameters, citations and `version: 1` byte-for-byte, and the registry's per-rule digest
+ * check would have thrown otherwise.
  *
  * ## The effective dating, and why the boundary is 1 January
  *
@@ -59,7 +67,7 @@ import { ruleSetDigest } from './ruleSetDigest';
  * The seeding lives in `registry.ts`, beside the v5 seed, so there is one place that answers *"what does
  * this build carry?"*.
  */
-export const PFA_2026_DPI_PACKAGE: FiscalRule[] = [...PFA_2026_SYSTEM_REAL_PACKAGE];
+export const PFA_2026_DPI_PACKAGE: FiscalRule[] = [...PFA_2026_SYSTEM_REAL_PACKAGE, ...DPI_RULES_2026];
 
 /**
  * The `releaseId` of the revision. Named for what it adds — the *drepturi de proprietate intelectuală*

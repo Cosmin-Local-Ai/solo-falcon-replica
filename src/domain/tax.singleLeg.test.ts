@@ -202,6 +202,11 @@ describe('B-85 — the composition is single-legged with the scenario refusal ou
       net: sub(RECEIPTS, RECORDED_EXPENSES),
       revenueNet: RECEIPTS,
       expenseNet: RECORDED_EXPENSES,
+      // B-112: this register holds no DPI receipts, so the DPI part of the turnover is zero.
+      // Declared rather than defaulted - the fixture asserts what the threshold rows measure on.
+      dpiGross: lei(0),
+      dpiGrossNet: lei(0),
+      dpiRecordIds: [],
     };
     expect(buildThresholdBases(ytd, res)['net-income']).toBe(FLAT_NET);
   });
