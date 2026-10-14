@@ -2340,22 +2340,22 @@ Write **`docs/ai/phases/55_b93_post_the_depreciation.md`**, from your own diff, 
 | `identity.adresa` / `adresaSocietate` | `Str. Libertății 12, Cluj-Napoca` | **`Str. Meșteșugului 12, Cluj-Napoca`** |
 | `identity.banca` | `BCR` | **`Banca Exemplu`** |
 | `identity.contBancar` | `RO44 BACX 0000 0000 1234 5678 9000` | **`RO44 EXMP 0000 0000 1234 5678 9000`** |
-| revenue `client` (r1, r4) | `Presta Consulting SRL` | **`Google LLC`** |
+| revenue `client` (r1, r4) | `Presta Consulting SRL` | **`Client Exemplu SRL`** |
 | revenue `client` (r2) | `Andrei Popescu` | **`Enache Sorin`** |
 | revenue `client` (r3) | `Marius Ionescu` | **`Barbu Cristina`** |
-| expense `furnizor` | `Carrefour` | **`Costco Wholesale`** |
-| expense `furnizor` | `CloudHost SRL` | **`Comcast`** |
-| expense `furnizor` | `Office Supplies SA` | **`Amazon`** |
+| expense `furnizor` | `Carrefour` | **`Magazin Exemplu SRL`** |
+| expense `furnizor` | `CloudHost SRL` | **`Telecom Exemplu SRL`** |
+| expense `furnizor` | `Office Supplies SA` | **`Birotică Exemplu SRL`** |
 
-**Why this is the right instinct, and where its edge is.** A famous name is **self-evidently a placeholder** — nobody reads a PFA demo whose client is `Google LLC` and thinks Google is a customer. That is *stronger* than the names I first chose: `Presta Consulting SRL` is exactly the shape a real Romanian firm has, so it could collide with someone who exists. **The exposure moves from "is this a real company?" to "we are trading on a famous brand's name."** Keep the fixture comments that explain what each bill depicts, so the placeholder stays legible.
+**Why self-labelling Romanian names rather than famous brands or plausible invented ones.** The user offered Google/Microsoft and S&P 500 names as *an idea*, then released the choice. **The deciding factor is the original concern: "is this taken from someone else's data?"** A name that announces itself as an example answers that permanently — **no competitor's demo data, screenshot or help document contains `Client Exemplu SRL`, so no comparison is even possible.** It also beats a plausible invented name: `Presta Consulting SRL` was the original defect precisely because it is the shape a real Romanian firm has, and a nicer invented variant would carry the same ambiguity. **Romanian wording keeps the demo legible to the person who will use it.**
 
-**The three supplier names are chosen to keep the fixture's meaning, not just to be famous:** `Costco Wholesale` for the supermarket bon that is **expressly non-deductible** as personal/family use (art. 68 alin. (7) lit. a)); `Comcast` for the hosting/connectivity bill that classifies `postal_and_telecom`; `Amazon` for the rechizite invoice. **If you swap one, preserve that mapping — the three exist to show all three fates.**
+**The three supplier names keep the fixture's meaning, not just the language:** `Magazin Exemplu SRL` for the supermarket bon that is **expressly non-deductible** as personal/family use (art. 68 alin. (7) lit. a)); `Telecom Exemplu SRL` for the hosting/connectivity bill that classifies `postal_and_telecom`; `Birotică Exemplu SRL` for the rechizite invoice. **If you swap one, preserve that mapping — the three exist to show all three fates.**
 
-**r2 and r3 stay Romanian personal names.** They are natural-person clients — r2 carries a CNP-shaped value — and the user's instruction was about companies. **Do not put a famous person's name on a natural-person client.**
+**r2 and r3 stay invented Romanian personal names.** They are natural-person clients — r2 carries a CNP-shaped value — and a common surname is generic rather than a brand risk. **Do not put a famous person's name on a natural-person client.**
 
 **Why `.example` for the email domain:** it is reserved by RFC 2606 for documentation and examples, so it **provably cannot resolve to a third party.** That is the difference between *provably safe* and *probably safe*. **Do not "fix" it to a plausible-looking `.ro`.**
 
-**Why the bank stays invented even though companies are now famous:** `BCR` plus `BACX` was the worst hook precisely because it was **plausible** — a real bank's real BIC prefix inside a real-format IBAN. `Google LLC` cannot be mistaken for a bank account. **`Banca Exemplu` / `EXMP` is deliberate and is not covered by the famous-names decision.**
+**Why the bank stays invented too:** `BCR` plus `BACX` was the worst hook precisely because it was **plausible** — a real bank's real BIC prefix inside a real-format IBAN. `Banca Exemplu` / `EXMP` cannot be mistaken for a real account.
 
 ## WHAT MUST NOT CHANGE
 1. **Every amount.** The seed estimate is pinned at **311.200 bani** and a large downstream suite depends on it. **Names are not amounts — if any figure moves, you have broken something.**
@@ -2403,7 +2403,7 @@ Before acting on any report, **grep every file and identifier it names against t
 2. **The seed estimate is still exactly 311.200 bani.** Unchanged, not re-pinned.
 3. **No date in the seed changed.**
 4. **A new test asserts the CUI and CNP fixtures fail their own check digits** — so a future edit cannot mint a real-looking identifier by accident.
-5. **No real *Romanian* bank identifier survives** in user-visible fixture data: no `BCR`, no `BACX`. **Famous foreign brands are now intentional** per the user's decision — the test is that no *plausible* identifier for a real local entity remains.
+5. **No real third-party brand, and no plausible real Romanian entity name, survives** in user-visible fixture data: no `BCR`, no `BACX`, no `Carrefour`, no `Presta Consulting`.
 6. **Every email domain in fixture data is a reserved one** (`.example`, `.invalid`, `.test`) or one we own.
 7. **Any changed hash or digest is re-pinned to a specific new value and named in the handoff**, with no assertion weakened or removed.
 8. **`git diff --stat` shows no change to `migration.ts`, `schema.ts`, the rule files, or `index.html`.** Chain head v21, release 5, 54 rules.
