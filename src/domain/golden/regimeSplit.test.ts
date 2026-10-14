@@ -176,6 +176,14 @@ describe('FIXTURE 1 — FINDING: the same ANAF example pins a CAS figure the eng
    * fiscal does not state and this repository has deliberately refused to infer from one example. Closing
    * it is tracked as **B-118**, and the authority (D212 instructions, a Norme metodologică, or ANAF
    * filling-in guidance on how *ponderea* is rounded) is being sought before any code picks a side.
+   *
+   * **B-112 stage 3 — what this does NOT implicate: the two CASS limbs.** Exemplul 3's two CASS amounts
+   * (6.800 lei on the PFA net, 9.720 lei on the ladder at the 24-SMN rung) are produced by the engine on
+   * the success path in `cass.twoLimbs.test.ts`, by a route that fills the second basin with dividends
+   * instead of DPI. Dividends do not enter the CAS ceiling test, so the proration stays exact and the year
+   * computes. That isolates the blocker: it is the CAS proration of a DPI-bearing year, and nothing about
+   * the CASS separation. **This fixture is not that test and is not to be read as Exemplul 3 passing** —
+   * the literals here are ANAF's, and ANAF's example puts DPI in both basins at once.
    */
   it.fails('FINDING — ANAF Exemplul 3 CAS: published 24.300 lei; the engine now builds that figure but refuses the result (art. 118 alin. (2^2) proration is fractional)', async () => {
     const res = computed(

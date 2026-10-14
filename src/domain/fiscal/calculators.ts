@@ -209,6 +209,22 @@ export type CassLadderInput = {
   alteSurseArt114?: PfaYesNo;
   /** D-OTH-2 — whether letting receipts come from the PFA's own activity or from personal patrimony. */
   cedareaSursa?: 'activitate_proprie_a_pfa' | 'patrimoniu_personal';
+  /**
+   * B-112 stage 3 — CF art. 154 alin. (1) lit. h¹): a natural person who **realises** salary and assimilated
+   * salary income **and/or** pension income is exempt from CASS *for income from intellectual property
+   * rights*. research/48 §11.3 quotes it and records that Legea 141/2025 art. II pct. 17 extended it to
+   * pensioners with effect from 1 Aug 2025.
+   *
+   * **The letter is not settled and is not asserted as settled.** Consolidations disagree on whether this
+   * exemption sits at lit. h) or lit. h¹); the operative content is the same either way (research/48, open
+   * question 3: „Verify against Monitorul Oficial before hard-coding the letter”). The breakdown therefore
+   * cites the reading this app uses and says the letter is unverified.
+   *
+   * Three states, because the exemption keys on income REALISED in the year, not on a status flag — the same
+   * discipline art. 174 alin. (7) lit. c) is held to in this file. `'unknown'` neither grants the exemption
+   * nor refuses the year: the amount is cumulated and the withheld exemption is stated.
+   */
+  dpiExemptArt154?: FactState;
 };
 
 export type CalculatorFunction = (
@@ -676,6 +692,13 @@ function calcCassLadder(rule: FiscalRule, input?: CalculatorInput): CalculatorRe
 
   // ── art. 170 alin. (5): neimpozabile income is seen, never added ──
   const neimpozabil = ladder?.neimpozabil ?? lei(0);
+  // ── B-112 stage 3 — art. 154 alin. (1) lit. h¹): DPI income seen, never cumulated, for a person with
+  // realised salary and/or pension income. The exemption reaches ONE category: the other five still
+  // cumulate, and the art. 155 alin. (1) lit. b) basin is untouched by it. Excluding the amount also removes
+  // it from the rung test, because income for which no CASS is owed cannot select the base of a CASS.
+  const dpiExempt = ladder?.dpiExemptArt154 ?? 'unknown';
+  const dpiAmount = amounts.proprietate_intelectuala;
+  const dpiExcluded = dpiExempt === 'da' && dpiAmount !== undefined && dpiAmount > 0;
   let cumulated = lei(0);
   for (const category of CASS_LADDER_CATEGORIES) {
     const amount = amounts[category];
@@ -686,6 +709,7 @@ function calcCassLadder(rule: FiscalRule, input?: CalculatorInput): CalculatorRe
         reason: `Un venit declarat la art. 155 alin. (1) lit. c)-h) este negativ (${leiText(amount)} lei); art. 170 alin. (4) cumulează venituri, nu pierderi.`,
       };
     }
+    if (category === 'proprietate_intelectuala' && dpiExcluded) continue;
     cumulated = sumBani([cumulated, amount]);
   }
 
@@ -752,6 +776,18 @@ function calcCassLadder(rule: FiscalRule, input?: CalculatorInput): CalculatorRe
     'plafonul de 72 SM din art. 170 alin. (1) NU se aplică acestui bazin: el mărginește venitul din art. 155 alin. (1) lit. b), nu cumularea de la lit. c)-h)',
     'venitul net al PFA nu intră în acest cumul, iar acest cumul nu intră în plafonul de 72 SM — cele două căi nu se întâlnesc nicăieri',
   ];
+  if (dpiExcluded) {
+    breakdown.push(
+      `venitul din drepturi de proprietate intelectuală de ${leiText(dpiAmount as Bani)} lei este CONSEMNET, dar NU intră în cumularea de la art. 170 alin. (4): persoana realizează venituri din salarii și asimilate salariilor și/sau din pensii, iar art. 154 alin. (1) lit. h¹) o exceptează de la CASS pentru veniturile din drepturi de proprietate intelectuală (research/48 §11.3; extinsă la pensionari prin Legea 141/2025 art. II pct. 17, în vigoare de la 1 aug 2025).`,
+      'excepția privește DOAR această categorie: celelalte cinci se cumulează în continuare, iar venitul din activitate independentă (art. 155 alin. (1) lit. b)) nu este atins de ea — cele două căi CASS nu se întâlnesc nicăieri',
+      'NOTĂ (LITERA NEVERIFICATĂ): consolidările nu cad de acord dacă această excepție este la art. 154 alin. (1) lit. h) sau lit. h¹); conținutul operativ este același (research/48, întrebarea deschisă 3). Aplicația citește h¹) și nu prezintă litera ca pe un fapt stabilit.',
+    );
+  }
+  if (dpiExempt === 'unknown' && dpiAmount !== undefined && dpiAmount > 0) {
+    breakdown.push(
+      `NOTĂ (EXCEPȚIE NESTABILITĂ): profilul nu consemnează cu certitudine că persoana a realizat venituri din salarii și asimilate salariilor și/sau din pensii în acest an fiscal, deci excepția de la art. 154 alin. (1) lit. h¹) nu a fost acordată. Venitul din DPI a fost cumulat; absența faptei nu este o dovadă contrară, ci o excepție pe care aplicația nu o poate stabili.`,
+    );
+  }
   if (neimpozabil > 0) {
     breakdown.push(
       `venituri neimpozabile consemnate (art. 93 și 105): ${leiText(neimpozabil)} lei — art. 170 alin. (5): „La încadrarea în plafonul prevăzut la alin. (4) nu se iau în calcul veniturile neimpozabile, prevăzute la art. 93 și 105.” Consemnate, nu adunate.`,

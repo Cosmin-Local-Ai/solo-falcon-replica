@@ -3,7 +3,7 @@
  * Consumes TaxInputsReference (derived.ts) + active rule release.
  * Domain purity: no React, DOM, localStorage, or store imports.
  */
-import type { PfaProfile } from './models';
+import type { FactState, PfaProfile } from './models';
 import { cassLadderForYear } from './models';
 import type { FiscalRule, RuleRelease } from './fiscal/rules';
 import type { DepreciationLeg } from './estimateBasis';
@@ -792,6 +792,30 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   let cassLadderValue: Bani = lei(0);
   let cassLadderBase: Bani | undefined;
   let cassLadderDivergence: string | undefined;
+  // B-112 stage 3 — CF art. 154 alin. (1) lit. h¹): a natural person who REALISES salary and assimilated
+  // salary income **and/or** pension income is exempt from CASS *for income from intellectual property
+  // rights* (research/48 §11.3; extended to pensioners by Legea 141/2025 art. II pct. 17, in force from
+  // 1 Aug 2025). Three states, assembled from the realised amounts and never from a status flag — the same
+  // discipline art. 174 alin. (7) lit. c) is held to two paragraphs below: a status does not say anything
+  // was realised in THIS fiscal year. `salaryStatus = da` with no amount recorded is an unestablished fact,
+  // not a negative one, so the exemption is withheld and the ladder says so instead of guessing.
+  //
+  // This is the CASS counterpart to the CAS asymmetry pinned in stage 2, and the two must not be merged:
+  // art. 150 alin. (2) exempts a salariat from CAS on lit. b¹) income, art. 154 alin. (1) lit. h¹) exempts
+  // the same person from CASS on the same income, and neither reaches the art. 155 alin. (1) lit. b) basin.
+  const salaryRealised: FactState =
+    inputs.salaryStatus !== 'da'
+      ? 'nu'
+      : inputs.salaryIncomeLei !== null && inputs.salaryIncomeLei > 0
+        ? 'da'
+        : 'unknown';
+  const pensionRealised: FactState = cassFacts.pensionSumsReceived;
+  const dpiCassExemption: FactState =
+    salaryRealised === 'da' || pensionRealised === 'da'
+      ? 'da'
+      : salaryRealised === 'unknown' || pensionRealised === 'unknown'
+        ? 'unknown'
+        : 'nu';
   // CASS AND CAS TREAT PENSIONERS DIFFERENTLY — and TASK 5 split the fact that used to serve both.
   //   CAS:  CF art. 150 alin. (1) — a pensioner owes NO CAS at all on art. 137 alin. (1) lit. b)/b^1)
   //         income (the call above). Key: pensioner STATUS.
@@ -839,6 +863,15 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
       }
       const ladderRes = calculatorRegistry['calc-cass-ladder'](cassRule, {
         cassLadder: {
+          // B-112 stage 3 — CF art. 154 alin. (1) lit. h¹): a person who REALISES salary and assimilated
+          // salary income **and/or** pension income is exempt from CASS for income from intellectual property
+          // rights (research/48 §11.3; extended to pensioners by Legea 141/2025 art. II pct. 17, in force
+          // from 1 Aug 2025). Assembled here from the realised amounts, never from a status flag, for the
+          // same reason art. 174 alin. (7) lit. c) keys on sums received rather than on being a pensioner:
+          // a status does not say anything was realised in THIS fiscal year. `salaryStatus = da` with no
+          // amount recorded is an unestablished fact, not a negative one — the exemption is withheld and the
+          // ladder says so, rather than the app guessing in either direction.
+          dpiExemptArt154: dpiCassExemption,
           amounts: {
             proprietate_intelectuala: ladderYear?.proprietateIntelectuala,
             asociere_persoana_juridica: ladderYear?.asocierePersoanaJuridica,
