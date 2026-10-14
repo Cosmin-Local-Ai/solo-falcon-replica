@@ -13,7 +13,7 @@
  * 2. **A synthetic value must also carry an impossible birth date**, so it fails on face value as well as
  *    on arithmetic. `9000000000001` reads as birth date `00-00-0000`, which no register contains.
  *
- * The names are the ones the rest of the repository already uses for demo people (Popescu, Ionescu), so a
+ * The names are the ones the rest of the repository already uses for demo people (Enache, Barbu), so a
  * reader who spots a name in a diff immediately knows which fixture it came from.
  *
  * This module imports nothing from `vitest` or `@playwright/test`, so both the unit suite and the e2e
@@ -42,7 +42,7 @@ export const SYNTHETIC_ID_DOC = 'XX 000000';
 /** One synthetic stay, first form. */
 export const SYNTHETIC_STAY_A: OccupancyStay = {
   id: 'stay-synthetic-1',
-  guestName: 'Andrei Popescu (synthetic)',
+  guestName: 'Enache Sorin (synthetic)',
   guestIdentifier: SYNTHETIC_CNP_A,
   identifierKind: 'cnp',
   firstDay: '2026-03-04',
@@ -52,7 +52,7 @@ export const SYNTHETIC_STAY_A: OccupancyStay = {
 /** A second synthetic stay, so a form can be shown with more than one row. */
 export const SYNTHETIC_STAY_B: OccupancyStay = {
   id: 'stay-synthetic-2',
-  guestName: 'Maria Ionescu (synthetic)',
+  guestName: 'Barbu Cristina (synthetic)',
   guestIdentifier: SYNTHETIC_CNP_B,
   identifierKind: 'cnp',
   firstDay: '2026-08-01',

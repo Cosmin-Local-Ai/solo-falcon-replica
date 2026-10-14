@@ -8,7 +8,7 @@ import { STORAGE_KEY } from './fixtures';
  * Acceptance criterion 1 says this has to be proven in Playwright, not in a unit test, and the reason is
  * structural: every unit test of the store asserts on a value (`dataOrigin`), while the defect was a
  * *screen*. A fresh browser profile used to open on "Bună, Andrei" with four demo invoices and
- * "Popescu Andrei" in the topbar, because `store.tsx` handed a first run the demo fixture and production
+ * "Dobre Radu" in the topbar, because `store.tsx` handed a first run the demo fixture and production
  * code only ever branched on `'quarantined'` — never on `'seed'`. No assertion on a store field could
  * have caught that. These tests assert on what is on screen.
  *
@@ -28,8 +28,8 @@ test.describe('First run — a fresh profile with zero stored entries', () => {
 
     // No demo invoice, no demo client, no demo taxpayer — anywhere on the page.
     await expect(page.getByText('FCT-2026-001')).toHaveCount(0);
-    await expect(page.getByText('Presta Consulting SRL')).toHaveCount(0);
-    await expect(page.getByText('Popescu Andrei')).toHaveCount(0);
+    await expect(page.getByText('Codexa SRL')).toHaveCount(0);
+    await expect(page.getByText('Dobre Radu')).toHaveCount(0);
 
     // The topbar carries no identity: no name, no avatar initials.
     await expect(page.locator('.topbar-user')).toHaveCount(0);
@@ -56,7 +56,7 @@ test.describe('First run — validation and refusal', () => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: onboarding.title })).toBeVisible();
 
-    await page.getByLabel(onboarding.fields.nume).fill('Popescu Andrei');
+    await page.getByLabel(onboarding.fields.nume).fill('Dobre Radu');
     await page.getByRole('button', { name: onboarding.actions.finish }).click();
 
     await expect(page.getByText(onboarding.errors.startDateRequired)).toBeVisible();
@@ -122,7 +122,7 @@ test.describe('First run — the demo sandbox is opt-in', () => {
     await expect(page.getByText(shell.sandboxTitle)).toBeVisible();
     // The fixture is on screen: the sidebar names the demo taxpayer and the cockpit carries the
     // fixture's own annual revenue figure.
-    await expect(page.locator('.sidebar-identity')).toContainText('Popescu Andrei PFA');
+    await expect(page.locator('.sidebar-identity')).toContainText('Dobre Radu PFA');
     await expect(page.getByRole('heading', { name: 'Tablou de bord' })).toBeVisible();
 
     await page.reload();
@@ -158,7 +158,7 @@ test.describe('First run — „Șterge toate datele și începe de la zero”',
     await expect(page.getByRole('heading', { name: onboarding.title })).toBeVisible();
     expect(await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY)).toBeNull();
     // Not the demo, either.
-    await expect(page.getByText('Popescu Andrei')).toHaveCount(0);
+    await expect(page.getByText('Dobre Radu')).toHaveCount(0);
     await expect(page.getByText('FCT-2026-001')).toHaveCount(0);
   });
 });

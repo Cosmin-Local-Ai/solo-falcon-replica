@@ -17,7 +17,7 @@ const newRevenue: Omit<Revenue, 'id'> = {
   tip: 'factura',
   nr: 'FCT-2026-002',
   date: '2026-03-20',
-  client: 'Presta Consulting SRL',
+  client: 'Codexa SRL',
   cui: 'RO12345678',
   valoareFaraTva: ron(500),
   tva: ron(95),
@@ -182,9 +182,9 @@ describe('save effect — multiple save cycles', () => {
 
     // Cycle 4 — update a client.
     const c1 = storeRef!.clients.find(c => c.id === 'c1')!;
-    act(() => storeRef!.updateClient({ ...c1, denumire: 'Presta Consulting S.R.L.' }));
+    act(() => storeRef!.updateClient({ ...c1, denumire: 'Codexa S.R.L.' }));
     persisted = read();
-    expect(persisted.clients.find(c => c.id === 'c1')!.denumire).toBe('Presta Consulting S.R.L.');
+    expect(persisted.clients.find(c => c.id === 'c1')!.denumire).toBe('Codexa S.R.L.');
 
     // Cycle 5 — add an annual filing, then update it.
     // TASK 9 re-pin (replaced, not deleted): this cycle used to update the seed's `d2`. The seed holds no

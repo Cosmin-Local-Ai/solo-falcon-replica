@@ -68,7 +68,7 @@ function TaxProbe() {
           store.updateProfile({
             identity: {
               ...store.profile.identity,
-              nume: 'Popescu Andrei Schimbat',
+              nume: 'Dobre Radu Schimbat',
               email: 'nou@example.test',
               codTvaIntra: 'RO9999999999999',
               caen: [{ cod: '6202', descriere: 'Alta activitate' }],
@@ -152,14 +152,14 @@ describe('useTaxDerived (Step 14)', () => {
     );
     const beforeKey = screen.getByTestId('tax-inputs-key').textContent;
     const beforeStatus = screen.getByTestId('tax-status').textContent;
-    expect(screen.getByTestId('identity-nume').textContent).toBe('Popescu Andrei');
+    expect(screen.getByTestId('identity-nume').textContent).toBe('Dobre Radu');
 
     act(() => {
       screen.getByText('change-identity').click();
     });
 
     // The identity really did change…
-    expect(screen.getByTestId('identity-nume').textContent).toBe('Popescu Andrei Schimbat');
+    expect(screen.getByTestId('identity-nume').textContent).toBe('Dobre Radu Schimbat');
     // …and the fiscal inputs key and status did not.
     expect(screen.getByTestId('tax-inputs-key').textContent).toBe(beforeKey);
     expect(screen.getByTestId('tax-status').textContent).toBe(beforeStatus);

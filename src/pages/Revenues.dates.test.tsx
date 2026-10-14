@@ -41,7 +41,7 @@ function revenue(over: Partial<Revenue> = {}): Revenue {
     tip: 'factura',
     nr: 'FCT-2026-901',
     date: '2026-12-20',
-    client: 'Presta Consulting SRL',
+    client: 'Codexa SRL',
     cui: 'RO12345678',
     valoareFaraTva: ron(1000),
     tva: ron(200),
@@ -92,7 +92,7 @@ function fillAndSubmit(nr: string, { documentDate, collected }: { documentDate?:
   if (documentDate !== undefined) fireEvent.change(dates[0], { target: { value: documentDate } });
   if (collected !== undefined) fireEvent.change(dates[1], { target: { value: collected } });
   fireEvent.change(screen.getByPlaceholderText('FCT-2025-0045'), { target: { value: nr } });
-  fireEvent.change(selectCarrying('Presta Consulting SRL'), { target: { value: 'Presta Consulting SRL' } });
+  fireEvent.change(selectCarrying('Codexa SRL'), { target: { value: 'Codexa SRL' } });
   const amounts = screen.getAllByPlaceholderText('0,00');
   fireEvent.change(amounts[0], { target: { value: '1000' } });
   fireEvent.change(amounts[1], { target: { value: '200' } });

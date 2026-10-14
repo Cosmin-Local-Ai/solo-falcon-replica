@@ -15,11 +15,11 @@ const STORAGE_KEY = 'pfa-app-data-v2';
 // --- Fixtures ---------------------------------------------------------------
 
 const identity = {
-  nume: 'Ion Popescu',
+  nume: 'Enache Sorin',
   cnp: '0123456789012',
   adresa: 'Str. Test 1, Bucuresti',
   telefon: '0700000000',
-  email: 'ion@example.com',
+  email: 'sorin@example.com',
   denumire: '',
   cui: '',
   formaJuridica: 'PFA',

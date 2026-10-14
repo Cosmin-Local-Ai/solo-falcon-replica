@@ -24,35 +24,36 @@ import { seedBrowser, seedBrowserOnce, STORAGE_KEY } from './fixtures';
 
 /** Shared settings payload for localStorage-seeded datasets (valid per settingsSchema). */
 // TASK 9 re-pin (replaced, not deleted): the legacy `company` block followed the seed's identity fix —
-// 'Popescu Consulting SRL' / 'SRL' → 'Popescu Andrei PFA' / 'Persoană fizică autorizată', and the CUI
+// the SRL-shaped trading name and the 'SRL' forma juridică became the PFA trading name and
+// 'Persoană fizică autorizată', and the CUI
 // that sat in the `cnp` field became the person's CNP. A PFA has no legal personality separate from the
 // person, and every rule, deadline and estimate in the app already resolves this profile as a PFA.
 const SEED_SETTINGS = {
   cotaTva: 9,
   company: {
-    denumire: 'Popescu Andrei PFA',
+    denumire: 'Dobre Radu PFA',
     cui: 'RO4455667788990',
     numarRegComert: 'J40/1234/2020',
-    adresa: 'Str. Libertății 12, Cluj-Napoca',
+    adresa: 'Str. Meșteșugului 12, Cluj-Napoca',
     cnp: '1234567890123',
     formaJuridica: 'Persoană fizică autorizată',
     codFiscal: 'RO4455667788990',
     codCAEN: '6201',
     'regComerț': 'J40/1234/2020',
     telefon: '0750 123 456',
-    email: 'contact@popescuconsulting.ro',
-    contBancar: 'RO44 BACX 0000 0000 1234 5678 9000',
-    banca: 'BCR',
+    email: 'contact@dobrestudio.example',
+    contBancar: 'RO44 CARP 0000 0000 1234 5678 9000',
+    banca: 'Banca Carpatică',
     caen: [{ cod: '6201', descriere: 'Activități de programare computerizate' }],
   },
   personal: {
-    nume: 'Popescu Andrei',
+    nume: 'Dobre Radu',
     cnp: '1234567890123',
-    adresa: 'Str. Libertății 12, Cluj-Napoca',
+    adresa: 'Str. Meșteșugului 12, Cluj-Napoca',
     telefon: '0750 123 456',
-    email: 'andrei@popescuconsulting.ro',
+    email: 'radu@dobrestudio.example',
   },
-  bankAccounts: [{ id: 'ba-1', banca: 'BCR', moneda: 'RON' }],
+  bankAccounts: [{ id: 'ba-1', banca: 'Banca Carpatică', moneda: 'RON' }],
   eFactura: { trimitere: 'manual', dateContact: '2026-09-01' },
 };
 
@@ -110,8 +111,8 @@ test.describe('Dashboard — cockpit cards (seed data)', () => {
     // the engine selects for a VAT-registered profile is still the VAT-exclusive one.
     //
     // TASK 2b changed WHICH expenses reach that operand: only the confirmed-deductible subset. Of the
-    // two 'inregistrata' seed expenses, e1 (CloudHost, 120,00 lei, `postal_and_telecom`) is deductibilă
-    // and e2 (Carrefour bon fiscal, 85,50 lei, `personal_or_family_use`) is nedeductibilă expres prin
+    // two 'inregistrata' seed expenses, e1 (Conectica, 120,00 lei, `postal_and_telecom`) is deductibilă
+    // and e2 (Coșul Zilnic SRL bon fiscal, 85,50 lei, `personal_or_family_use`) is nedeductibilă expres prin
     // CF art. 68 alin. (7) lit. a) — so the expense operand is 120,00 lei, not 205,50 lei:
     //   venit brut (excl-VAT)    7.700,00 lei înregistrat
     //   cheltuieli deductibile     120,00 lei înregistrat
@@ -747,20 +748,20 @@ test.describe('Dashboard — a PFA start date resolves no deadline', () => {
             vatRegistration: { status: 'inregistrat_art316' },
             cashFloorLei: 0,
             identity: {
-              nume: 'Popescu Andrei',
+              nume: 'Dobre Radu',
               cnp: '1234567890123',
-              adresa: 'Str. Libertății 12, Cluj-Napoca',
+              adresa: 'Str. Meșteșugului 12, Cluj-Napoca',
               telefon: '0750 123 456',
-              email: 'andrei@popescuconsulting.ro',
-              denumire: 'Popescu Consulting SRL',
+              email: 'radu@dobrestudio.example',
+              denumire: 'Dobre Radu SRL',
               cui: 'RO4455667788990',
               formaJuridica: 'SRL',
               numarRegComert: 'J40/1234/2020',
-              adresaSocietate: 'Str. Libertății 12, Cluj-Napoca',
+              adresaSocietate: 'Str. Meșteșugului 12, Cluj-Napoca',
               telefonSocietate: '0750 123 456',
-              emailSocietate: 'contact@popescuconsulting.ro',
-              contBancar: 'RO44 BACX 0000 0000 1234 5678 9000',
-              banca: 'BCR',
+              emailSocietate: 'contact@dobrestudio.example',
+              contBancar: 'RO44 CARP 0000 0000 1234 5678 9000',
+              banca: 'Banca Carpatică',
             },
             updatedAt: '2026-06-01T10:00:00.000Z',
           },
@@ -780,8 +781,8 @@ test.describe('Dashboard — a PFA start date resolves no deadline', () => {
           ],
           settings: {
             cotaTva: 9,
-            company: { denumire: 'Popescu Consulting SRL', cui: 'RO4455667788990', numarRegComert: 'J40/1234/2020', adresa: 'Str. Libertății 12, Cluj-Napoca', caen: [] },
-            personal: { nume: 'Popescu Andrei', cnp: '1234567890123', adresa: 'Str. Libertății 12, Cluj-Napoca', telefon: '0750 123 456', email: 'andrei@popescuconsulting.ro' },
+            company: { denumire: 'Dobre Radu SRL', cui: 'RO4455667788990', numarRegComert: 'J40/1234/2020', adresa: 'Str. Meșteșugului 12, Cluj-Napoca', caen: [] },
+            personal: { nume: 'Dobre Radu', cnp: '1234567890123', adresa: 'Str. Meșteșugului 12, Cluj-Napoca', telefon: '0750 123 456', email: 'radu@dobrestudio.example' },
             bankAccounts: [],
             eFactura: { trimitere: 'manual', dateContact: '2026-06-01' },
           },
@@ -831,20 +832,20 @@ test.describe('Dashboard — Grafic financiar & KPI table (seeded FY2025)', () =
       vatRegistration: { status: 'inregistrat_art316' },
       cashFloorLei: 0,
       identity: {
-        nume: 'Popescu Andrei',
+        nume: 'Dobre Radu',
         cnp: '1234567890123',
-        adresa: 'Str. Libertății 12, Cluj-Napoca',
+        adresa: 'Str. Meșteșugului 12, Cluj-Napoca',
         telefon: '0750 123 456',
-        email: 'andrei@popescuconsulting.ro',
-        denumire: 'Popescu Consulting SRL',
+        email: 'radu@dobrestudio.example',
+        denumire: 'Dobre Radu SRL',
         cui: 'RO4455667788990',
         formaJuridica: 'SRL',
         numarRegComert: 'J40/1234/2020',
-        adresaSocietate: 'Str. Libertății 12, Cluj-Napoca',
+        adresaSocietate: 'Str. Meșteșugului 12, Cluj-Napoca',
         telefonSocietate: '0750 123 456',
-        emailSocietate: 'contact@popescuconsulting.ro',
-        contBancar: 'RO44 BACX 0000 0000 1234 5678 9000',
-        banca: 'BCR',
+        emailSocietate: 'contact@dobrestudio.example',
+        contBancar: 'RO44 CARP 0000 0000 1234 5678 9000',
+        banca: 'Banca Carpatică',
       },
       // PG-4 (D-YEAR-1): this fixture deliberately views a CLOSED year (2025) while the app runs in 2026.
       // The automatic year advance moves a profile that was last maintained BEFORE the boundary — which
@@ -1043,20 +1044,20 @@ const computedDataset = () => ({
     vatRegistration: { status: 'inregistrat_art316' },
     cashFloorLei: 0,
     identity: {
-      nume: 'Popescu Andrei',
+      nume: 'Dobre Radu',
       cnp: '1234567890123',
-      adresa: 'Str. Libertății 12, Cluj-Napoca',
+      adresa: 'Str. Meșteșugului 12, Cluj-Napoca',
       telefon: '0750 123 456',
-      email: 'andrei@popescuconsulting.ro',
-      denumire: 'Popescu Andrei PFA',
+      email: 'radu@dobrestudio.example',
+      denumire: 'Dobre Radu PFA',
       cui: 'RO4455667788990',
       formaJuridica: 'PFA',
       numarRegComert: 'J40/1234/2020',
-      adresaSocietate: 'Str. Libertății 12, Cluj-Napoca',
+      adresaSocietate: 'Str. Meșteșugului 12, Cluj-Napoca',
       telefonSocietate: '0750 123 456',
-      emailSocietate: 'contact@popescuconsulting.ro',
-      contBancar: 'RO44 BACX 0000 0000 1234 5678 9000',
-      banca: 'BCR',
+      emailSocietate: 'contact@dobrestudio.example',
+      contBancar: 'RO44 CARP 0000 0000 1234 5678 9000',
+      banca: 'Banca Carpatică',
     },
     updatedAt: '2026-01-01T10:00:00.000Z',
   },

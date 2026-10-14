@@ -23,47 +23,47 @@ const STORAGE_KEY = 'pfa-app-data-v2';
 const SEED_SETTINGS = {
   cotaTva: 9,
   company: {
-    denumire: 'Popescu Andrei PFA',
+    denumire: 'Dobre Radu PFA',
     cui: 'RO4455667788990',
     numarRegComert: 'J40/1234/2020',
-    adresa: 'Str. Libertății 12, Cluj-Napoca',
+    adresa: 'Str. Meșteșugului 12, Cluj-Napoca',
     cnp: 'RO4455667788990',
     formaJuridica: 'PFA',
     codFiscal: 'RO4455667788990',
     codCAEN: '6201',
     'regComerț': 'J40/1234/2020',
     telefon: '0750 123 456',
-    email: 'contact@popescuconsulting.ro',
-    contBancar: 'RO44 BACX 0000 0000 1234 5678 9000',
-    banca: 'BCR',
+    email: 'contact@dobrestudio.example',
+    contBancar: 'RO44 CARP 0000 0000 1234 5678 9000',
+    banca: 'Banca Carpatică',
     caen: [{ cod: '6201', descriere: 'Activități de programare computerizate' }],
   },
   personal: {
-    nume: 'Popescu Andrei',
+    nume: 'Dobre Radu',
     cnp: '1234567890123',
-    adresa: 'Str. Libertății 12, Cluj-Napoca',
+    adresa: 'Str. Meșteșugului 12, Cluj-Napoca',
     telefon: '0750 123 456',
-    email: 'andrei@popescuconsulting.ro',
+    email: 'radu@dobrestudio.example',
   },
-  bankAccounts: [{ id: 'ba-1', banca: 'BCR', moneda: 'RON' }],
+  bankAccounts: [{ id: 'ba-1', banca: 'Banca Carpatică', moneda: 'RON' }],
   eFactura: { trimitere: 'manual', dateContact: '2026-09-01' },
 };
 
 const IDENTITY = {
-  nume: 'Popescu Andrei',
+  nume: 'Dobre Radu',
   cnp: '1234567890123',
-  adresa: 'Str. Libertății 12, Cluj-Napoca',
+  adresa: 'Str. Meșteșugului 12, Cluj-Napoca',
   telefon: '0750 123 456',
-  email: 'andrei@popescuconsulting.ro',
-  denumire: 'Popescu Andrei PFA',
+  email: 'radu@dobrestudio.example',
+  denumire: 'Dobre Radu PFA',
   cui: 'RO4455667788990',
   formaJuridica: 'PFA',
   numarRegComert: 'J40/1234/2020',
-  adresaSocietate: 'Str. Libertății 12, Cluj-Napoca',
+  adresaSocietate: 'Str. Meșteșugului 12, Cluj-Napoca',
   telefonSocietate: '0750 123 456',
-  emailSocietate: 'contact@popescuconsulting.ro',
-  contBancar: 'RO44 BACX 0000 0000 1234 5678 9000',
-  banca: 'BCR',
+  emailSocietate: 'contact@dobrestudio.example',
+  contBancar: 'RO44 CARP 0000 0000 1234 5678 9000',
+  banca: 'Banca Carpatică',
 };
 
 /**
@@ -320,7 +320,7 @@ test.describe('Phase 7 — identity round-trips through the one store', () => {
     expect(saved.profile.identity.nume).toBe('Georgescu Maria');
     // settings.personal is retired from writes but stays parseable (decision D-1): the seeded
     // value is still on disk, untouched, and still validates.
-    expect(saved.settings.personal.nume).toBe('Popescu Andrei');
+    expect(saved.settings.personal.nume).toBe('Dobre Radu');
 
     await page.goto('/');
     await expect(page.locator('.topbar-user')).toContainText('Georgescu Maria');
@@ -340,10 +340,10 @@ test.describe('Phase 7 — identity round-trips through the one store', () => {
     const saved = await stored(page);
     expect(saved.profile.identity.denumire).toBe('Georgescu Maria SRL');
     // The retired block keeps the value the app seeded and is never written again.
-    // TASK 9 re-pin (replaced, not deleted): 'Popescu Consulting SRL' → 'Popescu Andrei PFA'. The seed
+    // TASK 9 re-pin (replaced, not deleted): the seeded trading name became the PFA one. The seed
     // identity is a persoană fizică autorizată now; what this assertion guards is unchanged — the
     // retired `settings.company` block is still on disk with the seeded value and is never rewritten.
-    expect(saved.settings.company.denumire).toBe('Popescu Andrei PFA');
+    expect(saved.settings.company.denumire).toBe('Dobre Radu PFA');
 
     await page.goto('/');
     await expect(page.locator('.sidebar-identity')).toHaveText('Georgescu Maria SRL');

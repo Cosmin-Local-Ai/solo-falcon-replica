@@ -7,7 +7,7 @@
  *                  opt-in demo sandbox. It is never a first run (D-SEED-2, D-RUN-1).
  *
  * Before Phase 11 the second one was also the first: `store.tsx` handed a fresh browser `seedData` with
- * `dataOrigin: 'seed'`, and nothing rendered a banner for it, so a new install opened on "Popescu Andrei"
+ * `dataOrigin: 'seed'`, and nothing rendered a banner for it, so a new install opened on "Dobre Radu"
  * with four invoices nobody filed. That is defect D1, and it is closed here rather than labelled.
  *
  * The fixture is a **2026** PFA: `pfaStartYear: 2026`, `pfaStartDate: '2026-01-19'`, and every recorded
@@ -178,26 +178,26 @@ export const seedData: AppData = {
     // state and `VAT_REGISTRATION_DEADLINE_2026` correctly resolves to nothing.
     cashFloorLei: lei(0),
     identity: {
-      nume: 'Popescu Andrei',
+      nume: 'Dobre Radu',
       cnp: '1234567890123',
-      adresa: 'Str. Libertății 12, Cluj-Napoca',
+      adresa: 'Str. Meșteșugului 12, Cluj-Napoca',
       telefon: '0750 123 456',
-      email: 'andrei@popescuconsulting.ro',
+      email: 'radu@dobrestudio.example',
       // TASK 9 (identity hygiene): the block used to describe an SRL while every rule, deadline,
       // threshold and estimate in the app resolves this profile as a persoană fizică autorizată. A PFA
       // has no legal personality separate from the person, and an SRL does not file a D212 at all. The
       // trading name of a PFA is the person's own name; `numarRegComert` stays because a PFA IS
       // registered at ONRC (OUG 44/2008 art. 7 alin. (1)), and `J40/1234/2026` is what makes
       // `pfaStartYear: 2026` coherent rather than a stray year.
-      denumire: 'Popescu Andrei PFA',
+      denumire: 'Dobre Radu PFA',
       cui: 'RO4455667788990',
       formaJuridica: 'Persoană fizică autorizată',
       numarRegComert: 'J40/1234/2026',
-      adresaSocietate: 'Str. Libertății 12, Cluj-Napoca',
+      adresaSocietate: 'Str. Meșteșugului 12, Cluj-Napoca',
       telefonSocietate: '0750 123 456',
-      emailSocietate: 'contact@popescuconsulting.ro',
-      contBancar: 'RO44 BACX 0000 0000 1234 5678 9000',
-      banca: 'BCR',
+      emailSocietate: 'contact@dobrestudio.example',
+      contBancar: 'RO44 CARP 0000 0000 1234 5678 9000',
+      banca: 'Banca Carpatică',
       // Phase 7 (D-1): the fields that used to live only in settings.company.
       codTvaIntra: 'RO4455667788990',
       caen: [{ cod: '6201', descriere: 'Activități de programare computerizate' }],
@@ -211,34 +211,34 @@ export const seedData: AppData = {
   // every aggregate, cap and estimate pinned downstream is unchanged; only the month each record lands in
   // moved, and the invoice numbers stay in date order.
   revenues: [
-    { id: 'r1', tip: 'factura', nr: 'FCT-2026-001', date: '2026-02-02', client: 'Presta Consulting SRL', cui: 'RO12345678', valoareFaraTva: ron(4500), tva: ron(945), status: 'inregistrata', eFacturaStatus: 'Acceptată' },
-    { id: 'r2', tip: 'factura', nr: 'FCT-2026-002', date: '2026-04-10', client: 'Andrei Popescu', cui: '1234567890123', valoareFaraTva: ron(1200), tva: ron(252), status: 'in-asteptare', eFacturaStatus: 'În așteptare' },
-    { id: 'r3', tip: 'notafactura', nr: 'NF-2026-003', date: '2026-06-18', client: 'Marius Ionescu', cui: '9876543210987', valoareFaraTva: ron(800), tva: ron(168), status: 'respinsa', statusDetail: 'CUI nevalid', eFacturaStatus: 'Respinsă' },
-    { id: 'r4', tip: 'factura', nr: 'FCT-2026-004', date: '2026-09-25', client: 'Presta Consulting SRL', cui: 'RO12345678', valoareFaraTva: ron(3200), tva: ron(672), status: 'inregistrata', eFacturaStatus: 'Acceptată' },
+    { id: 'r1', tip: 'factura', nr: 'FCT-2026-001', date: '2026-02-02', client: 'Codexa SRL', cui: 'RO12345678', valoareFaraTva: ron(4500), tva: ron(945), status: 'inregistrata', eFacturaStatus: 'Acceptată' },
+    { id: 'r2', tip: 'factura', nr: 'FCT-2026-002', date: '2026-04-10', client: 'Enache Sorin', cui: '1234567890123', valoareFaraTva: ron(1200), tva: ron(252), status: 'in-asteptare', eFacturaStatus: 'În așteptare' },
+    { id: 'r3', tip: 'notafactura', nr: 'NF-2026-003', date: '2026-06-18', client: 'Barbu Cristina', cui: '9876543210987', valoareFaraTva: ron(800), tva: ron(168), status: 'respinsa', statusDetail: 'CUI nevalid', eFacturaStatus: 'Respinsă' },
+    { id: 'r4', tip: 'factura', nr: 'FCT-2026-004', date: '2026-09-25', client: 'Codexa SRL', cui: 'RO12345678', valoareFaraTva: ron(3200), tva: ron(672), status: 'inregistrata', eFacturaStatus: 'Acceptată' },
   ],
   expenses: [
     // TASK 2b — seed records are FIXTURES, not user data, so they carry explicit categories; migrated
     // user data stays uncategorised and classifies as `undetermined` (see `migrateExpenseCategoryV6`).
     // The three tokens are chosen so the demo shows all three fates, and each is the honest reading of
     // the document the fixture depicts — none is chosen to make a figure land somewhere:
-    //   e1  CloudHost SRL, factură de hosting/conectivitate → `postal_and_telecom`, deductibilă
+    //   e1  Conectica SRL, factură de hosting/conectivitate → `postal_and_telecom`, deductibilă
     //       (Normele HG 1/2016 pct. 7 alin. (5) lit. j)).
-    //   e2  Carrefour, bon fiscal de la un supermarket → `personal_or_family_use`, expres nedeductibil
+    //   e2  Coșul Zilnic SRL, bon fiscal de la un supermarket → `personal_or_family_use`, expres nedeductibil
     //       (CF art. 68 alin. (7) lit. a): „cheltuielile efectuate în interes personal sau de familie”).
-    //   e3  Office Supplies SA, factură de rechizite → `business_space_upkeep`, deductibilă ca categorie,
+    //   e3  Papetaria SRL, factură de rechizite → `business_space_upkeep`, deductibilă ca categorie,
     //       dar exclusă oricum de `status: 'respinsa'` — care nu ajunge niciodată în agregat.
     // Consequence for every pinned figure downstream: the deductible base is no longer „all expenses”.
     //   before: expenseNet = 120,00 + 85,50 = 205,50 lei (20.550 bani) — every 'inregistrata' record
     //   after:  expenseNet = 120,00 lei (12.000 bani) — only e1 survives classification
     //   and VAT-inclusive: 12.000 + 2.520 = 14.520 bani, down from 24.866 bani.
-    { id: 'e1', tip: 'factura', nr: 'FCT-PRO-118', date: '2026-03-05', furnizor: 'CloudHost SRL', cui: 'RO87654321', valoareFaraTva: ron(120), tva: ron(25.2), status: 'inregistrata', category: 'postal_and_telecom' },
-    { id: 'e2', tip: 'bon-fiscal', nr: 'BF-4471', date: '2026-05-12', furnizor: 'Carrefour', cui: 'RO11223344', valoareFaraTva: ron(85.5), tva: ron(17.96), status: 'inregistrata', category: 'personal_or_family_use' },
-    { id: 'e3', tip: 'factura', nr: 'FCT-PRO-121', date: '2026-07-20', furnizor: 'Office Supplies SA', cui: 'RO55667788', valoareFaraTva: ron(340), tva: ron(71.4), status: 'respinsa', statusDetail: 'Document neconform', category: 'business_space_upkeep' },
+    { id: 'e1', tip: 'factura', nr: 'FCT-PRO-118', date: '2026-03-05', furnizor: 'Conectica SRL', cui: 'RO87654321', valoareFaraTva: ron(120), tva: ron(25.2), status: 'inregistrata', category: 'postal_and_telecom' },
+    { id: 'e2', tip: 'bon-fiscal', nr: 'BF-4471', date: '2026-05-12', furnizor: 'Coșul Zilnic SRL', cui: 'RO11223344', valoareFaraTva: ron(85.5), tva: ron(17.96), status: 'inregistrata', category: 'personal_or_family_use' },
+    { id: 'e3', tip: 'factura', nr: 'FCT-PRO-121', date: '2026-07-20', furnizor: 'Papetaria SRL', cui: 'RO55667788', valoareFaraTva: ron(340), tva: ron(71.4), status: 'respinsa', statusDetail: 'Document neconform', category: 'business_space_upkeep' },
   ],
   clients: [
-    { id: 'c1', denumire: 'Presta Consulting SRL', cui: 'RO12345678', email: 'contact@presta.ro', telefon: '0721 111 222', oras: 'București' },
-    { id: 'c2', denumire: 'Andrei Popescu', cui: '1234567890123', email: 'andrei.popescu@mail.ro', telefon: '0731 333 444', oras: 'Cluj-Napoca' },
-    { id: 'c3', denumire: 'Marius Ionescu', cui: '9876543210987', email: 'm.ionescu@mail.ro', telefon: '0742 555 666', oras: 'Timișoara' },
+    { id: 'c1', denumire: 'Codexa SRL', cui: 'RO12345678', email: 'contact@codexa.example', telefon: '0721 111 222', oras: 'București' },
+    { id: 'c2', denumire: 'Enache Sorin', cui: '1234567890123', email: 'sorin@enache.example', telefon: '0731 333 444', oras: 'Cluj-Napoca' },
+    { id: 'c3', denumire: 'Barbu Cristina', cui: '9876543210987', email: 'cristina@barbu.example', telefon: '0742 555 666', oras: 'Timișoara' },
   ],
   // TASK 9 (seed hygiene) — the three monthly declaration records that used to sit here (2026-03
   // „transmisa”, 2026-06 „in-asteptare”, 2026-09 „inregistrata”) are GONE, and deliberately so.
@@ -289,7 +289,7 @@ export const seedData: AppData = {
   fixedAssets: [],
   documents: [
     { id: 'doc1', nume: 'FCT-2026-001.pdf', data: '2026-02-02', categoria: 'Facturi' },
-    { id: 'doc3', nume: 'Contract Presta Consulting.pdf', data: '2026-01-26', categoria: 'Contracte' },
+    { id: 'doc3', nume: 'Contract Codexa.pdf', data: '2026-01-26', categoria: 'Contracte' },
     // Phase 11 (PG-3): „Declarația 212 – venitul anului 2025.pdf” is gone. A PFA that started on
     // 2026-01-19 has no 2025 income year, so a 2025 return is not a document it holds — it is a
     // prior-year filing the fixture cannot have. Same reason the `im` section and the `212` statement
@@ -354,10 +354,10 @@ export const seedData: AppData = {
       // `legacyProfileFromSettings` absorbs from. It carried the same SRL/PFA contradiction as
       // `profile.identity`, so it is corrected to match — `store.migration.chain.test.tsx` asserts the
       // migrated identity against these very fields, so the two blocks cannot disagree.
-      denumire: 'Popescu Andrei PFA',
+      denumire: 'Dobre Radu PFA',
       cui: 'RO4455667788990',
       numarRegComert: 'J40/1234/2026',
-      adresa: 'Str. Libertății 12, Cluj-Napoca',
+      adresa: 'Str. Meșteșugului 12, Cluj-Napoca',
       // A CUI in a CNP field. Nothing in src/ reads `settings.company.cnp` — `identity.cnp` is absorbed
       // from `settings.personal.cnp` — but a PFA has no legal personality separate from the person, so
       // the only CNP this block could honestly carry is the person's.
@@ -367,20 +367,20 @@ export const seedData: AppData = {
       codCAEN: '6201',
       regComerț: 'J40/1234/2026',
       telefon: '0750 123 456',
-      email: 'contact@popescuconsulting.ro',
-      contBancar: 'RO44 BACX 0000 0000 1234 5678 9000',
-      banca: 'BCR',
+      email: 'contact@dobrestudio.example',
+      contBancar: 'RO44 CARP 0000 0000 1234 5678 9000',
+      banca: 'Banca Carpatică',
       caen: [{ cod: '6201', descriere: 'Activități de programare computerizate' }],
     },
     personal: {
-      nume: 'Popescu Andrei',
+      nume: 'Dobre Radu',
       cnp: '1234567890123',
-      adresa: 'Str. Libertății 12, Cluj-Napoca',
+      adresa: 'Str. Meșteșugului 12, Cluj-Napoca',
       telefon: '0750 123 456',
-      email: 'andrei@popescuconsulting.ro',
+      email: 'radu@dobrestudio.example',
     },
     bankAccounts: [
-      { id: 'ba-1', banca: 'BCR', moneda: 'RON' },
+      { id: 'ba-1', banca: 'Banca Carpatică', moneda: 'RON' },
     ],
     eFactura: {
       trimitere: 'manual',

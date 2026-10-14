@@ -29,7 +29,7 @@ function expense(over: Partial<Expense> = {}): Expense {
     tip: 'factura',
     nr: 'FCT-2026-911',
     date: '2026-12-30',
-    furnizor: 'CloudHost SRL',
+    furnizor: 'Conectica SRL',
     cui: 'RO87654321',
     valoareFaraTva: ron(500),
     tva: ron(100),
@@ -71,7 +71,7 @@ function fillAndSubmit(nr: string, { documentDate, paid }: { documentDate?: stri
   if (documentDate !== undefined) fireEvent.change(dates[0], { target: { value: documentDate } });
   if (paid !== undefined) fireEvent.change(dates[1], { target: { value: paid } });
   fireEvent.change(screen.getByPlaceholderText('FCT-09-112043'), { target: { value: nr } });
-  fireEvent.change(screen.getByPlaceholderText('SC … SA'), { target: { value: 'CloudHost SRL' } });
+  fireEvent.change(screen.getByPlaceholderText('SC … SA'), { target: { value: 'Conectica SRL' } });
   const amounts = screen.getAllByPlaceholderText('0,00');
   fireEvent.change(amounts[0], { target: { value: '500' } });
   fireEvent.change(amounts[1], { target: { value: '100' } });

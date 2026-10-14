@@ -39,7 +39,10 @@ function writeUserData() {
           nr: 'FCT-MINE-1',
           date: '2026-06-01',
           client: 'Client al meu',
-          cui: 'RO00000001',
+          // B110: was `RO00000001`, whose control digit is valid under both published CUI key
+          // variants. `RO00000002` fails the check digit, so this stored payload cannot carry a real
+          // registered number. The value is not asserted; only the record's presence is.
+          cui: 'RO00000002',
           valoareFaraTva: { amount: 100_000, currency: 'RON' },
           tva: { amount: 19_000, currency: 'RON' },
           status: 'inregistrata',
@@ -168,7 +171,7 @@ describe('Settings — „Șterge toate datele și începe de la zero”', () =>
     // The first-run screen is what is on screen now.
     expect(screen.getByRole('heading', { name: 'Bine ai venit' })).toBeInTheDocument();
     // And the demo strings are gone from the chrome — no fixture name in the topbar.
-    expect(screen.queryByText('Popescu Andrei')).toBeNull();
+    expect(screen.queryByText('Dobre Radu')).toBeNull();
     expect(screen.queryByText('FCT-2026-001')).toBeNull();
   });
 });

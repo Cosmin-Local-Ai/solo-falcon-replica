@@ -2329,7 +2329,7 @@ Write **`docs/ai/phases/55_b93_post_the_depreciation.md`**, from your own diff, 
 3. **`popescuconsulting.ro`** — a domain we do not own and have not verified, used in two demo email addresses.
 
 ## THE REPLACEMENT SET — use exactly this
-**User decision, 2026-10-13: companies are famous real ones — Google/Microsoft for clients, S&P 500 names for bills.** **Do not substitute your own names.** If one is wrong, **flag it in the handoff rather than changing it silently.**
+**User decision, 2026-10-13, revised twice: invented but relatable Romanian coinages — not famous brands, and not placeholder-branded names like `Furnizor Exemplu`.** **Do not substitute your own names.** If one is wrong, **flag it in the handoff rather than changing it silently.**
 
 | Field | Now | Becomes |
 |---|---|---|

@@ -25,14 +25,14 @@ describe('Clients (Step 25 — Defect 1)', () => {
 
     // Open the edit form for an existing client.
     act(() => {
-      screen.getByText('Presta Consulting SRL').click();
+      screen.getByText('Codexa SRL').click();
     });
-    expect(screen.getByText('Editează Presta Consulting SRL')).toBeTruthy();
+    expect(screen.getByText('Editează Codexa SRL')).toBeTruthy();
 
     // Change the denumire field.
     act(() => {
       fireEvent.change(screen.getByPlaceholderText('SC EXEMPLU SRL / Nume (PFA)'), {
-        target: { value: 'Presta Consulting SA' },
+        target: { value: 'Codexa SA' },
       });
     });
 
@@ -44,7 +44,7 @@ describe('Clients (Step 25 — Defect 1)', () => {
     // No duplicate: client count unchanged, and the edited value is displayed.
     expect(screen.getByText('3 clienți înregistrați în evidența dvs.')).toBeTruthy();
     expect(screen.getAllByRole('row').length).toBe(rowsBefore);
-    expect(screen.getByText('Presta Consulting SA')).toBeTruthy();
+    expect(screen.getByText('Codexa SA')).toBeTruthy();
   });
 
   it('preserves the existing email when editing only denumire (no email regression)', () => {
@@ -56,16 +56,16 @@ describe('Clients (Step 25 — Defect 1)', () => {
 
     // Open the edit form for the seeded client that has an email.
     act(() => {
-      screen.getByText('Presta Consulting SRL').click();
+      screen.getByText('Codexa SRL').click();
     });
 
     // The form initializes the email field from the existing client.
-    expect(screen.getByPlaceholderText('email@exemplu.ro')).toHaveValue('contact@presta.ro');
+    expect(screen.getByPlaceholderText('email@exemplu.ro')).toHaveValue('contact@codexa.example');
 
     // Change only the denumire field; leave the email untouched.
     act(() => {
       fireEvent.change(screen.getByPlaceholderText('SC EXEMPLU SRL / Nume (PFA)'), {
-        target: { value: 'Presta Consulting SA' },
+        target: { value: 'Codexa SA' },
       });
     });
 
@@ -74,7 +74,7 @@ describe('Clients (Step 25 — Defect 1)', () => {
     });
 
     // The client is updated in place and the original email is preserved.
-    expect(screen.getByText('Presta Consulting SA')).toBeTruthy();
-    expect(screen.getByText('contact@presta.ro')).toBeTruthy();
+    expect(screen.getByText('Codexa SA')).toBeTruthy();
+    expect(screen.getByText('contact@codexa.example')).toBeTruthy();
   });
 });

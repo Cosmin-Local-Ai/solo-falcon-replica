@@ -306,7 +306,7 @@ describe('threshold bases (Phase 8 — amount semantics, on seeded data)', () =>
       expect(t.fiscalBase).toBe('net-income');
       // TASK 2b moved this figure: the engine's `net-income` base is built from the CONFIRMED-DEDUCTIBLE
       // subset, not from every recorded expense. Seed expenseNet was 205,50 lei (e1 120,00 + e2 85,50);
-      // e2 is a Carrefour bon fiscal categorised `personal_or_family_use`, nedeductibilă expres prin
+      // e2 is a Coșul Zilnic SRL bon fiscal categorised `personal_or_family_use`, nedeductibilă expres prin
       // CF art. 68 alin. (7) lit. a), so the base is now 7.700,00 - 120,00 = 7.580,00 lei.
       expect(t.currentValue).toBe(lei(7580));
       // No contribution row may compare a contribution base to a turnover figure.

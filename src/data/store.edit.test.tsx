@@ -98,12 +98,12 @@ describe('updateClient', () => {
     const original = storeRef!.clients.find(c => c.id === 'c1')!;
 
     act(() => {
-      storeRef!.updateClient({ ...original, denumire: 'Presta Consulting S.R.L.', email: 'nou@presta.ro' });
+      storeRef!.updateClient({ ...original, denumire: 'Codexa S.R.L.', email: 'nou@codexa.example' });
     });
 
     const updated = storeRef!.clients.find(c => c.id === 'c1')!;
-    expect(updated.denumire).toBe('Presta Consulting S.R.L.');
-    expect(updated.email).toBe('nou@presta.ro');
+    expect(updated.denumire).toBe('Codexa S.R.L.');
+    expect(updated.email).toBe('nou@codexa.example');
     // Untouched fields survive the update.
     expect(updated.cui).toBe(original.cui);
     expect(updated.telefon).toBe(original.telefon);
@@ -131,11 +131,11 @@ describe('updateClient', () => {
     const c1 = storeRef!.clients.find(c => c.id === 'c1')!;
 
     act(() => {
-      storeRef!.updateClient({ ...c1, denumire: 'Presta Consulting S.R.L.' });
+      storeRef!.updateClient({ ...c1, denumire: 'Codexa S.R.L.' });
     });
 
     const persisted = persistedData();
-    expect(persisted.clients.find(c => c.id === 'c1')!.denumire).toBe('Presta Consulting S.R.L.');
+    expect(persisted.clients.find(c => c.id === 'c1')!.denumire).toBe('Codexa S.R.L.');
     expect(persisted.clients).toHaveLength(seedData.clients.length);
   });
 

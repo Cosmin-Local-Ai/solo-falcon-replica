@@ -29,12 +29,14 @@ describe('App topbar identity (Step 25 — Defect 5)', () => {
     );
 
     // Seeded identity is displayed.
-    expect(screen.getByText('Popescu Andrei')).toBeTruthy();
+    expect(screen.getByText('Dobre Radu')).toBeTruthy();
     // Avatar shows the computed initials.
-    expect(screen.getByText('PA')).toBeTruthy();
+    expect(screen.getByText('DR')).toBeTruthy();
 
-    // Old hardcoded values are gone.
-    expect(screen.queryByText('Popescu Ion')).toBeNull();
+    // Old hardcoded values are gone. The initials are derived from the seeded name, so the
+    // initials of every previous seed name must be absent — this is what catches a shell that
+    // stopped deriving and went back to a constant.
+    expect(screen.queryByText('PA')).toBeNull();
     expect(screen.queryByText('PI')).toBeNull();
   });
 });
@@ -56,12 +58,13 @@ describe('App shell identity and recovery (Phase 7)', () => {
       </StoreProvider>,
     );
     // TASK 9 re-pin (replaced, not deleted): the seed identity is a PFA, so the sidebar names the
-    // person's trading name. Old value: 'Popescu Consulting SRL'. The exact-match query below still
-    // matches only the topbar, because 'Popescu Andrei PFA' is not 'Popescu Andrei'.
-    expect(document.querySelector('.sidebar-identity')?.textContent).toBe('Popescu Andrei PFA');
+    // person's trading name rather than the legacy SRL-shaped trading name the block used to carry.
+    // The exact-match query below still matches only the topbar, because 'Dobre Radu PFA' is not
+    // 'Dobre Radu'.
+    expect(document.querySelector('.sidebar-identity')?.textContent).toBe('Dobre Radu PFA');
     // The person's full name stays unique to the topbar: no duplicate identity
     // state, and no ambiguous text query for the tests below or for e2e.
-    expect(screen.getAllByText('Popescu Andrei')).toHaveLength(1);
+    expect(screen.getAllByText('Dobre Radu')).toHaveLength(1);
   });
 
   it('greets with the given name, not the full name', () => {
@@ -70,7 +73,7 @@ describe('App shell identity and recovery (Phase 7)', () => {
         <App />
       </StoreProvider>,
     );
-    expect(screen.getByText('Bună, Andrei')).toBeTruthy();
+    expect(screen.getByText('Bună, Radu')).toBeTruthy();
   });
 
   it('shows a recovery banner when the stored payload was rejected (D-3)', () => {

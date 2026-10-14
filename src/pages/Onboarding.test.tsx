@@ -49,7 +49,7 @@ describe('Onboarding — required facts', () => {
   it('refuses to proceed without a PFA start date, and writes nothing', () => {
     renderOnboarding();
 
-    fireEvent.change(screen.getByLabelText(t.fields.nume), { target: { value: 'Popescu Andrei' } });
+    fireEvent.change(screen.getByLabelText(t.fields.nume), { target: { value: 'Dobre Radu' } });
     fireEvent.click(screen.getByText(t.actions.finish));
 
     expect(screen.getByText(t.errors.startDateRequired)).toBeInTheDocument();
@@ -62,7 +62,7 @@ describe('Onboarding — required facts', () => {
   it('rejects a malformed start date instead of storing it', () => {
     renderOnboarding();
 
-    fireEvent.change(screen.getByLabelText(t.fields.nume), { target: { value: 'Popescu Andrei' } });
+    fireEvent.change(screen.getByLabelText(t.fields.nume), { target: { value: 'Dobre Radu' } });
     fireEvent.change(screen.getByLabelText(t.fields.startDate), { target: { value: '2026-13-40' } });
     fireEvent.click(screen.getByText(t.actions.finish));
 
@@ -73,7 +73,7 @@ describe('Onboarding — required facts', () => {
   it('writes the collected facts and ends the first-run state', () => {
     renderOnboarding();
 
-    fireEvent.change(screen.getByLabelText(t.fields.nume), { target: { value: 'Popescu Andrei' } });
+    fireEvent.change(screen.getByLabelText(t.fields.nume), { target: { value: 'Dobre Radu' } });
     fireEvent.change(screen.getByLabelText(t.fields.cui), { target: { value: 'RO12345678' } });
     fireEvent.change(screen.getByLabelText(t.fields.startDate), { target: { value: '2026-03-01' } });
     fireEvent.change(screen.getByLabelText(t.fields.salaryStatus), { target: { value: 'da' } });
@@ -82,7 +82,7 @@ describe('Onboarding — required facts', () => {
 
     expect(store!.profile.pfaStartDate).toBe('2026-03-01');
     expect(store!.profile.pfaStartYear).toBe(2026);
-    expect(store!.profile.identity.nume).toBe('Popescu Andrei');
+    expect(store!.profile.identity.nume).toBe('Dobre Radu');
     expect(store!.profile.identity.cui).toBe('RO12345678');
     expect(store!.profile.salaryStatus).toBe('da');
     // `salaryIncomeLei` keeps its stale suffix on purpose and holds integer BANI (landmine 5).
@@ -100,7 +100,7 @@ describe('Onboarding — required facts', () => {
   it('leaves an unanswered optional fact unrecorded rather than inventing one', () => {
     renderOnboarding();
 
-    fireEvent.change(screen.getByLabelText(t.fields.nume), { target: { value: 'Popescu Andrei' } });
+    fireEvent.change(screen.getByLabelText(t.fields.nume), { target: { value: 'Dobre Radu' } });
     fireEvent.change(screen.getByLabelText(t.fields.startDate), { target: { value: '2026-03-01' } });
     fireEvent.click(screen.getByText(t.actions.finish));
 

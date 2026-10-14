@@ -13,16 +13,16 @@ const settings: SettingsState = {
     formaJuridica: 'SRL',
     codCAEN: '6201',
     telefon: '0700 111 222',
-    email: 'company@test.ro',
-    contBancar: 'RO44 BACX 0000 0000 1234 5678 9000',
-    banca: 'BCR',
+    email: 'company@example.test',
+    contBancar: 'RO44 CARP 0000 0000 1234 5678 9000',
+    banca: 'Banca Carpatică',
   },
   personal: {
-    nume: 'Popescu Andrei',
+    nume: 'Dobre Radu',
     cnp: '1234567890123',
     adresa: 'Str. Personal 2',
     telefon: '0711 222 333',
-    email: 'personal@test.ro',
+    email: 'personal@example.test',
   },
   bankAccounts: [],
   eFactura: { trimitere: 'manual', dateContact: '2026-09-01' },
@@ -36,11 +36,11 @@ const PINNED_INSTANT = new Date('2026-06-01T12:00:00Z');
 describe('legacyProfileFromSettings (profile migration)', () => {
   it('carries personal identity over from settings.personal', () => {
     const p = legacyProfileFromSettings(settings, PINNED_INSTANT);
-    expect(p.identity.nume).toBe('Popescu Andrei');
+    expect(p.identity.nume).toBe('Dobre Radu');
     expect(p.identity.cnp).toBe('1234567890123');
     expect(p.identity.adresa).toBe('Str. Personal 2');
     expect(p.identity.telefon).toBe('0711 222 333');
-    expect(p.identity.email).toBe('personal@test.ro');
+    expect(p.identity.email).toBe('personal@example.test');
   });
 
   it('carries company identity over from settings.company', () => {
@@ -51,9 +51,9 @@ describe('legacyProfileFromSettings (profile migration)', () => {
     expect(p.identity.numarRegComert).toBe('J40/1/2020');
     expect(p.identity.adresaSocietate).toBe('Str. Test 1');
     expect(p.identity.telefonSocietate).toBe('0700 111 222');
-    expect(p.identity.emailSocietate).toBe('company@test.ro');
-    expect(p.identity.contBancar).toBe('RO44 BACX 0000 0000 1234 5678 9000');
-    expect(p.identity.banca).toBe('BCR');
+    expect(p.identity.emailSocietate).toBe('company@example.test');
+    expect(p.identity.contBancar).toBe('RO44 CARP 0000 0000 1234 5678 9000');
+    expect(p.identity.banca).toBe('Banca Carpatică');
   });
 
   it('carries the CAEN list into identity.caen (D-1: identity owns CAEN)', () => {

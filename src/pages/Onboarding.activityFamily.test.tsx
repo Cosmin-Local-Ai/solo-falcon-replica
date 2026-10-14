@@ -40,7 +40,7 @@ const familyRadio = (value: string): HTMLInputElement => {
 };
 
 function finish(): void {
-  fireEvent.change(screen.getByLabelText(t.fields.nume), { target: { value: 'Popescu Andrei' } });
+  fireEvent.change(screen.getByLabelText(t.fields.nume), { target: { value: 'Dobre Radu' } });
   fireEvent.change(screen.getByLabelText(t.fields.startDate), { target: { value: '2026-03-01' } });
   fireEvent.click(screen.getByText(t.actions.finish));
 }

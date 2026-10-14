@@ -71,7 +71,7 @@ function revenue(over: Partial<Revenue> = {}): Revenue {
     tip: 'factura',
     nr: 'FCT-USD-R1',
     date: '2026-01-03',
-    client: 'Presta Consulting SRL',
+    client: 'Codexa SRL',
     cui: 'RO12345678',
     valoareFaraTva: usd(1000),
     tva: usd(190),

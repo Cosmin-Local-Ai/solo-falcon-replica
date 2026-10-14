@@ -53,20 +53,25 @@ describe('computeInputsHashSync is the exact sync twin of computeInputsHash', ()
     vatRegistration: { status: 'inregistrat_art316' as const },
     cashFloorLei: lei(0),
     identity: {
-      nume: 'Popescu Andrei',
-      cnp: '1900101223344',
+      nume: 'Dobre Radu',
+      // Synthetic. `1900101223344` sat here before B110 and it was a real-looking CNP: its control
+      // digit matches the canonical CNP algorithm and it decodes to a plausible birth date
+      // (1990-01-01). Replaced with a value that fails the control digit under both published
+      // variants AND carries an impossible birth date, so this fixture can never hash a real
+      // person's identifier. See src/data/seed.identityHygiene.test.ts.
+      cnp: '1999999223345',
       adresa: 'Str. Florilor 12, Bucuresti',
       telefon: '0712345678',
-      email: 'andrei@example.com',
-      denumire: 'Popescu Consulting SRL',
+      email: 'radu@example.com',
+      denumire: 'Dobre Radu SRL',
       cui: 'RO12345678',
       formaJuridica: 'PFA',
       numarRegComert: 'J40/1234/2020',
       adresaSocietate: 'Str. Florilor 12, Bucuresti',
       telefonSocietate: '0712345678',
-      emailSocietate: 'contact@popescu-consulting.ro',
+      emailSocietate: 'contact@dobrestudio.example',
       contBancar: 'RO24ABCDEFTREASURABANK001',
-      banca: 'BCR',
+      banca: 'Banca Carpatică',
     },
     updatedAt: '2026-01-01T00:00:00.000Z',
   };

@@ -10,11 +10,11 @@ import { lei } from '../money';
 // --- Fixtures -------------------------------------------------------------
 
 const identity = {
-  nume: 'Ion Popescu',
+  nume: 'Enache Sorin',
   cnp: '0123456789012',
   adresa: 'Str. Test 1, Bucuresti',
   telefon: '0700000000',
-  email: 'ion@example.com',
+  email: 'sorin@example.com',
   denumire: '',
   cui: '',
   formaJuridica: 'PFA',

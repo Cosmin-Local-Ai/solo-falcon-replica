@@ -50,7 +50,11 @@ function revenueRecord(over: Partial<Revenue> = {}): Revenue {
     nr: 'FCT-2026-901',
     date: '2026-04-20',
     client: 'Client Test SRL',
-    cui: 'RO90000002',
+    // B110: this read `RO90000002`, whose control digit is valid under both published CUI key
+    // variants — a plausible registered number for a client that is not the point of this test.
+    // `RO90000003` fails the check digit, so the fixture cannot be anyone's real CUI. The value is
+    // not asserted anywhere; only its presence on the record is.
+    cui: 'RO90000003',
     valoareFaraTva: ron(3000),
     tva: ron(570),
     status: 'inregistrata',

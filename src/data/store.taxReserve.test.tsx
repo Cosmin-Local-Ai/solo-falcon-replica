@@ -29,7 +29,7 @@ const validRevenue: Revenue = {
   tip: 'factura',
   nr: 'FCT-2026-001',
   date: '2026-03-15',
-  client: 'Presta Consulting SRL',
+  client: 'Codexa SRL',
   cui: 'RO12345678',
   valoareFaraTva: ron(1000),
   tva: ron(190),

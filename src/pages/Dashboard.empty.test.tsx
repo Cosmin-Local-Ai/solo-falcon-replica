@@ -158,7 +158,7 @@ describe('B-68 — a ledger that is present but excluded never triggers the empt
           tip: 'bon-fiscal',
           nr: 'BF-1',
           date: '2026-05-12',
-          furnizor: 'Carrefour',
+          furnizor: 'Coșul Zilnic SRL',
           cui: 'RO11223344',
           valoareFaraTva: { amount: 8_550 as Bani, currency: 'RON' },
           tva: { amount: 1_796 as Bani, currency: 'RON' },

@@ -96,8 +96,8 @@ test.describe('PG-2 — the money date end to end', () => {
     await page.getByPlaceholder('FCT-2025-0045').fill('FCT-PG2-E2E-001');
     await page
       .locator('select')
-      .filter({ has: page.locator('option[value="Presta Consulting SRL"]') })
-      .selectOption('Presta Consulting SRL');
+      .filter({ has: page.locator('option[value="Codexa SRL"]') })
+      .selectOption('Codexa SRL');
     await page.getByPlaceholder('0,00').first().fill('1000');
     await page.getByPlaceholder('0,00').nth(1).fill('200');
     await page.getByRole('button', { name: 'Adaugă', exact: true }).click();
@@ -134,7 +134,7 @@ test.describe('PG-2 — the money date end to end', () => {
     await modalDateInputs(page).nth(0).fill('2026-12-30');
     await modalDateInputs(page).nth(1).fill('2027-01-12');
     await page.getByPlaceholder('FCT-09-112043').fill('FCT-PG2-E2E-002');
-    await page.getByPlaceholder('SC … SA').fill('CloudHost SRL');
+    await page.getByPlaceholder('SC … SA').fill('Conectica SRL');
     await page.getByPlaceholder('0,00').first().fill('500');
     await page.getByPlaceholder('0,00').nth(1).fill('100');
     await page
@@ -196,7 +196,7 @@ test.describe('PG-2 — the money date end to end', () => {
           tip: 'factura',
           nr: 'FCT-PG2-E2E-003',
           date: '2026-12-20',
-          client: 'Presta Consulting SRL',
+          client: 'Codexa SRL',
           cui: 'RO12345678',
           valoareFaraTva: { amount: 100000 as Bani, currency: 'RON' },
           tva: { amount: 20000 as Bani, currency: 'RON' },
@@ -222,7 +222,7 @@ test.describe('PG-2 — the money date end to end', () => {
     await page.getByRole('button', { name: /Descarcă CSV/ }).click();
     await expect(page.getByText('RJIP 2027 a fost generat')).toBeVisible();
     const csv2027 = await readCapturedBlob(page);
-    expect(csv2027).toContain('2027-01-10;"Factură FCT-PG2-E2E-003 – Presta Consulting SRL";1.200,00;0,00');
+    expect(csv2027).toContain('2027-01-10;"Factură FCT-PG2-E2E-003 – Codexa SRL";1.200,00;0,00');
     expect(csv2027).not.toContain('2026-12-20');
   });
 });

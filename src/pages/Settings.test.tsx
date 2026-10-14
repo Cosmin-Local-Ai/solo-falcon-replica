@@ -8,12 +8,13 @@ import Settings from './Settings';
 import { lei } from '../domain/money';
 
 // Must match seedData.settings.company.denumire in src/data/seed.ts.
-// TASK 9 re-pin (replaced, not deleted): 'Popescu Consulting SRL' → 'Popescu Andrei PFA'. The seed
+// TASK 9 re-pin (replaced, not deleted): the legacy SRL-shaped trading name became the PFA trading
+// name. The seed
 // taxpayer is a persoană fizică autorizată, which is what every rule, deadline and estimate in the app
 // already resolves. The regression this test guards — a saved identity reaching localStorage instead of
 // being dropped — is unchanged.
-const SEED_DENUMIRE = 'Popescu Andrei PFA';
-const NEW_DENUMIRE = 'Popescu Andrei PFA (regres)';
+const SEED_DENUMIRE = 'Dobre Radu PFA';
+const NEW_DENUMIRE = 'Dobre Radu PFA (regres)';
 
 function readStoredDenumire(): string {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -107,9 +108,9 @@ describe('Settings persistence (Defect 3 regression)', () => {
       screen.getByRole('button', { name: 'Conturi bancare' }).click();
     });
 
-    // Seed: exactly one bank account (BCR / RON) — saving must not duplicate it.
+    // Seed: exactly one bank account (Banca Carpatică / RON) — saving must not duplicate it.
     expect(document.querySelectorAll('tbody tr').length).toBe(1);
-    expect(screen.getByText('BCR')).toBeInTheDocument();
+    expect(screen.getByText('Banca Carpatică')).toBeInTheDocument();
   });
 });
 
@@ -195,18 +196,18 @@ describe('Settings — identity round-trip (Phase 7)', () => {
       screen.getByRole('button', { name: 'Personal' }).click();
     });
     act(() => {
-      fireEvent.change(screen.getByDisplayValue('Popescu Andrei'), {
-        target: { value: 'Popescu Andrei Nou' },
+      fireEvent.change(screen.getByDisplayValue('Dobre Radu'), {
+        target: { value: 'Dobre Radu Nou' },
       });
     });
     act(() => {
       screen.getByRole('button', { name: 'Salvează' }).click();
     });
 
-    expect(readStored().profile.identity.nume).toBe('Popescu Andrei Nou');
+    expect(readStored().profile.identity.nume).toBe('Dobre Radu Nou');
     // The legacy block is FROZEN: still written by the seed and still parseable,
     // but no longer a write target (decision D-1, acceptance criterion 6).
-    expect(readStored().settings.personal.nume).toBe('Popescu Andrei');
+    expect(readStored().settings.personal.nume).toBe('Dobre Radu');
 
     act(() => {
       first.unmount();
@@ -219,7 +220,7 @@ describe('Settings — identity round-trip (Phase 7)', () => {
     act(() => {
       screen.getByRole('button', { name: 'Personal' }).click();
     });
-    expect(screen.getByDisplayValue('Popescu Andrei Nou')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Dobre Radu Nou')).toBeInTheDocument();
   });
 
   it('persists invoice notes into identity.mentiuniFactura', () => {
@@ -297,7 +298,7 @@ describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () => {
     // Phase 11 re-pin (replaced, not deleted): 2020 → 2026. The fixture is now the product scenario — a
     // PFA that started in 2026 — instead of a 2020 PFA with a 2025 return attached to it.
     expect(profile.pfaStartYear).toBe(2026);
-    expect(profile.identity.nume).toBe('Popescu Andrei');
+    expect(profile.identity.nume).toBe('Dobre Radu');
   });
 
   it('restores saved profile values from localStorage on remount', () => {

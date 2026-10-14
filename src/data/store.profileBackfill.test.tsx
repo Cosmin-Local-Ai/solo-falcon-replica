@@ -34,7 +34,7 @@ const revenues: LegacyRevenue[] = [
     tip: 'factura',
     nr: 'FCT-2026-001',
     date: '2026-02-10',
-    client: 'Presta Consulting SRL',
+    client: 'Codexa SRL',
     cui: 'RO12345678',
     valoareFaraTva: lei(18000),
     tva: lei(3420),
@@ -67,7 +67,7 @@ const expenses: LegacyExpense[] = [
   },
 ];
 
-const clients: Client[] = [{ id: 'c-legacy-1', denumire: 'Presta Consulting SRL', cui: 'RO12345678' }];
+const clients: Client[] = [{ id: 'c-legacy-1', denumire: 'Codexa SRL', cui: 'RO12345678' }];
 
 // A pre-v11 monthly row: storage, not a record. The `annual-filing` step drops it (PG-5b).
 const declarations: LegacyMonthlyDeclaration[] = [

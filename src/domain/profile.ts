@@ -91,7 +91,7 @@ export function profileIdentity(profile: PfaProfile): PfaIdentity {
 /**
  * The name to greet the person by, derived from `identity.nume`.
  *
- * `nume` is free text and this dataset stores it surname-first ('Popescu Andrei'),
+ * `nume` is free text and this dataset stores it surname-first ('Dobre Radu'),
  * so the given name is taken as the LAST token rather than assuming a Western
  * first-name-first order. A single token is used as-is; an empty name yields ''
  * so the caller can drop the greeting instead of rendering "Bună,".
