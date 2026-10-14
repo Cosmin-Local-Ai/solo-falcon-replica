@@ -75,8 +75,18 @@ describe('the default registry and the 2026 release', () => {
   });
 
   it('selects the 2026 release for a 2026 date, and nothing for a year it has no rules for', () => {
-    expect(selectRuleSet(2026, '2026-06-15')?.release.releaseId).toBe('PFA_2026_SYSTEM_REAL');
-    expect(activeRuleRelease(2026, '2026-12-31')?.releaseId).toBe('PFA_2026_SYSTEM_REAL');
+    // B-112 stage 0 moved both of these from 'PFA_2026_SYSTEM_REAL' to 'PFA_2026_DPI_INCOME_PATH'. That is
+    // not a re-baseline to keep the suite green: it is what supersession is for. v5's window closed at
+    // 2025-12-31 because the DPI articles are FY2026 law for the whole income year and the engine selects
+    // its rules at 1 January, so no FY2026 date may resolve the package that cannot represent DPI income.
+    // v5 stays registered and readable by releaseId, and `release2026dpi.test.ts` proves a v5-pinned
+    // snapshot still reproduces its own number.
+    expect(selectRuleSet(2026, '2026-06-15')?.release.releaseId).toBe('PFA_2026_DPI_INCOME_PATH');
+    expect(activeRuleRelease(2026, '2026-12-31')?.releaseId).toBe('PFA_2026_DPI_INCOME_PATH');
+    // And the superseded release is still addressable by id, which is how an old snapshot resolves.
+    expect(defaultRuleReleaseRegistry.entryByReleaseId('PFA_2026_SYSTEM_REAL')!.release.lifecycle).toBe(
+      'SUPERSEDED',
+    );
     // No fallback to a neighbouring year: the caller has to say there are no rules.
     expect(selectRuleSet(2025, '2025-06-15')).toBeUndefined();
     expect(activeRuleRelease(2027, '2027-06-15')).toBeUndefined();

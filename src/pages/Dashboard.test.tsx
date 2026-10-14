@@ -321,7 +321,7 @@ describe('Dashboard page', () => {
     // The disclosure caption is the copy layer's; the state sentence names the release.
     await waitFor(() =>
       expect(heroCard.textContent).toContain(
-        'Calculul folosește pachetul de reguli PFA_2026_SYSTEM_REAL, iar digestul înregistrat se potrivește cu cel al pachetului.',
+        'Calculul folosește pachetul de reguli PFA_2026_DPI_INCOME_PATH, iar digestul înregistrat se potrivește cu cel al pachetului.',
       ),
     );
     expect(heroCard.textContent).toContain('Regulile din spatele acestei cifre');

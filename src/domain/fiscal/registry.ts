@@ -38,6 +38,8 @@ import type { FiscalRule, ReleaseLifecycle, RuleRelease } from './rules';
 import { DuplicateRuleIdError, ruleDigest, ruleSetDigest } from './ruleSetDigest';
 import { PFA_2026_RELEASE } from './release2026';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './package2026';
+// B-112 — the FY2026 revision that carries the DPI income path, and the package it names.
+import { PFA_2026_DPI_RELEASE, PFA_2026_DPI_RELEASE_ID, PFA_2026_DPI_PACKAGE } from './release2026dpi';
 
 /** The ladder, in order. */
 export const RELEASE_LIFECYCLE_STEPS: readonly ReleaseLifecycle[] = [
@@ -366,9 +368,34 @@ export function createRuleReleaseRegistry(): RuleReleaseRegistry {
   return registry;
 }
 
-/** The registry the application uses. Seeded with the one rule set this build carries. */
+/** The registry the application uses. Seeded with the rule sets this build carries. */
 export const defaultRuleReleaseRegistry: RuleReleaseRegistry = createRuleReleaseRegistry();
 defaultRuleReleaseRegistry.register(PFA_2026_RELEASE, PFA_2026_SYSTEM_REAL_PACKAGE);
+
+/**
+ * B-112 — the FY2026 DPI revision, superseding `PFA_2026_SYSTEM_REAL` v5.
+ *
+ * The three calls below are in this order because the ladder and the single-ACTIVE rule force it, and the
+ * order is load-bearing: registering the revision ACTIVE would trip `checkSingleActive` against a v5 that
+ * is still ACTIVE at that moment, and advancing before superseding v5 would do the same. So the revision
+ * is registered `SCHEDULED`, v5 is superseded with its window closed at the day before the revision's
+ * opens, and only then does the revision take force — one legal ladder step, and never a moment at which
+ * two ACTIVE FY2026 windows overlap.
+ *
+ * v5 is not removed, edited, or re-hashed. `supersede` changes lifecycle and window only, which is exactly
+ * why a snapshot pinned to `PFA_2026_SYSTEM_REAL` still resolves v5's rules and reproduces its number.
+ * The dating and its reasoning are in `./release2026dpi`; `./release2026dpi.test.ts` proves both halves.
+ */
+defaultRuleReleaseRegistry.register(PFA_2026_DPI_RELEASE, PFA_2026_DPI_PACKAGE);
+defaultRuleReleaseRegistry.supersede(
+  PFA_2026_RELEASE.releaseId,
+  PFA_2026_DPI_RELEASE_ID,
+  // The day before the revision's window opens. The DPI articles are FY2026 law for the whole income year,
+  // and the engine selects rules at 1 January of the fiscal year, so the revision covers all of 2026 and
+  // v5 covers none of it by date — while staying reachable by releaseId, forever.
+  '2025-12-31',
+);
+defaultRuleReleaseRegistry.advance(PFA_2026_DPI_RELEASE_ID, 'ACTIVE');
 
 /**
  * The release in force for a fiscal year on a date, or `undefined` when this build registers none for

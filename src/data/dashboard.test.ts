@@ -531,7 +531,7 @@ describe('estimateProvenance and the surfaces that consume it (TASK 9)', () => {
     const tax = await getTaxEstimate(seedData, AS_OF);
     const view = estimateProvenance(tax)!;
     expect(view.state).toBe('pinned');
-    expect(view.releaseId).toBe('PFA_2026_SYSTEM_REAL');
+    expect(view.releaseId).toBe('PFA_2026_DPI_INCOME_PATH');
     expect(view.recordedHash).toBe(tax.status === 'computed' ? tax.snapshot.ruleSetHash : null);
     expect(view.registeredHash).toBe(view.recordedHash);
     // A digest never travels alone: the provisions behind the money come with it.
@@ -551,7 +551,7 @@ describe('estimateProvenance and the surfaces that consume it (TASK 9)', () => {
     expect(dashboard.legislation.items.length).toBeGreaterThan(0);
     for (const item of dashboard.legislation.items) {
       expect(item.provenance?.state).toBe('pinned');
-      expect(item.provenance?.releaseId).toBe('PFA_2026_SYSTEM_REAL');
+      expect(item.provenance?.releaseId).toBe('PFA_2026_DPI_INCOME_PATH');
     }
   });
 
