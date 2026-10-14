@@ -2338,24 +2338,24 @@ Write **`docs/ai/phases/55_b93_post_the_depreciation.md`**, from your own diff, 
 | `identity.email` | `andrei@popescuconsulting.ro` | **`radu@dobrestudio.example`** |
 | `identity.emailSocietate` | `contact@popescuconsulting.ro` | **`contact@dobrestudio.example`** |
 | `identity.adresa` / `adresaSocietate` | `Str. Libertății 12, Cluj-Napoca` | **`Str. Meșteșugului 12, Cluj-Napoca`** |
-| `identity.banca` | `BCR` | **`Banca Exemplu`** |
-| `identity.contBancar` | `RO44 BACX 0000 0000 1234 5678 9000` | **`RO44 EXMP 0000 0000 1234 5678 9000`** |
-| revenue `client` (r1, r4) | `Presta Consulting SRL` | **`Client Exemplu SRL`** |
+| `identity.banca` | `BCR` | **`Banca Carpatică`** |
+| `identity.contBancar` | `RO44 BACX 0000 0000 1234 5678 9000` | **`RO44 CARP 0000 0000 1234 5678 9000`** |
+| revenue `client` (r1, r4) | `Presta Consulting SRL` | **`Codexa SRL`** |
 | revenue `client` (r2) | `Andrei Popescu` | **`Enache Sorin`** |
 | revenue `client` (r3) | `Marius Ionescu` | **`Barbu Cristina`** |
-| expense `furnizor` | `Carrefour` | **`Magazin Exemplu SRL`** |
-| expense `furnizor` | `CloudHost SRL` | **`Telecom Exemplu SRL`** |
-| expense `furnizor` | `Office Supplies SA` | **`Birotică Exemplu SRL`** |
+| expense `furnizor` | `Carrefour` | **`Coșul Zilnic SRL`** |
+| expense `furnizor` | `CloudHost SRL` | **`Conectica SRL`** |
+| expense `furnizor` | `Office Supplies SA` | **`Papetaria SRL`** |
 
-**Why self-labelling Romanian names rather than famous brands or plausible invented ones.** The user offered Google/Microsoft and S&P 500 names as *an idea*, then released the choice. **The deciding factor is the original concern: "is this taken from someone else's data?"** A name that announces itself as an example answers that permanently — **no competitor's demo data, screenshot or help document contains `Client Exemplu SRL`, so no comparison is even possible.** It also beats a plausible invented name: `Presta Consulting SRL` was the original defect precisely because it is the shape a real Romanian firm has, and a nicer invented variant would carry the same ambiguity. **Romanian wording keeps the demo legible to the person who will use it.**
+**These are invented names chosen to read like ordinary Romanian businesses, not placeholders.** The user's instruction, twice over: relatable, not `Furnizor Exemplu`. **They are coinages, not firms** — `Codexa`, `Conectica` and `Papetaria` are invented words, and `Coșul Zilnic` is a phrase rather than a trading name. **That is what keeps them relatable without being someone else's.**
 
-**The three supplier names keep the fixture's meaning, not just the language:** `Magazin Exemplu SRL` for the supermarket bon that is **expressly non-deductible** as personal/family use (art. 68 alin. (7) lit. a)); `Telecom Exemplu SRL` for the hosting/connectivity bill that classifies `postal_and_telecom`; `Birotică Exemplu SRL` for the rechizite invoice. **If you swap one, preserve that mapping — the three exist to show all three fates.**
+**The three supplier names keep the fixture's meaning, not just the language:** `Coșul Zilnic SRL` for the supermarket bon that is **expressly non-deductible** as personal/family use (art. 68 alin. (7) lit. a)); `Conectica SRL` for the hosting/connectivity bill that classifies `postal_and_telecom`; `Papetaria SRL` for the rechizite invoice. **If you swap one, preserve that mapping — the three exist to show all three fates.**
 
-**r2 and r3 stay invented Romanian personal names.** They are natural-person clients — r2 carries a CNP-shaped value — and a common surname is generic rather than a brand risk. **Do not put a famous person's name on a natural-person client.**
+**r2 and r3 are natural-person clients** — r2 carries a CNP-shaped value — and invented Romanian personal names are the right register there. **Do not put a famous person's name on a natural-person client.**
 
 **Why `.example` for the email domain:** it is reserved by RFC 2606 for documentation and examples, so it **provably cannot resolve to a third party.** That is the difference between *provably safe* and *probably safe*. **Do not "fix" it to a plausible-looking `.ro`.**
 
-**Why the bank stays invented too:** `BCR` plus `BACX` was the worst hook precisely because it was **plausible** — a real bank's real BIC prefix inside a real-format IBAN. `Banca Exemplu` / `EXMP` cannot be mistaken for a real account.
+**The bank.** `BCR` plus `BACX` was the worst hook precisely because it was **plausible** — a real bank's real BIC prefix inside a real-format IBAN. **`Banca Carpatică` / `CARP` is a coinage, and it is relatable without being a real institution.** **It is also the one name in this table I cannot prove is unclaimed** — see the handoff requirement to list it as a residual for a pre-release check.
 
 ## WHAT MUST NOT CHANGE
 1. **Every amount.** The seed estimate is pinned at **311.200 bani** and a large downstream suite depends on it. **Names are not amounts — if any figure moves, you have broken something.**
@@ -2412,4 +2412,4 @@ Before acting on any report, **grep every file and identifier it names against t
 ## HANDOFF
 Write **`docs/ai/phases/56_b110_fixture_identity_hygiene.md`**, from your own diff, no line numbers (§12.14).
 
-**Record explicitly:** (a) **the three real-world hooks** this pass removed, and that the IBAN one was the worst; (b) **that the invalid checksums are a deliberate safety property** and are now tested; (c) **why `.example` was chosen** and that it is provably unresolvable; (d) **every digest or hash re-pinned, with old and new values**; (e) **the two residuals that cannot be proven safe** — the phone number and the plausible-format `J40/1234/2026` — stated plainly rather than glossed; (f) that **the product name was deliberately left alone** by decision, and that a later pass owns it.
+**Record explicitly:** (a) **the three real-world hooks** this pass removed, and that the IBAN one was the worst; (b) **that the invalid checksums are a deliberate safety property** and are now tested; (c) **why `.example` was chosen** and that it is provably unresolvable; (d) **every digest or hash re-pinned, with old and new values**; (e) **the residuals that cannot be proven safe** — `Banca Carpatică` and `CARP`, the phone number, and the plausible-format `J40/1234/2026` — listed as items for a pre-release check rather than glossed; (f) that **the product name was deliberately left alone** by decision, and that a later pass owns it.
