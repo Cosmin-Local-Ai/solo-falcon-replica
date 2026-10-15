@@ -66,8 +66,6 @@ function enteredOn(rate: ProvisionalRateEvidence): string {
 }
 
 export function ProvisionalCeilingNote({ figures, subject = 'ceiling', id, className }: ProvisionalCeilingNoteProps) {
-  if (figures.length === 0) return null;
-
   const years = [...new Set(figures.map(f => f.year))].sort((a, b) => a - b);
   const seen = new Set<string>();
 
@@ -87,6 +85,11 @@ export function ProvisionalCeilingNote({ figures, subject = 'ceiling', id, class
     seen.add(key);
     rateRows.push({ key, rate: f.rate, year: f.year });
   }
+
+  // Structural, not per-call-site: a note about a stand-in figure must not render beside a published one,
+  // and the check lives here so no caller has to remember it. A page that forgets to filter gets a card
+  // with no note, which is the correct answer — not a five-paragraph warning about a final rate.
+  if (rateRows.length === 0) return null;
 
   return (
     <div
