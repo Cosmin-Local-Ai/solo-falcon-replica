@@ -506,6 +506,30 @@ export function alin8PremiseForYear(
  * below is a list of lines with what may and may not be placed on each, and no line is given a computed
  * value the app cannot attribute to it.
  *
+ * **B-98 (brief 73) — the two adjustment rows stay empty, and the reason is now stated where it belongs.**
+ * These rows were already honest: each says it carries no value and why. What was not honest was the
+ * attribution around them, and §12.18 is the check that found it:
+ *
+ * - **rd. 33 cited `CF art. 304`.** Nothing in the corpus puts art. 304 on that row. `research/42` §7
+ *   records the instruction wording for rd. 33 as regularisations „conform art. 297 și 298 … sau art. 298
+ *   și 300 … în cazul persoanelor impozabile cu regim mixt” — art. 304 and art. 305 are both absent from it.
+ *   The citation is corrected to what the corpus actually records.
+ * - **rd. 33 asserted that the art. 305 schedule „ar intra” there.** That is an allocation, and the corpus
+ *   does not establish it. There are at least three candidate figures for two rows — the art. 304
+ *   adjustment for non-capital goods, the art. 305 capital-goods schedule, and the art. 300 alin. (14)
+ *   year-end pro-rata adjustment (with alin. (15)'s second-level capital-goods adjustment a fourth) — and
+ *   no source in `docs/ai/research/` says which belongs on rd. 33 and which on rd. 34.
+ * - **the engine computes no figure that could go on either row.** `capitalGoodClawback` (`fiscal/vat.ts`)
+ *   returns the *shape* of the art. 305 schedule — `years` and `annualShare`, with the art. 298 vehicle
+ *   exception that withholds the clawback altogether — and never multiplies it by a VAT amount. The pro
+ *   rata is applied **per line** inside `decideInputVat` (`fraction = Math.min(fraction, proRata.percent /
+ *   100)`), which is not the annual adjustment art. 300 alin. (14) defines. So there is nothing to place.
+ *
+ * **The conclusion is reported, not papered over: the corpus does not establish which figure goes on which
+ * line, and no number is placed.** An empty row that says why it is empty is honest; a plausible number on
+ * it is a guess wearing the app's arithmetic, and replacing the first with the second would be the
+ * regression this brief was written to prevent.
+ *
  * This is a **line layout, not a facsimile of the form** — the brief says so outright. Form 300 is approved
  * by OPANAF nr. 174/2026 (MO I 105/09.02.2026), „se completează de persoanele impozabile înregistrate în
  * scopuri de TVA conform art. 316", with the new model from the first fiscal period of 2026.
@@ -539,19 +563,37 @@ export const D300_DEDUCTIBLE_LINES: readonly D300Line[] = [
   {
     row: 'rd. 33',
     title: 'Regularizări taxă dedusă',
-    citation: 'CF art. 304; OPANAF 174/2026, formular 300',
+    // B-98: this row used to cite `CF art. 304`. The corpus does not: `research/42` §7 records the
+    // instruction wording for rd. 33 as regularisations „conform art. 297 și 298 … sau art. 298 și 300 …
+    // în cazul persoanelor impozabile cu regim mixt”, and neither art. 304 nor art. 305 appears in it. A
+    // citation the corpus does not support is worse than no citation, because it reads as authority.
+    citation:
+      'OPANAF 174/2026, formular 300 — instrucțiuni: regularizări „conform art. 297 și 298 … sau art. 298 și 300 … în cazul persoanelor impozabile cu regim mixt”',
     appTreatment:
-      'Aici ar intra regularizările pentru bunuri capitalizate și pentru vehiculele trecute în regim mixt. '
-      + 'Aplicația calculează grafia de regularizare (art. 305) dar nu a aplicat nicio regularizare la niciun '
-      + 'total — PG-6f a lăsat acest lucru neimplementat, deci rubrica rămâne fără valoare.',
+      'Rubrica rămâne fără valoare. Aplicația nu are nicio sumă de regularizat: `capitalGoodClawback` '
+      + 'calculează forma grafiei de la art. 305 — numărul de ani (5 sau 20) și cota anuală (1/5, 1/20), '
+      + 'împreună cu excepția din alin. (4) lit. a) pct. 1, care scutește cu totul vehiculul deja limitat '
+      + 'la 50 % prin art. 298 — dar nu înmulțește niciodată cota cu o valoare de TVA și nu aplică nicio '
+      + 'regularizare la niciun total. Cifra nu există, deci rubrica nu poate fi completată.',
   },
   {
     row: 'rd. 34',
     title: 'Ajustări conform pro-rata / ajustări de taxă',
-    citation: 'CF art. 300 alin. (14); OPANAF 174/2026, formular 300',
+    // B-98: the article is the one the row's own title names (pro-rata), and `research/42` §4 records
+    // alin. (14) as the year-end adjustment made „în decontul ultimei perioade fiscale”. That pairing is
+    // the app's reading of a row title, not a mapping the corpus pins — which is why the allocation itself
+    // is stated as open on both rows rather than settled on one of them.
+    citation: 'OPANAF 174/2026, formular 300; CF art. 300 alin. (14) (ajustarea anuală, în decontul ultimei perioade fiscale)',
     appTreatment:
-      'Cota pro-rata declarată se aplică linie cu linie în decizia de deductibilitate, dar ajustarea '
-      + 'anuală definită de art. 300 alin. (14) nu este calculată. Rubrica rămâne fără valoare.',
+      'Rubrica rămâne fără valoare. Cota pro-rata declarată se aplică linie cu linie în decizia de '
+      + 'deductibilitate (art. 300 alin. (5)-(14)), iar aceasta NU este ajustarea anuală pe care alin. (14) '
+      + 'o definește; aplicația nu calculează ajustarea anuală și nu are ce pune aici. '
+      + 'CE NU SE ȘTIE, și se raportează în loc să se ghicească: corpusul nu stabilește care dintre cifrele '
+      + 'de ajustare se înscrie pe rd. 33 și care pe rd. 34. Candidați sunt cel puțin trei — ajustarea '
+      + 'pentru bunuri și servicii necapitalizate (art. 304), grafia pentru bunuri de capital (art. 305) și '
+      + 'ajustarea de pro-rata / a doua ajustare pentru bunuri de capital (art. 300 alin. (14) și (15)) — '
+      + 'iar nicio sursă din docs/ai/research/ nu le repartizează pe cele două rubrici. O cifră plauzibilă '
+      + 'pe oricare dintre ele ar fi o atribuire inventată, nu un calcul.',
   },
 ];
 

@@ -564,4 +564,32 @@ describe('the D300 line layout — 6f\'s number is not one number on one line', 
   it('cites the OPANAF order that approves the form on every line', () => {
     for (const line of D300_DEDUCTIBLE_LINES) expect(line.citation).toContain('OPANAF 174/2026');
   });
+
+  it('B-98 — rd. 33 cites the instruction wording the corpus records, not an article it does not name', () => {
+    // The row used to carry `CF art. 304`. `research/42` §7 records rd. 33's instruction wording as
+    // regularisations „conform art. 297 și 298 … sau art. 298 și 300 … în cazul persoanelor impozabile cu
+    // regim mixt” — art. 304 appears nowhere in it, and neither does art. 305. A citation the corpus does
+    // not support reads to the person as authority the app never had.
+    const rd33 = D300_DEDUCTIBLE_LINES.find((l) => l.row === 'rd. 33')!;
+    expect(rd33.citation).toContain('art. 297 și 298');
+    expect(rd33.citation).not.toMatch(/art\. 304/);
+    // And the row no longer claims to know which figure would land on it.
+    expect(rd33.appTreatment).not.toMatch(/ar intra/);
+  });
+
+  it('B-98 — the allocation between rd. 33 and rd. 34 is reported as unknown, on the rows themselves', () => {
+    // Acceptance 2's second branch: the corpus does not establish which figure goes on which line, so the
+    // app says that instead of placing one. The statement has to live where a reader would otherwise fill
+    // the gap — on the row — not only in a source comment.
+    const rd34 = D300_DEDUCTIBLE_LINES.find((l) => l.row === 'rd. 34')!;
+    expect(rd34.appTreatment).toContain('CE NU SE ȘTIE');
+    expect(rd34.appTreatment).toMatch(/art\. 305/);
+    expect(rd34.appTreatment).toMatch(/art\. 300 alin\. \(14\)/);
+    // Neither row may carry a lei amount: an empty row that says why it is empty is the honest state, and
+    // the Declarations surface pins the same property from the rendered table.
+    for (const row of ['rd. 33', 'rd. 34']) {
+      const line = D300_DEDUCTIBLE_LINES.find((l) => l.row === row)!;
+      expect(line.appTreatment).not.toMatch(/\d[\d.]*,\d{2} lei/);
+    }
+  });
 });
