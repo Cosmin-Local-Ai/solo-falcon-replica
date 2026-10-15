@@ -210,6 +210,7 @@ describe('B-85 — the composition is single-legged with the scenario refusal ou
       dpiGross: lei(0),
       dpiGrossNet: lei(0),
       dpiRecordIds: [],
+      dpiDeclaredRecordIds: [],
     };
     expect(buildThresholdBases(ytd, res)['net-income']).toBe(FLAT_NET);
   });

@@ -1292,6 +1292,20 @@ export function depreciationCoverageGaps(leg: DepreciationLeg | null | undefined
  * would understate that: the hazard is not that one receipt is missed, it is that the ladder cumulates the
  * category twice and selects a higher rung of art. 170 alin. (3). One row naming both inputs is the honest
  * shape, and it is the same shape B-93 chose for `depreciation_conflict`.
+ *
+ * **B-117 — the second walk, and why it is a walk and not a widened filter.** `dpiRecordIds` only ever holds
+ * receipts the declared category puts *inside* art. 70, so a receipt declared art. 67 that nevertheless carries
+ * a DPI contract fact is invisible here: `dpiRecordConflict` names that pair, the form refuses to store it, and
+ * until now the coverage surface said nothing about it. Catching it needs the *other* register subset — the
+ * records that carry a DPI fact without being DPI — which is `selectYtd`'s `dpiDeclaredRecordIds`. It is read
+ * from the same pass rather than re-derived here for the standing B-70 reason: a second walk applying
+ * period, status and convertibility again is a second producer of "which receipts fall in this year".
+ *
+ * **The two halves do not suppress each other.** The double-representation short-circuit suppresses the
+ * per-receipt DPI rows, because those are the same fiscal quantity restated. An art. 67 contradiction is not a
+ * second producer of the DPI figure — it is a different record, and it is inside the estimate — so it is not
+ * swallowed by that refusal. B-106 is the standing warning about a refusal that hides the only finding a
+ * surface had to report.
  */
 export function dpiCoverageGaps(
   data: AppData,
@@ -1300,7 +1314,44 @@ export function dpiCoverageGaps(
 ): EstimateCoverageGap[] {
   const ledger = normaliseStoredLedger(data);
   const ytd = selectYtd(ledger.data, asOfDate);
-  if (ytd.dpiRecordIds.length === 0) return [];
+  const byId = new Map(ledger.data.revenues.map((r) => [r.id, r]));
+
+  /**
+   * B-117 — a receipt the declared category puts at art. 67 while the record still carries a DPI contract
+   * fact. The pair is a contradiction the person answered twice in two vocabularies, and the app does not
+   * break the tie (`dpiRecordConflict` says so, and ÎCCJ dec. 1793/2021 is why it may not).
+   *
+   * The row carries `amount: null`, and that is the difference from the art. 70 contradiction below. A DPI
+   * receipt is out of the figure, so its amount really did leave it. An art. 67 receipt is IN the figure —
+   * the engine ran on it at full value — so writing its amount here would subtract from the weighted
+   * percentage a sum the estimate already computed on, and the percentage and the figure would disagree about
+   * one record. That is the B-71 defect, not a disclosure. What is missing is not coverage of a sum; it is a
+   * coherent declaration, and `amount: null` is how every contradiction row in this channel says that
+   * (`depreciation_conflict` carries `null` for the same reason).
+   *
+   * `fact_missing` is the reason the sibling case below already uses for the same contradiction seen from the
+   * other side. One contradiction must not carry two names depending on which half of it is wrong.
+   */
+  const art67Conflicts: EstimateCoverageGap[] = [];
+  const dpiIds = new Set(ytd.dpiRecordIds);
+  for (const id of ytd.dpiDeclaredRecordIds) {
+    if (dpiIds.has(id)) continue;
+    const record = byId.get(id);
+    if (record === undefined || !isRon(record.valoareFaraTva)) continue;
+    const conflict = dpiRecordConflict(record);
+    if (conflict === null) continue;
+    art67Conflicts.push({
+      recordId: id,
+      kind: 'revenue',
+      reason: 'fact_missing',
+      amount: null,
+      currency: record.valoareFaraTva.currency,
+      fixTarget: estimateFixTarget('revenue', id),
+      detail: conflict,
+    });
+  }
+
+  if (ytd.dpiRecordIds.length === 0) return art67Conflicts;
 
   const fiscalYear = ledger.data.profile.fiscalYear;
   const declaredNet = cassLadderForYear(ledger.data.profile.cassLadderYears, fiscalYear)?.proprietateIntelectuala;
@@ -1334,10 +1385,12 @@ export function dpiCoverageGaps(
           'manual în Settings și lasă registrul să determine venitul net, sau nu marca documentele ca art. 70 ' +
           'și păstrează suma declarată.',
       },
+      // B-117 — the refusal decides nothing about a different record, so it cannot be allowed to mute a
+      // finding about one. The refusal row itself is unchanged: same reason, same sentence, same target.
+      ...art67Conflicts,
     ];
   }
 
-  const byId = new Map(ledger.data.revenues.map((r) => [r.id, r]));
   const out: EstimateCoverageGap[] = [];
   for (const id of ytd.dpiRecordIds) {
     const record = byId.get(id);
@@ -1373,7 +1426,7 @@ export function dpiCoverageGaps(
         'venit din activitate independentă (art. 67), care ar merge pe altă cale și cu altă bază.',
     });
   }
-  return out;
+  return [...out, ...art67Conflicts];
 }
 
 /**

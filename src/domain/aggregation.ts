@@ -72,6 +72,22 @@ export interface YtdTotals {
    * again is the B-70 defect class — two producers that drift the moment either changes.
    */
   dpiRecordIds: readonly string[];
+  /**
+   * B-117 — the ids of the in-period receipts that carry a DPI **contract fact** (`dpiContractType` or
+   * `dpiExcludedKind`) on the record, whatever category the person declared beside it.
+   *
+   * This is not a second answer to "is this DPI income" — `dpiRecordIds` remains the only one of those, and
+   * `incomeCategoryOf` remains the only place it is decided. The test here is field **presence**, which is
+   * structural: a receipt declared art. 67 that still carries a cesiune / licență or an art. 72 alin. (3)
+   * flag has answered the same question twice, and `dpiRecordIds` cannot see it because the category put the
+   * record outside art. 70. Whether the pair actually contradicts is `domain/dpi.ts dpiRecordConflict`'s
+   * question, asked in `estimateBasis.ts`; this list only says which records have a pair to ask about.
+   *
+   * Collected in the SAME pass and under the SAME period, status and convertibility filter as
+   * `dpiRecordIds`, for the SAME reason: a second walk over the register would be a second producer of
+   * "which receipts fall in this year" — the B-70 defect class.
+   */
+  dpiDeclaredRecordIds: readonly string[];
 }
 
 export interface MonthlyTotals {
@@ -392,6 +408,7 @@ export function selectYtd(data: AppData, asOfDate: string): YtdTotals {
   let dpiGross: Bani = lei(0);
   let dpiGrossNet: Bani = lei(0);
   const dpiRecordIds: string[] = [];
+  const dpiDeclaredRecordIds: string[] = [];
 
   for (const r of data.revenues) {
     const fiscalDate = revenueFiscalDate(r);
@@ -408,6 +425,12 @@ export function selectYtd(data: AppData, asOfDate: string): YtdTotals {
         dpiGrossNet = addBani(dpiGrossNet, net);
         dpiRecordIds.push(r.id);
       }
+      // B-117 — field presence only, never a legal reading. A record the category puts outside art. 70 but
+      // that still carries one of the two DPI contract facts is the pair `dpiRecordConflict` checks; it is
+      // invisible to `dpiRecordIds`, and that is the whole of defect B-117.
+      if (r.dpiContractType !== undefined || r.dpiExcludedKind !== undefined) {
+        dpiDeclaredRecordIds.push(r.id);
+      }
     }
   }
   for (const e of data.expenses) {
@@ -420,7 +443,10 @@ export function selectYtd(data: AppData, asOfDate: string): YtdTotals {
     }
   }
 
-  return { revenue, expenses, net: subBani(revenue, expenses), revenueNet, expenseNet, dpiGross, dpiGrossNet, dpiRecordIds };
+  return {
+    revenue, expenses, net: subBani(revenue, expenses), revenueNet, expenseNet,
+    dpiGross, dpiGrossNet, dpiRecordIds, dpiDeclaredRecordIds,
+  };
 }
 
 /**

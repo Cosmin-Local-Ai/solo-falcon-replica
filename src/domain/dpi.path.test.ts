@@ -4,6 +4,9 @@ import type { PfaIdentity, PfaProfile } from './models';
 import { selectYtd } from './aggregation';
 import { dpiCoverageGaps, selectEstimateOperands } from './estimateBasis';
 import { getThresholdStatuses } from '../data/dashboard';
+import { validateDatasetImport } from '../data/datasetImport';
+import { DATASET_EXPORT_KIND, DATASET_EXPORT_VERSION } from '../data/datasetExport';
+import { CURRENT_DATA_VERSION } from '../data/migration';
 import { selectRuleSet } from './fiscal';
 import { PFA_2026_DPI_RELEASE_ID } from './fiscal/release2026dpi';
 import { lei, money, type Bani } from './money';
@@ -132,14 +135,168 @@ describe('B-112 — DPI receipts are out of the sistem-real engine, and the esti
 
   it('an art. 67 receipt is never reported as an omitted DPI income', () => {
     // The guarantee that matters here is the mis-classification one: a receipt the person declared art. 67
-    // stays in the figure even if it also carries a DPI contract type. The contradiction between those two
-    // declarations is still named — by `dpiRecordConflict`, tested in `dpi.test.ts` — and the form refuses
-    // to store the pair at all (`Revenues.tsx` clears both DPI fields when the category is not art. 70).
+    // stays in the figure even if it also carries a DPI contract type. B-117 changed only what the app says
+    // about the contradiction — it always named it in `dpiRecordConflict` and the form always refused to
+    // store the pair (`Revenues.tsx` clears both DPI fields when the category is not art. 70), but the
+    // coverage surface was silent. It is not silent now, and the row is a contradiction row, not an
+    // omission row: see the B-117 block below for what the row is and what it carries.
     const data = makeData({ revenues: [rev('ai-1', lei(68_000), { dpiContractType: 'cesiune_licenta' })] });
-    expect(dpiCoverageGaps(data, AS_OF, rulesFor(data))).toEqual([]);
+    expect(dpiCoverageGaps(data, AS_OF, rulesFor(data)).map((g) => g.reason)).toEqual(['fact_missing']);
     const ops = selectEstimateOperands(data, AS_OF, rulesFor(data));
     if (ops.kind !== 'run') throw new Error('expected the engine to run');
     expect(ops.amounts.revenues).toBe(lei(68_000));
+  });
+});
+
+/**
+ * B-117 — a DPI contradiction stored on an art. 67 record reaches the coverage surface.
+ *
+ * **What the defect was.** `dpiRecordConflict` names the pair, `Revenues.tsx` refuses to store it, and
+ * `dpiCoverageGaps` walked only `ytd.dpiRecordIds` — the receipts the declared category puts inside art. 70.
+ * So a record that carries a DPI contract fact while its category says art. 67 was contradicted by the app's
+ * own vocabulary and invisible to its own coverage channel. Catching it needed the other register subset.
+ *
+ * **Severity is low and the tests say so.** The form blocks the pair, so the only way to hold it is an
+ * imported backup or hand-edited bytes. That is still a contradiction the person should be told about, and
+ * it is not a reason to invent one: every case below starts from a fact a live path can produce.
+ *
+ * **The B-143 lesson, applied.** A coverage row with no producer is how `AttentionState.not_submitted` ended
+ * up dead-but-test-pinned. The import case at the end of this block is the pin that says a live path
+ * produces the pair — without it, this whole block would be a row kept alive only by its own tests.
+ */
+describe('B-117 — a stored DPI contradiction on an art. 67 record reaches the coverage surface', () => {
+  function art67WithDpiFact(over: Partial<Revenue> = {}): AppData {
+    return makeData({ revenues: [rev('ai-1', lei(68_000), over)] });
+  }
+
+  it('a cesiune / licență declared on an art. 67 receipt yields one row that names the contradiction', () => {
+    const data = art67WithDpiFact({ dpiContractType: 'cesiune_licenta' });
+    const gaps = dpiCoverageGaps(data, AS_OF, rulesFor(data));
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].recordId).toBe('ai-1');
+    expect(gaps[0].kind).toBe('revenue');
+    // The reason the art. 70 side of the same contradiction already carries. One contradiction must not
+    // take two names depending on which half of it is wrong.
+    expect(gaps[0].reason).toBe('fact_missing');
+    expect(gaps[0].detail).toContain('art. 67');
+    expect(gaps[0].detail).toContain('art. 70');
+    // It reports the contradiction and refuses to resolve it.
+    expect(gaps[0].detail).toContain('nu alege');
+    // And it deep-links to the record, which is the only place the pair can be fixed.
+    expect(gaps[0].fixTarget).toContain('/revenues');
+  });
+
+  it('an art. 72 alin. (3) exclusion kind on an art. 67 receipt yields the same row', () => {
+    const data = art67WithDpiFact({ dpiExcludedKind: 'drept_de_suita' });
+    const gaps = dpiCoverageGaps(data, AS_OF, rulesFor(data));
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].reason).toBe('fact_missing');
+    expect(gaps[0].detail).toContain('art. 72 alin. (3)');
+  });
+
+  it('an art. 67 receipt under a contract de comandă is coherent, and the surface stays silent', () => {
+    // The walk must not fire on every DPI field: `contract_de_comanda` IS the art. 67 answer. A row here
+    // would be a finding on a record that carries none.
+    const data = art67WithDpiFact({ dpiContractType: 'contract_de_comanda' });
+    expect(dpiCoverageGaps(data, AS_OF, rulesFor(data))).toEqual([]);
+    expect(selectYtd(data, AS_OF).dpiDeclaredRecordIds).toEqual(['ai-1']);
+  });
+
+  it('the row carries no amount, because the receipt is inside the figure and nothing left it', () => {
+    // The art. 70 contradiction row carries its amount: that receipt really is out of the estimate. This one
+    // does not, because the engine ran on the receipt at full value. Writing the amount here would subtract
+    // from the weighted percentage a sum the figure already computed on — the B-71 defect, dressed as a
+    // disclosure.
+    const data = art67WithDpiFact({ dpiContractType: 'cesiune_licenta' });
+    const [gap] = dpiCoverageGaps(data, AS_OF, rulesFor(data));
+    expect(gap.amount).toBeNull();
+    expect(gap.currency).toBe('RON');
+    const ops = selectEstimateOperands(data, AS_OF, rulesFor(data));
+    if (ops.kind !== 'run') throw new Error('expected the engine to run');
+    expect(ops.amounts.revenues).toBe(lei(68_000));
+  });
+
+  it('the ids come from `selectYtd`, so period and status are decided in one place', () => {
+    // The B-70 rule: this function does not re-apply `inPeriod` or re-read `status`. It walks the subset the
+    // aggregation pass already selected.
+    expect(selectYtd(art67WithDpiFact({ dpiContractType: 'cesiune_licenta' }), AS_OF).dpiDeclaredRecordIds)
+      .toEqual(['ai-1']);
+    const outside = makeData({
+      revenues: [rev('ai-2', lei(68_000), { dpiContractType: 'cesiune_licenta', date: '2025-03-10' })],
+    });
+    expect(dpiCoverageGaps(outside, AS_OF, rulesFor(outside))).toEqual([]);
+    const pending = makeData({
+      revenues: [rev('ai-3', lei(68_000), { dpiContractType: 'cesiune_licenta', status: 'in-asteptare' })],
+    });
+    expect(dpiCoverageGaps(pending, AS_OF, rulesFor(pending))).toEqual([]);
+  });
+
+  it('a register with no DPI facts at all still produces no DPI row — the seed, and every pre-B-112 payload', () => {
+    // The early return for an empty DPI list is still an early return for an empty register: B-117 widened
+    // what the function can see, it did not make it report on records that carry nothing.
+    expect(dpiCoverageGaps(aiOnly(), AS_OF, rulesFor(aiOnly()))).toEqual([]);
+  });
+
+  it('a live path produces the pair: a backup file imports it, and the imported record reaches the row', () => {
+    // This is the pin that keeps B-117 from being B-143. The form cannot store the pair, so the producer has
+    // to be named — and it is a real one: Settings offers a dataset backup to `store.importDataset`, which
+    // validates through `revenueSchema`. That schema declares all three DPI fields — it has to, because zod
+    // strips undeclared keys — and refines none of them against the others, because a cross-field refine
+    // would reject bytes the person then has no way to repair. So the pair arrives, and the coverage surface
+    // is the place it has to be said.
+    const data = art67WithDpiFact({
+      incomeCategory: 'activitate_independenta',
+      dpiContractType: 'cesiune_licenta',
+    });
+    const raw = JSON.stringify({
+      kind: DATASET_EXPORT_KIND,
+      exportVersion: DATASET_EXPORT_VERSION,
+      exportedAt: '2026-10-13T09:00:00.000Z',
+      // `cotaTva` is an integer percent in the persisted shape and a fraction in the live one — the payload
+      // is written the way a backup file writes it, not the way the store holds it.
+      data: { ...data, version: CURRENT_DATA_VERSION, settings: { ...emptySettings, cotaTva: 19 } },
+    });
+    const outcome = validateDatasetImport(raw);
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    const [imported] = outcome.data.revenues;
+    expect(imported.incomeCategory).toBe('activitate_independenta');
+    expect(imported.dpiContractType).toBe('cesiune_licenta');
+    // The bytes are on the person's register now. The row has to follow them.
+    const gaps = dpiCoverageGaps(makeData({ revenues: outcome.data.revenues }), AS_OF, rulesFor(data));
+    expect(gaps.map((g) => [g.recordId, g.reason])).toEqual([['ai-1', 'fact_missing']]);
+  });
+
+  it('the B-112 refusal is untouched by this: same row, same sentence, and still no DPI income posted', () => {
+    // Acceptance criterion 4, pinned rather than asserted. The refusal suppresses the per-receipt DPI rows
+    // because those restate one fiscal quantity; it has nothing to say about a different record, so it must
+    // not mute this finding either (B-106 is the standing example of a refusal that hid the only finding a
+    // surface had).
+    const ladder = { fiscalYear: 2026, proprietateIntelectuala: lei(48_000) };
+    const dpiReceipt = () => rev('dpi-1', lei(50_000), {
+      incomeCategory: 'drepturi_de_proprietate_intelectuala',
+    });
+    const without = makeData({
+      profile: profile({ cassLadderYears: [ladder] }),
+      revenues: [rev('ai-1', lei(68_000)), dpiReceipt()],
+    });
+    const withContradiction = makeData({
+      profile: profile({ cassLadderYears: [ladder] }),
+      revenues: [rev('ai-1', lei(68_000), { dpiContractType: 'cesiune_licenta' }), dpiReceipt()],
+    });
+    const before = dpiCoverageGaps(without, AS_OF, rulesFor(without));
+    const after = dpiCoverageGaps(withContradiction, AS_OF, rulesFor(withContradiction));
+    expect(before).toHaveLength(1);
+    // Byte-identical refusal row, still first, still the only DPI row.
+    expect(after[0]).toEqual(before[0]);
+    expect(after[0].reason).toBe('dpi_income_double_represented');
+    expect(after.filter((g) => g.reason === 'dpi_income_double_represented')).toHaveLength(1);
+    expect(after.map((g) => g.recordId)).toEqual(['dpi:2026', 'ai-1']);
+    // And the refusal still refuses: neither DPI receipt reaches the figure.
+    const ops = selectEstimateOperands(withContradiction, AS_OF, rulesFor(withContradiction));
+    const plain = selectEstimateOperands(aiOnly(), AS_OF, rulesFor(aiOnly()));
+    if (ops.kind !== 'run' || plain.kind !== 'run') throw new Error('expected both to run');
+    expect(ops.amounts.revenues).toBe(plain.amounts.revenues);
   });
 });
 
