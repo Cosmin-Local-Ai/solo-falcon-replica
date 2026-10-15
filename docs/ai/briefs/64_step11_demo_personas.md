@@ -1,3 +1,41 @@
+## GLOBAL CONTRACT — APPLY TO EVERY PROMPT
+
+You are the LEAD ORCHESTRATOR for this step only.
+
+The project AI ecosystem is:
+- SCOUT = local repository inspection only; read-only; NEVER modifies files
+- RESEARCHER = internet research only; primary/official sources only
+- WORKER = implementation, focused testing, documentation, self-validation
+- ORCHESTRATOR = coordination, sequencing, synthesis, handoff
+
+Worker rules
+1. Never run more than ONE Worker at a time. Workers are sequential.
+2. The Orchestrator spawns the Worker and MUST give it the complete phase list, not a partial one.
+3. The Worker MUST spawn the Scouts it needs before modifying anything, and MUST use their reports rather than broadly searching the repository itself.
+4. **OVERRIDE — Scouts run SEQUENTIALLY.** One at a time, waiting for each report. Standing user decision (2026-10-10); the roadmap's parallel-Scout permission is not adopted.
+5. Each Scout inspects the smallest relevant territory and returns a compact report.
+6. If the Worker finds missing local information, it spawns another narrow Scout — it does not search broadly.
+6a. **UNDER NO CIRCUMSTANCES does the Worker do any work while a Scout is running.** After dispatching a Scout, **stop and end the turn.** No side-quests, no "meanwhile I'll read this", no drafting, no edits, no repository searching while waiting. Strict sequence: **dispatch one Scout → stop → receive report → read only the files you will actually edit → edit → dispatch the next Scout if needed → stop → …** If work was already started in parallel with a Scout, stop, discard that parallel searching, and wait. The failure mode this prevents: the Scout's report arrives after the Worker has already searched the repository itself, which wastes the Scout, burns the Worker's context, and defeats §12.9 entirely.
+7. One Worker = one coherent, tightly scoped job.
+8. Do NOT spawn a post-Worker Scout verification pass. The Worker self-validates instead.
+9. Self-validate: npx tsc --noEmit, npm run build, npm run test, npm run test:e2e.
+10. Do not start future phases. Stop when this phase's acceptance criteria are met.
+
+**Scout infrastructure — known defect.** The scout profile's default model produces no output. **Use the explicit override `llama-cpp/qwen3.8-flash-next-iq3_s` from the start.** If it fails too, STOP and report a BLOCKER.
+
+**Engine instability — known.** 262k context, ~390 MiB free, one slot, SIGKILLed under load. If killed, **on-disk work survives** — resume and continue. Checkpoint early and often.
+
+Worker handoff format (mandatory)
+```
+COMPLETED:
+FILES CHANGED:
+TESTS:
+VALIDATION:
+DECISIONS:
+BLOCKERS:
+NEXT HANDOFF:
+```
+
 # Brief 64 — Step 11 / 15: demo personas, the CAEN nomenclator, and persona selection by CAEN
 
 **D-DEMO-1**, and with it **B-96**, **B-100**, **B-123**, **B-124**. **Product scope, not a release gate** — but it is the step that makes everything from steps 1–10 *visible*, and B-123 is the proof: **B-112 shipped four stages and 2,526 unit tests with zero demo data and zero e2e coverage.**
@@ -134,6 +172,26 @@ From `FiscalRegime` in `src/domain/fiscal/rules.ts`:
 | 8 | Online commerce | **~650.000 lei** | **TVA 395.000 crossed**, perisabilități under art. 68 alin. (5) lit. d), and **the income-cash vs VAT-delivery divergence shown as a visible gap between two series** |
 
 **Acceptance, added:** for each persona, a test or e2e assertion that **the expected threshold was crossed and the expected rung/period changed**. A persona that loads without changing a rung is not finished.
+
+## Counterparties — a business with no counterparties is not a business
+**Standing user instruction, 2026-10-14: *„make sure they have clients that make sense and whanot, clients from abroad where it makes sense, you know, a proper showing, quality demo."***
+
+**Every persona needs named counterparties, not anonymous totals.** A ledger that says "income 340.000 lei" proves the arithmetic; a ledger that says four named clients on monthly invoices proves the *product*.
+- **Named clients and suppliers**, invented (B-110 hygiene: no real CNP, no real CUI, no name that resolves), each with a plausible trade name and, where the activity has them, a payment cadence.
+- **Foreign counterparties only where the activity genuinely has them.** IT freelance: EU/UK clients, EUR invoicing, BNR rate dates. Online commerce: non-EU suppliers, and the import/VAT consequences that follow. Rideshare: a **platform** as counterparty, which is its own fiscal shape (reţinere, informare). Airbnb: booking platforms as intermediaries. Landlord: mostly individuals, in lei. Investor: the distributing company, the bank, the fund administrator. **Agricultural and the driver should not be padded with foreign clients they would not have.**
+- **Counterparty type has to be visible**, because it changes what the engine does: a payroll employer, a Romanian corporate client, a non-EU client, a platform that withholds, a natural-person tenant.
+
+## Who the demo identities are
+**Open — user deciding.** Two coherent options, and they are not interchangeable:
+- **Named invented people** (e.g. an IT freelance, a driver, an Airbnb host). Warmer, more legible in screenshots, and it forces B-110 hygiene because a name invites a real one.
+- **The persona *is* the user.** The demo profile carries the person's own name and the persona only supplies the activity data. Cleaner for a real account, blander for a showcase.
+**Whatever is chosen, the CNP/CUI/reg-com values must be invented and visibly fake**, and the demo data must be labelled as demo — B-110 exists because demo data was previously borrowing real identities.
+
+## Lifecycle stage — new PFA vs an existing PFA that just found us
+**The distinction you are asking about is real, and the app already holds the field that answers it.**
+- **Onboarding already requires „Data începerii activității"** (`Onboarding.tsx`, `pfaStartDate`). **That is the ONRC start date, not the account signup date** — which is exactly why it separates the two cases without asking a second question: someone who registered at ONRC in 2019 and installed the app this week has `pfaStartDate` 2019 and is an **existing** PFA; someone who registered last month is a **new** one.
+- **The first-year law is already researched and already partly implemented.** `src/domain/deadlines.ts` states it: *„A PFA opened at any point in 2026 files its first Declarația Unică by 25 May 2027: art. 122 alin. (3) extends the term to the alin. (2) start-of-activity case verbatim"*, and `research/11_pfa_first_year_and_vat_registration_deadlines_2026.md` covers the 30-day declarație de înregistrare fiscală and the art. 82 alin. (6) lit. c) exclusions.
+- **What is missing is the derivation and the surface.** `pfaStartDate` is read in exactly one place — `completeness.ts:136`, which only asks whether it is *filled in*. **Nothing computes how long the PFA has been active, and nothing branches the UI on it.** So a person in month two and a person in year seven see the same screen. **Minted as B-127.**
 
 **Deliberate choices, and why:**
 - **The pension/salary statuses ride on personas 2 and 6** rather than getting their own persona, because a pensionari *is* a content creator or an investor — inventing a "pensioner persona" would be a status, not a user type.
