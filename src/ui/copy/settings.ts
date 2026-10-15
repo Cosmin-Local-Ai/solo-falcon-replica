@@ -178,6 +178,22 @@ export const settings = {
       cazare: 'Prestare de servicii de cazare',
     },
     /**
+     * B-107 — the *arendă agricolă* sentence. Arendă is carved out of art. 84 alin. (1) and (3) and has its
+     * own mechanism, and this app does not compute it (B-105 recorded that as a gap rather than half-
+     * building it from the ordinary-rent rule). The data layer has no arendă identifier at all, so the
+     * register falls through to sistem real — a true resolution, but a silent one: a person with an arendă
+     * would read a sistem-real figure as their own. The resolution stays; what is added is the sentence
+     * that says which regime the app applied, why, and what is different about the one it did not apply.
+     *
+     * Authority: `docs/ai/research/46` §6, as recorded on the B-107 row of `docs/ai/PHASE_PLAN_11_34.md`.
+     * No arendă arithmetic is asserted here — the sentence names the mechanism and states that the app
+     * does not run it.
+     */
+    activityFamilyOtherMethod:
+      'Regimul pe care aplicația îl aplică pentru acest răspuns: sistem real — venitul net este cifra de afaceri minus cheltuielile deductibile înregistrate (art. 118 CF). Este singurul regim pentru care aplicația deține faptele; nu este dedus din codul CAEN.',
+    activityFamilyOtherArenda:
+      'Dacă venitul tău este arendă agricolă, legea are un alt mecanism, pe care această aplicație nu îl calculează: venitul brut se stabilește la încasare (art. 84 alin. (4)), cota fixă de 20 % se aplică la fiecare plată (alin. (7)), impozitul de 10 % se reține la sursă și este impozit final (alin. (8)-(9)), contractul de arendare nu se înregistrează (art. 83 alin. (5) exclude arendarea de la înregistrare), iar CASS poate fi reținută la sursă de arendaș (art. 174¹ alin. (3)) — unicul venit din Capitolul IV pentru care acest lucru este adevărat. Cifra de pe tabloul de bord rămâne cea a sistemului real și nu este cifra arendei.',
+    /**
      * PG-6h-2 (B-82, B-83, B-84) — the accommodation facts, and the title they decide.
      *
      * Three rules these strings obey:

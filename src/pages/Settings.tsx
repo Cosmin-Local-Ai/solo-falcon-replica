@@ -1611,6 +1611,22 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                     ? settingsCopy.fiscal.activityFamilyUnanswered
                     : settingsCopy.fiscal.activityFamilyHint}
                 </span>
+                {/* B-107 — the resolution is stated beside the answer that produces it. A register that is
+                    not cazare and carries no lease fact resolves to sistem real; that is the right answer
+                    for most of them and the wrong regime for an arendă agricolă, which the app does not
+                    compute. The app does not change the resolution and does not guess that this person has
+                    an arendă — it says which regime it applied and what the law does differently for the
+                    one it left out. */}
+                {fiscal.activityFamily === 'other' && (
+                  <>
+                    <span className="hint" data-activity-family-method>
+                      {settingsCopy.fiscal.activityFamilyOtherMethod}
+                    </span>
+                    <span className="hint" data-arenda-note>
+                      {settingsCopy.fiscal.activityFamilyOtherArenda}
+                    </span>
+                  </>
+                )}
               </div>
 
               {/*

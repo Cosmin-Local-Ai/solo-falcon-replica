@@ -128,3 +128,51 @@ describe('the activity family is reviewable in Settings', () => {
     expect((stored.profile as { activityFamily?: string }).activityFamily).toBeUndefined();
   });
 });
+
+/**
+ * B-107 — arendă agricolă resolves to sistem real, and the app now says so.
+ *
+ * The resolution is unchanged and correct: the data layer carries no arendă identifier, so a non-cazare
+ * register with no lease fact falls through to sistem real. What was missing is the sentence. A person
+ * with an arendă agricolă reads a sistem-real figure and has no way to know the law runs that income
+ * differently — cash-basis gross, 20 % at each payment, 10 % withheld at source and final, no contract
+ * registration, CASS that CAN be withheld — or that this app deliberately does not compute it.
+ *
+ * The test asserts the sentence is present for the answer that produces the resolution and absent for the
+ * one that does not, so it cannot pass by printing the caveat everywhere.
+ */
+describe('B-107 — the sistem real resolution says which regime it applied', () => {
+  it('naming the regime beside the `other` answer, and naming arendă agricolă as the one it is not', () => {
+    seedStorage(payload({ profile: { ...seedData.profile, activityFamily: 'other' } }));
+    renderFiscalTab();
+
+    const method = document.querySelector('[data-activity-family-method]');
+    expect(method?.textContent).toContain('sistem real');
+    expect(method?.textContent).toContain('art. 118');
+
+    const arenda = document.querySelector('[data-arenda-note]');
+    expect(arenda?.textContent).toContain('arendă agricolă');
+    // The four things that make arendă a different mechanism, each cited.
+    expect(arenda?.textContent).toContain('art. 84 alin. (4)');
+    expect(arenda?.textContent).toContain('20 %');
+    expect(arenda?.textContent).toContain('art. 83 alin. (5)');
+    expect(arenda?.textContent).toContain('art. 174¹ alin. (3)');
+    // The claim that matters: the figure on the dashboard is not the arendă figure.
+    expect(arenda?.textContent).toContain('nu este cifra arendei');
+  });
+
+  it('a cazare register is not told about arendă: the sentence belongs to the answer that resolves to sistem real', () => {
+    seedStorage(payload({ profile: { ...seedData.profile, activityFamily: 'cazare' } }));
+    renderFiscalTab();
+
+    expect(document.querySelector('[data-arenda-note]')).toBeNull();
+    expect(document.querySelector('[data-activity-family-method]')).toBeNull();
+  });
+
+  it('an unanswered profile is not told which regime it is under — the app has not chosen one yet', () => {
+    seedStorage(payload({ profile: unansweredProfile() }));
+    renderFiscalTab();
+
+    expect(document.querySelector('[data-arenda-note]')).toBeNull();
+  });
+});
