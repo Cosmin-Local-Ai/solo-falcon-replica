@@ -506,7 +506,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
   // `settings` itself stays live for what is genuinely settings: e-Factura
   // behaviour and the bank-account list.
   const store = useStore();
-  const { settings, updateSettings, profile, updateProfile, toast, fxRates, dataOrigin, sandboxActive, loadSandbox, unloadSandbox, resetAllData, exportDataset, importDataset, blobStoreStatus, blobRelocation, blobReclaimFailures, orphanBlobIds } = store;
+  const { settings, updateSettings, profile, updateProfile, toast, fxRates, dataOrigin, sandboxActive, demoActive, loadSandbox, unloadSandbox, resetAllData, exportDataset, importDataset, blobStoreStatus, blobRelocation, blobReclaimFailures, orphanBlobIds } = store;
   const identity = profile.identity;
   const [wipeOpen, setWipeOpen] = useState(false);
   // PG-11 — export/import. `backupBusy` keeps a second click off the file while one is being read or written;
@@ -2478,7 +2478,10 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
             <div className="stack">
               <p className="hint">{settingsCopy.data.sandboxBody}</p>
               <div className="row">
-                {!sandboxActive && (
+                {/* B-134: gated on ANY demo, not only the seed fixture. `loadSandbox` refuses to run while a
+                    demo is already on screen, so offering it beside a persona demo would fire a toast claiming
+                    a fixture had been loaded when nothing changed. */}
+                {!demoActive && (
                   <button className="btn" onClick={() => { loadSandbox(); toast('success', settingsCopy.dataToasts.sandboxLoaded); }}>
                     {settingsCopy.data.sandboxLoad}
                   </button>
