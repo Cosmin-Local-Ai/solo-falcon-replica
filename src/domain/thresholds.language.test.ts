@@ -356,30 +356,16 @@ const LITERAL_QUOTE_EXEMPTIONS: ReadonlyArray<{ file: string; code: string; why:
 /**
  * Sites the shape rule cannot justify, listed one per site so the count is visible and a new one fails. An
  * entry here is not a pass — it is a leak or a judgement call with a name and a reason attached, and the
- * last test in this block fails if the site stops existing, so an exemption cannot outlive the code it excuses.
+ * last test in this block fails if the site stops existing, so an exemption cannot outlive the code it
+ * excuses.
+ *
+ * **Brief 75 (B-142) emptied this list, and it is empty on purpose.** The four entries it carried were the
+ * regime trio in `regimes.ts`, the onboarding refusal copy and the `estimateBasis.ts` treatment code — all
+ * five sites fixed in that pass by putting the Romanian wording into the sentence, which is what the
+ * exemption text itself asked for. Nothing was added to `QUOTABLE_VALUE_NAMES` to make a site pass, and no
+ * site was exempted a second time. A new entry here is a leak with a reason written next to it, not a fix.
  */
-const QUOTED_INTERPOLATION_EXEMPTIONS: ReadonlyArray<{ file: string; expr: string; why: string }> = [
-  {
-    file: './regimes.ts',
-    expr: 'regime',
-    why: 'B-139 boundary: the regime refusal quotes the stored value it refused. `PFA_REGIME_DESCRIPTORS[regime].label` exists and should be used, but four B-9/B-14 tests pin this wording and §4 of brief 67 puts the regime vocabulary out of scope. Reported, not fixed.',
-  },
-  {
-    file: './regimes.ts',
-    expr: 'String(regime)',
-    why: 'same site family as the line above — the unknown-regime branch.',
-  },
-  {
-    file: '../ui/copy/onboarding.ts',
-    expr: 'regime',
-    why: 'the same leak in the onboarding copy; outside brief 67\'s boundary, reported as a finding.',
-  },
-  {
-    file: './estimateBasis.ts',
-    expr: 'c.treatment',
-    why: 'a rule-package treatment code quoted at a person; found by this guard, outside brief 67\'s boundary, reported as a finding.',
-  },
-];
+const QUOTED_INTERPOLATION_EXEMPTIONS: ReadonlyArray<{ file: string; expr: string; why: string }> = [];
 
 /** Every `„${…}”` in one app source, as the expression text being quoted. */
 function quotedInterpolations(path: string): string[] {

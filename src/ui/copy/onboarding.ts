@@ -153,8 +153,13 @@ export const onboarding = {
 
   refusal: {
     title: 'Acest regim nu este suportat',
-    body: (regime: string): string =>
-      `Regimul „${regime}” nu este suportat de acest pachet de reguli. Aplicația nu va calcula nimic pentru el.`,
+    // B-142 — the parameter is named for what the caller passes: `Onboarding.tsx` hands this
+    // function `PFA_REGIME_DESCRIPTORS[regime].label`, the Romanian wording, never the stored
+    // code. The parameter used to be called `regime`, which made the sentence read as if it
+    // interpolated a code and forced a named exemption in the B-139 leak guard for a site that
+    // was not one. Renaming it lets the guard check the shape instead of taking our word for it.
+    body: (label: string): string =>
+      `Regimul „${label}” nu este suportat de acest pachet de reguli. Aplicația nu va calcula nimic pentru el.`,
     noEstimate:
       'Nu afișăm nicio estimare și nicio cifră de impozit pentru acest regim: aplicația nu deține valorile de care ar avea nevoie calculul, iar o cifră inventată ar fi mai gravă decât absența ei.',
     back: 'Mă întorc la alegerea regimului',

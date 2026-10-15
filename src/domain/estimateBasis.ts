@@ -48,6 +48,7 @@ import {
   type ExpenseCategory,
   type ExpenseClassificationContext,
   type RefusedExpense,
+  type DeductibilityTreatment,
 } from './fiscal/deductibility';
 import type { FiscalRule } from './fiscal/rules';
 import { selectApplicableRules } from './fiscal/select';
@@ -1816,6 +1817,23 @@ function leiMeasures(e: Expense): { net: Bani; inclVat: Bani } {
 }
 
 /**
+ * B-142 — the rule package's treatment codes in the words a person reads.
+ *
+ * `selectDeductibleExpenses` reports a rule-data error when a rule classifies an expense but gives it
+ * no category to total it under, and that sentence used to quote the treatment code (`„capped”`) at
+ * the reader. The code is what the engine branches on; the words below are what the sentence needs.
+ * They live here, next to the sentence that uses them, for the reason `models.ts` records for
+ * `CASS_LADDER_CATEGORY_NAMES`: the refusing string is itself domain output, and a second vocabulary
+ * in the copy layer is how the two drift apart.
+ */
+const treatmentLabels: Record<DeductibilityTreatment, string> = {
+  deductible: 'deductibil',
+  non_deductible: 'nu este deductibil',
+  capped: 'deductibil numai până la un plafon',
+  undetermined: 'nedeterminat, pentru că lipsește o faptă',
+};
+
+/**
  * Classify every expense that could reach the aggregate, and return the subset that may enter the
  * engine together with the reason every other one did not.
  *
@@ -1977,8 +1995,8 @@ export function selectDeductibleExpenses(
         ruleId: c.rule.ruleId,
         sourceArticle: c.rule.sourceArticle,
         detail:
-          `Regula ${c.rule.ruleId} a returnat tratamentul „${c.treatment}” fără nicio categorie asociată; ` +
-          'nu poate fi inclusă în niciun total pe categorie.',
+          `Regula ${c.rule.ruleId} a returnat un tratament de deductibilitate „${treatmentLabels[c.treatment]}” ` +
+          'fără nicio categorie asociată; nu poate fi inclusă în niciun total pe categorie.',
       });
       continue;
     }

@@ -87,21 +87,33 @@ export function regimeRefusalReason(regime: PfaRegime): string | null {
   if (!d) {
     // Defensive: the schema rejects unknown strings, but the engine gate must not trust
     // its input. An unrecognised regime is never computed — it is reviewed by a human.
+    //
+    // B-142 — the raw code is NOT printed here. This is the one refusal in the app with no
+    // descriptor behind it, so there is no Romanian wording to substitute, and a code inside a
+    // Romanian sentence is an internal name posing as a name a person can read. The stored value
+    // is also the one thing the reader cannot act on: they did not type it, and the app has no
+    // vocabulary for it. What the sentence can say truthfully is that the value is unrecognised
+    // and that the app will not name it.
     return (
-      `Regimul fiscal înregistrat („${String(regime)}") nu este unul dintre regimurile cunoscute ` +
+      'Regimul fiscal înregistrat în profil nu este unul dintre regimurile cunoscute ' +
       'de acest pachet de reguli 2026 (CF art. 123 alin. (1): impozit pe venit în sistem real). ' +
+      'Aplicația nu are nicio denumire în română pentru valoarea înregistrată și nu o afișează. ' +
       'Este necesară verificarea manuală a regimului aplicabil.'
     );
   }
   if (d.computable) return null;
+  // B-142 — the refusal names the regime in the Romanian wording the profile editor already
+  // shows for it (`PFA_REGIME_DESCRIPTORS[regime].label`), not in the stored code. The code is
+  // what the compiler reads; the label is what the person reads, and it was already sitting in
+  // this file unused by the very sentences that needed it.
   if (regime === 'impozit_pe_cit') {
     return (
-      `Regimul fiscal înregistrat („${regime}") nu poate aparține unui PFA în 2026: ` +
+      `Regimul fiscal înregistrat în profil este „${d.label}”. Acesta nu poate aparține unui PFA în 2026: ` +
       `${d.note} Verifică regimul din profil sau natura entității.`
     );
   }
   return (
-    `Regimul fiscal înregistrat („${regime}") nu poate fi calculat de acest pachet de reguli: ${d.note} ` +
+    `Regimul fiscal înregistrat în profil este „${d.label}”. Acesta nu poate fi calculat de acest pachet de reguli: ${d.note} ` +
     'Este necesară verificarea manuală a regimului aplicabil.'
   );
 }

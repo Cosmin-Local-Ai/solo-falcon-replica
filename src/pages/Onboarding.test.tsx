@@ -124,6 +124,12 @@ describe('Onboarding — the norma de venit refusal', () => {
     fireEvent.click(regimeRadio('norma_venit'));
 
     expect(screen.getByText('Acest regim nu este suportat')).toBeInTheDocument();
+    // B-142 — the refusal screen names the regime in the Romanian label the selector already shows, not
+    // in the stored code. `Onboarding.tsx` passes `PFA_REGIME_DESCRIPTORS[regime].label` into the copy
+    // function; this pins that the value reaching the person is that label, and pins the code absent.
+    // The code still exists on the screen as a `data-regime` attribute — an attribute is not copy.
+    expect(screen.getByText(/Normă de venit — nu se poate calcula în acest pachet de reguli/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('norma_venit');
     // The screen states that it shows no figure, and it does not: no money is rendered anywhere on it.
     expect(document.querySelector('[data-onboarding="no-estimate"]')).not.toBeNull();
     expect(document.body.textContent).not.toMatch(/RON/);

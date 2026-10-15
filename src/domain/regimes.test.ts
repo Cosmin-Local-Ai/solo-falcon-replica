@@ -55,7 +55,16 @@ describe('regime model — one computable regime, no invented alternatives', () 
   it('impozit_pe_cit is refused as a data-integrity failure, quoting the provisions (B-14)', () => {
     const reason = regimeRefusalReason('impozit_pe_cit');
     expect(reason).not.toBeNull();
-    expect(reason!).toContain('impozit_pe_cit');
+    // RE-PIN, named as such (brief 75 / B-142). This assertion used to read
+    // `expect(reason!).toContain('impozit_pe_cit')` — it pinned the STORED CODE, i.e. what the code
+    // happened to print, not what a person should read. The refusal now quotes
+    // `PFA_REGIME_DESCRIPTORS.impozit_pe_cit.label`, the Romanian wording the profile editor already
+    // shows for this regime, and the code is asserted ABSENT. Everything below this line is unchanged:
+    // the operative content — the provisions, the abrogation, the data-integrity framing — is what it was.
+    expect(reason!, 'the refusal names the regime in Romanian').toContain(
+      PFA_REGIME_DESCRIPTORS.impozit_pe_cit.label,
+    );
+    expect(reason!, 'the refusal no longer reads a code to a person').not.toContain('impozit_pe_cit');
     expect(reason!).toContain('nu poate aparține unui PFA');
     expect(reason!).toContain('art. 13 alin. (1)');
     expect(reason!).toContain('art. 14');
@@ -68,7 +77,12 @@ describe('regime model — one computable regime, no invented alternatives', () 
   it('norma_venit is refused as a boundary, with no invented norm values', () => {
     const reason = regimeRefusalReason('norma_venit');
     expect(reason).not.toBeNull();
-    expect(reason!).toContain('norma_venit');
+    // RE-PIN, named as such (brief 75 / B-142) — same change as the test above: the stored code was
+    // pinned, the Romanian label is pinned now, and the code is asserted absent.
+    expect(reason!, 'the refusal names the regime in Romanian').toContain(
+      PFA_REGIME_DESCRIPTORS.norma_venit.label,
+    );
+    expect(reason!, 'the refusal no longer reads a code to a person').not.toContain('norma_venit');
     expect(reason!).toContain('nu poate fi calculat');
     expect(reason!).toContain('art. 68 alin. (1)');
     expect(reason!).toContain('art. 118 alin. (6)');
@@ -100,5 +114,10 @@ describe('regime model — one computable regime, no invented alternatives', () 
       'nu este unul dintre regimurile cunoscute',
     );
     expect(regimeRefusalReason('microizator' as PfaRegime)).toContain('art. 123 alin. (1)');
+    // B-142 — this branch has no descriptor, so there is no Romanian wording to substitute, and the
+    // sentence used to print the raw value inside a Romanian sentence. It now says the value is
+    // unrecognised and that the app will not name it. The code is asserted absent: an identifier the
+    // person never typed and cannot act on is not information here, it is an internal name read aloud.
+    expect(regimeRefusalReason('microizator' as PfaRegime)).not.toContain('microizator');
   });
 });

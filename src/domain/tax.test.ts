@@ -5,6 +5,7 @@ import { computeTaxEstimate } from './tax';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal/package2026';
 import { PFA_2026_RELEASE } from './fiscal/release2026';
 import { TITLUL_II_VAT_ORDERING_RULE } from './fiscal/vat';
+import { PFA_REGIME_DESCRIPTORS } from './regimes';
 import { lei } from './money';
 
 // B-14: the fixtures used to default to `impozit_pe_cit`, which is the regime a PFA can NEVER have in
@@ -114,9 +115,15 @@ describe('computeTaxEstimate', () => {
     const res = await computeTaxEstimate({ inputs: makeInputs({ regime: 'impozit_pe_cit' }), profile: makeProfile({ regime: 'impozit_pe_cit' }), revenues: lei(50_000), expenses: lei(10_000), revenuesNet: lei(50_000), expensesNet: lei(10_000), expenseBase: { netFirst: lei(10_000), grossFirst: lei(10_000), divergent: false }, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });
     expect(res.status).toBe('review_required');
     if (res.status !== 'review_required') return;
-    // The reason has to name the provisions that make the regime impossible, and quote the bad value,
-    // so the user can see WHICH record is wrong instead of being told a ceiling is missing.
-    expect(res.reason).toContain('impozit_pe_cit');
+    // The reason has to name the provisions that make the regime impossible, and say WHICH record is
+    // wrong, instead of being told a ceiling is missing.
+    // RE-PIN, named as such (brief 75 / B-142). This assertion used to read
+    // `toContain('impozit_pe_cit')` — the comment above asked the refusal to "quote the bad value", and
+    // the value it quoted was the stored code. The refusal now names the regime with
+    // `PFA_REGIME_DESCRIPTORS.impozit_pe_cit.label`, which identifies the same record in the language
+    // the user reads; the code is asserted absent. The provisions below are unchanged.
+    expect(res.reason).toContain(PFA_REGIME_DESCRIPTORS.impozit_pe_cit.label);
+    expect(res.reason).not.toContain('impozit_pe_cit');
     expect(res.reason).toContain('art. 13 alin. (1)');
     expect(res.reason).toContain('art. 14');
     expect(res.reason).toContain('art. 15');
@@ -708,7 +715,11 @@ describe('uncomputable regimes surface as REVIEW_REQUIRED with a reason', () => 
     });
     expect(res.status).toBe('review_required');
     if (res.status !== 'review_required') return;
-    expect(res.reason).toContain('norma_venit');
+    // RE-PIN, named as such (brief 75 / B-142). This used to read `toContain('norma_venit')`, pinning
+    // the stored regime code on the engine's reason string. The engine's refusal now carries the
+    // Romanian descriptor label; the two assertions below it are unchanged.
+    expect(res.reason).toContain(PFA_REGIME_DESCRIPTORS.norma_venit.label);
+    expect(res.reason).not.toContain('norma_venit');
     expect(res.reason).toContain('art. 68 alin. (1)');
     expect(res.reason).toContain('nu inventăm valori');
   });
