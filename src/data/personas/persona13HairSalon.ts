@@ -104,7 +104,7 @@ const SALON: PartySpec = {
 const COSMETICE: PartySpec = {
   id: 'p13-cosmetice',
   denumire: 'Cosmetica Carpatică SRL',
-  cui: 'RO48495062',
+  cui: 'RO48495063',
   email: 'comenzi@cosmeticacarpatica.example',
   oras: 'Constanța',
   tara: 'România',

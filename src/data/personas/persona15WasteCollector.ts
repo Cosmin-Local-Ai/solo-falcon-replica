@@ -76,7 +76,7 @@ const IDENTITY = {
 const PRIMARIA: PartySpec = {
   id: 'p15-primaria',
   denumire: 'Primăria Orașului Valea Carpaților',
-  cui: 'RO58596072',
+  cui: 'RO58596073',
   oras: 'Valea Carpaților',
   tara: 'România',
   kind: 'client_corporate_ro',
