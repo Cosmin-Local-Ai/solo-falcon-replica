@@ -13,9 +13,9 @@
  * (BNR's XML carries USD) with a number that is not attributed to BNR.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import Expenses from './Expenses';
-import { StoreProvider } from '../data/store';
+import { StoreProvider, useStore } from '../data/store';
 import { CURRENT_DATA_VERSION } from '../data/migration';
 import { seedData } from '../data/seed';
 import type { Expense } from '../data/types';
@@ -88,6 +88,26 @@ function renderPage() {
   );
 }
 
+/**
+ * B-137: the lifecycle test has to go through the same door the Settings form goes through — `recordFxRate`,
+ * upserted by `rateKey`. Asserting on two hand-written payloads instead would pin a lifecycle the app does
+ * not actually run.
+ */
+let storeRef: ReturnType<typeof useStore> | null = null;
+function Probe() {
+  storeRef = useStore();
+  return null;
+}
+
+function renderPageWithProbe() {
+  render(
+    <StoreProvider>
+      <Probe />
+      <Expenses />
+    </StoreProvider>,
+  );
+}
+
 describe('Expenses — a euro ceiling is shown as a lei ceiling, with the rate that made it one', () => {
   beforeEach(() => localStorage.clear());
 
@@ -135,6 +155,94 @@ describe('Expenses — a euro ceiling is shown as a lei ceiling, with the rate t
     expect(screen.queryByText(/Plafonul în euro, convertit/)).not.toBeInTheDocument();
     expect(screen.getByText(/un plafon legal care nu poate fi măsurat/)).toBeInTheDocument();
     expect(screen.getByText(/anul plății 2026/)).toBeInTheDocument();
+  });
+
+  /**
+   * B-137 (D-FX-6) — the information note the user asked for, asserted on the rendered Romanian rather than
+   * on a class name. All five answers have to be on screen at once: a provisional figure that answers three
+   * of the five is a provisional figure someone will still misread.
+   */
+  it('the five-point note stands beside the provisional figure and answers all five', () => {
+    seedWith([expense({ category: 'sports_subscription' })], [EUR_ANNUAL_2026_PROVISIONAL, EUR_DAILY]);
+    renderPage();
+
+    expect(document.querySelector('[data-provisional-ceiling-note]')).not.toBeNull();
+    expect(screen.getByText(/Ce înseamnă cifra de mai sus/)).toBeInTheDocument();
+
+    // 1. the ceiling is written in euro, and the app had to turn it into lei.
+    expect(screen.getByText(/Plafonul este scris în euro în textul legii/)).toBeInTheDocument();
+    // 2. the rule used, and why an open year can only ever give a provisional figure.
+    expect(screen.getByText(/BNR publică acea medie abia după ce anul se încheie/)).toBeInTheDocument();
+    expect(screen.getByText(/pentru 2026, care nu s-a încheiat încă, cifra este provizorie/)).toBeInTheDocument();
+    // 3. the second rule in force, kept on screen instead of hidden.
+    expect(screen.getByText(/cere un alt curs, cel de la data plății/)).toBeInTheDocument();
+    // 4. the point that changes how the whole banner reads: it is replaced, and the return is filed later, so
+    //    a provisional number never reaches ANAF. This is the difference between alarming and informing.
+    expect(screen.getByText(/se depune abia în 2027, după publicare/)).toBeInTheDocument();
+    expect(screen.getByText(/nu ajunge niciodată la ANAF/)).toBeInTheDocument();
+    // 5. where the number came from — the app is forbidden from producing one itself.
+    expect(screen.getByText(/Aplicația nu și-a calculat singură această medie/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /media anuală 5\.3100 lei pentru un EUR în 2026 — introdus manual, înregistrată la 09\.10\.2026, de pe https:\/\/example\.invalid\/hand-entered-test-average/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/nici nu are voie să-și facă singură media/)).toBeInTheDocument();
+  });
+
+  it('the note is absent beside a final ceiling: it explains a stand-in, not a published figure', () => {
+    seedWith([expense({ category: 'sports_subscription' })], [EUR_ANNUAL_2026_FINAL, EUR_DAILY]);
+    renderPage();
+
+    expect(screen.getByText(/540,00 RON/)).toBeInTheDocument();
+    expect(document.querySelector('[data-provisional-ceiling-note]')).toBeNull();
+  });
+
+  it('the store replacing the provisional average with the published one retires the badge and the note', () => {
+    // Acceptance 5, through the existing lifecycle: one door (`recordFxRate`, upserted by `rateKey`), no
+    // second mechanism. The badge and the note both have to go, or a published figure keeps wearing a
+    // provisional warning and the user learns to ignore the badge.
+    seedWith([expense({ category: 'sports_subscription' })], [EUR_ANNUAL_2026_PROVISIONAL, EUR_DAILY]);
+    renderPageWithProbe();
+
+    expect(screen.getByText(/531,00 RON/)).toBeInTheDocument();
+    expect(screen.getByText(/Provizoriu/)).toBeInTheDocument();
+    expect(document.querySelector('[data-provisional-ceiling-note]')).not.toBeNull();
+
+    act(() => storeRef!.recordFxRate(EUR_ANNUAL_2026_FINAL));
+
+    expect(screen.getByText(/540,00 RON/)).toBeInTheDocument();
+    expect(screen.queryByText(/Provizoriu/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Definitiv/)).toBeInTheDocument();
+    expect(document.querySelector('[data-provisional-ceiling-note]')).toBeNull();
+  });
+
+  it('an unresolved euro ceiling names the daily rates it declines to average, and what would resolve it', () => {
+    // §4 — the honest refusal stays on screen and says *why*. Twelve daily EUR rows for 2026 are in the
+    // register; the ceiling still will not strike, and the banner has to make that legible as a decision
+    // rather than as a missing datum. It also has to name the next step, which until B-137 it did not.
+    const dailies: FxRateRecord[] = Array.from({ length: 12 }, (_, i) => ({
+      ...EUR_DAILY,
+      rateDate: `2026-${String(i + 1).padStart(2, '0')}-05`,
+      rate: i < 7 ? '5.0000' : '6.0000',
+    }));
+    seedWith([expense({ category: 'sports_subscription' })], dailies);
+    renderPage();
+
+    expect(screen.getByText(/un plafon legal care nu poate fi măsurat/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/deține 12 cursuri zilnice pentru acest an și tot nu face o medie anuală/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Media anuală a anului plății se poate înregistra manual/)).toBeInTheDocument();
+  });
+
+  it('the ceiling line names the series, how the rate arrived and when, whether or not it is provisional', () => {
+    seedWith([expense({ category: 'sports_subscription' })], [EUR_ANNUAL_2026_FINAL, EUR_DAILY]);
+    renderPage();
+
+    expect(
+      screen.getByText(/serie BNR CURSA_EURM-TEST · introdus manual la 15\.01\.2027 · sursă https:\/\/example\.invalid/),
+    ).toBeInTheDocument();
   });
 });
 
