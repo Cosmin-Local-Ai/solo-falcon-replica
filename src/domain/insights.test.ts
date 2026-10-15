@@ -876,7 +876,7 @@ describe('fiscal date integrity insight (B-21)', () => {
       field: 'date',
       value: '2026-6-1',
       status: 'review_required',
-      reason: '„2026-6-1” pe câmpul „date” nu este o dată calendaristică reală',
+      reason: '„2026-6-1” pe câmpul „data documentului” nu este o dată calendaristică reală',
       ...overrides,
     };
   }

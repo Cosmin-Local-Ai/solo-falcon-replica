@@ -598,6 +598,21 @@ export const fiscalDateSource: Record<FiscalDateField, string> = {
 };
 
 /**
+ * B-139 — the two money fields a foreign-currency conversion names, in Romanian.
+ *
+ * `domain/fx/ledger.ts normaliseRecord` used to write
+ *   `(câmpul „${field}" al înregistrării …)`
+ * which put `valoareFaraTva` / `tva` on a person's screen: the third instance of one leak after B-55's
+ * `FiscalBase` and B-138's `CapBase`. The map is exhaustive over the field union the converter walks —
+ * `ledger.ts` keys its own `fields` array off `keyof typeof moneyFieldLabels` — so a money field added to
+ * the conversion is a compile error here before it is a raw identifier on a screen.
+ */
+export const moneyFieldLabels: Record<'valoareFaraTva' | 'tva', string> = {
+  valoareFaraTva: 'valoarea fără TVA',
+  tva: 'TVA',
+};
+
+/**
  * PG-2 — the money date: the day the money actually moved.
  *
  * `docs/ai/research/37_cash_basis_date_semantics.md` §5 fixes what this app may claim about the

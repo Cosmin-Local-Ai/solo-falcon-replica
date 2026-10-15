@@ -12,6 +12,8 @@
  * series page. A real USD rate would arrive through the store, not through a fixture.
  */
 import { describe, expect, it } from 'vitest';
+// B-139: the test asserts the Romanian wording of the money field, so it reads the same map the domain writes from.
+import { moneyFieldLabels } from '../../ui/copy/records';
 import { normaliseLedgerToRon, normaliseStoredLedger } from './ledger';
 import { fixtureRateProvider } from './provider';
 import type { FxRateRecord } from './rates';
@@ -161,7 +163,10 @@ describe('a foreign-currency record enters the lei base at the payment-date dail
       fixtureRateProvider([EUR_DAILY_2026_10_08]), // no USD row at all
     );
     expect(outcome.conversions).toHaveLength(0);
-    expect(outcome.unconverted[0].detail).toContain('tva');
+    // B-139: this used to read `toContain('tva')`, pinning the raw property name as the correct thing to
+    // show a person. It now pins the wording, and that the code is absent.
+    expect(outcome.unconverted[0].detail).toContain(moneyFieldLabels.tva);
+    expect(outcome.unconverted[0].detail).not.toContain('„tva”');
     expect(outcome.data.expenses[0].valoareFaraTva).toEqual(ron(500));
     expect(outcome.data.expenses[0].tva).toEqual(usd(19));
   });

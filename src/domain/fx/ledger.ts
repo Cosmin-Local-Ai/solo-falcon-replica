@@ -36,6 +36,9 @@ import { BASIS_CITATIONS, convertToRon } from './convert';
 import { isISOCalendarDate } from '../date';
 import { RateStore, type FxRateProvider, type RateCurrency } from './provider';
 import type { FxRateRecord } from './rates';
+// B-139: the money field a conversion failure names is spelled in Romanian, from the one map that owns
+// those words. `valoareFaraTva` is what the compiler reads; it is not what a person should read.
+import { moneyFieldLabels } from '../../ui/copy/records';
 
 /** The only basis a ledger amount may convert at. A record has one payment/receipt date, so it has one rate. */
 export const LEDGER_CONVERSION_BASIS = 'payment_date_daily' as const;
@@ -130,8 +133,10 @@ function normaliseRecord<T extends Revenue | Expense>(
   onDateSource: LedgerDateSource,
   provider: FxRateProvider,
 ): { record: T; conversion: LedgerConversion } | { detail: string } {
-  const fields: Array<'valoareFaraTva' | 'tva'> = ['valoareFaraTva', 'tva'];
-  const converted: Record<'valoareFaraTva' | 'tva', RonMoney> = {
+  // Keyed off the copy map so there is one definition of which money fields the converter walks: adding a
+  // field here without a Romanian wording is a compile error, not a raw identifier on a screen (B-139).
+  const fields: Array<keyof typeof moneyFieldLabels> = ['valoareFaraTva', 'tva'];
+  const converted: Record<keyof typeof moneyFieldLabels, RonMoney> = {
     valoareFaraTva: { amount: 0 as Bani, currency: 'RON' },
     tva: { amount: 0 as Bani, currency: 'RON' },
   };
@@ -148,7 +153,7 @@ function normaliseRecord<T extends Revenue | Expense>(
     if (!result.ok) {
       return {
         detail:
-          `${result.detail} (câmpul „${field}" al înregistrării ${record.id}, ${amount.currency})`,
+          `${result.detail} (câmpul „${moneyFieldLabels[field]}” al înregistrării ${record.id}, ${amount.currency})`,
       };
     }
     converted[field] = { amount: result.lei, currency: 'RON' };

@@ -3,6 +3,8 @@ import type { AppData, Expense, Revenue, SettingsState } from '../data/types';
 import type { PfaIdentity, PfaProfile } from './models';
 import { inPeriod, selectMonthly, selectYtd, revenueFiscalDate, expenseFiscalDate, auditFiscalDates, selectUnconvertedRecords } from './aggregation';
 import { addBani, lei, money, ron, subBani, type Bani } from './money';
+// B-139: the test asserts the Romanian wording, so it reads the same map the domain writes from.
+import { fiscalDateSource } from '../ui/copy/records';
 
 function identity(): PfaIdentity {
   return {
@@ -496,7 +498,11 @@ describe('auditFiscalDates — the exclusion report (B-21)', () => {
       status: 'review_required',
     });
     expect(report[0].reason).toContain('2026-6-1');
-    expect(report[0].reason).toContain('date');
+    // B-139: this assertion used to read `toContain('date')`, which pinned the raw property name as the
+    // correct thing to show a person — the same mistake B-138 recorded for `CapBase`. It now pins the
+    // Romanian wording, and that the code is absent.
+    expect(report[0].reason).toContain(fiscalDateSource.date);
+    expect(report[0].reason).not.toContain('„date”');
     expect(report[0].reason).toContain('două cifre');
 
     // Excluded from the aggregate…

@@ -3,6 +3,10 @@ import type { AppData, Expense, Revenue } from '../data/types';
 // aggregation pass and the estimate assembler cannot answer "is this receipt DPI?" differently.
 import { isDpiIncome } from './dpi';
 import { isISOCalendarDate, isoCalendarDateProblem, isoCalendarDateProblemText } from './date';
+// B-139: the field a fiscal date came from is named in Romanian, from the one map that owns those words.
+// Raw property names are what the compiler reads; they are not what a person reads. Same pattern as
+// `domain/insights.ts`, which already imports this map.
+import { fiscalDateSource } from '../ui/copy/records';
 import { addBani, isRon, lei, subBani, sumBani, type Bani, type CurrencyCode, type Money } from './money';
 import type { ThresholdKind, ThresholdSeverity } from './thresholds';
 
@@ -296,7 +300,7 @@ export function auditFiscalDates(data: AppData): ExcludedFiscalDate[] {
       value,
       status: 'review_required',
       reason:
-        `„${value === '' ? '(necompletat)' : value}” pe câmpul „${field}” nu este o dată calendaristică reală ` +
+        `„${value === '' ? '(necompletat)' : value}” pe câmpul „${fiscalDateSource[field]}” nu este o dată calendaristică reală ` +
         `(${isoCalendarDateProblemText(problem)}); înregistrarea este exclusă din agregat până la corectare.`,
     });
   };
