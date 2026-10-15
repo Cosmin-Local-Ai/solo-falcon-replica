@@ -231,3 +231,39 @@ open, and it is pinned unchanged by this brief (`dpi.path.test.ts`, the B-117 bl
    queued** as the next step, so this fork's step is v23 or must be ordered after B-145.
 2. Whichever way the fork goes, the art. 72 alin. (3) exclusion case has **no** quota to apply and
    therefore needs an explicit answer that neither representation currently gives in a figure.
+
+---
+
+## Closed by brief 72 (2026-10-15) — the prerequisite this note said the fork was waiting on
+
+Both open items above are now settled, and the note is widened rather than superseded because the asymmetry
+it records is still the reason the fork exists.
+
+**Fact 2 is closed.** The art. 72 alin. (3) set — *moștenitori*, *drept de suită*, *copia privată* — now has
+an explicit answer in a figure, and it is **B-150**: `selectYtd` splits the recorded art. 70 gross by
+`isDpiArt72Alin3Excluded` into a quota-bearing half (40 % of art. 72 alin. (2) / art. 72¹ alin. (1)) and an
+excluded half that gets **no quota** (net = gross) and is **outside CAS** at art. 137 alin. (1) lit. b¹)'s own
+definition of the category. One predicate, one cut, read by the engine, the coverage row and the withholding
+source alike. It landed in the same commit as the quota on purpose: a 40 % deduction the statute withholds is
+not a conservative estimate, it is a fabricated one.
+
+**The premise this note corrected — "the recorded documents reach no calculator at all" — is no longer true,
+and that was the point of brief 72.** `calcDpiFlatQuota` has a call site. The ANAF CAS 24.300 lei fixture is
+now reproduced **from a recorded gross** rather than by typing a net, which is the bar the fork was
+conditioned on.
+
+**One thing this note did not foresee, and the retirement brief now owes an answer for.** The computed path
+feeds the CAS cumul (art. 148 alin. (3)) and the art. 151 alin. (6) withholding source. It does **not** feed
+the art. 170 alin. (4) **CASS ladder**, and that is a boundary rather than an omission: `calcCassLadder`
+refuses a partial six-category answer set, and one computed DPI amount cannot answer the other five —
+inventing five zeros is the exact thing that refusal exists to prevent. So the typed net is still the only
+producer for the ladder limb, and retiring it without an answer for that limb would strand exactly the
+taxpayers this note warned about. That belongs with the consolidated chain brief (v21 → v22, with B-145,
+B-108 and B-140), not here.
+
+**And a fact about the statute's own arithmetic, found while building the fixture:** ANAF's 50.000-lei DPI
+net implies a gross of 83.333,33 lei, which is **not representable in bani** — 8.333.333 × 0,6 =
+4.999.999,8, and `calcDpiFlatQuota` refuses a non-integer net rather than rounding a base, because art. 66
+rounds sums owed, not bases. No representable gross yields exactly 50.000 lei net. The published CAS figures
+are unaffected, because the DPI net only has to clear the 24-SMN rung. Worth knowing before anyone pins a
+golden fixture against ANAF's gross and reads the 0,02-lei gap as a bug.
