@@ -18,7 +18,7 @@ import { Disclosure } from '../components/ui/Disclosure';
 import { FiscalDateNote } from '../components/ui/FiscalDateNote';
 import { InterpretationNote } from '../components/ui/InterpretationNote';
 import { ProvisionalCeilingNote } from '../components/ui/ProvisionalCeilingNote';
-import { copy, empty, expenseCategoryLabels, expenses as expensesCopy, fields, moneyDate, recordStatus, validation, vehicles as vehiclesCopy } from '../ui/copy';
+import { copy, empty, expenseCategoryLabels, expenses as expensesCopy, fields, moneyDate, recordStatus, validation, vehicles as vehiclesCopy, assets as assetsCopy } from '../ui/copy';
 import type { Vehicle } from '../data/types';
 
 /**
@@ -62,10 +62,12 @@ function OutOfEstimateNote({ reason }: { reason: CoverageReason | undefined }) {
   );
 }
 
-function ExpenseForm({ initial, vehicles, onSave, onClose }: {
+function ExpenseForm({ initial, vehicles, fixedAssets, onSave, onClose }: {
   initial?: Expense;
   /** PG-6c (D-VEH-3): the cars this register declares. Empty list => no control at all. */
   vehicles: Vehicle[];
+  /** B-108: the assets this register declares. Empty list => no control at all. */
+  fixedAssets: { id: string; label: string }[];
   onSave: (e: Omit<Expense, 'id'>) => void;
   onClose: () => void;
 }) {
@@ -98,6 +100,11 @@ function ExpenseForm({ initial, vehicles, onSave, onClose }: {
     // stored as an ABSENT field, never as null. Nothing here guesses the car from the supplier, from the
     // category token or from anything else — the link is written only by the person.
     vehicleId: initial?.vehicleId ?? '',
+    // B-108: '' means "linked to no fixed asset", which is a real state, not a half-filled field, and it is
+    // stored as an ABSENT field, never as null. Nothing here guesses the asset from the amount, the date,
+    // the supplier or the category token — art. 68 alin. (4) lit. d) connects the two routes to the same
+    // cost and gives no rule for attributing one to the other. The link is written only by the person.
+    assetId: initial?.assetId ?? '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -126,6 +133,7 @@ function ExpenseForm({ initial, vehicles, onSave, onClose }: {
       statusDetail: f.statusDetail || undefined,
       category: f.category === '' ? undefined : (f.category as Expense['category']),
       vehicleId: f.vehicleId === '' ? undefined : f.vehicleId,
+      assetId: f.assetId === '' ? undefined : f.assetId,
     });
   };
 
@@ -227,6 +235,21 @@ function ExpenseForm({ initial, vehicles, onSave, onClose }: {
             <span className="text-sm muted">{vehiclesCopy.expense.hint}</span>
           </div>
         )}
+        {/* B-108 — which fixed asset a hand-recorded cost belongs to. The control appears only once the
+            register declares at least one asset: with no assets declared there is nothing to link to, and
+            the depreciation conflict stays register-wide by fact rather than by choice. Once an asset
+            exists, this is the only place that link can be written — the chain step that opened the field
+            attributed nothing, and matching by amount, date or supplier stays the rejected inference. */}
+        {fixedAssets.length > 0 && (
+          <div className="field">
+            <label>{assetsCopy.expense.field}</label>
+            <select data-asset-select value={f.assetId} onChange={e => set('assetId', e.target.value)}>
+              <option value="">{assetsCopy.expense.none}</option>
+              {fixedAssets.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
+            </select>
+            <span className="text-sm muted">{assetsCopy.expense.hint}</span>
+          </div>
+        )}
         {f.status !== 'inregistrata' && (
           <div className="field full">
             <label>{fields.statusDetail}</label>
@@ -247,7 +270,7 @@ interface ExpensesProps {
 
 export default function Expenses({ initialTab, onTabChange, focusRecord }: ExpensesProps) {
   const store = useStore();
-  const { expenses, addExpense, updateExpense, deleteExpense, vehicles, toast } = store;
+  const { expenses, addExpense, updateExpense, deleteExpense, vehicles, fixedAssets, toast } = store;
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>(
     initialTab && TABS.some(t => t.key === initialTab) ? initialTab : 'registered'
   );
@@ -324,6 +347,12 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
   const vehicleLabelById = useMemo(
     () => new Map(vehicles.map(v => [v.id, v.label])),
     [vehicles],
+  );
+  // B-108 — the same discipline one register over: an id is not a name, and a link the person made has to
+  // come back to them as the asset they chose. Nothing here infers an asset for a cost that has none.
+  const assetLabelById = useMemo(
+    () => new Map(fixedAssets.map(a => [a.id, a.label])),
+    [fixedAssets],
   );
 
   // TASK 2d — a ceiling that WAS struck must be explained, not just applied. These are the numbers the
@@ -597,6 +626,14 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
                           {vehiclesCopy.expense.rowLabel}: {vehicleLabelById.get(e.vehicleId)}
                         </div>
                       )}
+                      {/* B-108: the asset the person linked this cost to, when they linked one. Shown for the
+                          same reason the car is shown — the link is what decided how wide the depreciation
+                          refusal reached, and a person cannot see that from an id. */}
+                      {e.assetId && assetLabelById.get(e.assetId) && (
+                        <div className="text-sm muted" data-expense-asset style={{ marginTop: 3 }}>
+                          {assetsCopy.expense.rowLabel}: {assetLabelById.get(e.assetId)}
+                        </div>
+                      )}
                       <OutOfEstimateNote reason={excludedReasonById.get(e.id)} />
                     </td>
                     <td>
@@ -628,6 +665,7 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
         <ExpenseForm
           initial={editing === 'new' ? undefined : editing}
           vehicles={vehicles}
+          fixedAssets={fixedAssets}
           onClose={() => setEditing(null)}
           onSave={e => {
             if (editing === 'new') { addExpense(e); toast('success', expensesCopy.added(e.nr)); }

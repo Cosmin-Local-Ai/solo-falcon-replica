@@ -1156,6 +1156,28 @@ export interface DepreciationConflict {
   expenseIds: string[];
   /** What posting this asset's schedule would have added. Reported, never added. */
   withheld: Bani;
+  /**
+   * B-108 — how far the refusal reaches, and why.
+   *
+   * `'register-wide'`: at least one typed depreciation expense names no asset, so the app cannot say what it
+   * covers and withholds every schedule. `'asset'`: every typed expense in the period named an asset, and
+   * this is the one it named. The two need different sentences on screen — one is a gap in the record, the
+   * other is a real collision — and printing the second as the first would tell the person to delete an
+   * expense that is not in conflict with anything.
+   */
+  scope: 'register-wide' | 'asset';
+}
+
+/**
+ * B-108 — a declared asset link that names no asset in the register.
+ *
+ * The person linked the expense; the asset is gone. That withholds no schedule — there is none — but it is
+ * not "no conflict" either: it is a link the record still carries and the person cannot see why nothing
+ * happens.
+ */
+export interface DepreciationDanglingLink {
+  expenseId: string;
+  assetId: string;
 }
 
 export interface DepreciationLeg {
@@ -1184,8 +1206,13 @@ export interface DepreciationLeg {
    * applied rule at disposal is exactly the inconsistency this acceptance criterion exists to prevent.
    */
   disposals: AssetDepreciationDisposal[];
-  /** What the estimate adds to the expense leg. `0` while a conflict stands. */
+  /** What the estimate adds to the expense leg. `0` while a conflict stands over every schedule. */
   total: Bani;
+  /**
+   * B-108 — typed depreciation expenses whose `assetId` names an asset the register no longer holds.
+   * Reported; they withhold nothing.
+   */
+  danglingLinks: DepreciationDanglingLink[];
 }
 
 /**
@@ -1201,12 +1228,24 @@ export interface DepreciationLeg {
  * expenses, and posts nothing from the register — so the estimate stays exactly where it was and the user
  * is told what to fix rather than being quietly moved.
  *
- * **Why the conflict is register-wide rather than per asset.** `Expense` carries a `vehicleId` and no
- * `assetId`: the app holds no link between a typed expense and an asset, and inventing one by matching
- * amounts or dates would be an inference from the register to the expense side that art. 68 alin. (4)
- * lit. d) does not license. Without attribution the app cannot say *which* asset a typed depreciation
- * expense covers, so it cannot say that any one schedule is safe to post on top of it. It therefore
- * withholds every schedule while any typed depreciation expense stands in the period, and says so.
+ * **Why the conflict was register-wide, and what narrowed it (B-108).** `Expense` used to carry a
+ * `vehicleId` and no `assetId`: the app held no link between a typed expense and an asset, and inventing one
+ * by matching amounts or dates would be an inference from the register to the expense side that art. 68
+ * alin. (4) lit. d) does not license. Without attribution the app could not say *which* asset a typed
+ * depreciation expense covers, so it could not say that any one schedule was safe to post on top of it — and
+ * it withheld every schedule in the register while any typed depreciation expense stood in the period. That
+ * refusal was honest but broader than the truth: one typed line silenced the schedules of assets it had
+ * nothing to do with.
+ *
+ * **What `assetId` changes, and what it does not.** A typed expense that NAMES an asset withholds that
+ * asset's schedule and leaves the others to post. A typed expense that names nothing still withholds
+ * everything, because the app genuinely cannot say what it covers — and the coverage row says so, in those
+ * words. The link is written only by the person: the v22→v23 chain step opens the field and attributes
+ * nothing, and matching by amount, date or supplier stays the rejected inference it was.
+ *
+ * **A link that points at nothing is reported, not repaired and not ignored.** An `assetId` naming no asset
+ * in the register withholds no schedule — there is no schedule left to withhold — but it is a fact the person
+ * recorded, so it surfaces as its own coverage row rather than quietly becoming "no conflict".
  *
  * **Why the hand-recorded expense is not deleted here.** It is an ordinary register row and the classifier
  * decides its treatment; `EXPENSE_DEPRECIATION_BUSINESS_ASSET_2026` is correct and untouched. Withholding
@@ -1220,7 +1259,7 @@ export function selectAssetDepreciation(
 ): DepreciationLeg {
   const fiscalYear = data.profile?.fiscalYear ?? 0;
   const empty: DepreciationLeg = {
-    fiscalYear, lines: [], conflicts: [], refused: [], disposals: [], total: lei(0),
+    fiscalYear, lines: [], conflicts: [], refused: [], disposals: [], danglingLinks: [], total: lei(0),
   };
   // No rule package selected for this year means no expensing threshold, no ceiling and no coefficients.
   // The year's own missing-release refusal already says that; this adds a second `durata_lipsa`-shaped
@@ -1236,28 +1275,66 @@ export function selectAssetDepreciation(
   // The hand-recorded half, counted over the SAME period filter the deductible set uses, so the two paths
   // cannot disagree about which records are in the year. Counted, not summed: the collision is a fact about
   // existence, and the amounts are not compared — comparing them would be picking the larger by another name.
-  const handIds = (data.expenses ?? [])
-    .filter(
-      (e) =>
-        e.status === 'inregistrata' &&
-        e.category === 'depreciation_business_asset' &&
-        inPeriod(expenseFiscalDate(e), asOfDate, fiscalYear),
-    )
-    .map((e) => e.id);
+  const hand = (data.expenses ?? []).filter(
+    (e) =>
+      e.status === 'inregistrata' &&
+      e.category === 'depreciation_business_asset' &&
+      inPeriod(expenseFiscalDate(e), asOfDate, fiscalYear),
+  );
+  const handIds = hand.map((e) => e.id);
 
-  if (handIds.length > 0) {
-    return {
-      fiscalYear,
-      lines: [],
-      conflicts: schedule.posted.map((p) => ({
+  if (hand.length > 0) {
+    // B-108 — the link the person declared is the only thing that may narrow this. An expense with no
+    // `assetId` says nothing about which asset it covers, so it withholds every schedule exactly as before;
+    // an expense that names an asset withholds that asset and leaves the rest to post.
+    const unlinked = hand.filter((e) => e.assetId === undefined);
+    const linkedByAsset = new Map<string, string[]>();
+    for (const e of hand) {
+      if (e.assetId === undefined) continue;
+      const ids = linkedByAsset.get(e.assetId) ?? [];
+      ids.push(e.id);
+      linkedByAsset.set(e.assetId, ids);
+    }
+    // A link naming no asset in the register at all. It withholds nothing — there is no schedule behind it —
+    // and it is not silently folded into "no conflict": it is the person's own recorded fact.
+    const assetIdsInRegister = new Set((data.fixedAssets ?? []).map((a) => a.id));
+    const danglingLinks = hand
+      .filter((e) => e.assetId !== undefined && !assetIdsInRegister.has(e.assetId!))
+      .map((e) => ({ expenseId: e.id, assetId: e.assetId! }));
+
+    const registerWide = unlinked.length > 0;
+    const conflicts = schedule.posted
+      .filter((p) => registerWide || linkedByAsset.has(p.assetId))
+      .map((p) => ({
         assetId: p.assetId,
         label: p.label,
-        expenseIds: handIds,
+        // Register-wide, the whole typed set is the suspect; per-asset, only the lines that name it.
+        expenseIds: registerWide ? handIds : (linkedByAsset.get(p.assetId) ?? []),
         withheld: p.deductible,
-      })),
+        scope: registerWide ? ('register-wide' as const) : ('asset' as const),
+      }));
+    // Every posted schedule withheld, or only the named ones? `lines` is what survives, and it is empty
+    // exactly when nothing survives — the two cannot disagree about that.
+    const withheldIds = new Set(conflicts.map((c) => c.assetId));
+    const lines = schedule.posted
+      .filter((p) => !withheldIds.has(p.assetId))
+      .map((p) => ({
+        assetId: p.assetId,
+        label: p.label,
+        months: p.months,
+        uncapped: p.uncapped,
+        deductible: p.deductible,
+        lost: p.lost,
+        branch: p.branch,
+      }));
+    return {
+      fiscalYear,
+      lines,
+      conflicts,
       refused: schedule.refused,
       disposals: schedule.disposals,
-      total: lei(0),
+      danglingLinks,
+      total: sumBani(lines.map((l) => l.deductible)),
     };
   }
 
@@ -1276,6 +1353,7 @@ export function selectAssetDepreciation(
     conflicts: [],
     refused: schedule.refused,
     disposals: schedule.disposals,
+    danglingLinks: [],
     total: sumBani(lines.map((l) => l.deductible)),
   };
 }
@@ -1297,6 +1375,18 @@ export function depreciationCoverageGaps(leg: DepreciationLeg | null | undefined
   if (leg === null || leg === undefined) return [];
   const out: EstimateCoverageGap[] = [];
   for (const c of leg.conflicts) {
+    // B-108 — the two scopes need two sentences. Printing the register-wide sentence over a per-asset
+    // collision would tell the person to delete an expense that is in conflict with exactly one asset, and
+    // the fix for that one is to leave the other schedules alone.
+    const why =
+      c.scope === 'asset'
+        ? `Cheltuiala tastată care declanșează conflictul este legată de acest bun — este legătura pe care ` +
+          `ai făcut-o, nu o presupunere a aplicației. Planurile celorlalte bunuri din registru nu sunt ` +
+          `atinse: ele se postează normal.`
+        : 'Inregistrarea nu face legătura dintre o cheltuială și un mijloc fix, deci aplicația nu poate ' +
+          'să spună ce bun acoperă cheltuiala tastată; până când această legătură există, niciun plan din ' +
+          'registru nu este postat. Fă legătura pe cheltuială — alege bunul din formularul cheltuielii — ca ' +
+          'să se poată posta planurile bunurilor care nu sunt în conflict.';
     out.push({
       recordId: `asset:${c.assetId}`,
       kind: 'profile',
@@ -1310,10 +1400,26 @@ export function depreciationCoverageGaps(leg: DepreciationLeg | null | undefined
         'Ambele căi ajung la partea de cheltuieli a aceluiași bun prin art. 68 alin. (4) lit. d); adunate, ' +
         'aceeași amortizare s-ar deduce de două ori. Aplicația nu adună cele două, nu alege valoarea mai ' +
         'mare și nu preferă în tăcere niciuna: planul calculat nu este postat, iar cifra estimării nu se ' +
-        'mișcă. Inregistrarea nu face legătura dintre o cheltuială și un mijloc fix, deci aplicația nu poate ' +
-        'să spună ce bun acoperă cheltuiala tastată; până când această legătură există, niciun plan din ' +
-        'registru nu este postat. Ce poți face: șterge cheltuiala cu amortizarea înregistrată manual și ' +
-        'lasă registrul să calculeze, sau păstrează cheltuiala și nu mai aștepta nimic din registru.',
+        `mișcă. ${why} Ce poți face: șterge cheltuiala cu amortizarea înregistrată manual și lasă ` +
+        'registrul să calculeze, sau păstrează cheltuiala și nu mai aștepta nimic de la bunul acesta.',
+    });
+  }
+  // B-108 — a link the person made that names no asset the register still holds. It withholds nothing, so it
+  // is not a conflict; it is a record pointing at nothing, and silence about it would read as "the link did
+  // its job".
+  for (const d of leg.danglingLinks) {
+    out.push({
+      recordId: `expense:${d.expenseId}:asset-link`,
+      kind: 'profile',
+      reason: 'fact_missing',
+      amount: null,
+      currency: 'RON',
+      fixTarget: '/expenses',
+      detail:
+        `Cheltuiala ${d.expenseId} este legată de un mijloc fix care nu mai este în registru ` +
+        `(id ${d.assetId}). Aplicația nu repară legătura și nu alege alt bun în locul lui: o sumă legată de ` +
+        'un bun șters nu poate fi comparată cu niciun plan de amortizare, deci nu blochează nicio cheltuială ' +
+        'din registru. Ce poți face: leagă cheltuiala de un bun care există sau elimină legătura.',
     });
   }
   for (const r of leg.refused) {

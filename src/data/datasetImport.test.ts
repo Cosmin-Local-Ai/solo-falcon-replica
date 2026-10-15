@@ -83,7 +83,7 @@ describe('import — an older file runs the existing chain (acceptance 3)', () =
     if (!outcome.ok) return;
     expect(outcome.fromVersion).toBe(DATA_VERSION_VAT_RETURNS);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
-    expect(outcome.stepsApplied).toEqual(['lease-facts', 'document-blob-ref', 'efactura-deadline']);
+    expect(outcome.stepsApplied).toEqual(['lease-facts', 'document-blob-ref', 'efactura-deadline', 'expense-asset-link']);
     expect(outcome.data.version).toBe(CURRENT_DATA_VERSION);
   });
 
@@ -95,7 +95,7 @@ describe('import — an older file runs the existing chain (acceptance 3)', () =
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     // The chain is the same chain the load path runs — no import-specific migration path exists.
     expect(outcome.stepsApplied[0]).toBe('activity-family');
-    expect(outcome.stepsApplied[outcome.stepsApplied.length - 1]).toBe('efactura-deadline');
+    expect(outcome.stepsApplied[outcome.stepsApplied.length - 1]).toBe('expense-asset-link');
   });
 
   it('reads the envelope\'s own timestamp when it declares one, and never invents one', () => {

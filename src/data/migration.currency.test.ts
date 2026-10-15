@@ -5,8 +5,8 @@ import {
   // B-105 — the version that opens `profile.leaseFactsYears`.
   DATA_VERSION_LEASE_FACTS,
   // PG-11 — the head of the chain: the shape declaration that lets a document carry a blob pointer.
-  DATA_VERSION_DOCUMENT_BLOB_REF,
   DATA_VERSION_EFACTURA_DEADLINE,
+  DATA_VERSION_EXPENSE_ASSET_LINK,
   DATA_VERSION_RULE_SET_DIGEST,
   MIGRATION_CHAIN,
   migratePersistedData,
@@ -126,11 +126,11 @@ describe('record-currency is a no-op in value', () => {
     const after = migrateRecordCurrencyV10(v9Payload());
     expect(after.version).toBe(DATA_VERSION_RECORD_CURRENCY);
     // PG-6g re-pin (replaced, not deleted): this step is no longer the head of the chain — v11 … v18, v19,
-    // v20, v21 and now v22 follow it. Unchanged is that the step itself stamps exactly 10 and nothing else.
-    // Brief 76 states both edges again, because "the head moved by exactly one" is a property worth a test:
-    // v21 is now the second-to-last rung and v22 is what this build writes.
-    expect(MIGRATION_CHAIN[MIGRATION_CHAIN.length - 1]!.from).toBe(DATA_VERSION_DOCUMENT_BLOB_REF);
-    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_EFACTURA_DEADLINE);
+    // v20, v21, v22 and now v23 follow it. Unchanged is that the step itself stamps exactly 10 and nothing
+    // else. Brief 76 states both edges again, because "the head moved by exactly one" is a property worth a
+    // test: v22 is now the second-to-last rung and v23 is what this build writes.
+    expect(MIGRATION_CHAIN[MIGRATION_CHAIN.length - 1]!.from).toBe(DATA_VERSION_EFACTURA_DEADLINE);
+    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_EXPENSE_ASSET_LINK);
   });
 
   it('is idempotent: running it again on a v10 payload changes nothing', () => {
@@ -225,19 +225,19 @@ describe('the step touches only the two collections it names', () => {
 describe('the chain', () => {
   it('runs record-currency as its own step, from 9 to 10', () => {
     // PG-5 re-pin (replaced, not deleted): this used to assert record-currency was the FINAL step. It is
-    // now step 10 of 22 — the annual-filing, activity-family, accommodation, occupancy-sheet, vehicle-facts,
+    // now step 10 of 23 — the annual-filing, activity-family, accommodation, occupancy-sheet, vehicle-facts,
     // other-income-ladder, fixed-assets, input-vat-registration, vat-returns, lease-facts,
-    // document-blob-ref and efactura-deadline steps follow it — so the assertion moves from "last" to
-    // "present at exactly this edge", which is the property this file cares about. The offset below is
-    // counted from the END of the chain, so a step appended by a later phase moves it by one; that is the
-    // whole point of writing it as an offset rather than a literal index.
+    // document-blob-ref, efactura-deadline and expense-asset-link steps follow it — so the assertion moves
+    // from "last" to "present at exactly this edge", which is the property this file cares about. The offset
+    // below is counted from the END of the chain, so a step appended by a later phase moves it by one; that
+    // is the whole point of writing it as an offset rather than a literal index.
     const step = MIGRATION_CHAIN.find((s) => s.name === 'record-currency')!;
     expect(step.from).toBe(DATA_VERSION_RULE_SET_DIGEST);
     expect(step.to).toBe(DATA_VERSION_RECORD_CURRENCY);
     // Brief 76 re-pin (replaced, not deleted): the chain grew by one step again, so the offset from the end
     // moves by one. The property is unchanged — record-currency still sits at exactly this edge, and the
     // offset is written from the END on purpose so a later phase only has to move this one number.
-    expect(MIGRATION_CHAIN.indexOf(step)).toBe(MIGRATION_CHAIN.length - 13);
+    expect(MIGRATION_CHAIN.indexOf(step)).toBe(MIGRATION_CHAIN.length - 14);
   });
 
   it('a v9 payload needs one step per version above it', () => {
@@ -264,6 +264,7 @@ describe('the chain', () => {
     'document-blob-ref',
     // B-140 — and for `efactura-deadline`: it retires one settings preference and touches no amount.
     'efactura-deadline',
+    'expense-asset-link',
     ]);
   });
 
@@ -284,7 +285,7 @@ describe('the chain', () => {
     expect(outcome.migrated).toBe(true);
     expect(outcome.stepsApplied).toEqual(['annual-filing', 'activity-family', 'accommodation-facts', 'occupancy-sheet', 'vehicle-facts', 'other-income-ladder', 'fixed-assets', 'input-vat-registration', 'vat-returns', 'lease-facts', // PG-11 — appended after v20; it fills nothing in.
       'document-blob-ref', // B-140 — appended after v21; it retires a preference and moves no amount.
-      'efactura-deadline']);
+      'efactura-deadline', 'expense-asset-link']);
     expect(JSON.stringify(outcome.data.revenues.map(r => [r.valoareFaraTva, r.tva]))).toBe(amountsBefore);
     expect(outcome.data.version).toBe(CURRENT_DATA_VERSION);
   });

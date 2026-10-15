@@ -425,8 +425,32 @@ export const DATA_VERSION_DOCUMENT_BLOB_REF = 21;
  * runs *after* the data holding the value is gone proves nothing.
  */
 export const DATA_VERSION_EFACTURA_DEADLINE = 22;
+/**
+ * B-108 — an expense may now name the fixed asset it belongs to.
+ *
+ * **What this step opens, and what it refuses to fill in.** `Expense.assetId` appears on the record. The
+ * step writes the version and nothing else.
+ *
+ * The reason the field exists is a refusal that is currently broader than the truth. There are two routes to
+ * the expense side of one capital asset — the schedule the fixed-asset register computes, and a hand-typed
+ * `depreciation_business_asset` expense — and art. 68 alin. (4) lit. d) is the provision that connects them.
+ * With no link on the expense, `selectAssetDepreciation` cannot tell which asset a typed line covers, so it
+ * withholds **every** computed schedule in the register as soon as **one** typed depreciation expense
+ * exists. One hand-typed line can therefore silence the schedules of assets it has nothing to do with.
+ *
+ * **Why nothing is backfilled.** Matching a line to an asset by amount, by date or by supplier is the
+ * inference that was already rejected as one art. 68 alin. (4) lit. d) does not license, and that rejection
+ * stands. A guessed link would do the opposite of what the field is for: it would narrow the refusal on a
+ * fiction, which is worse than a refusal that is honest about being broad. So the person links the expense —
+ * the same control, and the same standing, as `vehicleId` — and until they do, the conflict stays
+ * register-wide and the coverage row says exactly that.
+ *
+ * A payload that already carries `assetId` keys is left untouched, which is what makes re-running the step a
+ * no-op rather than a wipe.
+ */
+export const DATA_VERSION_EXPENSE_ASSET_LINK = 23;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_EFACTURA_DEADLINE;
+export const CURRENT_DATA_VERSION = DATA_VERSION_EXPENSE_ASSET_LINK;
 
 export interface MigrationStep {
   readonly from: number;
@@ -1184,6 +1208,20 @@ export function migrateEfacturaDeadlineV22(data: PersistedAppData): PersistedApp
   };
 }
 
+/**
+ * v22 → v23 (`expense-asset-link`). Opens `Expense.assetId` by writing nothing. See
+ * `DATA_VERSION_EXPENSE_ASSET_LINK` for the refusal this field is meant to narrow and for the inference this
+ * step refuses to make.
+ *
+ * The body is deliberately the version stamp and nothing else. There is no stored fact from which an asset
+ * link could be derived without guessing — not the amount, not the date, not the supplier, not the category
+ * token — and a step that wrote one would narrow the conflict detection on a fiction. A payload that already
+ * carries `assetId` keeps it untouched.
+ */
+export function migrateExpenseAssetLinkV23(data: PersistedAppData): PersistedAppData {
+  return { ...data, version: DATA_VERSION_EXPENSE_ASSET_LINK };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -1360,6 +1398,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Preferința „când transmiți factura” a fost retrasă. Ecranul oferea termenul ca pe o alegere și termenul oferit era greșit: „În decurs de 2 zile de la emitere”, în timp ce sursa citată de aplicație — OUG 120/2021 art. 10 alin. (7), modificată de OUG 89/2025 pct. 2 art. X, în vigoare de la 01.01.2026 — spune 5 ZILE LUCRĂTOARE de la data emiterii. Niciun răspuns vechi nu a fost transformat într-un răspuns nou: „2 zile / imediat” răspund la ÎNCÂND, „manual / automat” răspund la CUM, și nicio corespondență între ele nu este susținută de ce a înregistrat persoana. A alege una în locul ei ar pune în gura contribuabilului o frază pe care nu a scris-o niciodată. Cheia ștearsă este singura faptă pierdută de acest pas: nicio sumă, niciun termen și nicio trimitere nu se calculau din ea, iar cardul e-Factura spune pe ecran ce a fost alegerea, care este termenul legal și că aplicația nu a ales nimic în locul tău. „dateContact” rămâne neschimbat. Câmpul a rămas acceptat la citire în toate versiunile, pentru că altfel poarta de încărcare — nu pasul cu motivul înregistrat — ar fi fost cea care distruge valoarea.',
     apply: migrateEfacturaDeadlineV22,
+  },
+  {
+    from: DATA_VERSION_EFACTURA_DEADLINE,
+    to: DATA_VERSION_EXPENSE_ASSET_LINK,
+    name: 'expense-asset-link',
+    summary:
+      'O cheltuială poate înregistra acum mijlocul fix căruia îi aparține, prin legătura pe care o face persoana. Nimic nu a fost completat în acest pas și nimic nu putea fi completat: art. 68 alin. (4) lit. d) leagă cele două căi de calcul — planul de amortizare și cheltuiala tastată de mână — dar nu dă nicio regulă prin care o linie tastată să fie atribuită unui bun. O legătură ghicită după sumă, după dată sau după furnizor ar îngusta refuzul pe o ficțiune, ceea ce este mai grav decât un refuz care spune sincer că e larg. Până când legătura există, conflictul rămâne la nivelul registrului, iar aplicația spune asta pe ecran. Un payload care are deja cheia `assetId` o păstrează neschimbată.',
+    apply: migrateExpenseAssetLinkV23,
   },
 ];
 

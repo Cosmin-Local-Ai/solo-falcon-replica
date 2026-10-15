@@ -121,6 +121,24 @@ export const assets = {
     labelRequired: 'Scrie o denumire pentru bun.',
   },
 
+  // ── Linking an expense to an asset (B-108) ───────────────────────────────
+  //
+  // The register computes a schedule; a hand-typed `depreciation_business_asset` expense records the same
+  // cost a second way. art. 68 alin. (4) lit. d) connects the two routes but gives no rule for saying which
+  // asset a typed line covers, so the link is only ever the person's own. Without it the conflict stays
+  // register-wide — a refusal that is honest about being broad — and with it the refusal narrows to the one
+  // asset that was named. The v22→v23 chain step opens the field and attributes nothing.
+  expense: {
+    field: 'Mijlocul fix căruia îi aparține cheltuiala',
+    none: '— niciun mijloc fix —',
+    hint:
+      'Leagă cheltuiala de bunul căruia îi aparține, ca aplicația să poată spune al cărui plan de ' +
+      'amortizare i se opune. Aplicația nu ghicește bunul după sumă, după dată, după furnizor sau după ' +
+      'categoria de cheltuială: art. 68 alin. (4) lit. d) leagă cele două căi de calcul, dar nu dă nicio ' +
+      'regulă de atribuire. Cât timp legătura lipsește, refuzul acoperă tot registrul și aplicația spune asta.',
+    rowLabel: 'Bun legat',
+  },
+
   // ── The schedule ─────────────────────────────────────────────────────────
   schedule: {
     heading: 'Planul de amortizare',

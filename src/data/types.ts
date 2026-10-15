@@ -162,6 +162,27 @@ export interface Expense {
    */
   vehicleId?: string;
   /**
+   * B-108 — the fixed asset this expense belongs to, by id.
+   *
+   * The register has two routes to the expense side of one capital asset: the depreciation schedule the
+   * fixed-asset record computes, and a hand-typed `depreciation_business_asset` expense. art. 68 alin. (4)
+   * lit. d) lets the taxpayer use the Titlul II amortisation rules for an asset whose cost was recorded as
+   * an expense, but it does not license deciding **which** asset a typed line covers. So until this field
+   * existed the collision could only be detected register-wide, and the refusal was broader than the truth:
+   * one typed expense withheld the computed schedules of every unrelated asset in the register.
+   *
+   * **Optional, and never invented by a migration or by the app.** The v22→v23 step opens the field and
+   * fills in nothing — matching a line to an asset by amount, by date or by supplier is the inference that
+   * was already rejected, and it stays rejected. The person links the expense, in the same control that
+   * links a running cost to a car (`vehicleId` above), and until they do the conflict stays register-wide
+   * and says so.
+   *
+   * An id that no longer names an asset (the asset was deleted) is not repaired and does not withhold any
+   * schedule — there is no schedule left to withhold — but it is reported, because a link the person made
+   * that points at nothing is a fact about the record, not a defect to paper over.
+   */
+  assetId?: string;
+  /**
    * PG-6f (B-30) — the facts this line's **input VAT** decision needs, declared by the person.
    *
    * They live on the record and not on the profile because every one of the switches art. 297-300 asks

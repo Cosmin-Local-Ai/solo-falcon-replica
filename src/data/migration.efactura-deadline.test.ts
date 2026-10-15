@@ -85,8 +85,8 @@ export type _b140_checks = [
   // The stored union still names the retired token, so a payload carrying it is a payload we can open.
   Assert<'2-zile' extends (typeof EFACTURA_TRIMITERE_READ_VALUES)[number] ? true : false>,
   Assert<'imediat' extends (typeof EFACTURA_TRIMITERE_READ_VALUES)[number] ? true : false>,
-  // And the head of the chain has moved: v22 is what this build writes.
-  Assert<typeof CURRENT_DATA_VERSION extends typeof DATA_VERSION_EFACTURA_DEADLINE ? true : false>,
+  // And the head of the chain has moved past this step: v22 is a rung, not the head any more.
+  Assert<typeof DATA_VERSION_EFACTURA_DEADLINE extends typeof CURRENT_DATA_VERSION ? false : true>,
 ];
 
 describe('B-140 — the e-Factura sending-deadline value', () => {
@@ -151,7 +151,7 @@ describe('B-140 — the e-Factura sending-deadline value', () => {
 
     const outcome = migratePersistedData(parsed.data);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
-    expect(outcome.stepsApplied).toEqual(['efactura-deadline']);
+    expect(outcome.stepsApplied).toEqual(['efactura-deadline', 'expense-asset-link']);
 
     // After the chain the value is gone from the payload, and it is gone because the step dropped it.
     expect('trimitere' in outcome.data.settings.eFactura).toBe(false);
@@ -183,8 +183,9 @@ describe('B-140 — the e-Factura sending-deadline value', () => {
     const twice = migrateEfacturaDeadlineV22(once);
     expect(twice.settings.eFactura).toEqual(once.settings.eFactura);
     expect(twice.version).toBe(DATA_VERSION_EFACTURA_DEADLINE);
-    // Re-running the chain at the head applies nothing.
-    expect(migratePersistedData(twice).stepsApplied).toEqual([]);
+    // Re-running the chain at the head applies nothing. (`twice` sits at v22, so the one rung above it still
+    // runs — the assertion about this step is that it does not run twice.)
+    expect(migratePersistedData(twice).stepsApplied).toEqual(['expense-asset-link']);
   });
 
   it('the on-screen contradiction is gone: no copy offers 2 days, and the 5-working-day citation stands', async () => {

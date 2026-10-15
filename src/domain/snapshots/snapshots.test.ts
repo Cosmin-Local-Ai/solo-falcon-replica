@@ -117,10 +117,11 @@ const leg: DepreciationLeg = {
   conflicts: [],
   refused: [],
   disposals: [],
+  danglingLinks: [],
   total: lei(6000),
 };
 
-const emptyLeg: DepreciationLeg = { fiscalYear: 2025, lines: [], conflicts: [], refused: [], disposals: [], total: lei(0) };
+const emptyLeg: DepreciationLeg = { fiscalYear: 2025, lines: [], conflicts: [], refused: [], disposals: [], danglingLinks: [], total: lei(0) };
 
 // --- Tests ------------------------------------------------------------------
 
@@ -575,6 +576,7 @@ describe('createCalculationSnapshot — assetRegisterHash', () => {
       conflicts: [],
       refused: [],
       disposals: [],
+      danglingLinks: [],
       total: lei(6000),
     };
     const a = await createCalculationSnapshot({

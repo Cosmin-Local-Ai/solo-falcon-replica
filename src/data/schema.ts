@@ -173,6 +173,11 @@ export const expenseSchema = z.object({
   // silently become unattributed. Optional and never defaulted: the v14→v15 step invents no vehicle and
   // attributes nothing, exactly as v6 did for `category`.
   vehicleId: z.string().optional(),
+  // B-108: which fixed asset this expense belongs to. Declared because **zod strips undeclared keys** — an
+  // undeclared link would be erased on the next load and the conflict would silently widen back to
+  // register-wide. Optional and never defaulted: the v22→v23 step opens the field and attributes nothing,
+  // exactly as v14→v15 did for `vehicleId` and v5→v6 for `category`.
+  assetId: z.string().optional(),
   // PG-6f (B-30): the per-line input-VAT facts. Declared because **zod strips undeclared keys** — an
   // undeclared block would be erased on the next load and the line would silently fall back to
   // „unresolved”. Every inner field is `.optional()` with no `.default()` anywhere: an absent answer is

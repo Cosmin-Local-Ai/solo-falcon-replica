@@ -94,12 +94,12 @@ describe('the chain around it', () => {
     // still a one-step gap, and `document-blob-ref` still sits at that edge — it is now the second-to-last
     // rung rather than the last.
     expect(DATA_VERSION_DOCUMENT_BLOB_REF - DATA_VERSION_LEASE_FACTS).toBe(1);
-    const previous = MIGRATION_CHAIN[MIGRATION_CHAIN.length - 2]!;
+    const previous = MIGRATION_CHAIN[MIGRATION_CHAIN.length - 3]!;
     expect(previous.from).toBe(DATA_VERSION_LEASE_FACTS);
     expect(previous.to).toBe(DATA_VERSION_DOCUMENT_BLOB_REF);
     expect(previous.name).toBe('document-blob-ref');
     const last = MIGRATION_CHAIN[MIGRATION_CHAIN.length - 1]!;
-    expect(last.from).toBe(DATA_VERSION_DOCUMENT_BLOB_REF);
+    expect(last.from).toBe(CURRENT_DATA_VERSION - 1);
     expect(last.to).toBe(CURRENT_DATA_VERSION);
   });
 
@@ -118,13 +118,13 @@ describe('the chain around it', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it('a v20 payload runs this step and the one that followed it, and no byte moves', () => {
-    // Brief 76 re-pin: v20 used to run exactly one step. It now runs two — `document-blob-ref`, then the
-    // `efactura-deadline` retirement. The guarded property is untouched: this step still declares a shape
-    // and relocates nothing.
+  it('a v20 payload runs this step and the two that followed it, and no byte moves', () => {
+    // Brief 76 re-pin: v20 used to run exactly one step. It now runs three — `document-blob-ref`, the
+    // `efactura-deadline` retirement and the `expense-asset-link` opening. The guarded property is
+    // untouched: this step still declares a shape and relocates nothing.
     const outcome = migratePersistedData(v20Payload());
     expect(outcome.fromVersion).toBe(DATA_VERSION_LEASE_FACTS);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
-    expect(outcome.stepsApplied).toEqual(['document-blob-ref', 'efactura-deadline']);
+    expect(outcome.stepsApplied).toEqual(['document-blob-ref', 'efactura-deadline', 'expense-asset-link']);
   });
 });
