@@ -211,8 +211,13 @@ export const chart = {
     expenses: 'Cheltuieli',
     net: 'Profit net',
   },
-  /** The estimate is not computed: say so, then give the engine's reason. */
-  taxNoteReview: 'Estimare impozit: revizuire necesară —',
+  /**
+   * B-106 — the estimate is not computed and the engine said why. The chart no longer quotes that reason:
+   * it is rendered once, in the estimate section, beside the figure the refusal took away. This is the
+   * same rule PG-6a set for `taxNoteRefused` below; before B-106 the withheld conclusion was the one state
+   * whose sentence lived only here, while the hero announced it and pointed down the page.
+   */
+  taxNoteReview: 'Estimare impozit: motorul a refuzat estimarea — refuzul lui este redat integral în secțiunea Estimare impozit.',
   /**
    * PG-6a — a scenario refusal. The chart does not carry this one: the rule's own sentence is rendered
    * once, in the estimate section, beside the control that fixes it. Repeating a cited paragraph twice on

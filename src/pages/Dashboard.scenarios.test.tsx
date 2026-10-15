@@ -91,13 +91,17 @@ describe('the hero renders a scenario refusal', () => {
     expect(badge?.textContent).toBe(copy.estimateState.badges.refused);
     expect(badge?.className).toContain('badge-danger');
 
-    // No number beside the refusal. `—` is the no-value token, not a zero: a zero would be a fiscal
-    // claim, and it is the exact failure B-28 registered.
-    expect(card!.querySelector('.tax-hero-value')?.textContent).toBe(copy.ui.noValue);
+    // B-28 RE-PIN. This used to assert the no-value token `—` beside the refusal, and the comment called
+    // the loading/refusal ambiguity "a product defect, registered as B-28". It is fixed: `—` is the token
+    // for „not known yet” and a refusal prints its own word instead. The assertion now proves the thing it
+    // always meant to prove — that the slot holds no number, and that what stands in for the number is the
+    // refusal, not a wait.
+    expect(card!.querySelector('.tax-hero-value')?.textContent).toBe(copy.estimateState.noFigure.refused);
+    expect(card!.querySelector('.tax-hero-value')?.textContent).not.toBe(copy.ui.noValue);
     const cockpit = [...document.querySelectorAll('.stat-card')].find((c) =>
       c.textContent?.includes(copy.dashboard.cards.taxEstimate),
     );
-    expect(cockpit?.querySelector('.value')?.textContent).toBe(copy.ui.noValue);
+    expect(cockpit?.querySelector('.value')?.textContent).toBe(copy.estimateState.noFigure.refused);
 
     // The fix link is the registry's resolved route, not a string the page invented.
     const link = card!.querySelector('[data-scenario-refusal] a');

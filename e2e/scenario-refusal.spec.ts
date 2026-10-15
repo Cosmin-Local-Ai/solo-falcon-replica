@@ -68,12 +68,15 @@ test.describe('PG-6a — a refusal replaces the number and says how to fix it', 
     );
 
     // No number beside the refusal, in the hero or in the cockpit strip. A `0` here would be a fiscal
-    // claim about a calculation that never ran — the B-28 ambiguity, which stays unresolved for the
-    // loading state but must not appear once the refusal itself is on screen.
+    // claim about a calculation that never ran.
+    //
+    // B-28 re-pin: this used to assert `—`, and the comment recorded that the ambiguity with the loading
+    // state "stays unresolved". It is resolved — `—` is the pending token, and a refusal prints its own
+    // word in both surfaces.
     const hero = page.locator('section.card').filter({ has: page.locator('.tax-hero-value') });
-    await expect(hero.locator('.tax-hero-value')).toHaveText('—');
+    await expect(hero.locator('.tax-hero-value')).toHaveText('Calcul refuzat');
     const cockpit = page.locator('.stat-card').filter({ hasText: 'Impozit estimat' });
-    await expect(cockpit.locator('.value')).toHaveText('—');
+    await expect(cockpit.locator('.value')).toHaveText('Calcul refuzat');
   });
 
   test('the fix link is a real route and lands on the control that settles the scenario', async ({ page }) => {

@@ -178,15 +178,18 @@ export interface DashboardSnapshotView extends DashboardSnapshot {
  * `refused` is PG-6a's. It is produced by the scenario registry, and only by it: a scenario whose effect
  * is `refuse` stops the calculation before the engine is reached, and the basis carries which one. It is
  * deliberately not a spelling of `review_required` — that word stays the engine's own withheld conclusion,
- * which is a calculation that ran and declined to answer. `closed_final` is still declared and produced by
- * nobody: PG-6 owns its trigger. Declaring it here is what makes the surfaces exhaustive over the union
- * instead of adding a seventh word later.
+ * which is a calculation that ran and declined to answer.
+ *
+ * B-79 deleted `closed_final`. It was declared and produced by nobody, and the one existing fact that
+ * could have driven it — `year.closed` — does not mean „the figure is final and complete”: a closed year
+ * can still carry an `incomplete` or a `refused` estimate, and PG-4 already renders the closed-year fact
+ * through `year`, the hero's `finalCalculation` label and the disclosure's `finalCalculationNote`.
+ * Triggering the state would have overwritten a true distinction with a coarser one, so the word goes.
  */export type TaxEstimateState =
   | 'complete'
   | 'incomplete'
   | 'review_required'
   | 'refused'
-  | 'closed_final'
   | 'unavailable';
 
 function estimateStateOf(

@@ -64,8 +64,15 @@ export const attention = {
  * They are not several spellings of one number: a computed figure, a figure that does not cover what
  * was recorded, a conclusion the engine withheld, and the absence of any calculation are different
  * claims, and each gets its own word, its own badge and its own sentence. `refused` got its trigger in
- * PG-6a — the scenario registry, and nothing else. `closed_final` still has its word before its trigger;
- * PG-6 produces it, and the surfaces stay exhaustive over the union in the meantime.
+ * PG-6a — the scenario registry, and nothing else.
+ *
+ * B-79 removed `closed_final`. It had a word and no producer: `estimateStateOf` never returns it, and
+ * the only existing fact that could have driven it — `year.closed` — does not mean what the word says.
+ * A closed year can still carry an `incomplete` or a `refused` estimate, and PG-4 already renders the
+ * closed-year fact in three places (`YearLifecycleBanner`, the hero's `finalCalculation` label and the
+ * disclosure's `finalCalculationNote`). Triggering it would have replaced a true distinction with a
+ * coarser one; deleting it is the honest move. The reason is recorded on the B-79 row of
+ * `docs/ai/PHASE_PLAN_11_34.md`.
  */
 export const estimateState = {
   badges: {
@@ -73,7 +80,6 @@ export const estimateState = {
     incomplete: 'Estimare incompletă',
     review_required: 'De verificat',
     refused: 'Nu putem calcula',
-    closed_final: 'Închis definitiv',
     unavailable: 'Indisponibil',
   },
   complete: 'Estimare calculată pe datele înregistrate acum, care acoperă tot ce este înregistrat.',
@@ -85,12 +91,24 @@ export const estimateState = {
   incompleteMany: (n: number): string =>
     `Estimarea nu acoperă tot ce ai înregistrat: ${n} înregistrări rămân în afara cifrei.`,
   /**
-   * The refusal reason itself is rendered once, in the chart note under the figure, where it is pinned
-   * by name (`e2e/dashboard.spec.ts`, the B-14 describe). Repeating the same cited paragraph in the
-   * hero would put two copies of a legal sentence on one screen.
+   * B-106 — the refusal reason is rendered here, beside the figure that is missing, in the engine's own
+   * words. It used to be rendered only in the chart note further down the page while this sentence pointed
+   * at it: a person reading the hero saw a refusal announced and a direction to walk in. The chart points
+   * here instead now, exactly as it already points for a scenario refusal, so the cited paragraph still
+   * reaches the screen once and where the missing figure is.
    */
   reviewRequired:
-    'Motorul de calcul a refuzat estimarea pe datele înregistrate. Cauza este redată integral la graficul financiar.',
+    'Motorul de calcul a refuzat estimarea pe datele înregistrate. Refuzul lui, în cuvintele lui:',
+  /**
+   * B-28 — what the hero prints where a figure should be. `—` is this app's token for „not known yet”,
+   * and it is honest only while a figure could still arrive. A refusal is not a number still coming: the
+   * engine ran and withheld the conclusion, or the rules never let it run. Both get their own word, so
+   * the figure slot stops being one glyph standing for two opposite situations.
+   */
+  noFigure: {
+    review_required: 'Calcul refuzat',
+    refused: 'Calcul refuzat',
+  },
   /**
    * PG-6a — the state a scenario refusal carries, and the one word the hero is allowed to say when no
    * number exists. It is not a softer `De verificat`: `review_required` means an engine ran and withheld

@@ -267,9 +267,14 @@ export default function FinancialChart() {
           /* PG-6a: this attribute used to hard-code `review_required`, which put a second answer to one
              question on the screen next to the hero's. A withheld conclusion and a refused calculation are
              different states, and the chart is not entitled to decide which one applies — it reads the
-             state the estimate already carries. The reason itself is still printed verbatim, as B-14 pins. */
+             state the estimate already carries.
+
+             B-106 moved the engine's own sentence out of here and into the estimate section, beside the
+             figure it refuses. The paragraph is still rendered exactly once on the page — the rule PG-6a
+             set for a scenario refusal, now applied to a withheld conclusion too — but it no longer sits
+             below a chart while the hero announces the refusal and points elsewhere. */
           <p className="chart-tax-note" data-estimate-state={dashboard.estimateState}>
-            {chartCopy.taxNoteReview} {tax.reason}
+            {chartCopy.taxNoteReview}
           </p>
         )}
 

@@ -89,10 +89,12 @@ test.describe('PG-6b — a declared cazare activity is refused, from stored data
     await expect(page.locator('[data-scenario-detail="accommodation-gross-undetermined"]')).toHaveCount(1);
 
     // No figure beside a refusal, in the hero or in the cockpit strip.
+    // B-28 re-pin: the slot used to print `—`, the glyph the pending state prints. A refusal now prints its
+    // own word, which is what makes this assertion prove "refused" rather than "not yet".
     const hero = page.locator('section.card').filter({ has: page.locator('.tax-hero-value') });
-    await expect(hero.locator('.tax-hero-value')).toHaveText('—');
+    await expect(hero.locator('.tax-hero-value')).toHaveText('Calcul refuzat');
     const cockpit = page.locator('.stat-card').filter({ hasText: 'Impozit estimat' });
-    await expect(cockpit.locator('.value')).toHaveText('—');
+    await expect(cockpit.locator('.value')).toHaveText('Calcul refuzat');
   });
 
   test('the fix link lands on the control that changes the answer, and shows the stored value', async ({ page }) => {

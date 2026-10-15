@@ -1133,8 +1133,10 @@ test.describe('Dashboard — impozit_pe_cit on a PFA is a data-integrity failure
 
     // No number is shown for a regime the taxpayer cannot have — the engine refuses rather than
     // computing Titlul IV amounts under a Titlul II label.
+    // B-28 re-pin: the cell used to print `—`, the same glyph a pending estimate prints. A refusal now
+    // prints its own word.
     const cell = page.locator('.stat-card').filter({ hasText: 'Impozit estimat' });
-    await expect(cell.locator('.value')).toHaveText('—');
+    await expect(cell.locator('.value')).toHaveText('Calcul refuzat');
 
     // PG-6a moved where this sentence is rendered; it did not move whether it is rendered. The reason is
     // now the refusal block in the estimate section, beside the control that fixes it, instead of the

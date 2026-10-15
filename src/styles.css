@@ -211,6 +211,10 @@ a:hover { text-decoration: underline; }
 .banner-details summary { cursor: pointer; color: var(--text-2); }
 .greeting { margin: 0 0 16px; font-size: 14px; color: var(--text-2); }
 .tax-hero-value { font-size: 28px; font-weight: 700; }
+/* B-28 — a refusal is not a figure still arriving. The word that replaces the number is styled from the
+   state, not from the amount: it is smaller than a figure on purpose, so it cannot be read as one, and it
+   carries the same red the refusal badge already uses. */
+.tax-hero-value.tax-hero-refused { font-size: 20px; color: var(--danger-text); }
 .num { text-align: right; }
 
 /* Financial chart (Step 20).

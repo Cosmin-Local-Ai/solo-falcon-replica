@@ -5,6 +5,7 @@ import { CURRENT_DATA_VERSION } from '../data/migration';
 import { seedData } from '../data/seed';
 import type { AppData, LegacyRevenue } from '../data/types';
 import Dashboard from './Dashboard';
+import { copy } from '../ui/copy';
 import { type Bani } from '../domain/money';
 
 const STORAGE_KEY = 'pfa-app-data-v2';
@@ -289,16 +290,20 @@ describe('Dashboard page', () => {
     const card = (await screen.findByText('Impozit estimat', { exact: true })).closest('.stat-card');
     expect(card).not.toBeNull();
     // The reason must name the provisions that make the regime impossible for a persoană fizică, so the
-    // user can see which record is wrong (rendered verbatim by FinancialChart).
+    // user can see which record is wrong (rendered verbatim in the estimate section).
     expect(await screen.findByText(/nu poate aparține unui PFA/)).toBeTruthy();
     expect(screen.getByText(/art\. 13 alin\. \(1\)/).textContent).toContain('art. 120');
-    // ORDER IS LOAD-BEARING. The em dash is asserted only after the refusal reason is on screen, so
+    // ORDER IS LOAD-BEARING. The figure slot is asserted only after the refusal reason is on screen, so
     // what it proves is "the engine refused and the cockpit carries the refusal marker" — not "the
     // estimate happened to be mid-flight". Read in the old order this assertion passed against the
-    // loading sentinel, i.e. it checked nothing and could not fail. It is still not fully provable from
-    // the card alone, because the cockpit renders the SAME `—` for "still computing" and for "refused";
-    // that ambiguity is a product defect, registered as B-28, not something a test may paper over.
-    expect(card).toHaveTextContent(/—/);
+    // loading sentinel, i.e. it checked nothing and could not fail.
+    //
+    // B-28 RE-PIN. It used to assert `—`, with a comment recording that the cockpit rendered the SAME
+    // glyph for "still computing" and for "refused" and that the ambiguity was a registered defect. The
+    // defect is closed: a refusal prints its own word, and `—` is left to the states where a figure could
+    // still arrive. `Dashboard.refusal.test.tsx` pins both moments on one page.
+    expect(card).toHaveTextContent(copy.estimateState.noFigure.refused);
+    expect(card).not.toHaveTextContent(/—/);
   });
 
   test('TASK 9: the estimate hero attributes its figure to the rule package that produced it', async () => {

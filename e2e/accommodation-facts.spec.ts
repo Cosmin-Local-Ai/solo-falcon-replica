@@ -94,8 +94,11 @@ test.describe('PG-6h-2 — an unrecorded room count stays unknown (acceptance 1)
     // art. 68^3 either.
     await expect(page.locator('[data-scenario-refusal="accommodation-title-cedarea-folosintei"]')).toHaveCount(0);
 
+    // B-28 re-pin: the figure slot used to print `—`, the same glyph the pending state prints. A refusal
+    // now prints its own word, so the slot proves both that there is no number and that no number is coming.
     const hero = page.locator('section.card').filter({ has: page.locator('.tax-hero-value') });
-    await expect(hero.locator('.tax-hero-value')).toHaveText('—');
+    await expect(hero.locator('.tax-hero-value')).toHaveText('Calcul refuzat');
+    await expect(hero.locator('.tax-hero-value')).not.toHaveText('—');
   });
 
   test('Settings says the count is not recorded, and names neither title', async ({ page }) => {
@@ -148,9 +151,19 @@ test.describe('B-88 — 1–7 camere is measured under art. 85, not refused for 
     // `review_required` and `refused` are different states and the badge says so: an engine ran and
     // withheld a conclusion, which is not the same sentence as a register the app would not compute at all.
     await expect(page.locator('.badge[data-estimate-state]')).toHaveAttribute('data-estimate-state', 'review_required');
-    // No figure is offered while the art. 170 alin. (4) sum is unknown.
+    // B-106 + B-28 re-pin. This used to assert only `—` and stop: the ladder refused, and the sentence that
+    // says why lived in the chart note further down the page. The refusal now prints its own word in the
+    // figure slot, and the engine's own sentence is rendered beside it.
     const hero = page.locator('section.card').filter({ has: page.locator('.tax-hero-value') });
-    await expect(hero.locator('.tax-hero-value')).toHaveText('—');
+    await expect(hero.locator('.tax-hero-value')).toHaveText('Calcul refuzat');
+    await expect(hero.locator('.tax-hero-value')).not.toHaveText('—');
+    const reason = page.locator('[data-estimate-reason]');
+    await expect(reason).toContainText('Baza de calcul CASS pentru veniturile din art. 155 alin. (1) lit. c)-h)');
+    await expect(reason).toContainText('art. 170 alin. (4)');
+    // One cited paragraph, one rendering: the chart points at the estimate section instead of quoting it.
+    await expect(page.locator('.chart-tax-note[data-estimate-state="review_required"]')).toContainText(
+      'secțiunea Estimare impozit',
+    );
   });
 });
 
@@ -259,8 +272,9 @@ test.describe('PG-6h-2 — the commission reading is the user’s choice, with t
     await expect(detail).not.toContainText('Citește A');
     await expect(detail).toContainText('autorizația ONRC');
 
+    // B-28 re-pin — see the first describe: a refusal no longer borrows the pending glyph.
     const hero = page.locator('section.card').filter({ has: page.locator('.tax-hero-value') });
-    await expect(hero.locator('.tax-hero-value')).toHaveText('—');
+    await expect(hero.locator('.tax-hero-value')).toHaveText('Calcul refuzat');
   });
 });
 

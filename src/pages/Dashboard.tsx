@@ -27,6 +27,20 @@ import CompletenessSection from '../components/dashboard/CompletenessSection';
 import ActionSection from '../components/dashboard/ActionSection';
 import LegislationSection from '../components/dashboard/LegislationSection';
 
+/**
+ * B-28 — what the estimate figure slot prints, for every state that has no figure.
+ *
+ * `—` stays the token for „not known yet”: it is what the slot prints on the first paint, before the
+ * engine has answered, and for a register with nothing to compute. A refusal does not get to borrow it.
+ * `review_required` and `refused` are the two states in which an answer exists and was withheld, and the
+ * figure slot says so in words instead of a dash that reads as a wait.
+ */
+function heroFigureFor(state: TaxEstimateState, total: Parameters<typeof formatBaniRON>[0] | null): string {
+  if (total !== null) return formatBaniRON(total);
+  if (state === 'review_required' || state === 'refused') return estimateStateCopy.noFigure[state];
+  return copy.ui.noValue;
+}
+
 function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="stat-card">
@@ -94,6 +108,19 @@ export default function DashboardPage() {
   const taxTotal =
     data.tax !== null && data.tax.status === 'computed' ? data.tax.output.total : null;
   const estimateState = data.estimateState;
+  // B-28 — `—` is this app's token for „not known yet”, and it is honest only while a figure could still
+  // arrive. A refusal is the opposite claim: the engine looked at the register and declined to produce a
+  // number, or the rules never let it try. The hero used to print the same glyph for both, so a person
+  // who had just been refused could reasonably wait for a number that would never come.
+  const heroRefused = estimateState === 'review_required' || estimateState === 'refused';
+  const heroFigure = heroFigureFor(estimateState, taxTotal);
+  // B-106 — the engine's own refusal sentence, rendered where the missing figure is. It is not
+  // paraphrased here and not re-derived: `tax.reason` is the sentence `calcCassLadder` and the other
+  // calculators wrote.
+  const refusalReason =
+    estimateState === 'review_required' && data.tax !== null && data.tax.status === 'review_required'
+      ? data.tax.reason
+      : null;
   // PG-5C — the run-rate forecast, if the model has months left to project into. It is read here for one
   // reason: to be shown beside the hero, labelled, and visibly not the hero. Nothing on this page feeds
   // it to a figure; `basis.actual` is the only quantity the estimate and the thresholds were built from,
@@ -145,7 +172,7 @@ export default function DashboardPage() {
             <StatCard label={dashboardCopy.cards.revenueYear} value={formatBaniRON(snapshot.pfaRevenue)} />
             <StatCard
               label={dashboardCopy.cards.taxEstimate}
-              value={taxTotal === null ? copy.ui.noValue : formatBaniRON(taxTotal)}
+              value={heroFigure}
               hint={dashboardCopy.cards.taxEstimateHint}
             />
             <StatCard label={dashboardCopy.cards.monthlyReserve} value={formatBaniRON(reserve.recommendedMonthlyReserve)} />
@@ -205,7 +232,12 @@ export default function DashboardPage() {
                   </span>
                 </span>
               </div>
-              <div className="tax-hero-value mono">{taxTotal === null ? copy.ui.noValue : formatBaniRON(taxTotal)}</div>
+              <div
+                className={`tax-hero-value mono${heroRefused ? ' tax-hero-refused' : ''}`}
+                data-hero-figure={taxTotal === null ? estimateState : 'value'}
+              >
+                {heroFigure}
+              </div>
               {estimateState === 'complete' ? (
                 <p className="hint">{estimateStateCopy.complete}</p>
               ) : (
@@ -221,6 +253,14 @@ export default function DashboardPage() {
                         : estimateStateCopy.unavailable}
                 </p>
               )}
+              {/* B-106 — a refusal the reader cannot read is a dead end. The engine's sentence used to be
+                  rendered only in the chart note further down the page, with the hero pointing at it; it
+                  now sits beside the figure it refuses, and the chart points here instead. */}
+              {refusalReason !== null ? (
+                <p className="hint estimate-refusal-reason" data-estimate-reason>
+                  {refusalReason}
+                </p>
+              ) : null}
               {/* PG-6a — the refusal says what could not be computed, in the rule's own words, and points
                   at the control that fixes it. It sits above the coverage rows because a refusal is not a
                   coverage problem: there is no figure for records to be missing from. */}

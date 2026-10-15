@@ -255,10 +255,22 @@ describe('FinancialChart', () => {
     mockUseDashboardData.mockReturnValue({
       snapshot: { asOf: AS_OF },
       tax: { status: 'review_required', reason: 'date lipsă' },
+      estimateState: 'review_required',
       ledger: { conversions: [], unconverted: [] },
     });
     renderChart();
-    expect(screen.getByText(/revizuire necesară — date lipsă/)).toBeInTheDocument();
+    /**
+     * RE-PIN (B-106). This used to assert `revizuire necesară — date lipsă`, i.e. that the chart is where
+     * the engine's refusal sentence reaches the screen. It no longer is: the sentence is rendered once, in
+     * the estimate section beside the figure the refusal took away (`src/pages/Dashboard.tsx`,
+     * `[data-estimate-reason]`, pinned by `Dashboard.ladderRefusal.test.tsx`). What the chart owes is a
+     * note that names the state and points there — and it still must not print the paragraph a second
+     * time, which is the last assertion here.
+     */
+    const note = screen.getByText(/motorul a refuzat estimarea/);
+    expect(note).toBeInTheDocument();
+    expect(note.getAttribute('data-estimate-state')).toBe('review_required');
+    expect(screen.queryByText(/date lipsă/)).not.toBeInTheDocument();
   });
 
   /**
