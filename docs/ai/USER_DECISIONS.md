@@ -379,3 +379,19 @@ This **changes a default this project has followed.** Until now the rule has bee
 - **The refusal stays legible.** Persona 11's `cap_unresolved` rows are kept as evidence that the app will not invent a rate; when they become strikable, they should say *why* they became strikable.
 
 **Tracked as defect B-137**, cross-linked to `research/22` §1 and `research/23`. Not a second copy of the legal analysis.
+
+### D-EFACT-1 — The e-Factura sending deadline is 5 working days
+**Raised by B-140:** `src/ui/copy/settings.ts:78` offers *„În decurs de 2 zile de la emitere"* while `notes.ts eFacturaDeadline` cites **5 working days** (OUG 120/2021 art. 10 alin. (7) as amended by OUG 89/2025). The app contradicts itself on screen about a legal deadline.
+**User decision, 2026-10-15: it is 5 working days, and no Researcher pass is needed.** The corpus already holds the correct citation; the contradiction is a stale option, not an open legal question.
+**Constraint:** the option is backed by a **stored enum value** (`'2-zile'`). Correcting it moves persisted data, so it is a migration decision — retire or remap the value with a recorded reason, do not silently re-point the label.
+
+### D-DPI-1 — B-116 is investigated, not implemented
+**User decision, 2026-10-15.** The app holds DPI income two ways and only one can survive. **That is an architectural fork and the user keeps the call.** A Worker reads both representations and reports the two options — what each costs in migration and tests, and which is closer to the statute — **without implementing either.** B-117 (an art. 67 record with a DPI contract type producing no coverage row) is fixed inside whichever representation currently serves it, so the fork does not block the smaller defect.
+
+### D-CITE-1 — Cite by article and quoted text, not by letter
+**User decision, 2026-10-15, settling B-120.** Article-letter instability across consolidations is now inside the rule package: the same provision can appear as one letter in one consolidation and another in the next, and B-112 and B-126 show letters and superscripts moving under us.
+**Chosen: prefer the article number plus the quoted statutory text over the letter.** A shifted letter must not break a citation. Where a sub-letter is genuinely load-bearing (the art. 68 alin. (5) lit. g) ceilings, for example), the quoted text carries the meaning and the letter becomes a locator, not the identity.
+**Consequence:** this is a rule-package-wide change, not a copy fix, and it is the reason B-120 gets its own Worker rather than riding along with the form work.
+
+### D-RUN-1 — RAM caps stay a documented rule, not a package.json change
+**User decision, 2026-10-15.** The capped commands (`--pool=threads --poolOptions.threads.maxThreads=2`, `--workers=2`) live in §12.17 as mandatory commands. **`package.json` is left alone** so the user's own `npm run test` keeps its default behaviour. Accepted trade-off: the uncapped form remains one command away, and the rule has already failed twice by being rediscovered instead of read.
