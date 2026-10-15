@@ -1383,9 +1383,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
           <Card title={settingsCopy.eFactura.connect}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 13, color: 'var(--text-2)' }}>
-                {settingsCopy.eFactura.connected}
+                {settingsCopy.eFactura.notConnected}
               </span>
-              <Badge kind="warning">{settingsCopy.eFactura.inProgress}</Badge>
+              <Badge kind="warning">{settingsCopy.eFactura.notConnectedBadge}</Badge>
             </div>
           </Card>
 

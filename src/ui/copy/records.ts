@@ -6,7 +6,7 @@
  * modal captions, the same „Niciun rezultat pentru căutare." — and each copy used to keep its own
  * copy-paste of the sentence. One key now, shared.
  */
-import type { ExpenseStatus, FilingStatus, RevenueStatus, StoredStatusCode, VatReturnStatus } from '../../data/types';
+import type { ExpenseStatus, FilingStatus, RevenueStatus, VatReturnStatus } from '../../data/types';
 import type { ExpenseCategory } from '../../domain/fiscal/deductibility';
 // PG-6g — the parked-list reason labels are exhaustive over the three reason unions PG-6f defined. The
 // labels live here; the unions stay in `domain/fiscal/vat.ts`, which this phase may not edit.
@@ -533,21 +533,25 @@ export const vatReturnStatusLabels = {
 /**
  * The four record states, in the words a person reads. The tabs use the plural, the select uses the
  * singular — the same state, agreed with what it counts.
+ *
+ * B-56: `transmisa` is gone from both maps. It is the one word in `StoredStatusCode` with no live
+ * producer (see the note on that union in `src/data/types.ts`): no revenue or expense schema accepts it
+ * and the monthly row that wrote it is dropped by the v10→v11 migration. A label that said „Transmise”
+ * therefore claimed a transmission nobody in this app performs, and it was unreachable anyway — no page
+ * renders it. The maps are keyed by `RevenueStatus`, which is exactly what the registers can hold.
  */
 export const recordStatus = {
   tabs: {
     inregistrata: 'Înregistrate',
     'in-asteptare': 'În așteptare',
-    transmisa: 'Transmise',
     respinsa: 'Respinse',
-  } satisfies Record<StoredStatusCode, string>,
+  } satisfies Record<RevenueStatus, string>,
   /** The badge and select wording — the same states, agreed with the single record they describe. */
   labels: {
     inregistrata: 'Înregistrată',
     'in-asteptare': 'În așteptare',
-    transmisa: 'Transmisa',
     respinsa: 'Respinsă',
-  } satisfies Record<StoredStatusCode, string>,
+  } satisfies Record<RevenueStatus, string>,
   /**
    * PG-5: the annual return's own three states, kept separate from `labels` above on purpose. The
    * monthly words describe a record in this app; `depusa` is the only word in the app that says a
@@ -650,12 +654,19 @@ export const documents = {
   sections: {
     im: {
       title: 'Impozit pe venit (IM)',
-      desc: 'Declarația 100 / impozit pe venit',
+      // B-62 — D100 is not an „impozit pe venit” declaration. Its official name is „Declarație privind
+      // obligațiile de plată la bugetul de stat” (cod 14.13.01.99/bs): the quarterly Titlul III return,
+      // owed by a micro-enterprise. A Titlul IV taxpayer never files it, so the caption has to say which
+      // form this really is rather than which bucket the file was dropped into.
+      desc: 'Declarația 100 — obligații de plată la bugetul de stat (cod 14.13.01.99/bs)',
       helper: 'Un fișier pe perioadă (PDF).',
     },
     cs: {
       title: 'Contribuții sociale (CS)',
-      desc: 'Declarația 220 / contribuții sociale',
+      // B-62 — D220 is „Declarație privind venitul estimat / norma de venit”, not a social-contribution
+      // document. Naming it „contribuții sociale” sent people to the wrong form for a real contribution
+      // document.
+      desc: 'Declarația 220 — venitul estimat sau norma de venit',
       helper: 'Un fișier pe perioadă (PDF).',
     },
     tva: {
@@ -780,17 +791,22 @@ export const documents = {
 
 export const eFactura = {
   title: 'e-Factura',
-  subtitle: 'Starea facturilor transmise în sistemul e-Factura.',
+  // B-56 — this page described itself as the state of invoices „transmise în sistemul e-Factura”.
+  // Nothing is transmitted: there is no client, and `eFacturaStatus` is a value this app stores, not an
+  // answer from ANAF. The page now says whose record it is and what it is not.
+  subtitle:
+    'Starea pe care ai notat-o în aplicație pentru facturile emise. Aplicația nu este conectată la sistemul e-Factura.',
   tabs: {
     accepted: 'Acceptate',
     pending: 'În așteptare',
     rejected: 'Respinse',
   },
   emptyTitle: 'Nicio factură în această stare',
-  emptyBody: 'Facturile transmise către e-Factura vor apărea aici.',
-  resend: 'Retransmite',
-  resentDetail: 'Retransmisă către e-Factura',
-  resentToast: (nr: string): string => `${nr} a fost retransmisă către e-Factura`,
+  emptyBody: 'Aici apar facturile emise pentru care ai notat o stare în aplicație.',
+  resend: 'Notează o nouă transmitere',
+  resentDetail: 'Nouă transmitere notată în aplicație',
+  resentToast: (nr: string): string =>
+    `${nr} este înregistrată în aplicație ca factură pe care trebuie să o retransmiți`,
   columns: {
     document: 'Document',
     client: 'Client',

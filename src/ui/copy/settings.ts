@@ -62,13 +62,19 @@ export const settings = {
     vatCodeIntro:
       'Firmele neplătitoare de TVA care vor colabora cu firme din Uniunea Europeană au nevoie de acest cod special. Dacă ai deja un cod de TVA intracomunitar, te rugăm să îl introduci aici.',
   },
+  // B-56 — this card announced a connection that exists nowhere: the app has no e-Factura client, no
+  // network layer and no credential store. `Q-EFACT-API` is not started. The card now states the state
+  // that is actually true, and the preference below is labelled as a note to the person, not as a
+  // sending rule the app obeys.
   eFactura: {
-    connect: 'Conectare e-Factura',
-    connected: 'Contul este conectat la platforma e-Factura',
-    inProgress: 'În progres',
+    connect: 'Starea conectării la e-Factura',
+    notConnected:
+      'Aplicația de pe acest dispozitiv nu este conectată la platforma e-Factura și nu trimite nimic în sistemul ANAF.',
+    notConnectedBadge: 'Neconectat',
     preferences: 'Preferințe e-Factura',
-    sending: 'Trimitere e-Factura',
-    sendingHint: 'Alege cât de repede trimite aplicația; termenul legal rămâne același indiferent de alegere.',
+    sending: 'Când transmiți tu factura',
+    sendingHint:
+      'Alegerea nu trimite nimic de aici — în sistemul e-Factura transmiți tu. Termenul legal rămâne același indiferent de alegere.',
     sendWithinTwoDays: 'În decurs de 2 zile de la emitere',
     sendAsap: 'Cât mai repede după emitere',
     contactData: 'Date de contact',
@@ -76,12 +82,14 @@ export const settings = {
     contactIncluded: 'Include e-mail și telefon în e-Factura',
     contactHint: 'Nu este obligatoriu să incluzi datele tale de contact în e-Factura.',
   },
+  // B-56 — the same class of claim in a different card: the app promised an SMS code it has no way to
+  // send. The honest version says where the change actually lands.
   security: {
     title: 'Securitatea datelor personale',
     bankBody:
-      'Pentru a efectua modificări ale conturilor bancare îți vom trimite un cod de securitate prin SMS.',
+      'Modificările conturilor bancare se aplică în registrul de pe acest dispozitiv. Aplicația nu îți trimite nicio notificare și niciun cod de securitate prin SMS.',
     personalBody:
-      'Pentru modificări ale datelor personale îți vom trimite un cod de securitate prin SMS.',
+      'Modificările datelor personale se aplică în registrul de pe acest dispozitiv. Aplicația nu îți trimite nicio notificare și niciun cod de securitate prin SMS.',
   },
   bank: {
     title: 'Conturi bancare',
