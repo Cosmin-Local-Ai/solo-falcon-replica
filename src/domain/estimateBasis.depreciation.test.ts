@@ -22,7 +22,7 @@ import { describe, expect, it } from 'vitest';
 import { lei, ron, sumBani } from '../domain/money';
 import { seedData } from '../data/seed';
 import { getTaxEstimate } from '../data/dashboard';
-import type { Expense, FixedAsset } from '../data/types';
+import type { Expense, FixedAsset, Vehicle } from '../data/types';
 import {
   depreciationForFiscalYear,
   FISCAL_DEPRECIATION_RULE_ID,
@@ -372,5 +372,95 @@ describe('the seam itself', () => {
     expect(leg.total).toBe(lei(0));
     expect(leg.refused).toEqual([]);
     expect(leg.conflicts).toEqual([]);
+  });
+});
+
+describe('B-65 acceptance 3 (brief 74) — the 50 % mixed-use limit is NOT also applied to depreciation', () => {
+  /**
+   * Why this test exists at all. Normele Titlul IV pct. 7 alin. (7) says the 50 % vehicle half-count
+   * applies to the running costs „cu excepția cheltuielilor privind amortizarea pentru care se aplică
+   * regulile privind amortizarea prevăzute la art. 28 titlul II", and CF art. 68 alin. (7) lit. k) closes
+   * with the same exclusion in its own words: „Cheltuielile care intră sub incidența acestor prevederi nu
+   * includ cheltuielile privind amortizarea." So art. 28 alin. (14) is the **only** cap that reaches a
+   * vehicle's amortisation. Applying both would be a second, uncited cap, and it would move money.
+   *
+   * The register below is deliberately built so the 50 % rule is **live** — a mixed-use car with an
+   * attributed running cost — so the assertion cannot pass by accident. If the half-count ever reached
+   * amortisation, the leg would read 7.500 lei instead of 15.000.
+   */
+  const MIXED_CAR: Vehicle = {
+    id: 'veh-m1',
+    label: 'Autoturism M1',
+    years: [{ fiscalYear: 2026, use: 'mixed', usedByPerson: 'da' }],
+  };
+
+  const FUEL: Expense = {
+    id: 'exp-carburant',
+    tip: 'factura',
+    nr: 'VEH-2026-0001',
+    date: '2026-06-10',
+    paid: '2026-06-10',
+    furnizor: 'Real Motor',
+    cui: 'RO90000001',
+    valoareFaraTva: ron(10000),
+    tva: ron(2100),
+    status: 'inregistrata',
+    category: 'vehicle_related',
+    vehicleId: 'veh-m1',
+  };
+
+  const withCar = () => ({
+    ...seedData,
+    fixedAssets: [M1_CAR],
+    vehicles: [...(seedData.vehicles ?? []), MIXED_CAR],
+    expenses: [...seedData.expenses, FUEL],
+  });
+
+  it('the schedule posts the art. 28 alin. (14) figure, 1.500 lei × 10 months, and no half-count on top', () => {
+    const leg = selectAssetDepreciation(withCar(), AS_OF, RULES);
+    expect(leg.conflicts).toEqual([]);
+    expect(leg.lines).toHaveLength(1);
+    // 120.000 / 60 luni = 2.000 lei/lună, peste plafon → 1.500 lei/lună × 10 luni (martie–decembrie).
+    expect(leg.lines[0]!.deductible).toBe(lei(15000));
+    expect(leg.total).toBe(lei(15000));
+    // The double cap would read half of this. Asserted as a negative so the failure names the mistake.
+    expect(leg.total).not.toBe(lei(7500));
+  });
+
+  it('the same register halves the running cost, so the 50 % rule is provably live beside the asset', () => {
+    // Without this, the test above could pass simply because no vehicle rule fired at all.
+    const bare = selectEstimateOperands({ ...seedData, expenses: [...seedData.expenses, FUEL] }, AS_OF, RULES);
+    expect(bare.kind).toBe('run');
+    if (bare.kind !== 'run') throw new Error('the register must run');
+    // `expenses` is the VAT-inclusive measure, so the half-count lands on 10.000 + 2.100 = 12.100 lei and
+    // 6.050 lei enters the expense leg. The point is that a vehicle_related cost DOES move.
+    const seedOnly = selectEstimateOperands(seedData, AS_OF, RULES);
+    expect(seedOnly.kind).toBe('run');
+    if (seedOnly.kind !== 'run') throw new Error('the seed register must run');
+    expect(bare.amounts.expenses - seedOnly.amounts.expenses).toBe(lei(6050));
+  });
+
+  it('the estimate moves by exactly the capped amortisation on top of the halved running cost', () => {
+    const withFuelOnly = selectEstimateOperands(
+      { ...seedData, vehicles: [...(seedData.vehicles ?? []), MIXED_CAR], expenses: [...seedData.expenses, FUEL] },
+      AS_OF,
+      RULES,
+    );
+    const withBoth = selectEstimateOperands(withCar(), AS_OF, RULES);
+    expect(withFuelOnly.kind).toBe('run');
+    expect(withBoth.kind).toBe('run');
+    if (withFuelOnly.kind !== 'run' || withBoth.kind !== 'run') throw new Error('both must run');
+    // The difference between the two registers is the amortisation and nothing else: 15.000 lei, not 7.500.
+    expect(withBoth.amounts.expenses - withFuelOnly.amounts.expenses).toBe(lei(15000));
+  });
+
+  it('the cap is per vehicle per month — „pentru fiecare" — so a second M1 gets its own ceiling', () => {
+    // `research/40` §4 records the asymmetry: art. 28 alin. (14) is per vehicle with no one-car limit,
+    // while art. 68 alin. (5) lit. j) limits running costs to a single car. A fleet is not a pool.
+    const second: FixedAsset = { ...M1_CAR, id: 'asset-m1-b', label: 'Autoturism M1 doi' };
+    const leg = selectAssetDepreciation(withAssets([M1_CAR, second]), AS_OF, RULES);
+    expect(leg.lines).toHaveLength(2);
+    for (const line of leg.lines) expect(line.deductible).toBe(lei(15000));
+    expect(leg.total).toBe(lei(30000));
   });
 });

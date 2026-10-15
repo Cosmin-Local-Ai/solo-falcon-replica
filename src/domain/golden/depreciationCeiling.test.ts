@@ -28,7 +28,12 @@
  */
 import { describe, expect, it } from 'vitest';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from '../fiscal/package2026';
-import { depreciationSchedule, FISCAL_DEPRECIATION_RULE_ID, type FixedAssetFacts } from '../fiscal/depreciation';
+import {
+  depreciationSchedule,
+  FISCAL_DEPRECIATION_RULE_ID,
+  M1_EXCEPTION_CATEGORIES,
+  type FixedAssetFacts,
+} from '../fiscal/depreciation';
 import { lei } from '../money';
 
 const depRule = PFA_2026_SYSTEM_REAL_PACKAGE.find((r) => r.ruleId === FISCAL_DEPRECIATION_RULE_ID)!;
@@ -169,6 +174,64 @@ describe('FIXTURE 7C (INFERENCE — NOT an authority; regression guard) — the 
     const years = schedule({ ...M1_110500, m1ExceptionCategory: 'transport_persoane_cu_plata_inclusiv_taxi' });
     const oneMonth = years.find((y) => y.months === 1)!;
     expect(oneMonth.deductible).toBe(lei(1_841) + 67); // uncapped
+    expect(oneMonth.lost).toBe(lei(0));
+  });
+});
+
+/**
+ * FIXTURE 7D — the four art. 28 alin. (14) exception categories, asserted one at a time.
+ *
+ * Before brief 74 only ONE of the four was ever exercised (`transport_persoane_cu_plata_inclusiv_taxi`,
+ * in 7C). A four-member union with one member tested is a union that can lose a member silently, and the
+ * two lists in play are close enough to be confused: `research/36` §12.7 records that alin. (14) has
+ * **four** exceptions, including „test drive și pentru demonstrații", while art. 68 alin. (7) lit. k) has
+ * **five**, drops the test-drive wording and adds „mărfuri în scop comercial". The five-member list is the
+ * one that governs running costs and expressly does **not** govern amortizare.
+ *
+ * They are **categories, not elections**: a vehicle does not choose one, and `research/36` §12.6 records
+ * that the Norme never say how any of them is evidenced — `M1` appears exactly once in the whole 624-page
+ * Partea I, in pct. 27. So the app asks the taxpayer to declare the category and never reads it off a
+ * label, a CAEN code or a *foaie de parcurs*.
+ */
+describe('FIXTURE 7D — each of the four alin. (14) exception categories lifts the 1.500 lei/lună ceiling, on its own', () => {
+  const UNCAPPED_MONTHLY = lei(1_841) + 67; // 110.500 / 60 luni, with no ceiling applied
+
+  for (const category of M1_EXCEPTION_CATEGORIES) {
+    it(`${category} — declared, and the ceiling is off`, () => {
+      const years = schedule({ ...M1_110500, m1ExceptionCategory: category });
+      const oneMonth = years.find((y) => y.months === 1)!;
+      expect(oneMonth.deductible).toBe(UNCAPPED_MONTHLY);
+      expect(oneMonth.lost).toBe(lei(0));
+      // And the ceiling still bites nothing else about the schedule: the fiscal value is fully recovered.
+      expect(years.reduce((acc, y) => acc + y.deductible, 0)).toBe(lei(110_500));
+    });
+  }
+
+  it('the alin. (14) list has exactly four members, and is not the five-member art. 68 alin. (7) lit. k) list', () => {
+    // `research/36` §12.7: two vehicle lists, four against five, and the engine must not blur them.
+    expect(M1_EXCEPTION_CATEGORIES).toHaveLength(4);
+    // The income-tax list's fifth member has no counterpart here, and the test-drive wording has no
+    // counterpart in the income-tax list. Asserted by token so a merge of the two vocabularies fails here.
+    expect(M1_EXCEPTION_CATEGORIES).toContain('vanzari_achizitii_test_drive_demonstratii');
+    expect(M1_EXCEPTION_CATEGORIES.some((c) => c.includes('marfuri_in_scop_comercial'))).toBe(false);
+  });
+
+  it('no category declared — the ceiling applies; the exception is claimed, never inferred', () => {
+    // The same asset, same facts, one field absent. This is the pair that makes the four tests above mean
+    // something: without it, "the ceiling is off" would be indistinguishable from "the ceiling never ran".
+    const years = schedule(M1_110500);
+    const oneMonth = years.find((y) => y.months === 1)!;
+    expect(oneMonth.deductible).toBe(lei(1_500));
+    expect(oneMonth.lost).toBe(UNCAPPED_MONTHLY - lei(1_500));
+  });
+
+  it('an M1 flagged as NOT an M1 is outside alin. (14) altogether, category or no category', () => {
+    // alin. (14) reaches „mijloacele de transport de persoane … din categoria M1". A self-propelled truck
+    // or a >9-seat minibus is not M1, so the ceiling never engages — and declaring a category on it would
+    // be a no-op, not a permission.
+    const years = schedule({ ...M1_110500, isM1Vehicle: false, m1ExceptionCategory: 'urgenta_paza_curierat' });
+    const oneMonth = years.find((y) => y.months === 1)!;
+    expect(oneMonth.deductible).toBe(UNCAPPED_MONTHLY);
     expect(oneMonth.lost).toBe(lei(0));
   });
 });
