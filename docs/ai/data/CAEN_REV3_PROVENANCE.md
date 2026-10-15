@@ -32,7 +32,9 @@ and the list this script verifies cannot drift apart. Consequences:
   as a working feature.
 
 ## Counts — counted from the file, and asserted by the ingest script
-**22 secțiuni (A–V) · 87 diviziuni · 287 grupe · 651 clase.**
+**87 diviziuni · 287 grupe · 651 clase** — these three agree with caen3.ro exactly and are safe.
+
+**⚠️ „22 secțiuni (A–V)“ is NOT settled — see B-136.** The MO text prints 22 headers with J = 58-60, K = 61-63, L = 64-66; caen3.ro says 21, and the NACE Rev.2 structure CAEN Rev.3 derives from has one J = 58-63 and K = 64-66. **The ingest derives the letters from diviziune ranges rather than carrying them from the source rows, which is how a contested field became an assertion pinned in two test layers.** Do not „fix“ it from memory: obtain the official INS list or ONRC's section codes, regenerate, and re-pin in the same commit.
 Structural checks that passed: no duplicate codes · no grupa without a clasă · no diviziune without a clasă · every clasă has its grupa and diviziune present.
 **The 22nd secțiune is V (organizații extrateritoriale).** caen3.ro advertises „21 secțiuni" while itself listing `9900` — its own count is inconsistent; ours is the one derived from the primary text.
 **Absent diviziuni (genuine Rev.3 structure, not gaps in the paste):** 04, 34, 40, 44, 45, 48, 54, 57, 67, 76, 83, 89. Rev.3 dissolved Rev.2's `45` (auto trade and repair) into `467`/`478` and `953`, and `04` into `07`.
