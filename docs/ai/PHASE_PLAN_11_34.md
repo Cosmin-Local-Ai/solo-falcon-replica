@@ -739,6 +739,15 @@ Written 2026-10-12, after I briefed a Researcher to **read a research file and w
 5. **New tests stay targeted to the defect.** Do not grow a 1.200-line test file to cover one assertion; do not add a new e2e spec where a component test proves the same thing. The five largest test files are already 900–1.200 lines each.
 6. **Report the shape of your runs in the handoff**, under `TESTS:` — which targeted runs, and the one full-suite result with its newly measured counts. If you ran the full suite more than twice, **say why.**
 
+**The commands are mandatory, not the intention — added 2026-10-15 after the user asked for it.** Brief 66's Worker discovered on its own that capping parallelism makes the full suite slower but survivable; brief 67's Worker did the same. **Two Workers, one discovery each, and the third would have had to find it again.** `npm run test` and `npm run test:e2e` use the **default full-parallel pool**, which is what exhausts the machine. The gate is therefore these exact commands:
+
+```
+npx vitest run --pool=threads --poolOptions.threads.maxThreads=2     # unit  — measured 176 files / 2 941 tests in ~57s
+npx playwright test --workers=2                                      # e2e   — 38 specs / 219 tests
+```
+
+Slower, and that is the point: **the user's RAM is the scarce resource, not wall-clock time.** A Worker that runs the uncapped default and forces a PI restart has lost more time than it saved. Run them as **two separate commands, never concurrently.**
+
 **What this does not license:** skipping the full suite. §9 is unchanged — `tsc`, `build`, `test`, `test:e2e` all run before handoff, and a handoff without them is not a handoff. The rule is about **not running them repeatedly**, not about running them less at the end.
 
 ### 12.13 Never `git add -A` while a Worker is in flight — **orchestrator error, 2026-10-12**
