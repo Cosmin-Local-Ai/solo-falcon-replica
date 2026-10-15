@@ -575,6 +575,14 @@ The user asked for `impozit_pe_cit` and "any legacy shit thats just not valid" t
 
 **What *is* genuinely dead and should go:** B-78 (PG-5b dead vocabulary) and B-141 (`'transmisa'` with no producer). Those are the real targets; `impozit_pe_cit` is not one of them.
 
+### Brief 67 — the legacy sweep *(briefed 2026-10-15, before Step 12)*
+
+**B-141** (`'transmisa'`: a status nothing produces, still badged green), **B-78** (PG-5b dead vocabulary), **B-139** (the third identifier-leak family, and the guard that should cover all three).
+
+**The brief's core instruction is restraint, not removal.** It opens by telling the Worker that the user's headline request — delete `impozit_pe_cit` — is wrong and why, and sets **read-wide / write-narrow** as the rule for every dead thing it finds: stop it on WRITE, keep it on READ, delete only what provably never persisted. B-141 is the genuine version of the same instinct, and it is the one that should go.
+
+**B-140 is held back deliberately** — the e-Factura 2-days-vs-5-working-days contradiction is backed by a stored enum value and needs the deadline settled from the primary source first. That is a Researcher question and then a user decision, not a copy fix.
+
 ## Two sequencing traps recorded so they aren't walked into
 
 1. **Fixtures before personas (6 before 7).** Fixtures pin expected returns; personas **move the pinned seed estimate** — 311.200 bani has been held unmoved through PG-6b … 6g, and the persona set will break that pin by design. Do personas first and every fixture gets re-pinned twice.
