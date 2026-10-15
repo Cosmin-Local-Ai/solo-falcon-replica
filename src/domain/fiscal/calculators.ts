@@ -557,10 +557,17 @@ function calcCas(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
   }
 
   if (realized < tier1Base) {
-    const zeroPayable = withheld === undefined ? {} : { retinutLaSursa: withheld.retinut, dePlatit: payableAfterWithholding(lei(0), withheld.retinut, 'cas').dePlatit };
+    // B-125: the over-withheld note used to be thrown away here. This branch is the MOST likely place for a
+    // CAS over-retention — the person owes nothing under art. 148 alin. (1) while a payer withheld at a rung
+    // — and it was exactly the place where the app said nothing about the money. The note is now carried.
+    const zeroPayable = withheld === undefined
+      ? undefined
+      : payableAfterWithholding(lei(0), withheld.retinut, 'cas');
     return {
       value: lei(0),
-      ...zeroPayable,
+      ...(withheld === undefined || zeroPayable === undefined
+        ? {}
+        : { retinutLaSursa: withheld.retinut, dePlatit: zeroPayable.dePlatit }),
       breakdown: [
         `venit realizat: ${leiText(realized)} lei`,
         `sub 12 SM anual (${leiText(tier1Base)} lei) — conditia din CF art. 148 alin. (1) nu este indeplinita`,
@@ -568,6 +575,7 @@ function calcCas(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
         ...(withheld === undefined
           ? ['NOTĂ (REȚINERE NESTABILITĂ): aplicația nu deține cuantumul sursei al cărei plătitor ar reține CAS (art. 137 alin. (1) lit. b^1)), deci nu raportează nicio sumă reținută și nici nu susține că nu a reținut nimeni nimic.']
           : [withheld.note]),
+        ...(zeroPayable?.note ? [zeroPayable.note] : []),
       ],
     };
   }
