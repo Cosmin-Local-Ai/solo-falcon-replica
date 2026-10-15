@@ -79,8 +79,9 @@ describe('the three bases are distinct', () => {
     const result = convertToRon(eur(100), { basis: 'payment_date_daily', onDate: '2026-03-15' }, provider);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    // 10.000 bani × 5.3470 = 53.470 bani = 534,70 lei, exactly.
-    expect(result.ron).toEqual(ronBani(534.7));
+    // 10.000 bani × 5,3470 = 53.470 bani = 534,70 lei. D-ROUND-2 rounds the product to a whole leu and 70
+    // bani exceeds 50, so the converted amount is 535 lei. Before 2026-10-15 this pinned 534,70 lei.
+    expect(result.ron).toEqual(ronBani(535));
     expect(result.rate.rate).toBe('5.3470');
     expect(result.carriedForward).toBe(false);
   });
@@ -89,7 +90,8 @@ describe('the three bases are distinct', () => {
     const result = convertToRon(eur(100), { basis: 'payment_year_annual_average', paymentYear: 2025 }, provider);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.ron).toEqual(ronBani(496.31));
+    // 10.000 × 4,9631 = 49.631 bani = 496,31 lei; 31 bani is at or under 50, so it is neglected → 496 lei.
+    expect(result.ron).toEqual(ronBani(496));
     expect(result.rate.seriesCode).toBe('CURSA_EURM');
   });
 
@@ -187,7 +189,8 @@ describe('a missing rate is a refusal, never a number', () => {
     expect(result.carriedForward).toBe(true);
     expect(result.rate.rateDate).toBe('2026-02-27');
     expect(result.rate.carriedFrom).toBe('2026-02-27');
-    expect(result.ron).toEqual(ronBani(534.1));
+    // 10.000 × 5,3410 = 53.410 bani = 534,10 lei → 10 bani neglected → 534 lei.
+    expect(result.ron).toEqual(ronBani(534));
   });
 
   it('a provider that cannot enumerate simply yields no_rate rather than guessing', () => {
@@ -197,27 +200,84 @@ describe('a missing rate is a refusal, never a number', () => {
   });
 });
 
-describe('rounding is stated, not assumed', () => {
-  it('rounds the product to the nearest ban', () => {
-    // 12,34 EUR = 1234 bani × 5.3470 = 6598.198 bani → 6598 bani.
+describe('rounding at the conversion product is stated, not assumed (D-ROUND-2)', () => {
+  it('a product whose leu fraction exceeds 50 bani is raised to the next leu', () => {
+    // 12,34 EUR = 1.234 bani × 5,3470 = 6.598,198 bani = 65,98198 lei. The fraction above the whole leu is
+    // 58,198 bani — over 50 — so art. 66 raises it: 66 lei = 6.600 bani. Under the pre-D-ROUND-2 rule this
+    // pinned 6.598 bani (65,98 lei).
     const result = convertToRon(eurBani(12.34), { basis: 'payment_date_daily', onDate: '2026-03-15' }, provider);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.ron.amount).toBe(6598);
+    expect(result.ron.amount).toBe(6600);
   });
 
-  it('rounds a fraction of a ban up, and does NOT round to a whole leu', () => {
-    // 5 bani × 5.3470 = 26.735 bani → 27 bani. If art. 66 were applied to this intermediate product the
-    // answer would be 0 lei (27 bani ≤ 50 bani is dropped) — a real amount erased on an unverified reading.
+  it('a product whose leu fraction is 50 bani or less is neglected — even when that erases the amount', () => {
+    // 5 bani × 5,3470 = 26,735 bani = 0,26735 lei. The fraction is 26,735 bani, at or under 50, so it is
+    // neglected and the converted amount is **0 lei**.
+    //
+    // This is the cost of D-ROUND-2, pinned rather than hidden. Until 2026-10-15 this test asserted 27 bani
+    // and its comment argued that rounding to a whole leu here would erase „a real amount on an unverified
+    // reading”. That argument was heard and the decision went the other way anyway — so the case stays
+    // pinned with its consequence stated, not deleted. A sub-lei conversion is now 0 lei, and a record that
+    // converts to 0 lei contributes nothing to a lei total. The contrary argument stays in
+    // `ROUNDING_CHOICE.contraryArguments` in the source, where a reader can find it.
     const result = convertToRon(eurBani(0.05), { basis: 'payment_date_daily', onDate: '2026-03-15' }, provider);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.ron.amount).toBe(27);
+    expect(result.ron.amount).toBe(0);
   });
 
-  it('records that the art. 66 question is unresolved rather than silently answering it', () => {
-    expect(ROUNDING_CHOICE.status).toBe('app decision, not a cited rule');
-    expect(ROUNDING_CHOICE.notApplied).toContain('whole leu');
+  it('the boundary itself is pinned, not just the example: 50 bani neglected, 51 bani raised', () => {
+    // The ANAF chain cannot separate art. 66 from a plain floor — 2.488,50 sits exactly ON the inclusive
+    // boundary (research/53 §3). A rate of exactly 1,0000 makes the product's leu fraction equal to the
+    // amount's own bani remainder, so both sides of the boundary can be pinned directly.
+    const atOne = fixtureRateProvider([{
+      currency: 'EUR', rate: '1.0000', rateKind: 'daily_reference', rateDate: '2026-03-15',
+      seriesCode: 'CURSZ_EUR', sourceUrl: 'https://example.invalid/rate', fetchedAt: '2026-03-15T00:00:00Z',
+      provisional: false, entryMode: 'manual',
+    }]);
+    const at = (euro: number) => {
+      const r = convertToRon(eurBani(euro), { basis: 'payment_date_daily', onDate: '2026-03-15' }, atOne);
+      if (!r.ok) throw new Error(`the conversion refused: ${JSON.stringify(r)}`);
+      return r.ron.amount;
+    };
+    expect(at(1.49)).toBe(100); // 1,49 lei — 49 bani neglected
+    expect(at(1.50)).toBe(100); // 1,50 lei — exactly 50, and the article says „inclusiv”
+    expect(at(1.51)).toBe(200); // 1,51 lei — 51 bani exceeds 50, raised
+    expect(at(2.00)).toBe(200); // already whole: rounding changes nothing
+  });
+
+  it('one rounding on the exact product, not two: a half-ban product is decided on its exact value', () => {
+    // 100 bani × 1,5040 = 150,4 bani = 1,504 lei. Art. 66 on the exact value sees a fraction of 50,4 bani,
+    // which exceeds 50, and raises to 2 lei. Rounding to bani first would give 150 bani and then neglect
+    // it, yielding 1 lei. The two procedures disagree, and this pins which one the app runs.
+    const odd = fixtureRateProvider([{
+      currency: 'EUR', rate: '1.5040', rateKind: 'daily_reference', rateDate: '2026-03-15',
+      seriesCode: 'CURSZ_EUR', sourceUrl: 'https://example.invalid/rate', fetchedAt: '2026-03-15T00:00:00Z',
+      provisional: false, entryMode: 'manual',
+    }]);
+    const r = convertToRon(eurBani(1.00), { basis: 'payment_date_daily', onDate: '2026-03-15' }, odd);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.ron.amount).toBe(200);
+  });
+
+  it('records that the rule behind the rounding is undetermined, and names the contrary readings', () => {
+    // The status string is the guard: it must keep saying this is an app decision, and it must not claim
+    // art. 66 governs conversion. If someone later “fixes” the comment into a legal assertion, this fails.
+    expect(ROUNDING_CHOICE.status).toContain('app decision on an undetermined point');
+    expect(ROUNDING_CHOICE.status).toContain('NOT a cited rule');
+    // The denial is pinned verbatim: if someone later smooths the comment into a legal assertion, the
+    // sentence disappears and this fails.
+    expect(ROUNDING_CHOICE.status).toContain('not a claim that art. 66 governs conversion');
+    // The field meanings inverted with the decision, and that inversion is itself pinned: `applied` is now
+    // the whole-leu rule and `notApplied` is the nearest-ban behaviour this file used to defend.
+    expect(ROUNDING_CHOICE.applied).toContain('whole leu');
+    expect(ROUNDING_CHOICE.notApplied).toContain('nearest ban');
+    // The self-contradiction that made this a judgement, not a lookup, stays on the record.
+    expect(ROUNDING_CHOICE.scopeResearch.publishedChainsContradictEachOther).toBe(true);
+    expect(ROUNDING_CHOICE.scopeResearch.contraryArguments.join(' ')).toContain('OUG 59/2005');
+    expect(ROUNDING_CHOICE.scopeResearch.contraryArguments.join(' ')).toContain('art. 310 alin. (1)');
   });
 });
 

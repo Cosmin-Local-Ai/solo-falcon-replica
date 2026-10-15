@@ -84,7 +84,8 @@ const provider = fixtureRateProvider([
 
 describe('the euro ceilings in the rule package become lei ceilings', () => {
   it('converts 400 EUR at the FY2025 average of 5,0415 lei', () => {
-    // 400,00 EUR = 40.000 cents × 5,0415 = 201.660,00 bani = 2.016,60 lei.
+    // 400,00 EUR = 40.000 cents × 5,0415 = 201.660,00 bani = 2.016,60 lei. D-ROUND-2 rounds the product to a
+    // whole leu and 60 bani exceeds 50, so the ceiling is 2.017 lei. Before 2026-10-15 this pinned 2.016,60.
     const attempt = strikeCapCeiling({
       cap: capMoney('EUR', 400),
       paymentDates: ['2025-06-10'],
@@ -92,16 +93,17 @@ describe('the euro ceilings in the rule package become lei ceilings', () => {
     });
     expect(attempt.ok).toBe(true);
     if (!attempt.ok) return;
-    expect(attempt.strike.ceiling).toBe(lei(2016.6));
+    expect(attempt.strike.ceiling).toBe(lei(2017));
     expect(attempt.strike.paymentYear).toBe(2025);
     expect(attempt.strike.provisional).toBe(false);
   });
 
   it('converts every distinct ceiling the package states — 400, 100 and 4.000 euro', () => {
-    // 100 × 5,0415 = 504,15 lei; 4.000 × 5,0415 = 20.166,00 lei.
+    // 100 × 5,0415 = 504,15 lei → 15 bani neglected → 504 lei. 4.000 × 5,0415 = 20.166,00 lei, already
+    // whole, so rounding changes nothing — the control that shows the movement is the fraction, not the size.
     const sports = strikeCapCeiling({ cap: capMoney('EUR', 100), paymentDates: ['2025-06-10'], provider });
     const dues = strikeCapCeiling({ cap: capMoney('EUR', 4000), paymentDates: ['2025-06-10'], provider });
-    expect(sports.ok && sports.strike.ceiling).toBe(lei(504.15));
+    expect(sports.ok && sports.strike.ceiling).toBe(lei(504));
     expect(dues.ok && dues.strike.ceiling).toBe(lei(20166));
   });
 
@@ -109,7 +111,7 @@ describe('the euro ceilings in the rule package become lei ceilings', () => {
     const attempt = strikeCapCeiling({ cap: capMoney('EUR', 400), paymentDates: ['2025-06-10'], provider });
     expect(attempt.ok).toBe(true);
     if (!attempt.ok) return;
-    // 400 EUR is 40.000 euro cents — a different quantity from the 201.660 bani it converts to, and a
+    // 400 EUR is 40.000 euro cents — a different quantity from the 201.700 bani it converts to, and a
     // different unit. Reading one as the other is exactly what `paramBani` refuses and what B-32 was.
     expect(attempt.strike.cap).toEqual({ amount: 40000, currency: 'EUR' });
     expect(attempt.strike.currency).toBe('EUR');
@@ -129,14 +131,14 @@ describe('the euro ceilings in the rule package become lei ceilings', () => {
   });
 
   it('strikes the competing reading at the payment date, and it is a different number', () => {
-    // CF art. 9 alin. (3) lit. b) + alin. (4): 400 × 5,3470 = 2.138,80 lei, against the 2.016,60 lei
-    // pct. 7 alin. (6) gives. Both are shown; the app does not decide which rule wins.
+    // CF art. 9 alin. (3) lit. b) + alin. (4): 400 × 5,3470 = 2.138,80 lei → 80 bani exceeds 50 → 2.139 lei,
+    // against the 2.017 lei pct. 7 alin. (6) gives. Both are shown; the app does not decide which rule wins.
     const attempt = strikeCapCeiling({ cap: capMoney('EUR', 400), paymentDates: ['2026-10-08'], provider });
     expect(attempt.ok).toBe(true);
     if (!attempt.ok) return;
     expect(attempt.strike.alternative.ok).toBe(true);
     if (!attempt.strike.alternative.ok) return;
-    expect(attempt.strike.alternative.ceiling).toBe(lei(2138.8));
+    expect(attempt.strike.alternative.ceiling).toBe(lei(2139));
     expect(attempt.strike.alternative.evidence.basis).toBe('payment_date_daily');
     expect(attempt.strike.alternative.evidence.citation).toContain('art. 9 alin. (3) lit. b)');
   });

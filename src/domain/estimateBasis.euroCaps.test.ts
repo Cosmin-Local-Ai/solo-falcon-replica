@@ -236,12 +236,14 @@ describe('TASK 10b — both readings stay on the record, and the conflict is the
   });
 
   it('the alternative is the art. 9 payment-date reading, and it gives a different ceiling', () => {
-    // 100 EUR × 5,3470 = 534,70 lei against the 531,00 lei applied. Neither is declared wrong.
+    // 100 EUR × 5,3470 = 534,70 lei → D-ROUND-2 rounds the product, 70 bani exceeds 50, so 535 lei — against
+    // the 531,00 lei the applied pct. 7 alin. (6) rate gives (100 × 5,3100, already whole, unmoved by
+    // rounding). Neither reading is declared wrong; the rounding applies to whichever one is used.
     const a = struck();
     expect(a.euro?.alternative.ok).toBe(true);
     if (!a.euro?.alternative.ok) return;
-    expect(a.euro.alternative.ceiling).toBe(lei(534.7));
-    expect(a.ceilingAlt).toEqual({ inclVat: lei(534.7), exclVat: lei(534.7) });
+    expect(a.euro.alternative.ceiling).toBe(lei(535));
+    expect(a.ceilingAlt).toEqual({ inclVat: lei(535), exclVat: lei(535) });
   });
 
   it('the conflict travels as the rule’s own parameter, not as a sentence in a component', () => {

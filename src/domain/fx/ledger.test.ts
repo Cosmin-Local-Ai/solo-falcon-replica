@@ -88,13 +88,15 @@ function ledger(revenues: Revenue[], expenses: Expense[]): AppData {
 
 describe('a foreign-currency record enters the lei base at the payment-date daily rate', () => {
   it('converts a USD expense at the rate of the day it was paid', () => {
-    // 100,00 USD = 10.000 cents × 4,5000 = 45.000 bani = 450,00 lei
-    //  19,00 USD =  1.900 cents × 4,5000 =  8.550 bani =  85,50 lei
+    // 100,00 USD = 10.000 cents × 4,5000 = 45.000 bani = 450,00 lei — already whole, rounding changes nothing
+    //  19,00 USD =  1.900 cents × 4,5000 =  8.550 bani =  85,50 lei → fraction exactly 50 bani, and art. 66
+    //  says neglect „până la 50 de bani **inclusiv**”, so 85 lei = 8.500 bani. This is the inclusive boundary
+    //  reached by an ordinary 19-lei VAT line, which is why it is pinned on a record and not only on a unit.
     const outcome = normaliseLedgerToRon(ledger([], [expense()]), provider);
     expect(outcome.conversions).toHaveLength(1);
     const converted = outcome.data.expenses[0];
     expect(converted.valoareFaraTva).toEqual({ amount: 45000 as Bani, currency: 'RON' });
-    expect(converted.tva).toEqual({ amount: 8550 as Bani, currency: 'RON' });
+    expect(converted.tva).toEqual({ amount: 8500 as Bani, currency: 'RON' });
     expect(outcome.unconverted).toHaveLength(0);
   });
 
@@ -200,13 +202,14 @@ describe('a foreign-currency record enters the lei base at the payment-date dail
 
   it('an EUR record converts on the same path, at the rate research 23 actually captured', () => {
     // 100,00 EUR × 5,3470 = 534,70 lei — the verified figure, as the EUR control for the USD tests above.
+    // D-ROUND-2 then rounds it: 70 bani exceeds 50, so the lei amount is 535 lei.
     const outcome = normaliseLedgerToRon(
       ledger([], [expense({ valoareFaraTva: eur(100), tva: eur(19) })]),
       provider,
     );
     expect(outcome.conversions[0].rate).toBe('5.3470');
-    expect(outcome.data.expenses[0].valoareFaraTva).toEqual({ amount: 53470 as Bani, currency: 'RON' });
-    expect(outcome.conversions[0].netLei).toBe(lei(534.7));
+    expect(outcome.data.expenses[0].valoareFaraTva).toEqual({ amount: 53500 as Bani, currency: 'RON' });
+    expect(outcome.conversions[0].netLei).toBe(lei(535));
   });
 });
 
@@ -252,7 +255,9 @@ describe('Phase 10c — the anchor date is named, and the boundary is one call',
     expect(c.netRecorded).toEqual(usd(100));
     expect(c.vatRecorded).toEqual(usd(19));
     expect(c.netLei).toBe(45000 as Bani);
-    expect(c.vatLei).toBe(8550 as Bani);
+    // 85,50 lei → the inclusive-50 boundary neglects it to 85 lei. The recorded USD amount beside it is
+    // unchanged: rounding moves the lei result, never what the person recorded.
+    expect(c.vatLei).toBe(8500 as Bani);
   });
 
   it('normaliseStoredLedger reads the rates the app stores, and a second pass converts nothing', () => {
