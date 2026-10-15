@@ -698,6 +698,21 @@ Written 2026-10-12, after I briefed a Researcher to **read a research file and w
 
 **The failure mode is the same one behind §12.12 and the two brief errors of 2026-10-12:** I write a document from what the role *suggests* and treat it as if it were verified. A Researcher is not "a developer who researches"; it is a browser with no filesystem. **Check the definition before briefing off it, and when a brief tells an agent to touch something it cannot reach, the brief is the defect — not the agent.**
 
+### 12.17 — Workers are intentional about test runs; the full suite is a gate, not an iteration loop — **user decision, 2026-10-15**
+
+**Why the rule exists, stated plainly because the cost is the user's, not the agent's.** The suite is now **172 unit test files and 47.025 lines of test code**, plus **37 Playwright specs**. `npm run test` and `npm run test:e2e` run **all of it, every time**. On this machine — one engine slot, ~390 MiB free — a Worker looping on the full suite **exhausts the user's RAM and forces them to restart PI and re-preload the whole session, repeatedly, to wait for a run that passes anyway.** The tests are not the problem. The repetition is. A Worker that runs the whole suite six times during one brief has spent the user's machine six times over for information it could have got in six targeted runs.
+
+**The rule:**
+
+1. **During development, run the narrowest set that covers the change.** `npx vitest run <path>` on the files you touched and their direct consumers. `npx playwright test <spec>` on the spec you changed. **Never `npm run test` as an iteration loop.**
+2. **Run the full suite exactly once, at the end**, as the §9 self-validation gate. That single run is the evidence; the targeted runs are the work.
+3. **Never run the unit suite and the e2e suite in the same command, or concurrently.** They are separate memory events and they stack.
+4. **Do not re-run the full suite after a green full-suite run unless a file changed after it.** A green run followed by an identical green run is pure cost.
+5. **New tests stay targeted to the defect.** Do not grow a 1.200-line test file to cover one assertion; do not add a new e2e spec where a component test proves the same thing. The five largest test files are already 900–1.200 lines each.
+6. **Report the shape of your runs in the handoff**, under `TESTS:` — which targeted runs, and the one full-suite result with its newly measured counts. If you ran the full suite more than twice, **say why.**
+
+**What this does not license:** skipping the full suite. §9 is unchanged — `tsc`, `build`, `test`, `test:e2e` all run before handoff, and a handoff without them is not a handoff. The rule is about **not running them repeatedly**, not about running them less at the end.
+
 ### 12.13 Never `git add -A` while a Worker is in flight — **orchestrator error, 2026-10-12**
 **What happened.** While `worker-b51-scope-statement` was running, the orchestrator committed a documentation change with `git add -A && git commit`. That swept **six of the Worker's in-flight source files** — `Onboarding.tsx`, `Settings.tsx`, `scope.statement.test.tsx`, `ui/copy/common.ts`, `ui/copy/index.ts` and an e2e spec — into a commit whose message was about a work-queue section in a plan file. The Worker's own report had to say so, because its diff no longer matched any commit that described it.
 
