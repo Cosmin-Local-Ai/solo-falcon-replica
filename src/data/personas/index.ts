@@ -137,6 +137,18 @@ export const personasByCaen: ReadonlyMap<string, readonly CaenPersonaMatch[]> = 
   return map;
 })();
 
+/**
+ * A persona by id, or `undefined` for an id this build does not have.
+ *
+ * B-134 needs this: the demo toggle persists an **identifier**, and on the next load the store has to turn
+ * that identifier back into a dataset. A stale key from a build that had a persona this one dropped must
+ * resolve to `undefined` so the store can fall back to the user's own data instead of rendering a badge
+ * that names a profile with no records behind it.
+ */
+export function personaById(id: string): PersonaDefinition | undefined {
+  return PERSONAS.find((p) => p.id === id);
+}
+
 /** Every persona that declares this CAEN code, principal first. Empty for the 1,187-odd it does not. */
 export function personasForCaen(cod: string): readonly CaenPersonaMatch[] {
   return personasByCaen.get(cod) ?? [];

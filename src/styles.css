@@ -271,3 +271,58 @@ a:hover { text-decoration: underline; }
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
+
+/* ---------- Step 11 / Part D (B-132, B-134): the persona surface and the demo marker ---------- */
+/* The demo marker is chrome, not a banner: `.main-content` scrolls and a banner inside it scrolls away,
+   while `.topbar` is a fixed row above it. That is the whole reason this is a topbar element. */
+.demo-badge {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 6px 4px 12px; border-radius: 999px;
+  background: #fff7ed; border: 1px solid #fdba74; color: #7c2d12; font-size: 12.5px;
+}
+.demo-badge-title { font-weight: 700; }
+.demo-badge-note { color: #9a3412; }
+.demo-badge .btn { background: #fff; border-color: #fdba74; color: #7c2d12; }
+
+.personas-page { display: grid; gap: 16px; }
+.persona-route {
+  border: 1px solid var(--border); border-left: 4px solid var(--border-strong);
+  border-radius: 8px; padding: 12px 14px; display: grid; gap: 8px;
+}
+/* The weight follows the level: an exact clasă route carries a solid rule, a secțiune route a dashed one.
+   The difference is also in the sentence (`personas.levelSentence`), because a rule alone is a colour
+   difference and a colour difference is not something a test or a screen reader can check. */
+.persona-route--clasa { border-left-style: solid; border-left-color: var(--primary); }
+.persona-route--grupa { border-left-style: solid; border-left-color: var(--blue); }
+.persona-route--diviziune { border-left-style: dashed; border-left-color: var(--blue); }
+.persona-route--sectiune { border-left-style: dashed; border-left-color: var(--text-4); }
+.persona-route--none { border-left-style: dotted; border-left-color: var(--danger-text); }
+.persona-route-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.persona-route-cod { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.persona-level {
+  font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 999px; background: var(--primary-soft); color: var(--primary);
+}
+.persona-level--sectiune, .persona-level--none { background: #f1f5f9; color: var(--text-3); }
+.persona-route-tie { font-size: 12px; color: var(--text-2); }
+.persona-route-den, .persona-route-matched { font-size: 12.5px; color: var(--text-3); margin: 0; }
+.persona-route-strength { font-size: 13.5px; font-weight: 600; margin: 0; }
+.persona-route--sectiune .persona-route-strength,
+.persona-route--none .persona-route-strength { font-weight: 500; color: var(--text-2); }
+.persona-route-reason { font-size: 12.5px; color: var(--text-2); margin: 0; }
+.persona-candidates { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.persona-candidate {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+}
+.persona-candidate-label { font-size: 13.5px; font-weight: 600; }
+.persona-candidate-role { font-size: 12px; color: var(--text-3); }
+.persona-candidate .btn { margin-left: auto; }
+.persona-sample {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; border: 1px dashed var(--border-strong); border-radius: 8px; background: #f8fafc;
+}
+.persona-sample strong { font-size: 12px; }
+.persona-sample-label { font-size: 13.5px; font-weight: 600; }
+.persona-sample .btn { margin-left: auto; }
+.persona-check { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }

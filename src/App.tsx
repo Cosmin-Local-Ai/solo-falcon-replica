@@ -11,11 +11,12 @@ import Declarations from './pages/Declarations';
 import Documents from './pages/Documents';
 import Assets from './pages/Assets';
 import Clients from './pages/Clients';
+import Personas from './pages/Personas';
 import Settings from './pages/Settings';
 import OnboardingPage from './pages/Onboarding';
 import { Toasts } from './components/ui';
 import { FiscalYearAdvance } from './components/dashboard/YearLifecycleBanner';
-import { disclosure, nav, onboarding as onboardingCopy, shell } from './ui/copy';
+import { disclosure, nav, onboarding as onboardingCopy, personas as personasCopy, shell } from './ui/copy';
 
 export type Page =
   | 'dashboard'
@@ -29,6 +30,10 @@ export type Page =
   // art. 68 alin. (7) lit. h) forbids.
   | 'assets'
   | 'clients'
+  // Step 11 / Part D (B-132): the persona surface. Its own page rather than a card on Settings, because the
+  // only CAEN control that existed was the person's own fiscal field — and a demo marker beside a real
+  // declared activity reads as a recommendation about that activity.
+  | 'personas'
   | 'settings';
 
 const PAGES: Page[] = [
@@ -40,6 +45,7 @@ const PAGES: Page[] = [
   'documents',
   'assets',
   'clients',
+  'personas',
   'settings',
 ];
 
@@ -52,6 +58,7 @@ const NAV: { page: Page; label: string; icon: string }[] = [
   { page: 'documents', label: nav.documents, icon: '📁' },
   { page: 'assets', label: nav.assets, icon: '🏷' },
   { page: 'clients', label: nav.clients, icon: '👥' },
+  { page: 'personas', label: nav.personas, icon: '🧭' },
   { page: 'settings', label: nav.settings, icon: '⚙' },
 ];
 
@@ -145,7 +152,7 @@ function Shell() {
   const [route, setRoute] = useState<Route>(parseRoute);
   const [navOpen, setNavOpen] = useState(false);
   const isMobile = useIsMobile();
-  const { profile, dataOrigin, migration, quarantine, moneyNotices, toast, sandboxActive, unloadSandbox, saveFailure, retrySave } = useStore();
+  const { profile, dataOrigin, migration, quarantine, moneyNotices, toast, sandboxActive, unloadSandbox, saveFailure, retrySave, demoActive, demoPersonaId, demoPersonaLabel, unloadDemoPersona } = useStore();
 
   // Phase 11 (D1, D-RUN-1): empty storage is a first run, not a demo. `dataOrigin === 'empty'` is the
   // only state that means "nothing this person entered exists yet" — and because the save effect in
@@ -294,6 +301,30 @@ function Shell() {
           )}
           <span className="page-title">{firstRun ? onboardingCopy.title : TITLES[route.page]}</span>
           <span className="spacer" />
+          {/* B-134 — the demo marker is chrome, not a banner. The banners live in `.main-content`, which is
+              the scroll container, so a long register scrolls them away; the topbar does not scroll, which is
+              what makes this "impossible to miss" rather than "present at the top of the page". It names
+              WHOSE data the screen shows and carries the control that switches back, so the toggle is
+              persistent in both directions and never only a URL or a localStorage flag. */}
+          {demoActive && (
+            <div className="demo-badge" role="status" data-demo-badge data-demo-persona={demoPersonaId ?? 'seed'}>
+              <span className="demo-badge-title" data-demo-badge-title>
+                {demoPersonaLabel ?? personasCopy.badgeSeed}
+              </span>
+              <span className="demo-badge-note" data-demo-badge-note>{personasCopy.badgeTitle}</span>
+              <button
+                type="button"
+                className="btn btn-sm"
+                data-demo-badge-exit
+                onClick={() => {
+                  unloadDemoPersona();
+                  toast('success', personasCopy.toasts.unloaded);
+                }}
+              >
+                {personasCopy.exitDemo}
+              </button>
+            </div>
+          )}
           {/* Phase 11: the topbar used to print `identity.nume` unconditionally, which on a fresh profile
               meant the fixture's name sat in the chrome of an app that holds no data. No name, no block. */}
           {profile.identity.nume && (
@@ -371,6 +402,7 @@ function Shell() {
             />
           )}
           {route.page === 'clients' && <Clients />}
+          {route.page === 'personas' && <Personas />}
           {route.page === 'assets' && <Assets />}
           {route.page === 'settings' && (
             <Settings

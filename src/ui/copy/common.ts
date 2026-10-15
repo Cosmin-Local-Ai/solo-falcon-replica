@@ -159,7 +159,7 @@ export const empty = {
 } as const;
 
 /**
- * The eight destinations in the sidebar. `App.tsx` used to spell these twice — once in `NAV`, once in
+ * The destinations in the sidebar. `App.tsx` used to spell these twice — once in `NAV`, once in
  * `TITLES` — which is how a rename ends up half-applied. One key now feeds both the link and the
  * page title.
  */
@@ -175,6 +175,10 @@ export const nav = {
   // there would invite exactly that reading.
   assets: 'Mijloace fixe',
   clients: 'Clienți',
+  // Step 11 / Part D (B-132): the persona surface, its own destination. Not a card bolted onto the user's
+  // own CAEN field in Setări — a demo marker beside a real declared activity reads as a recommendation about
+  // that activity, which is the one thing the routing is not entitled to say.
+  personas: 'Persona demonstrativ',
   settings: 'Setări',
 } as const;
 

@@ -16,6 +16,7 @@
  * Enforced by `src/ui/copy/copy.guard.test.ts`.
  */
 export { ui, disclosure, noteLabel, scope, fields, validation, empty, nav, shell } from './common';
+export { personas } from './personas';
 export {
   dashboard,
   chart,
@@ -72,6 +73,7 @@ export {
 import {
   ui, disclosure, noteLabel, scope, fields, validation, empty, nav, shell,
 } from './common';
+import { personas } from './personas';
 import {
   dashboard, chart, summary, insights, reserve, actions, deadlines, completeness,
   legislation, moneyPrecision, checkLabel, deadlineAppliesToLabels, deadlineLabels,
@@ -100,6 +102,7 @@ import {
 /** The whole layer as one namespaced object, for call sites that prefer `copy.x.y`. */
 export const copy = {
   ui, disclosure, noteLabel, scope, fields, validation, empty, nav, shell,
+  personas,
   dashboard, chart, summary, insights, reserve, actions, deadlines, completeness,
   legislation, moneyPrecision, checkLabel, deadlineAppliesToLabels, deadlineLabels,
   deadlineLabelFor, vatFilingPeriodUnknown,

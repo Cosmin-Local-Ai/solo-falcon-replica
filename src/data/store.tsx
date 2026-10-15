@@ -37,6 +37,11 @@ import {
 import { connectDefaultBlobStore, getBlobStore, hasIndexedDB } from './blobStore';
 import { buildDatasetExport, type DatasetExportResult } from './datasetExport';
 import { validateDatasetImport } from './datasetImport';
+// B-134 — the demo ↔ real toggle. The flag lives in its own key, never in `AppData`, and the demo's
+// records are re-derived from the persona module rather than copied into storage.
+import { clearDemoMode, readDemoMode, writeDemoMode } from './demoMode';
+import { personaById } from './personas/index';
+import type { PersonaId } from './personas/personaTypes';
 
 /**
  * The one storage key for the dataset. It does NOT change across versions —
@@ -70,10 +75,11 @@ export const QUARANTINE_STORAGE_KEY = quarantineKey(STORAGE_KEY);
  *   `QUARANTINE_STORAGE_KEY` first, and the app fell back to an EMPTY dataset —
  *   not to a fixture. This is the state the banner must show; B-11 was exactly
  *   this case being silent.
- * - `'sandbox'`: the demo fixture is loaded on purpose, through the opt-in
- *   sandbox control. It is never written to storage and never survives a reload,
- *   which is what makes it removable and what keeps it from ever being the
- *   initial state. The banner is what marks it.
+ * - `'sandbox'`: a demo profile is loaded on purpose, through the opt-in sandbox control or through the
+ *   persona surface (B-134). It is never written to storage and never reaches the user's own key, which is
+ *   what makes it removable and what keeps it from ever being the initial state. The banner and the topbar
+ *   badge are what mark it. A remembered persona demo IS restored on load — that is the point of B-134 —
+ *   but it is restored as a view over the user's untouched data, and it is announced the moment it is.
  * Store-level only — never part of the persisted `AppData` shape.
  */
 export type DataOrigin = 'empty' | 'persisted' | 'quarantined' | 'sandbox';
@@ -307,8 +313,29 @@ interface StoreValue extends AppData {
   loadSandbox: () => void;
   /** Phase 11 — put the data that was on screen before the sandbox back, unchanged. */
   unloadSandbox: () => void;
-  /** True while the demo fixture is what is on screen. */
+  /** True while the SEED demo fixture is what is on screen. */
   sandboxActive: boolean;
+  /**
+   * B-134 — switch the screen onto one of the fifteen demo personas, IN MEMORY, and remember the choice.
+   *
+   * `false` for an id this build does not have; the caller must not report success in that case. Nothing
+   * merges: the persona's dataset replaces what is on screen, the user's own bytes under `STORAGE_KEY`
+   * are never read back or rewritten, and the save effect refuses to write while a demo is on screen.
+   */
+  loadDemoPersona: (id: PersonaId) => boolean;
+  /** B-134 — put the user's own data back, unchanged, and forget the demo choice. */
+  unloadDemoPersona: () => void;
+  /** B-134 — true while ANY demo profile (seed fixture or persona) is what is on screen. */
+  demoActive: boolean;
+  /** B-134 — which persona is on screen; `null` for the seed fixture and for the user's own data. */
+  demoPersonaId: PersonaId | null;
+  /**
+   * B-134 — the label the topbar badge prints for the demo that is on screen.
+   *
+   * Produced here rather than looked up in `App.tsx` so the badge and the store cannot disagree about
+   * whose data the screen is showing, and so the shell does not have to import the persona module.
+   */
+  demoPersonaLabel: string | null;
   /**
    * Phase 11 — "Șterge toate datele și începe de la zero". Clears the data key (and the preserved
    * quarantine copy, which is data too) and returns the store to the `'empty'` state, which is the state
@@ -448,14 +475,73 @@ function loadInitial(): LoadedData {
   }
 }
 
+interface LoadedData {
+  data: AppData;
+  dataOrigin: DataOrigin;
+  migration: MigrationInfo | null;
+  quarantine: QuarantineRecord | null;
+}
+
+/**
+ * What the store starts with, once the remembered demo toggle (B-134) has been consulted.
+ *
+ * `preDemo` is the user's own data set aside before the demo replaces it on screen. It is the whole of the
+ * losslessness guarantee: switching back restores this value by reference, and the bytes in storage were
+ * never touched in between.
+ */
+interface BootState extends LoadedData {
+  demoPersonaId: PersonaId | null;
+  preDemo: { data: AppData; origin: DataOrigin } | null;
+}
+
+/**
+ * Load the user's data, then apply the demo the toggle remembered — as a view, never as a write.
+ *
+ * The demo is restored synchronously, inside the first render, for the reason B-134 exists: a demo that
+ * appears a frame after the user's own numbers is a demo that can be mistaken for their year. Restoring it
+ * here means the badge and the numbers arrive in the same paint.
+ *
+ * Two loads refuse the restore, and both refusals are the honest direction rather than a convenience:
+ *  - `'quarantined'`: the payload was rejected, and the banner about it is the more urgent fact. The key is
+ *    left alone, so the choice survives and simply does not apply over a rejected payload.
+ *  - `'empty'`: there is nothing to switch back from. A demo over an empty first run is the D1 defect —
+ *    a fresh browser opening on somebody else's invoices — and `resetAllData` clears the key anyway.
+ */
+function boot(): BootState {
+  const loaded = loadInitial();
+  if (loaded.dataOrigin !== 'persisted') {
+    return { ...loaded, demoPersonaId: null, preDemo: null };
+  }
+  const stored = readDemoMode();
+  if (!stored) return { ...loaded, demoPersonaId: null, preDemo: null };
+  const persona = personaById(stored.personaId);
+  if (!persona) {
+    // A key naming a persona this build does not have. Fall back to the user's own data and drop the key,
+    // rather than print a badge for a profile with no records behind it.
+    clearDemoMode();
+    return { ...loaded, demoPersonaId: null, preDemo: null };
+  }
+  return {
+    data: clone(persona.data),
+    dataOrigin: 'sandbox',
+    migration: loaded.migration,
+    quarantine: loaded.quarantine,
+    demoPersonaId: persona.id,
+    preDemo: { data: loaded.data, origin: loaded.dataOrigin },
+  };
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [initial] = useState(loadInitial);
+  const [initial] = useState(boot);
   const [data, setData] = useState<AppData>(initial.data);
   const [dataOrigin, setDataOrigin] = useState<DataOrigin>(initial.dataOrigin);
   const [quarantine, setQuarantine] = useState<QuarantineRecord | null>(initial.quarantine);
+  // B-134 — which demo persona is on screen, if any. Seeded from the restored toggle so the badge is
+  // correct on the first paint after a reload, not one effect later.
+  const [demoPersonaId, setDemoPersonaId] = useState<PersonaId | null>(initial.demoPersonaId);
   // What was on screen before the sandbox replaced it. A ref, not state: it is not rendered, and it must
   // survive every re-render of the sandbox without triggering one.
-  const preSandbox = useRef<{ data: AppData; origin: DataOrigin } | null>(null);
+  const preSandbox = useRef<{ data: AppData; origin: DataOrigin } | null>(initial.preDemo);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const timers = useRef<number[]>([]);
 
@@ -903,12 +989,48 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const previous = preSandbox.current;
       if (!previous) return;
       preSandbox.current = null;
+      setDemoPersonaId(null);
+      clearDemoMode();
       setData(previous.data);
       setDataOrigin(previous.origin);
     },
-    sandboxActive: dataOrigin === 'sandbox',
+    // The seed fixture specifically. `demoPersonaId === null` is what distinguishes it from a persona
+    // demo, which shares the same `'sandbox'` origin because it shares the same guarantee: in memory only.
+    sandboxActive: dataOrigin === 'sandbox' && demoPersonaId === null,
+    loadDemoPersona: id => {
+      const persona = personaById(id);
+      if (!persona) return false;
+      // Switching persona A → persona B must not stack. The state to come back to is whatever was on
+      // screen before the FIRST demo, which is the user's own data — never the previous persona's.
+      preSandbox.current = preSandbox.current ?? { data, origin: dataOrigin };
+      setData(clone(persona.data));
+      setDataOrigin('sandbox');
+      setDemoPersonaId(persona.id);
+      writeDemoMode({ personaId: persona.id });
+      return true;
+    },
+    unloadDemoPersona: () => {
+      // Any demo, seed fixture or persona: the topbar badge is one control for both, and a control that
+      // silently did nothing on one of the two states would be its own small dishonesty.
+      if (dataOrigin !== 'sandbox') return;
+      const previous = preSandbox.current;
+      preSandbox.current = null;
+      setDemoPersonaId(null);
+      clearDemoMode();
+      if (previous) {
+        setData(previous.data);
+        setDataOrigin(previous.origin);
+      }
+    },
+    demoActive: dataOrigin === 'sandbox',
+    demoPersonaId,
+    demoPersonaLabel: demoPersonaId ? personaById(demoPersonaId)?.label ?? null : null,
     resetAllData: () => {
       preSandbox.current = null;
+      // B-134 — "start from zero" includes the demo toggle. A wipe that left the flag behind would reopen
+      // the app on somebody else's year, which is the D1 defect this control exists to prevent.
+      clearDemoMode();
+      setDemoPersonaId(null);
       // PG-11 — a wipe is an **explicit** delete of every record, including every document, and the
       // confirmation screen says so by name ("…documentele…"). Leaving the bytes behind in the browser while
       // the records that named them are gone would be the one case where "orphans are reported, not removed"
