@@ -31,7 +31,17 @@
  */
 import { describe, expect, it } from 'vitest';
 import { getDeadlineRows, getTaxEstimate, getThresholdStatuses, getVatPeriodicity } from './dashboard';
-import { PERSONAS, personaForCaen, personasForCaen } from './personas';
+import { CAEN_ENTRIES } from './caenRev3';
+import {
+  CAEN_DEMO_SAMPLE_PERSONA_ID,
+  CAEN_MATCH_LEVEL_LABELS,
+  CAEN_SAMPLE_LABEL,
+  PERSONAS,
+  caenCoverage,
+  personaForCaen,
+  personasForCaen,
+  routePersonaForCaen,
+} from './personas';
 import { PERSONA_IDS, type PersonaId } from './personas/personaTypes';
 import { contentCreatorPersona } from './personas/persona2ContentCreator';
 import { fixedInstant } from '../test/fixedInstant';
@@ -298,10 +308,10 @@ describe('step 11 — the CAEN→persona map (D-DEMO-3)', () => {
     expect(personaForCaen('5520')?.id).toBe('short-term-host');
   });
 
-  it('answers a code nobody models with no match, and says what the miss means', async () => {
+  it('answers a code nobody models with no exact match, and says what the miss means', async () => {
     const { caenCoverage } = await import('./personas');
+    // The exact map is still exact: B-128 added a route, it did not pretend 2511 is a persona's code.
     expect(personasForCaen('2511')).toEqual([]);
-    expect(personaForCaen('2511')).toBeUndefined();
     const coverage = caenCoverage();
     expect(coverage.unmappedClasses).toBeGreaterThan(coverage.mappedClasses);
     expect(coverage.missMeaning).toContain('nu că codul nu există');
@@ -314,6 +324,145 @@ describe('step 11 — the CAEN→persona map (D-DEMO-3)', () => {
     expect(investor?.caen.principal).toBe('');
     expect(personasForCaen('')).toEqual([]);
     expect(caenCoverage().coveredClasses).not.toContain('');
+  });
+});
+
+describe('B-128 — every clasă routes to a demo, by the nomenclator’s own lineage', () => {
+  const CLASE = CAEN_ENTRIES.filter((e) => e.nivel === 'clasa');
+
+  it('routes every clasă in the nomenclator by lineage, or says exactly why it cannot', () => {
+    // Iterated over the nomenclator, not over a list of examples: the requirement is about all 651.
+    expect(CLASE.length).toBe(651);
+    for (const entry of CLASE) {
+      const route = routePersonaForCaen(entry.cod);
+      const routed = route.matchLevel !== 'none';
+      if (routed) {
+        expect(route.candidates.length, `${entry.cod} routed with no candidate`).toBeGreaterThan(0);
+        expect(route.tie).toBe(route.candidates.length > 1);
+        expect(route.sample, `${entry.cod} matched and also carried a sample`).toBeUndefined();
+        expect(route.matchedOn, `${entry.cod} routed without naming the ancestor`).not.toBe('');
+      } else {
+        // A no-route answer must be explainable and must not dead-end: it carries the sample instead.
+        expect(route.candidates).toEqual([]);
+        expect(route.matchedOn).toBe('');
+        expect(route.sample?.id).toBe(CAEN_DEMO_SAMPLE_PERSONA_ID);
+        expect(route.reason).toContain(`secțiunea ${entry.sectiune}`);
+      }
+      for (const m of route.candidates) {
+        expect(PERSONAS.some((p) => p.id === m.persona.id), `${entry.cod} routed to an unknown persona`).toBe(true);
+      }
+    }
+  });
+
+  it('the lineage never leaves the nomenclator’s own prefixes — there is no semantic matching', () => {
+    // The structural proof that no fuzzy matching exists: every match is a code prefix or a section letter.
+    for (const entry of CLASE) {
+      const route = routePersonaForCaen(entry.cod);
+      if (route.matchLevel === 'none') continue;
+      const ok =
+        route.matchLevel === 'sectiune'
+          ? route.matchedOn === entry.sectiune
+          : entry.cod.startsWith(route.matchedOn) && route.matchedOn.length > 0;
+      expect(ok, `${entry.cod} matched on ${route.matchedOn}, which is not a lineage ancestor`).toBe(true);
+    }
+  });
+
+  it('the distribution across levels is the measured one, and it is the deliverable', () => {
+    const c = caenCoverage();
+    // Pinned deliberately: these numbers say how much of the nomenclator is genuinely covered and how much
+    // is reached only by a weak fallback. If a persona is added they move, and that is the point of pinning.
+    expect(c.matchLevelCounts).toEqual({ clasa: 34, grupa: 36, diviziune: 97, sectiune: 331, none: 153 });
+    expect(c.routedClasses).toBe(498);
+    expect(c.unroutedClasses).toBe(153);
+    expect(c.routedClasses + c.unroutedClasses).toBe(c.totalClasses);
+    expect(Object.values(c.matchLevelCounts).reduce((a, b) => a + b, 0)).toBe(c.totalClasses);
+    expect(c.tieClasses).toBe(104);
+    // A secțiune-level route is the majority of what "coverage" here means. Stated, not implied.
+    expect(c.matchLevelCounts.sectiune).toBeGreaterThan(c.routedClasses / 2);
+  });
+
+  it('the 153 uncovered clase are a coverage gap in 11 named secțiuni, not scattered misses (B-131)', () => {
+    const c = caenCoverage();
+    expect(c.sectiuniWithoutPersona).toEqual(['B', 'D', 'E', 'F', 'L', 'P', 'Q', 'R', 'T', 'U', 'V']);
+    expect(Object.keys(c.unroutedBySectiune).sort()).toEqual(c.sectiuniWithoutPersona);
+    expect(Object.values(c.unroutedBySectiune).reduce((a, b) => a + b, 0)).toBe(c.unroutedClasses);
+    // Every clasă in a secțiune with a persona routes; every clasă in one without does not.
+    for (const entry of CLASE) {
+      const hasPersona = !c.sectiuniWithoutPersona.includes(entry.sectiune);
+      expect(routePersonaForCaen(entry.cod).matchLevel !== 'none', entry.cod).toBe(hasPersona);
+    }
+  });
+
+  it('names the level it matched at, from the exact case down to the weakest', () => {
+    // Every code here is a real clasă in docs/ai/data/caen_rev3.csv. 6201 and 6202 are not: they are Rev.2
+    // codes and Rev.3 does not contain them, so the register row’s `6202` example cannot be tested.
+    expect(routePersonaForCaen('6210')).toMatchObject({ matchLevel: 'clasa', matchedOn: '6210', tie: false });
+    expect(routePersonaForCaen('4931')).toMatchObject({ matchLevel: 'grupa', matchedOn: '493' });
+    expect(routePersonaForCaen('4911')).toMatchObject({ matchLevel: 'diviziune', matchedOn: '49' });
+    expect(routePersonaForCaen('2511')).toMatchObject({ matchLevel: 'sectiune', matchedOn: 'C' });
+    expect(routePersonaForCaen('4931').candidates.map((m) => m.persona.id)).toEqual(['ride-hailing-driver']);
+    expect(routePersonaForCaen('4911').candidates.map((m) => m.persona.id)).toEqual(['ride-hailing-driver']);
+    // The weakest route is labelled as weak, in the reason the UI renders.
+    expect(routePersonaForCaen('2511').reason).toContain('Potrivire slabă');
+    expect(routePersonaForCaen('2511').candidates.map((m) => m.persona.id)).toEqual(['agricultural-producer']);
+    expect(personaForCaen('2511')?.id).toBe('agricultural-producer');
+  });
+
+  it('returns every candidate on a tie at every level, never a silent pick', () => {
+    const ties: [string, string, string[]][] = [
+      ['4721', 'clasa', ['agricultural-norma', 'agricultural-producer']],
+      ['4722', 'grupa', ['agricultural-norma', 'agricultural-producer']],
+      // Diviziunea 47 holds three personas: commerce declares 4791 as principal, normă declares 4721 as
+      // principal, the agricultural producer declares 4721 as secondary — so principal first puts 4791 ahead.
+      ['4730', 'diviziune', ['online-commerce', 'agricultural-norma', 'agricultural-producer']],
+      ['4611', 'sectiune', ['online-commerce', 'agricultural-norma', 'agricultural-producer']],
+    ];
+    for (const [cod, level, ids] of ties) {
+      const route = routePersonaForCaen(cod);
+      expect(route.matchLevel, cod).toBe(level);
+      expect(route.tie, cod).toBe(true);
+      expect(route.candidates.map((m) => m.persona.id), cod).toEqual(ids);
+      // Principal first, so the convenience accessor is ranked rather than arbitrary — and the tie is one
+      // call away for anything that has to show the choice.
+      expect(personaForCaen(cod)?.id, cod).toBe(ids[0]);
+    }
+  });
+
+  it('a sample is a different kind of answer from a match, and is labelled so', () => {
+    const route = routePersonaForCaen('0710'); // Extracția minereurilor feroase — secțiunea B, no persona.
+    expect(route.matchLevel).toBe('none');
+    expect(route.candidates).toEqual([]);
+    expect(route.sample?.id).toBe('online-commerce');
+    expect(route.reason).toContain('Niciun persona demonstrativ');
+    expect(route.reason).not.toContain('aceeași');
+    // The sample must never be reachable through the match path, at any level.
+    for (const cod of ['6210', '4931', '4911', '2511', '4721']) {
+      expect(routePersonaForCaen(cod).sample, cod).toBeUndefined();
+    }
+    // And the wording the UI renders keeps the two apart.
+    expect(CAEN_SAMPLE_LABEL).toBe('Exemplu demonstrativ — nu activitatea dumneavoastră');
+    for (const level of ['clasa', 'grupa', 'diviziune', 'sectiune', 'none'] as const) {
+      expect(CAEN_MATCH_LEVEL_LABELS[level]).toBeTruthy();
+      expect(CAEN_SAMPLE_LABEL).not.toBe(CAEN_MATCH_LEVEL_LABELS[level]);
+    }
+    expect(new Set(Object.values(CAEN_MATCH_LEVEL_LABELS)).size).toBe(5);
+  });
+
+  it('refuses a sample for a code that is not in the nomenclator at all', () => {
+    // 6201 is a Rev.2 code Rev.3 dissolved. Offering a demo for it would paper over an input error.
+    for (const cod of ['6201', '6202', '9999', '']) {
+      const route = routePersonaForCaen(cod);
+      expect(route.matchLevel, cod).toBe('none');
+      expect(route.sample, cod).toBeUndefined();
+      expect(route.candidates, cod).toEqual([]);
+    }
+    expect(routePersonaForCaen('6201').reason).toContain('nu există în CAEN Rev.3');
+  });
+
+  it('routes a grupa or diviziune code by the level it actually is', () => {
+    // The picker only ever hands a clasă, but the map is queried with partial codes elsewhere.
+    expect(routePersonaForCaen('621')).toMatchObject({ matchLevel: 'grupa', matchedOn: '621' });
+    expect(routePersonaForCaen('49')).toMatchObject({ matchLevel: 'diviziune', matchedOn: '49' });
   });
 });
 
