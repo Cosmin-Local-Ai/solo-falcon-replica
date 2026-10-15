@@ -99,7 +99,7 @@ import { dpiQuotaPercentOf } from './fiscal/dpi2026';
 // be struck through the FX boundary that already exists: `convertToRon` over `recordedRateProvider(data)`.
 // This module does not touch `domain/fx/` internals and does not write a second rate lookup — it names the
 // anchor the article asks for and lets the existing converter answer it.
-import { convertToRon, type ConversionAnchor } from './fx/convert';
+import { convertToRon, type ConversionAnchor, type ProvisionalRateEvidence } from './fx/convert';
 import type { FxRateProvider } from './fx/provider';
 import { selectProjectionV1, type ProjectionV1 } from './projection';
 import {
@@ -582,6 +582,17 @@ export interface CedareGross {
   gross: Bani | null;
   /** Why no gross could be struck. Reported, never guessed, and never replaced by a default. */
   detail?: string;
+  /**
+   * B-144 — every provisional rate this gross was measured with, one entry per distinct rate.
+   *
+   * art. 84 measures the rent at the BNR average of the year the income is realised, and for a year that
+   * has not closed that average is a stand-in the user recorded. The lei gross that comes out of it is what
+   * the threshold rows on the Dashboard are measured against — `data/dashboard.ts` passes this same estimate
+   * into `getThresholdStatuses` — so a provisional rate here does not merely move a deduction, it can move
+   * which tier a person lands in. That is the case the five-point note has to reach, and it has to reach it
+   * with the rate that was actually used rather than one a surface re-read from the store.
+   */
+  provisionalAnnualAverage?: ProvisionalRateEvidence[];
 }
 
 /**
@@ -603,10 +614,10 @@ function convertUnderAnchor(
   anchor: ConversionAnchor,
   provider: FxRateProvider,
   context: string,
-): { bani: Bani } | { detail: string } {
+): { bani: Bani; provisional?: ProvisionalRateEvidence } | { detail: string } {
   if (isRon(amount)) return { bani: amount.amount };
   const outcome = convertToRon(amount, anchor, provider);
-  if (outcome.ok) return { bani: outcome.ron.amount };
+  if (outcome.ok) return { bani: outcome.ron.amount, provisional: outcome.provisionalEvidence };
   if (outcome.reason === 'unsupported_currency') {
     return {
       detail:
@@ -665,13 +676,23 @@ export function selectCedareGross(
       (r) => r.status === 'inregistrata' && inPeriod(r.date, asOfDate, fiscalYear),
     );
     let derived = lei(0);
+    // B-144 — the provisional rates this pass actually used, keyed so one rate behind twelve documents is
+    // named once. Read off the conversion outcome, never re-looked-up: a note that re-reads the store can
+    // name a rate that is not the one behind the figure.
+    const provisionalRates = new Map<string, ProvisionalRateEvidence>();
+    const noteProvisional = (net: { bani: Bani; provisional?: ProvisionalRateEvidence }): void => {
+      const evidence = net.provisional;
+      if (evidence) provisionalRates.set(`${evidence.currency}|${evidence.rate}|${evidence.anchor}`, evidence);
+    };
     for (const r of documents) {
       const net = convertUnderAnchor(r.valoareFaraTva, anchor, provider, `documentul ${r.nr} (${r.date})`);
       if ('detail' in net) return { gross: null, detail: net.detail };
+      noteProvisional(net);
       let line = net.bani;
       if (!chargesVat) {
         const vat = convertUnderAnchor(r.tva, anchor, provider, `TVA-ul documentului ${r.nr} (${r.date})`);
         if ('detail' in vat) return { gross: null, detail: vat.detail };
+        noteProvisional(vat);
         line = sumBani([line, vat.bani]);
       }
       derived = sumBani([derived, line]);
@@ -698,7 +719,17 @@ export function selectCedareGross(
     // The uplift joins the GROSS, before the ratio — art. 84 alin. (1) last sentence „Venitul brut se
     // majorează cu…”. Deducting it after the 20 % would produce a different net, which is why it is added
     // here rather than passed to the calculator.
-    return { gross: sumBani([rent, uplift]) };
+    //
+    // B-144 — the provisional rates are reported only where the gross is the one the documents produced.
+    // When the person declared the annual rent in lei, that declared figure IS the gross and no conversion
+    // decided it; the documents were converted only to test whether the two producers agree. Naming their
+    // rate as though it had measured the income would claim more than happened, which is the opposite error
+    // from the silent one.
+    const gross = sumBani([rent, uplift]);
+    if (declared === undefined && provisionalRates.size > 0) {
+      return { gross, provisionalAnnualAverage: [...provisionalRates.values()] };
+    }
+    return { gross };
   }
 
   // ── art. 84^1: the per-payment measure ───────────────────────────────────────────────────
@@ -2210,6 +2241,14 @@ export type EstimateOperands =
       /** TASK 10b — ledger records that entered the operands only because a recorded rate converted them. */
       conversions: LedgerConversion[];
       /**
+       * B-144 — the provisional annual averages the income measure was converted with, empty when every
+       * conversion used a final rate. This is the ledger disclosure's blind spot: `conversions` records the
+       * daily-anchored pass, and the art. 84 gross is struck through a second, annual-average pass that the
+       * ledger never sees. A lei income figure built that way is what the threshold rows are measured on, so
+       * the provisional-ness has to travel with the estimate or no surface can say it.
+       */
+      provisionalIncomeRates: ProvisionalRateEvidence[];
+      /**
        * PG-6a — the scenario registry's answer for this register. It is produced here, at the one
        * evaluation point, and travels with the estimate so no surface runs the registry again.
        */
@@ -2228,6 +2267,8 @@ export type EstimateOperands =
       deductible: DeductibleExpenseSet;
       capAdjustments: AnnualCapAdjustment[];
       conversions: LedgerConversion[];
+      /** B-144 — see the `run` branch. A refusal carries them too: the pass that refused did use them. */
+      provisionalIncomeRates: ProvisionalRateEvidence[];
       scenarios: ScenarioOutcome[];
       depreciation: DepreciationLeg;
     };
@@ -2258,11 +2299,13 @@ export function selectEstimateOperands(
       ? selectCedareGross(ledger.data, asOfDate, method)
       : { gross: null as Bani | null, detail: undefined };
   const cedareWithholdingBlocked =
-    method === 'cedare-art84x1'
-      ? art84x1WithholdingBlocked(
+    method === 'cedare-art84x1'      ? art84x1WithholdingBlocked(
           leaseFactsForYear(ledger.data.profile.leaseFactsYears, ledger.data.profile.fiscalYear),
         )
       : false;
+  // B-144 — read off the pass that struck the gross, not re-derived. A second FX walk over the same register
+  // is the B-70 defect class, and here it would also be able to name a rate the figure never used.
+  const provisionalIncomeRates = cedareGross.provisionalAnnualAverage ?? [];
   const deductible = {
     ...selectDeductibleExpenses(ledger.data, asOfDate, rules, context),
     // The assembler's own pass covers revenues as well as expenses, so the audit trail it reports is the
@@ -2340,6 +2383,7 @@ export function selectEstimateOperands(
       deductible,
       capAdjustments: [],
       conversions: ledger.conversions,
+      provisionalIncomeRates,
       scenarios,
       depreciation,
     };
@@ -2454,6 +2498,7 @@ export function selectEstimateOperands(
       deductible,
       capAdjustments: [],
       conversions: ledger.conversions,
+      provisionalIncomeRates,
       scenarios,
       depreciation,
     };
@@ -2479,6 +2524,7 @@ export function selectEstimateOperands(
     deductible,
     capAdjustments: adjustments,
     conversions: ledger.conversions,
+    provisionalIncomeRates,
     scenarios,
     depreciation,
   };
@@ -2508,6 +2554,15 @@ export type TaxEstimateWithBasis = TaxEstimateResult & {
    */
   inputVat?: InputVatDecision;
   /**
+   * B-144 — the provisional annual averages the income measure was converted with, carried rather than
+   * re-derived for the same reason `inputVat` is.
+   *
+   * Optional because a result that never went through `selectEstimateOperands` — a hand-built fixture, a
+   * stored snapshot taken before this field existed — genuinely has no answer here rather than an empty
+   * list. A surface must read `undefined` as "this estimate never said", not as "nothing was provisional".
+   */
+  provisionalIncomeRates?: ProvisionalRateEvidence[];
+  /**
    * B-93 — the depreciation leg the estimate was built with, including the schedules it **withheld**.
    *
    * Optional for the same reason `scenarios` and `inputVat` are: a result that never went through
@@ -2524,12 +2579,16 @@ export function attachEstimateBasis(
   scenarios?: readonly ScenarioOutcome[],
   inputVat?: InputVatDecision,
   depreciation?: DepreciationLeg,
+  provisionalIncomeRates?: ProvisionalRateEvidence[],
 ): TaxEstimateWithBasis {
   const attached: TaxEstimateWithBasis = scenarios === undefined
     ? { ...result, basis }
     : { ...result, basis, scenarios: [...scenarios] };
   const withVat = inputVat === undefined ? attached : { ...attached, inputVat };
-  return depreciation === undefined ? withVat : { ...withVat, depreciation };
+  const withDep = depreciation === undefined ? withVat : { ...withVat, depreciation };
+  return provisionalIncomeRates === undefined
+    ? withDep
+    : { ...withDep, provisionalIncomeRates };
 }
 
 /** The recorded basis, or `null` when this result never had one. */

@@ -114,6 +114,38 @@ export const fx = {
       `media anuală ${used.rate} lei pentru un ${used.currency} în ${used.year} — ${used.how}, înregistrată la ${used.when}, de pe ${used.source}`,
     notDerived:
       'Aplicația nici nu are voie să-și facă singură media: media anuală a BNR se obține din mediile lunare, nu din cursurile zilnice, deci o medie calculată din cursuri zilnice ar fi un alt număr decât cel publicat.',
+
+    /**
+     * B-144 — the same five answers, one level over.
+     *
+     * A provisional ceiling changes a deduction. A provisional annual average applied to **income** changes
+     * the number the thresholds are measured on, and a threshold that moves changes the shape of the whole
+     * year: which tier, which contribution base, not just which deduction. The five answers are the same
+     * five, so they are rendered by the same component; only the first three sentences differ, because the
+     * rule, the currency direction and the rival reading differ. Points 4 and 5 are shared verbatim — the
+     * filing date and the prohibition on deriving the average do not depend on which figure is at stake.
+     */
+    threshold: {
+      /** Why the figure above is a converted one at all: income and threshold both had to reach lei. */
+      lead:
+        'Cifra de mai sus nu schimbă doar o deducere. Pe ea se măsoară dacă treceți de un prag, iar un prag '
+        + 'care se mișcă schimbă forma întregului an: baza de calcul pentru contribuții, nu doar impozitul.',
+      /** 1. The threshold is in euro, the income was recorded in euro, and the app brought both to lei. */
+      statedInEuro:
+        'Pragul este scris în euro în textul legii, iar venitul dumneavoastră a fost înregistrat în euro. '
+        + 'Ca să le poată compara, aplicația a adus ambele cifre în lei cu un curs mediu anual.',
+      /** 2. Which rule, and why an open year can only ever produce a provisional figure. */
+      ruleAndOpenYear: (year: number): string =>
+        'Regula folosită este media anuală a BNR pentru anul în care s-a realizat venitul, temei adresa ANAF '
+        + `Cluj din 22.04.2026 și instrucțiunile OPANAF 2.736/2025. BNR publică acea medie abia după ce anul `
+        + `se încheie, așa că pentru ${year}, care nu s-a încheiat încă, cifra este provizorie.`,
+      /** 3. The rival rule, kept on screen rather than hidden. */
+      secondRule:
+        'Niciun text oficial nu spune după care dintre cele două reguli se aduce venitul în lei: media anului '
+        + 'în care venitul s-a realizat, sau cursul BNR de la data încasării, temei art. 9 alin. (3) lit. b) '
+        + 'și alin. (4) din Codul fiscal. Aplicația folosește una singură și o afișează și pe cealaltă, în '
+        + 'loc s-o ascundă.',
+    },
   },
 
   /**

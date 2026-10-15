@@ -88,7 +88,16 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
       // scenario registry decided it, and the scenario travels on the estimate so the hero can name it
       // and link to the control that fixes it.
       setEstimate(
-        attachEstimateBasis(operands.result, operands.basis, operands.scenarios, undefined, operands.depreciation),
+        attachEstimateBasis(
+          operands.result,
+          operands.basis,
+          operands.scenarios,
+          undefined,
+          operands.depreciation,
+          // B-144 — threaded, not re-read, and identical to `data/dashboard.ts getTaxEstimate` by
+          // construction: the live path and the tested path must agree about which rate measured the income.
+          operands.provisionalIncomeRates,
+        ),
       );
       setLoading(false);
       return;
@@ -133,7 +142,15 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
     }).then((result) => {
       if (!cancelled) {
         setEstimate(
-          attachEstimateBasis(result, basis, operands.scenarios, operands.inputVat, operands.depreciation),
+          attachEstimateBasis(
+            result,
+            basis,
+            operands.scenarios,
+            operands.inputVat,
+            operands.depreciation,
+            // B-144 — see the refused branch above: the same field, the same single producer.
+            operands.provisionalIncomeRates,
+          ),
         );
         setLoading(false);
       }

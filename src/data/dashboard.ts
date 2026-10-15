@@ -437,7 +437,16 @@ export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEsti
   const operands = selectEstimateOperands(data, asOfDate, rules);
   if (operands.kind === 'refused') {
     return Promise.resolve(
-      attachEstimateBasis(operands.result, operands.basis, operands.scenarios, undefined, operands.depreciation),
+        attachEstimateBasis(
+          operands.result,
+          operands.basis,
+          operands.scenarios,
+          undefined,
+          operands.depreciation,
+          // B-144 — threaded, not re-read: the assembler converted the income, this call site only carries
+          // the answer to the surface that renders the figure.
+          operands.provisionalIncomeRates,
+        ),
     );
   }
   const { basis, amounts } = operands;
@@ -477,7 +486,15 @@ export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEsti
     // leg the figure was built from. A second reading of the register here would be the B-70 defect class.
     depreciation: operands.depreciation,
   }).then((result) =>
-    attachEstimateBasis(result, basis, operands.scenarios, operands.inputVat, operands.depreciation),
+    attachEstimateBasis(
+      result,
+      basis,
+      operands.scenarios,
+      operands.inputVat,
+      operands.depreciation,
+      // B-144 — see the refused branch above: the same field, the same single producer.
+      operands.provisionalIncomeRates,
+    ),
   );
 }
 

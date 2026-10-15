@@ -345,7 +345,7 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
   // average for a year BNR has not closed yet. The five-point note is keyed to these, because the note is an
   // explanation of a stand-in figure and has no business appearing beside a published one.
   const euroProvisional = euroStruck
-    .map(a => ({ paymentYear: a.euro!.paymentYear, rate: a.euro!.applied }))
+    .map(a => ({ year: a.euro!.paymentYear, rate: a.euro!.applied }))
     .filter(x => x.rate.provisional);
   // TASK 10b — ledger records that entered the lei base only because a recorded rate converted them.
   const converted = classification.conversions;
@@ -479,7 +479,7 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
               <p className="hint" key={a.ruleId}>{a.conflict ?? ''}</p>
             ))}
           </Disclosure>
-          {euroProvisional.length > 0 && <ProvisionalCeilingNote ceilings={euroProvisional} />}
+          {euroProvisional.length > 0 && <ProvisionalCeilingNote figures={euroProvisional} />}
         </div>
       )}
 

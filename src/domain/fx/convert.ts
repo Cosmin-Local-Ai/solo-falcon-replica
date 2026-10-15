@@ -119,7 +119,92 @@ export const ROUNDING_CHOICE = {
   notApplied: 'art. 66 rounding to a whole leu',
   reason: 'art. 66 governs the sum of tax being calculated; whether it reaches an intermediate conversion product is not established by any text read for this task, and applying it would move every converted amount by up to 0,50 lei on an unverified reading.',
   status: 'app decision, not a cited rule',
+  /**
+   * B-113 — where this decision was researched, and what the research graded it. Recorded here rather than
+   * left in a commit message, because the honest form of this decision is a citation to a corpus that says
+   * it does not know.
+   *
+   * The article's text is CONFIRMED verbatim in three research files — Titlul IV, Capitolul I, titled
+   * „Stabilirea sumelor fixe", one unnumbered paragraph: „Sumele sunt calculate prin rotunjire la un leu,
+   * prin neglijarea fracțiunilor de până la 50 de bani inclusiv și majorarea la leu a fracțiunilor ce
+   * depășesc 50 de bani." What is not confirmed is whether „Sumele" reaches a converted amount on its way
+   * into the base. The corpus grades that question UNVERIFIED, twice, in the very file that cites the
+   * article for the conversion rules this app runs.
+   */
+  scopeResearch: {
+    textConfirmedAt: [
+      'docs/ai/research/20_cf_art66_rounding_and_art154_cass_exemption_2026.md:17',
+      'docs/ai/research/23_fx_conversion_and_bnr_rates_2026.md:185',
+      'docs/ai/research/49_proration_precision_fy2026.md:61',
+    ],
+    scopeGradedUnverifiedAt: [
+      'docs/ai/research/23_fx_conversion_and_bnr_rates_2026.md:193',
+      'docs/ai/research/23_fx_conversion_and_bnr_rates_2026.md:207',
+    ],
+    /**
+     * The finding that turns B-113 from a bug into a decision request. The engine already implements art.
+     * 66 correctly — `money.ts roundArt66` neglects a fraction of **50 bani or less** and raises a larger
+     * one, which is the article's own boundary. Applied to the conversion product it reproduces every
+     * published ANAF figure in the Sector 4 example: 2.488,50 → 2.488, and the forfetar 2.985,60 → 2.986
+     * with net 11.942. So the disagreement is not about the rounding **mode**, which already matches ANAF,
+     * and not about the rate or the basis — the control case at 4,974 agrees exactly. It is only about
+     * **where the rule applies**, which is the part no primary text in this corpus settles.
+     *
+     * Pinned as passing assertions in `golden/fxTruncation.test.ts`, labelled as what art. 66 WOULD give,
+     * so the decision can be taken on numbers rather than on a comment.
+     */
+    roundingModeAlreadyMatchesAnaf: true,
+  },
 } as const;
+
+/**
+ * B-144 — the evidence a lei figure carries when the rate behind it was not the final published one.
+ *
+ * This is `CapRateEvidence` (`fx/capCeiling.ts`) with the ceiling-specific fields dropped, and it exists so
+ * the five-point honesty note has exactly ONE shape to render. A provisional ceiling and a provisional
+ * threshold are two consequences of one fact: a lei number this app did not derive, standing in for a
+ * published number that does not exist yet. `capCeiling.ts` imports this module, so the shared shape lives
+ * here and not there.
+ */
+export interface ProvisionalRateEvidence {
+  currency: RateCurrency;
+  /** The printed decimal exactly as the record holds it — never re-formatted, never recomputed. */
+  rate: string;
+  /** The year (or, for a daily rate, the date) the record is anchored to, as the note names it. */
+  anchor: string;
+  seriesCode: string;
+  /**
+   * `false` never reaches this shape through `provisionalRateEvidence`, which returns `undefined` for a
+   * final rate. It is `boolean` rather than the literal `true` so `CapRateEvidence` — which carries the
+   * flag for both states — stays structurally assignable and the note needs no adapter.
+   */
+  provisional: boolean;
+  entryMode: FxRateRecord['entryMode'];
+  fetchedAt: string;
+  sourceUrl: string;
+}
+
+/**
+ * The evidence for one provisional conversion, read off the record the conversion actually used.
+ *
+ * Deliberately not a re-read of the store: the caller hands over the `FxRateRecord` from the
+ * `ConversionResult`, so a note can never name a rate other than the one that produced the figure beside it.
+ * Returns `undefined` for a final rate — the absence IS the answer, and it is why a surface can render
+ * nothing without inventing a „not provisional” row.
+ */
+export function provisionalRateEvidence(rate: FxRateRecord): ProvisionalRateEvidence | undefined {
+  if (!rate.provisional) return undefined;
+  return {
+    currency: rate.currency as RateCurrency,
+    rate: rate.rate,
+    anchor: rate.rateYear !== undefined ? String(rate.rateYear) : (rate.rateDate ?? ''),
+    seriesCode: rate.seriesCode,
+    provisional: true,
+    entryMode: rate.entryMode,
+    fetchedAt: rate.fetchedAt,
+    sourceUrl: rate.sourceUrl,
+  };
+}
 
 /** Why a conversion could not be performed. */
 export type ConversionFailure =
@@ -138,6 +223,13 @@ export type ConversionResult =
       carriedForward: boolean;
       /** `true` when the rate was not the final published figure — a 2026 annual average, for instance. */
       provisional: boolean;
+      /**
+       * B-144 — the provenance of that provisional rate, present exactly when `provisional` is `true`.
+       * A caller that turns a provisional conversion into a lei figure can carry this to whatever surface
+       * renders the figure, which is what stops the honesty note from re-reading the store and guessing
+       * which rate was in play.
+       */
+      provisionalEvidence?: ProvisionalRateEvidence;
     }
   | ConversionFailure;
 
@@ -269,5 +361,6 @@ function product(amount: Money, rate: FxRateRecord, basis: ConversionBasis, carr
     basis,
     carriedForward,
     provisional: rate.provisional,
+    provisionalEvidence: provisionalRateEvidence(rate),
   };
 }

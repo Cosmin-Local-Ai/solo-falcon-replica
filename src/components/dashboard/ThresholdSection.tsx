@@ -4,6 +4,8 @@ import { formatRoCalendarDate } from '../../domain/date';
 import { Card, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Disclosure } from '../ui/Disclosure';
 import { InterpretationNote } from '../ui/InterpretationNote';
+import { ProvisionalCeilingNote } from '../ui/ProvisionalCeilingNote';
+import type { ProvisionalRateEvidence } from '../../domain/fx/convert';
 import {
   copy,
   measuredBasisLabels,
@@ -59,9 +61,20 @@ export interface ThresholdSectionProps {
    * must not own a clock.
    */
   asOfDate?: string;
+  /**
+   * B-144 — the provisional annual averages the measured income was converted with, empty when none were.
+   *
+   * This is the case the ledger disclosure cannot see: `CurrencySection` reports the daily-anchored
+   * conversions, and an art. 84 rent is measured through a second, annual-average pass the ledger never
+   * walks. So a threshold row can be measured on a lei figure that rests on a stand-in rate, and nothing on
+   * this card says so. The rows state *what* they measured and *when*; this says *how firm the number under
+   * them is*. Carried in, never re-derived: the card must not own a clock, and it must not own a rate lookup
+   * either.
+   */
+  provisionalIncomeRates?: ProvisionalRateEvidence[];
 }
 
-export default function ThresholdSection({ thresholds, asOfDate }: ThresholdSectionProps) {
+export default function ThresholdSection({ thresholds, asOfDate, provisionalIncomeRates = [] }: ThresholdSectionProps) {
   return (
     <Card
       header={
@@ -83,6 +96,16 @@ export default function ThresholdSection({ thresholds, asOfDate }: ThresholdSect
           {thresholds.map((t) => (
             <ThresholdRow key={t.thresholdId} threshold={t} />
           ))}
+          {/* B-144 — below the rows, because the note explains the figures above it, and it is the same
+              five answers the ceiling banner gives, in the income rule's words. A threshold is the more
+              consequential of the two: a ceiling moves a deduction, a threshold moves the shape of the year. */}
+          <ProvisionalCeilingNote
+            subject="threshold"
+            figures={provisionalIncomeRates.map(rate => ({
+              year: Number(rate.anchor),
+              rate,
+            })).filter(f => Number.isFinite(f.year))}
+          />
         </>
       )}
     </Card>

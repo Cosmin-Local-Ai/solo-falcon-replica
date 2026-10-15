@@ -413,7 +413,14 @@ export default function DashboardPage() {
 
         <div className="grid grid-2">
           <TaxReserve reserve={data.reserve} onRecord={appData.setReservedAmount} />
-          <ThresholdSection thresholds={data.thresholds} asOfDate={data.snapshot.asOf} />
+          <ThresholdSection
+            thresholds={data.thresholds}
+            asOfDate={data.snapshot.asOf}
+            // B-144 — read off the estimate the rows were measured on, not re-derived here: `data.tax` is the
+            // same result `getThresholdStatuses` was handed, so the note and the rows cannot disagree about
+            // which rate measured the income.
+            provisionalIncomeRates={data.tax?.provisionalIncomeRates ?? []}
+          />
           <DeadlineSection deadlines={data.deadlines} asOfDate={data.snapshot.asOf} />
           <CompletenessSection completeness={data.completeness} />
           <ActionSection actions={data.actions} />
