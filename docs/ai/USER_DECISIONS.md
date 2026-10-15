@@ -406,3 +406,18 @@ This **changes a default this project has followed.** Until now the rule has bee
 **What would settle it:** an ANAF example whose converted fraction **exceeds** 50 bani, or a `decizie de soluționare` / normă metodologică / court decision applying art. 66 to a conversion product.
 
 **Cost recorded so nobody underestimates the fix later:** applying it moves up to 0,50 lei per converted amount, 3 lei across the six-month example, and every converted figure in the app. **This is why B-113 is resolved before the CASS and expense Workers run** — otherwise their pins move twice.
+
+### D-ROUND-2 — B-113: the conversion product IS rounded, with art. 66
+**Supersedes the open question in D-ROUND-1. User decision, 2026-10-15, taken on the evidence research/53 returned.**
+
+**What the research settled.** No separating official example exists — bounded negative. But the ANAF București Sector 4 document that generated our two examples **contains two complete chains** (payment-date rate 4,977 and BNR annual average 4,974), and across them it produces **three cases where art. 66 and a plain floor disagree**: `2.985,60 → 2.986` and `11.937,60 → 11.938` follow art. 66, while `1.193,80 → 1.193` follows a floor. **The document contradicts itself.** It cannot be used as an oracle for a rounding convention, and `research/47` §3B's note calling it „a rounding convention our engine must match" is **refuted**.
+
+**What it does establish, and this is what the decision rests on:** ANAF converts, then publishes a **whole-leu** figure, and it is that whole-leu figure — **2.488, not 2.488,50** — that is multiplied by 6 to give the gross. The conversion product is rounded before it is used. Only the *rule* is undetermined.
+
+**Chosen: apply `roundArt66` to the product of a currency conversion.** Reasons, in order: it matches ANAF's published presentation and the arithmetic that follows from it; it matches the user's reading; and HG 1/2016 Norme metodologice, Titlul IV, Cap. I, Secț. 1, pct. 4 applies that same rule to **bazele de calcul**, which defeats the "only final sums owed" reading the app has been relying on.
+
+**Recorded as a reasoned choice, not settled law.** The contrary argument is real and stays on the record: where the legislator *does* round a conversion product it writes a **different** rule into the converting provision (art. 310 alin. (1) to the next thousand; HG 1/2016 Titlul VII to thousands), and OUG 59/2005 art. 7 expressly declines to round intermediate conversion elements for local taxes. Neither reaches Title IV. **No primary text decides this.**
+
+**Cost, stated so it is not discovered later:** up to 0,50 lei per converted amount; 3 lei across the six-month example; every converted figure in the app. **This is why it lands before the CASS and expense Workers.**
+
+**Second decision, same pass:** the ANAF Sector 4 chain **stays in the golden suite** but is relabelled as a **known-inconsistent document**. Its header currently asserts „ANAF applies art. 66 to each step", which research/53 refutes, and its three `it.fails` findings are written as though the published chain were a correct answer the engine misses. It is a **FACT about what ANAF published**, not a specification.
