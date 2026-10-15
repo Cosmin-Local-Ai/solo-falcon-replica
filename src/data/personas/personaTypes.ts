@@ -32,7 +32,15 @@ export type PersonaId =
   | 'passive-investor'
   | 'agricultural-producer'
   | 'online-commerce'
-  | 'agricultural-norma';
+  | 'agricultural-norma'
+  // B-131 — the six personas that closed the coverage gap. They are appended, not interleaved: the nine
+  // original ids and their order are what the gallery and the e2e specs already address.
+  | 'construction-finisher'
+  | 'music-teacher'
+  | 'physiotherapist'
+  | 'hair-salon'
+  | 'insurance-agent'
+  | 'waste-collector';
 
 /** The order the gallery lists them in, and the order the coverage test walks. */
 export const PERSONA_IDS: readonly PersonaId[] = [
@@ -45,6 +53,12 @@ export const PERSONA_IDS: readonly PersonaId[] = [
   'agricultural-producer',
   'online-commerce',
   'agricultural-norma',
+  'construction-finisher',
+  'music-teacher',
+  'physiotherapist',
+  'hair-salon',
+  'insurance-agent',
+  'waste-collector',
 ];
 
 /**

@@ -74,13 +74,19 @@ import {
 } from '../caenRev3';
 import { agriculturalNormaPersona } from './persona9NormaVenit';
 import { agriculturalProducerPersona } from './persona7Agricultural';
+import { constructionFinisherPersona } from './persona10Construction';
 import { contentCreatorPersona } from './persona2ContentCreator';
+import { hairSalonPersona } from './persona13HairSalon';
+import { insuranceAgentPersona } from './persona14InsuranceAgent';
 import { itFreelancePersona } from './persona1ItFreelance';
 import { longTermLandlordPersona } from './persona5Landlord';
+import { musicTeacherPersona } from './persona11MusicTeacher';
 import { onlineCommercePersona } from './persona8Commerce';
 import { passiveInvestorPersona } from './persona6Investor';
+import { physiotherapistPersona } from './persona12Physiotherapist';
 import { rideHailingDriverPersona } from './persona3Driver';
 import { shortTermHostPersona } from './persona4Host';
+import { wasteCollectorPersona } from './persona15WasteCollector';
 import type { PersonaDefinition, PersonaId } from './personaTypes';
 
 /** The personas, in the order the UI lists them. */
@@ -94,6 +100,12 @@ export const PERSONAS: readonly PersonaDefinition[] = [
   agriculturalProducerPersona,
   onlineCommercePersona,
   agriculturalNormaPersona,
+  constructionFinisherPersona,
+  musicTeacherPersona,
+  physiotherapistPersona,
+  hairSalonPersona,
+  insuranceAgentPersona,
+  wasteCollectorPersona,
 ];
 
 /** One entry of the CAEN→persona map: a persona, and whether the code is their principal or secondary. */
