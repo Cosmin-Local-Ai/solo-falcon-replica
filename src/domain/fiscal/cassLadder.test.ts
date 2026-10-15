@@ -171,7 +171,15 @@ describe('an unanswered category is not zero (B-41)', () => {
         },
       }),
     );
-    expect(reason).toContain('alte surse (lit. h))');
+    // RE-PIN, named as such (brief 75 / B-120, D-CITE-1). This used to read
+    // `toContain('alte surse (lit. h))')` — a bare litera with no article, which is the weakest citation
+    // shape in the corpus: a consolidation that shifts the letters leaves `(lit. h))` pointing nowhere
+    // while the sentence still reads as a citation. The category name now carries the article AND the
+    // verbatim definition from research/41 §1, and that is what this assertion pins. The two assertions
+    // below it are unchanged.
+    expect(reason).toContain(
+      'alte surse — art. 155 alin. (1) lit. h): „venituri din alte surse, definite conform art. 114”',
+    );
     // The refusal names the gap in the language the person reads, never as the stored identifier.
     expect(reason).not.toContain('alte_surse');
     expect(reason).toMatch(/nu completează zero/);

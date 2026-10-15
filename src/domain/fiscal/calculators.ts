@@ -471,9 +471,10 @@ function cassWithheldFromSource(
     return {
       retinut: lei(0),
       note:
-        'art. 154 alin. (1) lit. h¹): persoana realizează venituri din salarii și asimilate salariilor ' +
-        'și/sau din pensii, deci nu datorează CASS pentru veniturile din drepturi de proprietate ' +
-        'intelectuală; plătitorul de venit nu are ce reține pentru această categorie.',
+        'art. 154 alin. (1) lit. h¹) exceptează de la CASS „persoanele fizice care realizează venituri din ' +
+        'salarii și asimilate salariilor și/sau venituri din pensii, pentru veniturile din drepturi de ' +
+        'proprietate intelectuală”; persoana îndeplinește această condiție, deci plătitorul de venit nu are ' +
+        'ce reține pentru această categorie.',
     };
   }
   const rung = sourceNet === undefined ? undefined : payerRung(sourceNet, rungs);
@@ -1198,7 +1199,7 @@ function calcCassLadder(rule: FiscalRule, input?: CalculatorInput): CalculatorRe
   const withheld = withholding.outcome;
 
   const breakdown = [
-    `venit cumulat din art. 155 alin. (1) lit. c)-h), măsurat potrivit art. 170 alin. (4): ${leiText(cumulated)} lei`,
+    `venit cumulat din art. 155 alin. (1) lit. c)-h), măsurat potrivit art. 170 alin. (4) — „Încadrarea în plafonul anual de cel puțin 6, 12 sau 24 de salarii minime brute pe țară, după caz, se efectuează prin cumularea veniturilor prevăzute la art. 155 alin. (1) lit. c)-h)”: ${leiText(cumulated)} lei`,
     ...CASS_LADDER_CATEGORIES.map((c) => `${CASS_LADDER_CATEGORY_NAMES[c]}: ${leiText(amounts[c] as Bani)} lei`),
     `treapta aleasă: ${rung} — art. 170 alin. (2)-(4); intervalele sunt inclusive la limita de jos`,
     base === lei(0)
@@ -1212,9 +1213,9 @@ function calcCassLadder(rule: FiscalRule, input?: CalculatorInput): CalculatorRe
   ];
   if (dpiExcluded) {
     breakdown.push(
-      `venitul din drepturi de proprietate intelectuală de ${leiText(dpiAmount as Bani)} lei este CONSEMNET, dar NU intră în cumularea de la art. 170 alin. (4): persoana realizează venituri din salarii și asimilate salariilor și/sau din pensii, iar art. 154 alin. (1) lit. h¹) o exceptează de la CASS pentru veniturile din drepturi de proprietate intelectuală (research/48 §11.3; extinsă la pensionari prin Legea 141/2025 art. II pct. 17, în vigoare de la 1 aug 2025).`,
+      `venitul din drepturi de proprietate intelectuală de ${leiText(dpiAmount as Bani)} lei este CONSEMNET, dar NU intră în cumularea de la art. 170 alin. (4): persoana realizează venituri din salarii și asimilate salariilor și/sau din pensii, iar art. 154 alin. (1) lit. h¹) — „persoanele fizice care realizează venituri din salarii și asimilate salariilor și/sau venituri din pensii, pentru veniturile din drepturi de proprietate intelectuală” — o exceptează de la CASS pentru veniturile din drepturi de proprietate intelectuală (textul citat: research/48 §5 și research/25; litera rămâne neverificată — research/48 §11.3; excepția a fost extinsă la pensionari prin Legea 141/2025 art. II pct. 17, în vigoare de la 1 aug 2025).`,
       'excepția privește DOAR această categorie: celelalte cinci se cumulează în continuare, iar venitul din activitate independentă (art. 155 alin. (1) lit. b)) nu este atins de ea — cele două căi CASS nu se întâlnesc nicăieri',
-      'NOTĂ (LITERA NEVERIFICATĂ): consolidările nu cad de acord dacă această excepție este la art. 154 alin. (1) lit. h) sau lit. h¹); conținutul operativ este același (research/48, întrebarea deschisă 3). Aplicația citește h¹) și nu prezintă litera ca pe un fapt stabilit.',
+      'NOTĂ (LITERA NEVERIFICATĂ): consolidările nu cad de acord dacă această excepție este la art. 154 alin. (1) lit. h) sau lit. h¹); conținutul operativ este același (research/48, întrebarea deschisă 3). Aplicația citește h¹) și nu prezintă litera ca pe un fapt stabilit. Exact din acest motiv textul este citat integral mai sus: litera este localizatorul, ceea ce decide scutirea este textul, iar textul nu se mișcă atunci când se mișcă litera.',
     );
   }
   if (dpiExempt === 'unknown' && dpiAmount !== undefined && dpiAmount > 0) {
@@ -1699,7 +1700,7 @@ function calcDpiFlatQuota(rule: FiscalRule, input?: CalculatorInput): Calculator
     `venit net = ${leiText(gross)} × ${(100 - expenseRatioPercent) / 100} = ${leiText(net)} lei`,
     `impozit = ${leiText(net)} × ${taxRatePercent / 100} = ${leiText(tax)} lei — art. 72 alin. (1) și (4), „impozitul fiind final”`,
     `povara efectivă = ${taxRatePercent * (100 - expenseRatioPercent) / 100}% din venitul brut`,
-    'venitul net din DPI intră în testul de plafon de la art. 148 alin. (3) (CAS, art. 137 alin. (1) lit. b^1)) și în cumularea de la art. 170 alin. (4) lit. a) (CASS, art. 155 alin. (1) lit. c)) — două litere diferite pentru același venit, și cele două căi CASS nu se cumulează niciodată între ele',
+    'venitul net din DPI intră în testul de plafon de la art. 148 alin. (3) (CAS, art. 137 alin. (1) lit. b^1)) și în cumularea de la art. 170 alin. (4) lit. a) — „venitul net din drepturi de proprietate intelectuală, stabilit după acordarea cotei de cheltuieli forfetare prevăzute la art. 72 și 72¹, precum și venitul net din DPI determinat potrivit prevederilor art. 73” —, categorie intrată în CASS prin art. 155 alin. (1) lit. c): „venituri din drepturi de proprietate intelectuale, definite conform art. 70” — două litere diferite pentru același venit, și cele două căi CASS nu se cumulează niciodată între ele',
   ];
   if (typeof insideQuota === 'string') breakdown.push(insideQuota);
   if (typeof withholdingDeadline === 'string') {

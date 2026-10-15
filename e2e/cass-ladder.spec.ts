@@ -85,7 +85,12 @@ test.describe('PG-6d — the ladder is asked, not assumed', () => {
     );
     await expect(body).toContainText('nu completează zero');
     // Named in the language the person reads, never as the stored identifier.
-    await expect(body).toContainText('alte surse (lit. h))');
+    // RE-PIN, named as such (brief 75 / B-120, D-CITE-1) — same change as the unit pin in
+    // `src/domain/fiscal/cassLadder.test.ts`: the bare `(lit. h))` is replaced by the article plus the
+    // verbatim definition from research/41 §1.
+    await expect(body).toContainText(
+      'alte surse — art. 155 alin. (1) lit. h): „venituri din alte surse, definite conform art. 114”',
+    );
     await expect(body).not.toContainText('alte_surse');
   });
 

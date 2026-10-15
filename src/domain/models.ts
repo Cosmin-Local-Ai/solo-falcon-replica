@@ -390,13 +390,40 @@ export const CASS_LADDER_CATEGORIES: readonly CassLadderCategory[] = [
  * here rather than in the copy layer because the refusing string is itself domain output: one list, so the
  * engine's refusal and the form's labels cannot drift into two vocabularies.
  */
+/**
+ * What each ladder category is called **on screen**, keyed by the same identifier the engine sums.
+ *
+ * The refusal in `calcCassLadder` has to name the categories that are missing, and an identifier printed on
+ * a screen is an enum value posing as a sentence — the rule TASK 7 wrote the copy guard for. The names live
+ * here rather than in the copy layer because the refusing string is itself domain output: one list, so the
+ * engine's refusal and the form's labels cannot drift into two vocabularies.
+ *
+ * **D-CITE-1 (B-120): each entry now carries the article and the statutory text, and the litera is only a
+ * locator.** The previous form cited the first category at `art. 155 alin. (1) lit. c))` and the other five
+ * at a bare `(lit. d))`, `(lit. e))` … — a litera with no article attached, which is exactly what a
+ * consolidation shift breaks: if the letters move, five of the six citations stop pointing anywhere and the
+ * sentence still reads as though they pointed somewhere. The quoted definition is what makes each entry
+ * true, and it survives the shift; the litera only tells a reader where to look today.
+ *
+ * The six quoted definitions are verbatim from the consolidated art. 155 alin. (1) recorded in
+ * `docs/ai/research/41_other_income_flags_and_cass_ladder.md` §1 (Portal Legislativ unreachable; the
+ * consolidation used is `legislatie.just.ro` doc 171282 with `legislatie.info` per-article views, verified
+ * 12 Oct 2026). Nothing below is a paraphrase of the law: the words inside the quotes are the words in that
+ * file.
+ */
 export const CASS_LADDER_CATEGORY_NAMES: Record<CassLadderCategory, string> = {
-  proprietate_intelectuala: 'proprietate intelectuală (art. 155 alin. (1) lit. c))',
-  asociere_persoana_juridica: 'asocierea cu o persoană juridică (lit. d))',
-  cedarea_folosintei_bunurilor: 'cedarea folosinței bunurilor (lit. e))',
-  activitati_agricole: 'activități agricole, silvicultură și piscicultură (lit. f))',
-  investitii: 'investiții (lit. g))',
-  alte_surse: 'alte surse (lit. h))',
+  proprietate_intelectuala:
+    'proprietate intelectuală — art. 155 alin. (1) lit. c): „venituri din drepturi de proprietate intelectuale, definite conform art. 70”',
+  asociere_persoana_juridica:
+    'asocierea cu o persoană juridică — art. 155 alin. (1) lit. d): „venituri din asocierea cu o persoană juridică, contribuabil potrivit titlului II sau titlului III, pentru care sunt aplicabile prevederile art. 125”',
+  cedarea_folosintei_bunurilor:
+    'cedarea folosinței bunurilor — art. 155 alin. (1) lit. e): „venituri din cedarea folosinței bunurilor, definite conform art. 83”',
+  activitati_agricole:
+    'activități agricole, silvicultură și piscicultură — art. 155 alin. (1) lit. f): „venituri din activități agricole, silvicultură și piscicultură, definite conform art. 103”',
+  investitii:
+    'investiții — art. 155 alin. (1) lit. g): „venituri din investiții, definite conform art. 91”',
+  alte_surse:
+    'alte surse — art. 155 alin. (1) lit. h): „venituri din alte surse, definite conform art. 114”',
 };
 
 /**

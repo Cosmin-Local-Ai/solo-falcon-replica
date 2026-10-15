@@ -173,7 +173,7 @@ export const passiveInvestorPersona: PersonaDefinition = {
     'Salariat cu dividende, dobânzi, un contract de asociere cu o societate, drepturi de autor și un '
     + 'apartament închiriat unei firme. Fără PFA, fără cod CAEN.',
   teaches: [
-    'Dividendele ca bază CASS: „dividendele plătite, diminuate cu impozitul reținut” (art. 170 alin. (4) lit. g))',
+    'Dividendele ca bază CASS: „dividendele plătite, diminuate cu impozitul reținut” — măsura se ia la art. 170 alin. (4) lit. d) (veniturile din investiții), iar categoria este art. 155 alin. (1) lit. g): „venituri din investiții, definite conform art. 91”. Citatul este cel care decide; litera doar arată unde te uiți (research/41 §2, research/48 §5)',
     'Scara CASS pe art. 155 alin. (1) lit. c), d), g) și h) — trei litere intrate de o singură persoană',
     'CAS și CASS reținute la sursă (art. 151 alin. (5)-(11), art. 174^1 alin. (3)-(6)) și diferența de plătit',
     'art. 84^1: chiriei plătite de o entitate cu evidență contabilă, cu impozit reținut și final',
