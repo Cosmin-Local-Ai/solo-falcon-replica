@@ -378,16 +378,22 @@ export default function Revenues({ initialTab, onTabChange, focusRecord }: Reven
                       {/* B-112 — only the non-default category is marked. Every pre-B-112 record is
                           activitate independentă, and putting „art. 67” on all of them would read as a
                           finding on records that carry none. A DPI row is marked because it is measured by
-                          a different article, and a contradictory row is marked because the app has
-                          declined to post it. */}
+                          a different article. */}
                       {isDpiIncome(r) && (
                         <div className="text-sm muted" style={{ marginTop: 3 }}>
                           {revenuesCopy.categoryCell.drepturi_de_proprietate_intelectuala}
                         </div>
                       )}
-                      {isDpiIncome(r) && dpiRecordConflict(r) !== null && (
+                      {/* B-149 — the gate is the contradiction, not the category. `dpiRecordConflict` answers
+                          for both halves of the pair, and B-117 already reports the art. 67 half on the
+                          coverage surface; leaving the register gated on `isDpiIncome` meant the app told one
+                          surface about a contradiction and hid it from the other. The tag is chosen from the
+                          same fact, because the two halves differ in what happened to the money: an art. 70
+                          receipt with a contract-de-comandă declaration is out of the figure, an art. 67
+                          receipt with a cesiune/licență declaration is inside it at full value. */}
+                      {dpiRecordConflict(r) !== null && (
                         <div className="text-sm" style={{ marginTop: 3, color: 'var(--warn, #b45309)' }}>
-                          {revenuesCopy.dpiConflictTag}
+                          {isDpiIncome(r) ? revenuesCopy.dpiConflictTagDpi : revenuesCopy.dpiConflictTagArt67}
                         </div>
                       )}
                     </td>

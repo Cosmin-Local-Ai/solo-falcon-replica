@@ -106,11 +106,21 @@ export const revenues = {
   },
   /**
    * B-112 — the marker on a row whose declared category and declared contract object contradict each other.
-   * It says the row is not posted, because that is the consequence the person needs before they read the
-   * totals; which of the two fields is wrong is for them to say, and `dpiRecordConflict` spells it out in
-   * the coverage row.
+   *
+   * **B-149 (brief 73): this used to be ONE tag, and it was wrong twice over.** It read
+   * „declarație contradictorie — venit nepostat” and was gated on `isDpiIncome`, so (a) an art. 67 receipt
+   * carrying the same contradiction showed no tag at all, while the coverage surface had reported it since
+   * B-117 — the app half-reported one fact, which is worse than either extreme — and (b) had it shown on
+   * that row, „venit nepostat” would have been **false there**: that income is posted and is inside the
+   * figure. `estimateBasis.dpiCoverageGaps` says so in the shape of its own rows — the art. 67
+   * contradiction carries `amount: null` precisely because the estimate already computed on that sum, while
+   * the art. 70 one is out of the figure.
+   *
+   * So there are now two tags, and each is true of the record it marks. Which of the two fields is wrong
+   * stays the person's call: `dpiRecordConflict` spells that out in the coverage row.
    */
-  dpiConflictTag: 'declarație contradictorie — venit nepostat',
+  dpiConflictTagDpi: 'declarație contradictorie — venit nepostat',
+  dpiConflictTagArt67: 'declarație contradictorie — venitul este postat la art. 67',
   clientSelectPlaceholder: '— alege clientul —',
   columns: {
     document: 'Document',

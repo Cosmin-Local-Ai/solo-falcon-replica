@@ -182,4 +182,62 @@ describe('B-112 — a stored DPI record is marked on its row', () => {
     expect(screen.getByText('art. 70 · DPI')).toBeInTheDocument();
     expect(screen.getByText('declarație contradictorie — venit nepostat')).toBeInTheDocument();
   });
+
+  it('B-149 — an art. 67 record carrying the same contradiction is marked too, in words that are true of it', () => {
+    // The half the gate used to hide. `dpiRecordConflict` answers for this pair, B-117 already reports it on
+    // the coverage surface, and the register said nothing — the app half-reported one fact. The tag cannot
+    // reuse „venit nepostat”: this receipt is posted, and `estimateBasis.dpiCoverageGaps` gives its row
+    // `amount: null` precisely because the estimate already computed on it at full value.
+    seedWith([
+      revenue({
+        id: 'art67-conflict',
+        incomeCategory: 'activitate_independenta',
+        dpiContractType: 'cesiune_licenta',
+      }),
+    ]);
+    render(
+      <StoreProvider>
+        <Revenues />
+      </StoreProvider>,
+    );
+    expect(screen.getByText('declarație contradictorie — venitul este postat la art. 67')).toBeInTheDocument();
+    // And the two tags are not interchangeable: the unposted wording must not reach a posted record.
+    expect(screen.queryByText('declarație contradictorie — venit nepostat')).toBeNull();
+    // The category marker stays DPI-only — art. 67 is the default, and marking it would read as a finding
+    // on every record that carries none.
+    expect(screen.queryByText('art. 70 · DPI')).toBeNull();
+  });
+
+  it('B-149 — the art. 72 alin. (3) exclusion carried on an art. 67 record is the same finding, not a new one', () => {
+    // `dpiRecordConflict` returns a reason for this pair as well. One contradiction must not carry two names
+    // depending on which half of it is wrong — the rule `dpiCoverageGaps` already states for the coverage row.
+    seedWith([
+      revenue({
+        id: 'art67-excluded-kind',
+        incomeCategory: 'activitate_independenta',
+        dpiExcludedKind: 'drept_de_suita',
+      }),
+    ]);
+    render(
+      <StoreProvider>
+        <Revenues />
+      </StoreProvider>,
+    );
+    expect(screen.getByText('declarație contradictorie — venitul este postat la art. 67')).toBeInTheDocument();
+  });
+
+  it('B-149 — a coherent art. 67 record still carries no tag', () => {
+    // Widening the gate must not turn every ordinary receipt into a warning. The tag is the contradiction,
+    // and a record with no contradiction has nothing to report.
+    seedWith([
+      revenue({ id: 'plain-art67' }),
+      revenue({ id: 'coherent-dpi', incomeCategory: 'drepturi_de_proprietate_intelectuala', dpiContractType: 'cesiune_licenta' }),
+    ]);
+    render(
+      <StoreProvider>
+        <Revenues />
+      </StoreProvider>,
+    );
+    expect(screen.queryByText(/declarație contradictorie/)).toBeNull();
+  });
 });
