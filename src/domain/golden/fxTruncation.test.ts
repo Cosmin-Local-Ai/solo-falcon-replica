@@ -25,6 +25,33 @@
  * unpinned, a half-leu difference in a monthly gross reads downstream as a rule error and costs a day to
  * diagnose. Pinned, it says plainly: the money is the same rule applied under two different rounding
  * conventions, and here is exactly where they part.
+ *
+ * ── B-113, re-read 2026-10-15: the framing above was half right, and the missing half changes the fix ──
+ *
+ * Two things were checked rather than assumed, and both matter:
+ *
+ * 1. **The article is confirmed; its scope is not.** Codul fiscal art. 66 is quoted verbatim in three
+ *    research files — Titlul IV, Capitolul I, titled „Stabilirea sumelor fixe", one unnumbered paragraph:
+ *    „Sumele sunt calculate prin rotunjire la un leu, prin neglijarea fracțiunilor de până la 50 de bani
+ *    inclusiv și majorarea la leu a fracțiunilor ce depășesc 50 de bani." The corpus grades the question
+ *    that actually divides the engine from ANAF — whether „Sumele" reaches a converted amount on its way
+ *    into the base — as **UNVERIFIED**, twice, in the very file that cites art. 66 for the conversion rules
+ *    this app runs: `docs/ai/research/23_fx_conversion_and_bnr_rates_2026.md:193` and `:207`. So the
+ *    rounding is not a settled rule the engine is failing to obey.
+ *
+ * 2. **The engine's rounding mode already matches ANAF's.** `money.ts roundArt66` implements the article's
+ *    own boundary — a fraction of **50 bani or less is neglected, more than 50 is raised to the leu** — and
+ *    applied to this example it reproduces every published ANAF figure exactly. That is what the block at
+ *    the end of this file pins. ANAF did not "truncate" in the sense of always rounding down: 2.488,5**0**
+ *    sits exactly on the article's inclusive-50 boundary, which is why it goes to 2.488. The second
+ *    published example in the same research file (750 EUR × 4,9686 = 3.726,45 → **3.726**) lands on the
+ *    same rule from the other side, 45 bani neglected.
+ *
+ * So B-113 is **not** "the engine rounds wrongly". It is "the engine declines to apply a rule at a step
+ * whose coverage no primary text in this corpus settles". Changing it would move money on an UNVERIFIED
+ * reading, which is the class of error this corpus has been burned by before; leaving it is a decision that
+ * has to be reported rather than parked behind three `it.fails`. The decision request is registered in
+ * `docs/ai/PHASE_PLAN_11_34.md` against B-113 with the numbers below attached.
  */
 import { describe, expect, it } from 'vitest';
 import { convertToRon } from '../fx/convert';
@@ -32,7 +59,7 @@ import { fixtureRateProvider } from '../fx/provider';
 import type { FxRateRecord } from '../fx/rates';
 import { calculatorRegistry } from '../fiscal/calculators';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from '../fiscal/package2026';
-import { money, majorToMinor, lei, formatBani, type Bani } from '../money';
+import { money, majorToMinor, lei, formatBani, roundArt66, type Bani } from '../money';
 
 const art84Rule = PFA_2026_SYSTEM_REAL_PACKAGE.find((r) => r.ruleId === 'CEDARE_ART84_2026')!;
 
@@ -106,9 +133,11 @@ describe('FIXTURE 3 (FACT for the convention — ANAF București Sector 4, incom
   });
 
   it.fails("FINDING — on ANAF's gross 14.928 lei, ANAF prints forfetar 2.986 lei; the engine keeps 2.985,60", () => {
-    // ANAF, on gross 14.928: forfetar 2.986, net 11.942, impozit 1.194 lei. ANAF rounds each step to a whole
-    // leu; the engine carries the fraction through to the sum that is actually due, which is what art. 66
-    // alin. (1) governs. The forfetar and the net therefore disagree. The tax does not — see below.
+    // ANAF, on gross 14.928: forfetar 2.986, net 11.942, impozit 1.194 lei. ANAF applies art. 66 to each step
+    // (2.985,60 → 2.986, because 60 bani exceeds 50); the engine carries the fraction through to the sum that
+    // is actually due, which is the step art. 66 is confirmed to govern. The forfetar and the net therefore
+    // disagree. The tax does not — see below. Whether art. 66 reaches these intermediate sums is the
+    // UNVERIFIED scope question recorded in this file's header and in the block at the end.
     expect(determine(lei(14_928)).forfetar).toBe(lei(2_986)); // ANAF's figure.
   });
 
@@ -148,5 +177,64 @@ describe('FIXTURE 3 (FACT for the convention — ANAF București Sector 4, incom
     // Half a leu a month, 3 lei over the six months ANAF computes, and 0 lei where the product is already
     // whole. `formatBani` so the numbers are readable in a failure message.
     expect(`${formatBani(anaf)} / ${formatBani(engine)}`).toBe('2.488,00 / 2.488,50');
+  });
+});
+
+/**
+ * B-113 — the decision request, stated as numbers rather than as a comment.
+ *
+ * Everything in this block is a **passing** assertion about `roundArt66`, the engine's own implementation of
+ * art. 66. None of it changes what the converter produces. It exists because the three `it.fails` above have
+ * been read as "the engine rounds wrongly", and that reading is false: the engine's rounding mode already
+ * reproduces ANAF's published figures exactly. What separates them is only **where** the rule is applied —
+ * and that is the part the corpus grades UNVERIFIED.
+ *
+ * Pinning this is what lets the decision be taken on arithmetic. If the orchestrator decides art. 66 does
+ * reach a conversion product, the change is one call to a function that already exists and already agrees
+ * with ANAF; if not, the divergence stands and is now measured from both sides.
+ */
+describe('B-113 — art. 66 applied per sum reproduces every published ANAF figure in this example', () => {
+  it('the engine\'s art. 66 boundary is the article\'s own: 50 bani or less is neglected, more than 50 is raised', () => {
+    // „neglijarea fracțiunilor de până la 50 de bani **inclusiv** și majorarea la leu a fracțiunilor ce
+    // depășesc 50 de bani." The inclusive boundary is the whole point of the next test, so it is pinned here
+    // on both sides of it.
+    expect(roundArt66(248_850)).toBe(248_800); // 2.488,50 → 2.488 — exactly 50 bani, neglected
+    expect(roundArt66(248_950)).toBe(248_900); // 2.489,50 → 2.490 — 50 bani again, on the next leu
+    expect(roundArt66(248_951)).toBe(249_000); // 2.489,51 → 2.490 — 51 bani exceeds 50, raised
+    expect(roundArt66(248_849)).toBe(248_800); // 2.488,49 → 2.488
+  });
+
+  it('ANAF\'s 2.488 is not a truncation: it is art. 66 landing exactly on its own 50-bani boundary', () => {
+    // 500 EUR × 4,9770 = 248.850 bani = 2.488,50 lei. A "truncate" convention and art. 66 give the same
+    // answer here, which is why the leaflet alone cannot tell them apart — and why the second published
+    // example below matters.
+    expect(roundArt66(convertDaily(RATE_1_IULIE_2024, '2024-07-01'))).toBe(lei(2_488));
+    // …and the six-month gross ANAF prints follows from it exactly.
+    expect(roundArt66(convertDaily(RATE_1_IULIE_2024, '2024-07-01')) * 6).toBe(lei(14_928));
+  });
+
+  it('the second published example corroborates the same boundary from the other side', () => {
+    // `docs/ai/research/47_published_worked_examples_fy2026.md:64` — 750 EUR × 4,9686 = 3.726,45, and the
+    // published brut is **3.726**. That is 45 bani neglected, which is art. 66, not a floor. A pure
+    // truncation rule and art. 66 agree here too; what would separate them is a fraction above 50 bani, and
+    // no published example in this corpus supplies one. Recorded so the gap is visible rather than papered.
+    expect(roundArt66(372_645)).toBe(372_600);
+  });
+
+  it('applied per sum, art. 66 gives ANAF\'s forfetar 2.986 and net 11.942 — the two figures the findings above disagree on', () => {
+    const gross = lei(14_928);
+    const forfetarExact = 298_560; // 20 % of the gross, as the engine computes it
+    const forfetar = roundArt66(forfetarExact);
+    expect(forfetar).toBe(lei(2_986)); // ANAF's figure, from the engine's own rounding function
+    expect(gross - forfetar).toBe(lei(11_942)); // ANAF's net, with no further rounding needed
+    // The tax already agrees today, because art. 66 is confirmed to govern the sum that is due.
+    expect(roundArt66(determine(gross).tax)).toBe(lei(1_194));
+  });
+
+  it('so the whole published chain is reachable — and the engine still does not apply it, on purpose', () => {
+    // The last assertion is the decision, restated as a test so it cannot be quietly reversed: the converter
+    // keeps the half-leu, and that is the app's choice on an UNVERIFIED scope, not an oversight.
+    expect(roundArt66(convertDaily(RATE_1_IULIE_2024, '2024-07-01'))).toBe(lei(2_488));
+    expect(convertDaily(RATE_1_IULIE_2024, '2024-07-01')).toBe(lei(2_488) + 50);
   });
 });
