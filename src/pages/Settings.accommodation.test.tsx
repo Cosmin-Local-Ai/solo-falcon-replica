@@ -207,6 +207,55 @@ describe('the title line names the title, with the articles (acceptance 2)', () 
   });
 });
 
+/*
+ * B-81 (brief 73) — the D212 subsection for an art. 68^3 income is refused on screen.
+ *
+ * The trap this block guards is the one the brief names: OPANAF 2736/2025 — the D212 model and its
+ * instructions — contains no reference to art. 68^3 and still sends the tourist-rental line to the fișă
+ * approved by OPANAF 398/2021, which OPANAF 381/2026 abrogated. A cell map derived from those instructions
+ * would print a form reference that no longer exists. The deliverable is the refusal, and it has to name
+ * the abrogated citation while keeping the certain thing (the 25 mai term) intact.
+ */
+describe('B-81 — the 68^3 D212 section is refused, not invented', () => {
+  function refusalText(): string | undefined {
+    return document.querySelector('[data-accommodation-d212-refusal]')?.textContent;
+  }
+
+  it('names the abrogated order it refuses to derive a cell map from', () => {
+    seedStorage(payload({ profile: cazareProfile({ accommodationRoomCounts: [{ fiscalYear: seedData.profile.fiscalYear, rooms: 9 }] }) }));
+    renderFiscalTab();
+    expect(refusalText()).toBeDefined();
+    expect(refusalText()).toContain('OPANAF nr. 2.736');
+    expect(refusalText()).toContain('nu conține nicio referire la art. 68^3');
+    expect(refusalText()).toContain('OPANAF nr. 398/2021');
+    expect(refusalText()).toContain('abrogat');
+    expect(refusalText()).toContain('OPANAF nr. 381');
+  });
+
+  it('does not withdraw the term the law does give, and says what is actually missing', () => {
+    seedStorage(payload({ profile: cazareProfile({ accommodationRoomCounts: [{ fiscalYear: seedData.profile.fiscalYear, rooms: 9 }] }) }));
+    renderFiscalTab();
+    expect(refusalText()).toContain('25 mai');
+    expect(refusalText()).toContain('art. 122 alin. (3)');
+    // The successor order is reported as not found, with the sweep that would settle it still open.
+    expect(refusalText()).toContain('Monitorul Oficial Partea I');
+  });
+
+  it('is not shown under cedarea folosinței, where the form section is known', () => {
+    // The art. 85 regime has its own open question in rule data and its own D212 citation for the ordinary
+    // cedarea folosinței lines; the 68^3 refusal belongs to the 68^3 title and nowhere else.
+    seedStorage(payload({ profile: cazareProfile({ accommodationRoomCounts: [{ fiscalYear: seedData.profile.fiscalYear, rooms: 3 }] }) }));
+    renderFiscalTab();
+    expect(refusalText()).toBeUndefined();
+  });
+
+  it('is not shown when the count is unanswered — no title, no form question', () => {
+    seedStorage(payload({ profile: cazareProfile() }));
+    renderFiscalTab();
+    expect(refusalText()).toBeUndefined();
+  });
+});
+
 describe('the commission answer is recorded as the user’s choice, with the alternative visible (acceptance 4)', () => {
   it('choosing a reading persists it and shows which one the app applied, beside the other', () => {
     seedStorage(payload({ profile: cazareProfile() }));

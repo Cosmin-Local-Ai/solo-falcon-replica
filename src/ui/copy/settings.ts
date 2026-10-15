@@ -376,6 +376,23 @@ export const settings = {
       `Pentru ${year} venitul înregistrat este sub titlul „activitate independentă”: art. 83 alin. (4) și art. 68^3 din Codul fiscal, pentru că numărul de camere este peste 7.`,
     accommodationTitleUnknown: (year: number): string =>
       `Pentru ${year} numărul de camere nu este înregistrat, deci aplicația nu știe sub ce titlu intră venitul. Nu alege niciunul: 1–7 camere și peste 7 camere sunt titluri diferite, nu două valori ale aceluiași calcul.`,
+    /**
+     * B-81 (brief 73) — a refusal, on screen, naming the citation that makes a cell map impossible.
+     *
+     * The trap this sentence exists to refuse: OPANAF 2736/2025 is the D212 model and its instructions, and
+     * they still tell the tourist-rental line to use the fișă approved by **OPANAF 398/2021** — an order
+     * **abrogated** by OPANAF 381/2026 (see `occupancy.ts`, where the corrected form lives). Deriving a
+     * D212 cell map for art. 68^3 out of those instructions would print a reference to a form that no
+     * longer exists, with the app's authority behind it. `research/38_art68x3_cass_and_occupancy_order.md`
+     * §4 says so outright: „D212 cell mapping — OPANAF 2736/2025 has no 68^3 subsection and cites the
+     * abrogated 398/2021. Do not derive a form map from it.”
+     *
+     * So the honest deliverable is the refusal, and it keeps the two things apart: the **term** is certain
+     * and is not withdrawn by the refusal, the **section** is what is missing, and what would settle it — a
+     * successor order — has not been found.
+     */
+    accommodationD212SectionRefusal:
+      'Aplicația nu îți spune în ce secțiune a Declarației Unice se înscrie venitul de la art. 68^3, iar acesta este un refuz motivat, nu o omisiune. OPANAF nr. 2.736 din 23.12.2025 (MO I nr. 1.207 din 29.12.2025) — modelul și instrucțiunile Declarației Unice — nu conține nicio referire la art. 68^3, iar la linia de închiriere turistică trimite la fișa aprobată prin OPANAF nr. 398/2021, ordin abrogat de OPANAF nr. 381 din 24.03.2026 (MO I nr. 250 din 31.03.2026), care aprobă „Fișa de ocupare a capacității de cazare”. Un tabel de celule derivat din aceste instrucțiuni ar tipări o trimitere la un formular care nu mai există, și pentru aceea secțiunea nu este inventată. Ceea ce este cert nu este retras de acest refuz: declarația se depune, iar termenul este 25 mai (art. 68^3 alin. (9)-(10) cu art. 122 alin. (3)). Ceea ce lipsește este ordinul care să descrie secțiunea pentru venitul pe 2026; Monitorul Oficial Partea I nu a fost parcurs exhaustiv pentru decembrie 2025 – octombrie 2026, deci căutarea acelui ordin rămâne primul pas, nu completarea golului.',
     accommodationCaenPromptHint:
       'Întrebările despre cazare apar aici și pentru că profilul are un cod CAEN din Divizia 55. Codul nu este un răspuns la niciuna dintre ele: HG 656/1997 art. 4 alin. (1) spune că încadrarea într-o entitate CAEN „nu presupune crearea de drepturi sau obligații”, iar alin. (2) lasă responsabilitatea folosirii lui la autoritatea care o folosește. Lista de coduri după care se afișează aceste întrebări este o alegere a acestei aplicații, nu o lege — nicio listă oficială de corespondență între tipul de structură turistică și codurile CAEN nu a fost găsită.',
     startYear: 'Anul începerii activității',

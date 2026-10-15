@@ -1713,6 +1713,18 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                     {accommodationTitleText}
                   </span>
 
+                  {/* B-81 — the D212 subsection for an art. 68^3 income is refused on screen, not left
+                      blank. The current instructions cannot ground a cell map: OPANAF 2736/2025 has no
+                      art. 68^3 subsection and its tourist-rental line points at the fișă approved by
+                      OPANAF 398/2021, which OPANAF 381/2026 abrogated. A refusal that names the abrogated
+                      citation is the deliverable; a plausible row map would have encoded a form reference
+                      that no longer exists. */}
+                  {accommodationTitle === 'activitate_independenta_68x3' && (
+                    <span className="hint" data-accommodation-d212-refusal>
+                      {settingsCopy.fiscal.accommodationD212SectionRefusal}
+                    </span>
+                  )}
+
                   {tourismCaenPresent && (
                     <span className="hint" data-accommodation-caen-prompt>
                       {settingsCopy.fiscal.accommodationCaenPromptHint}
