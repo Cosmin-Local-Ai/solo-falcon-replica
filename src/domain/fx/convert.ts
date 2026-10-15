@@ -40,15 +40,22 @@
  *
  * ## Rounding, and what is not claimed
  *
- * The product of an amount and a rate is generally fractional. This module rounds it **to the nearest ban**
- * (half-up), because the money type's unit is the ban and a fraction of a ban is not representable.
+ * The product of an amount and a rate is generally fractional. Since **D-ROUND-2 (2026-10-15)** this module
+ * rounds it **to a whole leu, at the point of conversion**, using `roundArt66` — the same function the tax
+ * calculators already use. Before that date it rounded to the nearest ban (half-up) and left the fraction
+ * for downstream sums; `ROUNDING_CHOICE.notApplied` keeps that behaviour on the record.
  *
- * It deliberately does **not** apply `roundArt66` (CF art. 66, which rounds to a whole **leu**) to
- * that product. art. 66 is the rule for rounding a sum of tax that is being calculated; whether it also
- * reaches an intermediate currency-conversion product is **not established by any text I read**, and
- * applying it here would move every converted amount by up to 0,50 lei on an unverified reading. The
- * existing art. 66 rounding stays exactly where it was — on the tax due. This choice is recorded in
- * `ROUNDING_CHOICE` so it can be reviewed rather than assumed.
+ * **This is a reasoned choice on an undetermined point, not a cited rule, and nothing here claims that
+ * art. 66 governs currency conversion.** What is established: ANAF converts and then publishes a whole-leu
+ * figure and multiplies *that* downstream (2.488, not 2.488,50; 2.488 × 6 = 14.928), so the product is
+ * rounded before use. What is **not** established: which rule rounds it. The Sector 4 leaflet contains two
+ * chains and applies art. 66 at two intermediate steps and a plain floor at a third — it contradicts itself
+ * — and the conversion line itself separates neither way, because 2.488,50 sits exactly on art. 66's
+ * inclusive-50 boundary. `ROUNDING_CHOICE.scopeResearch` carries the separating cases and the contrary
+ * readings (art. 310 alin. (1), HG 1/2016 Titlul VII, OUG 59/2005 art. 7), and
+ * `docs/ai/research/53_anaf_sector4_rounding_inconsistency.md` is the source. The full argument, including
+ * why the scope of the decision stops at the conversion product and does not extend to deduction lines, is
+ * on `product()` below.
  */
 
 import { Decimal } from 'decimal.js-light';
