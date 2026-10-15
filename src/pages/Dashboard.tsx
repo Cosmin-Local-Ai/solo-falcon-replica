@@ -1,5 +1,9 @@
 import { useDashboardData } from '../data/dashboardAdapter';
 import { useStore } from '../data/store';
+// B-67 — the count of records the estimate attributed to this year by their document date, because no
+// money date is recorded. Read from the same helper the RJIP export uses, so the two surfaces cannot give
+// two different counts of one fact.
+import { countPostedOnDocumentDate } from '../domain/aggregation';
 import { getFinancialSummary, type TaxEstimateState } from '../data/dashboard';
 import { isGapReason } from '../domain/estimateBasis';
 // B-94 — the dated status flag on the 50 % vehicle cut, read from the same domain object the input-VAT
@@ -10,7 +14,7 @@ import { identityGreeting } from '../domain/profile';
 import { fmtDate } from '../data/types';
 import { formatBaniRON } from '../domain/money';
 import { estimateBasisExplanation, estimateBasisLabel, estimateForecastExplanation, estimateForecastLabel } from '../domain/estimateBasis';
-import { copy, dashboard as dashboardCopy, estimateState as estimateStateCopy, provenance as provenanceCopy, scenarios as scenariosCopy } from '../ui/copy';
+import { copy, dashboard as dashboardCopy, estimateState as estimateStateCopy, moneyDate as moneyDateCopy, provenance as provenanceCopy, scenarios as scenariosCopy } from '../ui/copy';
 import { Disclosure } from '../components/ui/Disclosure';
 import { RuleProvenance } from '../components/ui/RuleProvenance';
 import FinancialChart from '../components/FinancialChart';
@@ -134,6 +138,12 @@ export default function DashboardPage() {
   // the registry runs, and a page that ran it a second time would be a second answer to one question.
   const refusal =
     data.tax !== null && data.tax.basis.kind === 'refused' ? data.tax.basis.scenario : null;
+  // B-67 — how many of this year's records the app dated from paper rather than from money.
+  const postedOnDocumentDate = countPostedOnDocumentDate(
+    appData.revenues,
+    appData.expenses,
+    String(snapshot.taxYear),
+  );
 
   return (
     <div className="dashboard">
@@ -269,6 +279,15 @@ export default function DashboardPage() {
                   reason, at which amount, and where to fix each one. Without them the badge is a warning
                   with nothing to act on. */}
               <EstimateCoverageRows coverage={data.coverage} />
+              {/* B-67 — the estimate is computed on a cash basis the register may not fully hold. Where a
+                  record has no collection or payment date, the year was chosen from the document. That is
+                  an assumption this app makes, not a presumption the law makes, and the estimate section
+                  used to be the one surface that never said it. */}
+              {postedOnDocumentDate > 0 ? (
+                <p className="hint cash-basis-note" data-money-date-assumption={postedOnDocumentDate}>
+                  {moneyDateCopy.assumedFromDocument(postedOnDocumentDate)}
+                </p>
+              ) : null}
               {estimateState === 'complete' ? (
                 <p className="hint">
                   {dashboardCopy.estimate.setAsideLead}{' '}

@@ -338,6 +338,38 @@ export function expenseFiscalDate(e: Pick<Expense, 'date' | 'paid'>): string {
   return e.paid ?? e.date;
 }
 
+/**
+ * B-67 — how many records the app attributed to a fiscal year by their **document** date because no
+ * money date is recorded.
+ *
+ * `revenueFiscalDate` / `expenseFiscalDate` fall back to `date` when `collected` / `paid` is absent. That
+ * fallback is the whole of D-DATE-1's stand-in, and it has no legal footing: for Titlul IV the document
+ * date is a validity condition (art. 68 alin. (4) lit. a) — „justificate prin documente”), never the
+ * year-determining fact, which is art. 68 alin. (2) lit. a) „sumele încasate” and alin. (4) lit. b) „al
+ * anului în cursul căruia au fost plătite”. No provision presumes document date = money date, and none
+ * fills in a blank money date.
+ *
+ * The behaviour stays — choosing a different date is a user decision, not a defect fix. What was missing
+ * is that the count is available to be said. It is one function so the RJIP export and the estimate
+ * cannot grow two answers to one question.
+ */
+export function countPostedOnDocumentDate(
+  revenues: readonly Pick<Revenue, 'date' | 'collected'>[],
+  expenses: readonly Pick<Expense, 'date' | 'paid'>[],
+  fiscalYear: string,
+): number {
+  let n = 0;
+  for (const r of revenues) {
+    if (revenueFiscalDate(r).slice(0, 4) !== fiscalYear) continue;
+    if (r.collected === undefined) n += 1;
+  }
+  for (const e of expenses) {
+    if (expenseFiscalDate(e).slice(0, 4) !== fiscalYear) continue;
+    if (e.paid === undefined) n += 1;
+  }
+  return n;
+}
+
 function monthKey(date: string): string {
   return date.slice(0, 7); // 'YYYY-MM'
 }

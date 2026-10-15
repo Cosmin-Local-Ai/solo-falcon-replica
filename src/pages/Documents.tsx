@@ -8,7 +8,7 @@ import {
 import type { AppData } from '../data/types';
 import type { DocTypeCode, CompanyDocument, TaxStatement } from '../data/types';
 import { type Bani, formatBani, formatBaniRON, requireRon, sumBani, subBani } from '../domain/money';
-import { expenseFiscalDate, revenueFiscalDate } from '../domain/aggregation';
+import { countPostedOnDocumentDate, expenseFiscalDate, revenueFiscalDate } from '../domain/aggregation';
 import { localYear, localDateISO, now } from '../domain/date';
 import { getLedgerDisclosure, type LedgerDisclosure } from '../data/dashboard';
 import { Card, Badge, Modal, Empty } from '../components/ui';
@@ -563,13 +563,11 @@ export function buildRjipRegister(data: AppData, year: number): RjipRegister {
   };
 
   const rows: RjipRow[] = [];
-  let postedOnDocumentDate = 0;
   let unconverted = 0;
 
   for (const r of data.revenues) {
     const on = revenueFiscalDate(r);
     if (on.slice(0, 4) !== yearKey) continue;
-    if (r.collected === undefined) postedOnDocumentDate += 1;
     const lei = leiOf(r, () => requireRon(total(r), `revenue ${r.id}`));
     if (lei === null) {
       unconverted += 1;
@@ -585,7 +583,6 @@ export function buildRjipRegister(data: AppData, year: number): RjipRegister {
   for (const e of data.expenses) {
     const on = expenseFiscalDate(e);
     if (on.slice(0, 4) !== yearKey) continue;
-    if (e.paid === undefined) postedOnDocumentDate += 1;
     const lei = leiOf(e, () => requireRon(total(e), `expense ${e.id}`));
     if (lei === null) {
       unconverted += 1;
@@ -599,6 +596,10 @@ export function buildRjipRegister(data: AppData, year: number): RjipRegister {
     });
   }
   // „în ordine cronologică” — by the money date, which is the column the order is defined on.
+  // B-67: the count of records posted on the document date moved to `aggregation.ts
+  // countPostedOnDocumentDate`, because the estimate section now discloses the same fact and two surfaces
+  // must not grow two counts of it.
+  const postedOnDocumentDate = countPostedOnDocumentDate(data.revenues, data.expenses, yearKey);
   return { rows: rows.sort((a, b) => a.data.localeCompare(b.data)), postedOnDocumentDate, unconverted };
 }
 

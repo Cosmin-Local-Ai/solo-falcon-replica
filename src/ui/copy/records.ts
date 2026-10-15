@@ -636,6 +636,28 @@ export const moneyDate = {
   /** The register row: which year the money date put this record in, when it is not the document's year. */
   collectedIn: (year: number): string => `încasat în ${year}`,
   paidIn: (year: number): string => `plătit în ${year}`,
+  /**
+   * B-67 — the assumption stated where the estimate is shown, not only in the two forms and the RJIP
+   * export.
+   *
+   * A record with no money date is attributed to a year by its document date because nothing else is
+   * recorded. That stand-in has no legal footing: for Titlul IV the document date is a validity condition
+   * (art. 68 alin. (4) lit. a) „justificate prin documente”), never the fact that decides the year, which
+   * is „sumele încasate” (alin. (2) lit. a)) and „al anului în cursul căruia au fost plătite” (alin. (4)
+   * lit. b)). No provision presumes document date = money date, and none fills in a blank money date. The
+   * behaviour is unchanged — which date to record is the person's decision — but the estimate no longer
+   * presents a figure whose year was chosen on paper as if the paper were the payment.
+   */
+  assumedFromDocument: (n: number): string =>
+    n === 1
+      ? 'O înregistrare a fost atribuită acestui an fiscal după data documentului, pentru că nu are dată de '
+        + 'încasare sau de plată înregistrată. Legea alege anul după banul încasat sau plătit, nu după hârtie '
+        + '(art. 68 alin. (2) lit. a) și art. 68 alin. (4) lit. b) din Codul fiscal); nicio dispoziție nu prezumă că '
+        + 'data documentului este data banului și nici nu completează o dată de plată lipsă.'
+      : `${n} înregistrări au fost atribuite acestui an fiscal după data documentului, pentru că nu au dată de `
+        + 'încasare sau de plată înregistrată. Legea alege anul după banul încasat sau plătit, nu după hârtie '
+        + '(art. 68 alin. (2) lit. a) și art. 68 alin. (4) lit. b) din Codul fiscal); nicio dispoziție nu prezumă că '
+        + 'data documentului este data banului și nici nu completează o dată de plată lipsă.',
 } as const;
 
 export const documents = {
