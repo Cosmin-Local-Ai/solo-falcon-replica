@@ -556,6 +556,14 @@ Brief 64 §Part B specified persona selection as **a CAEN → persona affinity t
 
 **Boundaries held:** no `domain/fx/**`, no persona figure changes, no `caen_rev3.csv` (B-136 is PARKED), no migration step, no persona gallery.
 
+### Brief 66 — the honesty sweep *(briefed 2026-10-15, before Step 12)*
+
+Eight small defects in one class, taken before Step 12 because they are cheap and because Step 12's evidence work would otherwise have to re-explain them: **B-56**, **B-28 with B-27** (paired deliberately — B-27's unresolvable pending state is what makes B-28's ambiguous `—` fixable), **B-106**, **B-62**, **B-138**, **B-107**, **B-67**, **B-79**. Ordered by harm, not by ease: B-56 leads because a user who believes a declaration was transmitted may simply not file it.
+
+**Two things the brief requires that are easy to skip:** B-138's fix **re-pins three tests that currently assert an internal enum on screen** — the suite has pinned the leak as correct behaviour, the B-99/B-101 failure mode again, and the re-pin must be reported as a re-pin. And B-79 must be **decided**, not deferred: `closed_final` is either triggerable from named existing data or deleted; leaving it declared is the one unacceptable outcome.
+
+**§12.17 is written into the brief itself**, not just the contract: targeted runs during development, one full-suite run as the gate.
+
 ## Two sequencing traps recorded so they aren't walked into
 
 1. **Fixtures before personas (6 before 7).** Fixtures pin expected returns; personas **move the pinned seed estimate** — 311.200 bani has been held unmoved through PG-6b … 6g, and the persona set will break that pin by design. Do personas first and every fixture gets re-pinned twice.
