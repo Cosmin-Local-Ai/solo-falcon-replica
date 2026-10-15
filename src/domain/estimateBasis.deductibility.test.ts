@@ -162,7 +162,10 @@ describe('selectDeductibleExpenses — the law decides, the record only states',
     expect(set.annualCapped).toHaveLength(0);
     expect(set.counts.capUnresolved).toBe(1);
     expect(set.excluded[0].ruleId).toBe('EXPENSE_PRIVATE_PENSION_2026');
-    expect(set.excluded[0].detail).toContain('annual_eur_per_person');
+    // B-138 RE-PIN. This asserted the `CapBase` code inside the sentence, which pinned the leak as intended
+    // behaviour. The sentence now names the base in Romanian, and the code is asserted ABSENT.
+    expect(set.excluded[0].detail).toContain('un plafon anual exprimat în euro pe persoană');
+    expect(set.excluded[0].detail).not.toContain('annual_eur_per_person');
     // TASK 2c acceptance: the missing fact is the DATUM and the RULE, not a vague "not implemented".
     expect(set.excluded[0].detail).toContain('nu stochează niciun curs BNR');
     expect(set.excluded[0].detail).toContain('pct. 7 alin. (6)');
@@ -179,7 +182,9 @@ describe('selectDeductibleExpenses — the law decides, the record only states',
     expect(set.annualCapped).toHaveLength(0);
     expect(set.counts.capUnresolved).toBe(1);
     expect(set.excluded[0].ruleId).toBe('EXPENSE_SOCIAL_EXPENSES_2026');
-    expect(set.excluded[0].detail).toContain('annual_salary_expense');
+    // B-138 RE-PIN — see the euro-cap test above.
+    expect(set.excluded[0].detail).toContain('valoarea anuală a cheltuielilor cu salariile personalului');
+    expect(set.excluded[0].detail).not.toContain('annual_salary_expense');
     expect(set.excluded[0].detail).toContain('nu are niciun concept de pontaj');
     expect(set.excluded[0].detail).toContain('nu este declarat 0');
   });

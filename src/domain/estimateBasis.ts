@@ -30,6 +30,11 @@
  *
  * No fiscal value, rate, parameter or rule lives here.
  */
+// B-138 — the one cap sentence that was language rather than a legal conclusion. It interpolated
+// `cap.base`, a machine enum, into a Romanian sentence, so the person read
+// `Plafonul se calculează pe baza „annual_eur_per_person”`. The wording is keyed by the same code in the
+// copy layer — the same shape B-55 used for `FiscalBase` in `domain/thresholds.ts`.
+import { capBaseSentence } from '../ui/copy/thresholds';
 import type { UnconvertedRecord, YtdTotals } from './aggregation';
 import { expenseFiscalDate, inPeriod, revenueFiscalDate, selectYtd } from './aggregation';
 import type { AppData, Expense } from '../data/types';
@@ -1556,14 +1561,22 @@ function paymentYearOf(fiscalDate: string): number | undefined {
  * and must not convert "the app holds no such datum" into "the base is zero" — for cheltuieli sociale
  * that difference is the whole answer (research 22 §4: the zero ceiling is an arithmetic consequence of
  * having no personnel, which is a fact the app does not hold, not a fact it can assert).
+ *
+ * B-138: the base used to be interpolated here as its machine code, so the person read
+ * `pe baza „annual_eur_per_person”`. The naming of the base is `ui/copy/thresholds.ts capBaseSentence`,
+ * keyed by the same `CapBase` code and exhaustive over it. What stays here is what only the domain may
+ * decide: which rule is cited, and what the app is therefore forbidden to invent.
  */
 function unresolvedCapDetail(
   cap: DeductibilityCap | undefined,
   sourceArticle: string,
   paymentYear?: number,
 ): string {
-  const base = cap ? cap.base : 'nesetată';
+  const base = cap ? cap.base : undefined;
   const article = cap ? cap.baseArticle : sourceArticle;
+  const opening = cap
+    ? capBaseSentence(cap.base, article)
+    : `Plafonul are baza nesetată în regula ${article}`;
   let missing: string;
   if (base === 'annual_eur_per_person') {
     missing =
@@ -1587,7 +1600,7 @@ function unresolvedCapDetail(
       'un agregat anual pe care această aplicație nu îl poate măsura; categoriile cu o astfel de bază '
       + 'sunt excluse din total, nu deduse cu o valoare ghicită.';
   }
-  return `Plafonul se calculează pe baza „${base}” (${article}) — ${missing}`;
+  return `${opening} — ${missing}`;
 }
 
 /**

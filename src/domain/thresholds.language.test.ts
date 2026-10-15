@@ -21,7 +21,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { THRESHOLD_SPECS, type FiscalBase } from './thresholds';
-import { fiscalBaseLabels, unmeasuredBasisReason } from '../ui/copy/thresholds';
+import type { CapBase } from './fiscal/deductibility';
+import { capBaseLabels, capBaseSentence, fiscalBaseLabels, unmeasuredBasisReason } from '../ui/copy/thresholds';
 
 /** Every app source file, as raw text, keyed by path relative to this file. */
 const SOURCES = import.meta.glob('../**/*.{ts,tsx}', {
@@ -126,6 +127,10 @@ describe('the deleted threshold claims stay deleted (TASK 4 acceptance)', () => 
  * It is deliberately scoped to the `FiscalBase` family rather than to "any identifier in a quote":
  * `src/domain/estimateBasis.ts` has the same defect with the `CapBase` union and is outside this brief's
  * boundary. Widening the rule here would have turned a reported defect into a red suite.
+ *
+ * B-138 closed that deferral: the `CapBase` case is now fixed, so the rule below covers it too. The
+ * sentence above is kept because it records why the widening did not happen in TASK 7 — a guard widened
+ * over a live defect reports a red suite instead of a fixed app, and that trade was the right one then.
  */
 const FISCAL_BASES: readonly FiscalBase[] = [
   'revenue-incl-vat',
@@ -163,6 +168,54 @@ describe('no internal identifier reaches a rendered Romanian sentence (B-55)', (
       for (const code of FISCAL_BASES) expect(reason).not.toContain(code);
       // Still the sentence the component test and `e2e/dashboard.spec.ts` match on.
       expect(reason).toContain('nu a fost furnizată');
+    }
+  });
+});
+
+/**
+ * B-138 — the same leak, the other identifier family.
+ *
+ * `estimateBasis.ts unresolvedCapDetail` used to write
+ *   `Plafonul se calculează pe baza „${cap.base}” (${article}) — …`
+ * which put `annual_eur_per_person` / `annual_salary_expense` on a person's screen, and three tests
+ * asserted the code as the way to find the node — the suite had pinned the leak as correct behaviour.
+ * The wording is now `ui/copy/thresholds.ts capBaseLabels`, exhaustive over `CapBase`; the rule below is
+ * what stops the next cap base from shipping as an enum.
+ */
+const CAP_BASES: readonly CapBase[] = [
+  'expense_itself',
+  'art68_alin6_base',
+  'gross_income',
+  'annual_salary_expense',
+  'annual_eur_per_person',
+];
+
+describe('no internal cap identifier reaches a rendered Romanian sentence (B-138)', () => {
+  it('no app source quotes a CapBase code inside a Romanian sentence', () => {
+    for (const base of CAP_BASES) {
+      const pattern = quote(`„${base}”`);
+      expect(
+        offenders(pattern, p => codeOnly(SOURCES[p])),
+        `„${base}” is still quoted at a person rather than at a compiler`,
+      ).toEqual([]);
+    }
+  });
+
+  it('every cap base the union can carry has a Romanian wording', () => {
+    // The compile-time half is `Record<CapBase, string>`. This is the runtime half: a base that can reach
+    // the screen has words before it ships.
+    for (const base of CAP_BASES) {
+      expect(capBaseLabels[base], `no Romanian wording for the cap base '${base}'`).toBeTruthy();
+    }
+  });
+
+  it('the cap sentence names the base in Romanian and never as a code', () => {
+    for (const base of CAP_BASES) {
+      const sentence = capBaseSentence(base, 'art. 154 alin. (1) lit. b) CF');
+      expect(sentence).toContain(capBaseLabels[base]);
+      for (const code of CAP_BASES) expect(sentence).not.toContain(code);
+      // Still the sentence `Expenses.capBanner.test.tsx` and the exclusion rows match on.
+      expect(sentence).toContain('Plafonul se calculează pe baza');
     }
   });
 });

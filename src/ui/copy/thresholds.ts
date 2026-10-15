@@ -25,6 +25,7 @@
  * layer had no slot for that family, so one was added rather than hand-translating a second dictionary at
  * the call site.
  */
+import type { CapBase } from '../../domain/fiscal/deductibility';
 import type {
   FiscalBase,
   FiscalThreshold,
@@ -111,6 +112,33 @@ export const fiscalBaseLabels: Record<FiscalBase, string> = {
  */
 export function unmeasuredBasisReason(base: FiscalBase): string {
   return `Baza „${fiscalBaseLabels[base]}” nu a fost furnizată; pragul nu poate fi evaluat.`;
+}
+
+/**
+ * B-138 — what each `CapBase` a deductibility rule can name actually measures, in Romanian.
+ *
+ * The same B-55 leak in the other identifier family: `estimateBasis.ts unresolvedCapDetail` interpolated
+ * `cap.base` straight into a sentence, so a person read `Plafonul se calculează pe baza
+ * „annual_eur_per_person”`. Keyed by the same code the domain uses and exhaustive over the union, so a
+ * sixth base is a compile error here rather than a word nobody wrote. The legal sentences that follow this
+ * one stay in the domain — they carry citations and decide what the app may claim — but naming a datum in
+ * Romanian is language, not a legal conclusion.
+ */
+export const capBaseLabels: Record<CapBase, string> = {
+  expense_itself: 'cheltuiala însăși',
+  art68_alin6_base: 'baza de calcul de la art. 68 alin. (6)',
+  gross_income: 'venitul brut',
+  annual_salary_expense: 'valoarea anuală a cheltuielilor cu salariile personalului',
+  annual_eur_per_person: 'un plafon anual exprimat în euro pe persoană',
+};
+
+/**
+ * B-138 — the opening of the sentence that names an unmeasurable cap base. The domain supplies the
+ * article and decides when the sentence is said; the wording of the base is here, so the enum never
+ * reaches the screen.
+ */
+export function capBaseSentence(base: CapBase, article: string): string {
+  return `Plafonul se calculează pe baza „${capBaseLabels[base]}” (${article})`;
 }
 
 /**

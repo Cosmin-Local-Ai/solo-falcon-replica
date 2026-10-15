@@ -112,7 +112,10 @@ describe('TASK 10b — a euro ceiling with no rate stays unresolved, and says wh
     expect(set.records).toHaveLength(0);
     const detail = set.excluded[0].detail;
     expect(set.excluded[0].reason).toBe('cap_unresolved');
-    expect(detail).toContain('annual_eur_per_person');
+    // B-138 RE-PIN. This asserted the `CapBase` code inside the sentence — the suite pinned the leak as
+    // correct behaviour. The base is now named in Romanian, and the code is asserted ABSENT.
+    expect(detail).toContain('un plafon anual exprimat în euro pe persoană');
+    expect(detail).not.toContain('annual_eur_per_person');
     expect(detail).toContain('anul plății 2026');
     expect(detail).toContain('nu stochează niciun curs BNR');
     expect(detail).toContain('pct. 7 alin. (6)');
