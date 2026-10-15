@@ -545,6 +545,16 @@ Brief 64 §Part B specified persona selection as **a CAEN → persona affinity t
 
 **Consequence for the surface (B-132):** the UI must display *which level* matched, because a secțiune-level match is a much weaker claim than a clasă-level one and must not look identical to the user.
 
+### Step 11 Part D — briefed 2026-10-15: the surface and the toggle
+
+**Brief 65** — `briefs/65_step11d_demo_surface_toggle.md`. Closes **B-132** and **B-134**, and takes three small defects that share the honesty class: **B-111** (the CNP guard in `src/test/occupancyFixtures.ts` implements the **CUI** rule, and `personas.test.ts` imports that exact helper to prove the fifteen invented identities are not real people), **B-74**, **B-55**.
+
+**What Part D is not:** it is not a re-do of Part B. `routePersonaForCaen` already routes a CAEN with no exact persona to the closest one (B-128, B-131). Part D is the screen — which brief 64's own sequencing predicted would be needed and which step 11 never built.
+
+**The requirement that follows from the Part B divergence above:** the surface must render *which level matched*, and a secțiune-level match must not look identical to a clasă-level one. 379 of 611 routed clase sit on that weakest tier; a UI that flattens them would turn a taxonomy accident into a user-facing claim.
+
+**Boundaries held:** no `domain/fx/**`, no persona figure changes, no `caen_rev3.csv` (B-136 is PARKED), no migration step, no persona gallery.
+
 ## Two sequencing traps recorded so they aren't walked into
 
 1. **Fixtures before personas (6 before 7).** Fixtures pin expected returns; personas **move the pinned seed estimate** — 311.200 bani has been held unmoved through PG-6b … 6g, and the persona set will break that pin by design. Do personas first and every fixture gets re-pinned twice.
