@@ -17,6 +17,7 @@ import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
 import { Disclosure } from '../components/ui/Disclosure';
 import { FiscalDateNote } from '../components/ui/FiscalDateNote';
 import { InterpretationNote } from '../components/ui/InterpretationNote';
+import { ProvisionalCeilingNote } from '../components/ui/ProvisionalCeilingNote';
 import { copy, empty, expenseCategoryLabels, expenses as expensesCopy, fields, moneyDate, recordStatus, validation, vehicles as vehiclesCopy } from '../ui/copy';
 import type { Vehicle } from '../data/types';
 
@@ -340,6 +341,12 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
   // the competing art. 9 ceiling beside the applied one. The conflict itself is the rule's own text, not a
   // sentence written here.
   const euroStruck = capStruck.filter(a => a.euro !== undefined);
+  // B-137 (D-FX-6) — the rates behind those ceilings that are provisional, i.e. a person recorded an annual
+  // average for a year BNR has not closed yet. The five-point note is keyed to these, because the note is an
+  // explanation of a stand-in figure and has no business appearing beside a published one.
+  const euroProvisional = euroStruck
+    .map(a => ({ paymentYear: a.euro!.paymentYear, rate: a.euro!.applied }))
+    .filter(x => x.rate.provisional);
   // TASK 10b — ledger records that entered the lei base only because a recorded rate converted them.
   const converted = classification.conversions;
   // PG-6f (B-30) — the engine picks the money measure from the **declared VAT registration state**, not
@@ -453,6 +460,14 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
                   )}
                 </div>
                 {euro.provisional && <div className="muted">{expensesCopy.euroCapProvisionalTail}</div>}
+                <div className="muted">
+                  {expensesCopy.euroCapProvenance({
+                    series: euro.applied.seriesCode,
+                    how: copy.fx.entryModeLabels[euro.applied.entryMode],
+                    when: fmtDate(localDateISO(new Date(euro.applied.fetchedAt))),
+                    source: euro.applied.sourceUrl,
+                  })}
+                </div>
                 {euro.applied.carriedFrom !== undefined && (
                   <div className="muted">{copy.fx.carriedFrom(euro.applied.carriedFrom)}</div>
                 )}
@@ -464,6 +479,7 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
               <p className="hint" key={a.ruleId}>{a.conflict ?? ''}</p>
             ))}
           </Disclosure>
+          {euroProvisional.length > 0 && <ProvisionalCeilingNote ceilings={euroProvisional} />}
         </div>
       )}
 
@@ -510,6 +526,7 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
           {expensesCopy.capBlockedTail}
           <InterpretationNote note={copy.notes.capUnmeasurable} />
           <div className="text-sm muted" style={{ marginTop: 6 }}>{capBlocked[0].detail}</div>
+          <div className="text-sm" style={{ marginTop: 6 }} data-cap-blocked-fix>{expensesCopy.capBlockedFix}</div>
           {capBlocked.length > 1 && (
             <div className="text-sm muted">
               {expensesCopy.capBlockedRest(capBlocked.length - 1)}

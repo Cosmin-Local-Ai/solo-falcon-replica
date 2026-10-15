@@ -1571,6 +1571,7 @@ function unresolvedCapDetail(
   cap: DeductibilityCap | undefined,
   sourceArticle: string,
   paymentYear?: number,
+  dailyRatesHeld?: number,
 ): string {
   const base = cap ? cap.base : undefined;
   const article = cap ? cap.baseArticle : sourceArticle;
@@ -1589,7 +1590,15 @@ function unresolvedCapDetail(
       + 'doar a cazurilor „prevăzute expres în prezentul cod", iar normele nu sunt „prezentul cod". '
       + 'Niciun text primar nu împacă cele două reguli, deci aplicația nu alege niciuna și nu fixează '
       + 'niciun curs: un curs scris în cod ar fi o regulă inventată, iar media anuală nu se calculează '
-      + 'din cursurile zilnice.';
+      + 'din cursurile zilnice.'
+      // B-137 (§4) — the refusal named as evidence rather than as a gap. A register that holds the daily
+      // rates and still declines to average them is making a decision, and the person reading the banner
+      // has to be able to tell that apart from a missing datum.
+      + (dailyRatesHeld !== undefined && dailyRatesHeld > 0
+        ? ` Aplicația deține ${dailyRatesHeld} cursuri zilnice pentru acest an și tot nu face o medie anuală `
+          + 'din ele: media publicată de BNR se obține din mediile lunare, deci o medie a cursurilor zilnice ar '
+          + 'fi un alt număr decât cel publicat. Media se înregistrează așa cum a fost publicată.'
+        : '');
   } else if (base === 'annual_salary_expense') {
     missing =
       'lipsă datele: baza este „valoarea anuală a cheltuielilor efectuate cu salariile personalului", '
@@ -1939,7 +1948,10 @@ export function selectDeductibleExpenses(
     }
     unresolvedEuro.push({
       line,
-      detail: unresolvedCapDetail(line.cap, line.sourceArticle, attempt.paymentYear),
+      // B-137 (§4): the refusal has to stay legible as a refusal. `dailyRatesHeld` is what makes persona 11's
+      // register readable — it holds twelve EUR daily rates for 2026 and the ceiling still will not strike,
+      // so the sentence says how much the app is declining to use rather than leaving it looking like a gap.
+      detail: unresolvedCapDetail(line.cap, line.sourceArticle, attempt.paymentYear, attempt.dailyRatesHeld),
     });
   }
   for (const { line, detail } of unresolvedEuro) {

@@ -227,6 +227,21 @@ export const expenses = {
     'cursul mediu pentru acest an nu este încă publicat de BNR, deci plafonul este provizoriu și se recalculează '
     + 'singur când media definitivă intră în registru.',
   /**
+   * B-137 — where a struck ceiling's rate came from, on the same line as the ceiling. The five-point note
+   * below the banner explains the rule; this names the record behind the specific number on this row, and it
+   * shows for a final rate too. A converted ceiling that cannot name its source is the same defect B-32 was.
+   */
+  euroCapProvenance: (used: { series: string; how: string; when: string; source: string }): string =>
+    `· serie BNR ${used.series} · ${used.how} la ${used.when} · sursă ${used.source}`,
+  /**
+   * B-137 — an unmeasurable euro ceiling now says what would measure it. Before this the banner explained the
+   * conflict and stopped, which left the person with a refusal and no next step; the entry form was already
+   * able to record an annual average, nothing pointed at it.
+   */
+  capBlockedFix:
+    'Media anuală a anului plății se poate înregistra manual, de pe ecranul de cursuri valutare. Până atunci '
+    + 'plafonul rămâne nemăsurat, iar cheltuiala rămâne în afara totalului — nu este dedusă cu o valoare ghicită.',
+  /**
    * TASK 10b — ledger records that entered the lei base only because a recorded BNR rate converted them.
    * The conversion is a legal act (art. 9 alin. (3) lit. b) + alin. (4)), so the rate that did it is shown
    * beside the record, not hidden behind a disclosure.
