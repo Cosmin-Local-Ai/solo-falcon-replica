@@ -1365,10 +1365,11 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     const computed: TaxEstimateResult = {
       status: 'computed',
       lines,
-      output: { total, ...carryInReport },
+      output: { total },
       snapshot: snap,
       bases: contributionBases(gross, deductibleBase, net, legs, cassLadderBase),
       contributionCategories,
+      ...carryInReport,
     };
     if (lossCarryForward) computed.lossCarryForward = lossCarryForward;
     return computed;
@@ -1392,10 +1393,11 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   return {
     status: 'computed',
     lines,
-    output: { total, ...carryInReport },
+    output: { total },
     snapshot: snap,
     bases: contributionBases(gross, deductibleBase, net, legs, cassLadderBase),
     contributionCategories,
+    ...carryInReport,
   };
 }
 
