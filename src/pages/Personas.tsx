@@ -233,8 +233,11 @@ export default function Personas() {
         <p className="muted">{t.checkBody}</p>
         <div className="persona-check">
           <div className="field">
+            <label htmlFor="persona-cod-input">{t.checkInputLabel}</label>
             <input
+              id="persona-cod-input"
               data-persona-cod-input
+              placeholder={t.checkPlaceholder}
               value={draft}
               onChange={e => setDraft(e.target.value)}
               onKeyDown={e => {

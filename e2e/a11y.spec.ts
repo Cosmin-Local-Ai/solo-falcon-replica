@@ -205,6 +205,19 @@ async function loadFixedAssetDocuments(page: import('@playwright/test').Page): P
   await expect(page.getByTestId('fa-download-register')).toBeVisible();
 }
 
+/**
+ * Step 11 / Part D (B-132) — the persona surface, the first route added since `/assets`.
+ *
+ * Scanned populated: the seed taxpayer declares CAEN `6210`, so the page renders a real routing decision
+ * with a candidate list rather than an empty state.
+ */
+async function loadPersonaSurface(page: import('@playwright/test').Page): Promise<void> {
+  await seedBrowser(page);
+  await page.clock.setFixedTime(fixedInstant());
+  await page.goto('/personas');
+  await expect(page.locator('[data-route-for="6210"]')).toBeVisible();
+}
+
 test.describe('PG-0 — axe-core accessibility gate on /dashboard', () => {
   test('the dashboard has no serious or critical axe violations', async ({ page }) => {
     const violations = await scanDashboard(page);
@@ -330,6 +343,27 @@ test.describe('PG-0 — axe-core accessibility gate on /dashboard', () => {
     expect(
       fatal,
       `axe found blocking violations on /documents#!/fixed-assets:\n\n${describeViolations(fatal)}`,
+    ).toHaveLength(0);
+  });
+
+  test('the persona surface has no serious or critical axe violations', async ({ page }) => {
+    await loadPersonaSurface(page);
+    const violations = await runAxe(page);
+    const fatal = blocking(violations);
+    const noise = violations.filter((v) => !BLOCKING_IMPACTS.includes(v.impact ?? ''));
+
+    test.info().annotations.push({
+      type: 'axe',
+      description: `${fatal.length} blocking (serious+critical), ${noise.length} non-blocking `
+        + `(minor+moderate) on /personas`,
+    });
+    if (noise.length > 0) {
+      console.log(`axe, non-blocking on /personas:\n${describeViolations(noise)}`);
+    }
+
+    expect(
+      fatal,
+      `axe found blocking violations on /personas:\n\n${describeViolations(fatal)}`,
     ).toHaveLength(0);
   });
 

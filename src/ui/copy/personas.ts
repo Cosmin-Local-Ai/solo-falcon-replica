@@ -77,6 +77,8 @@ export const personas = {
     'Introduceți un cod din nomenclator ca să vedeți ce profil demonstrativ i-ar corespunde și la ce nivel '
     + 's-ar potrivi. Nu schimbă nimic din ce ați declarat dumneavoastră.',
   checkPlaceholder: 'Cod CAEN, de exemplu 5520',
+  /** The input's own name. axe caught the field rendering without one. */
+  checkInputLabel: 'Cod CAEN de verificat',
   checkButton: 'Verifică',
   checkInvalid: (problem: string): string => `Codul nu poate fi verificat: ${problem}`,
   noCaenTitle: 'Nu ați declarat niciun cod CAEN',
