@@ -356,3 +356,26 @@ This **changes a default this project has followed.** Until now the rule has bee
 **Decided 2026-10-14.** *„make sure the personas have proper data loaded so charts, thresholds, everything is showcased at full power. not a one month 9000 lei income type shit"* and *„make sure they have clients that make sense … clients from abroad where it makes sense."*
 
 **Rules adopted:** 12 months minimum per persona with real seasonality and **≥ 12 points on every chart**; each persona **crosses** at least two thresholds rather than approaching them; realistic annual scale per activity; multi-year where the feature is multi-year; integer bani throughout. Named invented clients and suppliers, foreign ones **only where the activity genuinely has them**, and **counterparty type kept visible** because a platform that withholds is a different fiscal shape from a corporate client. **Acceptance: a persona that loads without changing a rung is not finished.**
+
+### D-FX-6 — Which rate converts a euro-denominated deductibility ceiling, and what does the open year show?
+**Raised by the Worker's B-131 pass**, which carried the 400-euro private-pension ceiling (art. 68 alin. (5) lit. g) in persona 11 and refused to strike it. Two rules in force name different rates and **no primary text reconciles them**: HG 1/2016 Titlul IV Cap. II Secț. a 2-a **pct. 7 alin. (6)** asks for the BNR **average for the year of payment**; **CF art. 9 alin. (3) lit. b) + alin. (4)** point at the BNR rate **on the payment date**. The complication that makes it urgent rather than academic: BNR publishes the annual average (`CURSA_EURM`) only after the year closes, so for FY2026 the applied basis does not exist yet.
+
+**User decision, 2026-10-15: (d)** — **the annual average stays the single primary basis**, and for a year whose average is not yet published the app uses the **existing provisional → final lifecycle** rather than refusing or presenting two rival readings.
+
+**Why (d) over the others, as put to the user:** (a) status quo leaves every FY2026 euro ceiling unanswered in the one year people plan in; (b) switching to the payment-date daily is the reading the corpus treats as the rival and would move the base of every cap already pinned; (c) showing both and letting the user pick is honest but asks a non-accountant to make a legal call. (d) keeps one rule as *the* rule and still produces a number.
+
+**Constraints placed on it:**
+- **The app must never compute the annual average from daily rates.** BNR's stated method is the arithmetic mean of the twelve **monthly** averages; a mean of dailies yields a different number. A provisional annual average is **entered by a person** (or obtained as BNR's own figure), never derived. `provider.ts` already treats a human copying the printed figure as the normal route for `annual_average`.
+- **`provisional` must be loud on screen, with provenance.** A subtle badge turns a stand-in into something a user reads as law — the failure mode this corpus has been burned by twice.
+- **The mitigating fact belongs next to the badge:** the FY2026 return is filed in 2027, after BNR publishes the 2026 average. A provisional figure is a **planning aid during the year**, not what reaches ANAF.
+- **A visible information note is required wherever a provisional ceiling figure appears** — the user asked for it explicitly, and it is part of this decision, not a later polish item. It has to answer, in plain Romanian and without requiring the user to know any of this exists:
+  1. the ceiling is stated in **euro**, and the app had to turn it into lei;
+  2. the rule used is the **BNR average for the year of payment** (HG 1/2016 pct. 7 alin. (6)), and **BNR only publishes that figure after the year closes**, so for an open year the number is **provizoriu**;
+  3. **a second rule in force points at a different rate** — the daily rate on the payment date, CF art. 9 alin. (3) lit. b) + alin. (4) — and the two are not reconciled by any primary text; the app applies one and says so rather than hiding the other;
+  4. the figure **will be replaced automatically** once BNR publishes, and the return for that year is filed **after** publication, so the provisional number never reaches ANAF;
+  5. **where the number came from** — who entered it and when — because the app is forbidden from deriving an annual average out of daily rates.
+  The note is not a tooltip for a lawyer. It is the difference between a stand-in and a guess the user trusts.
+
+- **The refusal stays legible.** Persona 11's `cap_unresolved` rows are kept as evidence that the app will not invent a rate; when they become strikable, they should say *why* they became strikable.
+
+**Tracked as defect B-137**, cross-linked to `research/22` §1 and `research/23`. Not a second copy of the legal analysis.
