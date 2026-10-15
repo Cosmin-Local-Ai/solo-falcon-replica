@@ -24,18 +24,25 @@
  * real registered identifier. That is a safety property, not sloppiness: it means no fixture can ever
  * match a real taxpayer. The scan below is what stops a future edit from quietly minting one.
  *
- * One honest caveat, recorded rather than glossed. Two published CNP check-digit formulations exist in
- * this repository, and they disagree:
+ * **B-111 closed the disagreement this file used to record as a caveat.** `cnpCheckDigitValid` used to
+ * compute `sum % 11` (10 → 1) — the **CUI** rule — while the canonical CNP rule is `(sum % 11) * 10 % 11`
+ * (10 → 1). They are not two strengths of the same key: they map the residue to different digits, so a
+ * value can satisfy one and not the other. The helper is now canonical, and the corrected rule moves
+ * exactly two literals from "fails the arithmetic" to "passes the arithmetic, impossible on structure":
  *
- *   - `src/test/occupancyFixtures.ts cnpCheckDigitValid` uses `sum % 11` (10 → 1).
- *   - The canonical CNP rule is `(sum % 11) * 10 % 11` (10 → 1).
+ *   - `1234567890123` — the seed taxpayer's CNP, and the demo client CUI. Control digit lands; birth date
+ *     decodes to month 45 / day 67, which no register contains.
+ *   - `0123456789012` — a unit-fixture profile CNP (`schema.test.ts`, `store.snapshots.test.tsx`,
+ *     `snapshots.test.ts`). Control digit lands; the leading `0` is not a legal sex digit and the day is
+ *     34. **This one was not recorded anywhere before B-111** — it was passing the wrong guard, not a
+ *     documented exception. It is pinned below rather than excused in prose.
  *
- * Under the canonical rule the seed CNP `1234567890123` **does** match its control digit — it is the
- * house variant that rejects it. It still cannot be anyone's real CNP, because it decodes to birth date
- * month 45 / day 67, which no register contains. So this file checks both the arithmetic and the
- * structure, and fails a value that passes either test alone. The same discipline caught
- * `1900101223344` in `src/domain/snapshots/hashSync.test.ts`: canonical control digit valid, decodable
- * to 1990-01-01 — a real-looking person's CNP sitting in a hashing fixture. It is gone.
+ * Neither is a real-looking person, because neither decodes to a date a register could hold — that is the
+ * arithmetic-vs-structure distinction B-110 established and B-111 leaves standing. The set of
+ * arithmetic-valid literals is asserted by name below, so a third one cannot arrive quietly and a fixed one
+ * cannot linger in the list. The case where BOTH legs fail is the one already removed:
+ * `1900101223344` in `src/domain/snapshots/hashSync.test.ts` — canonical control digit valid AND decodable
+ * to a real 1990 birth date. A hashing fixture is not a person, and it is gone.
  *
  * What this file does NOT cover: `docs/`. Historical phase notes and audit records quote the old values
  * as the record of what was changed, and rewriting them would falsify that record. The record of this
@@ -44,7 +51,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { fixedInstant } from '../test/fixedInstant';
 import { pinClock, unpinClock } from '../test/clock';
-import { CNP_CHECK_DIGIT_WEIGHTS, cnpCheckDigitValid } from '../test/occupancyFixtures';
+import {
+  cnpBirthDatePlausible,
+  cnpCheckDigitValid,
+  cnpControlDigit,
+  cnpLooksReal,
+} from '../test/occupancyFixtures';
 import { getTaxEstimate } from './dashboard';
 import { ron, type RonMoney } from '../domain/money';
 import { seedData } from './seed';
@@ -198,39 +210,13 @@ describe('B110 — every fixture email sits on a reserved domain', () => {
 
 // ── 3. No fixture identifier can ever match a real taxpayer ─────────────────
 
-/** The canonical CNP control digit: `(sum % 11) * 10 % 11`, with 10 → 1. */
-function cnpControlDigitCanonical(value: string): number {
-  const digits = value.split('').map(Number);
-  const sum = CNP_CHECK_DIGIT_WEIGHTS.reduce((acc, w, i) => acc + w * digits[i], 0);
-  const rest = (sum % 11) * 10 % 11;
-  return rest === 10 ? 1 : rest;
-}
-
-/** True when the CNP decodes to a birth date a register could contain. */
-function cnpBirthDatePlausible(value: string): boolean {
-  const sex = Number(value[0]);
-  if (sex < 1 || sex > 9) return false;
-  const year = 1900 + Number(value.slice(1, 3));
-  const month = Number(value.slice(3, 5));
-  const day = Number(value.slice(5, 7));
-  if (month < 1 || month > 12) return false;
-  const daysInMonth = new Date(year, month, 0).getDate();
-  return day >= 1 && day <= daysInMonth;
-}
-
-/**
- * A CNP is real-looking only if BOTH the canonical arithmetic and the decoded birth date hold. The
- * house helper is checked separately because it is the guard the occupancy fixtures already rely on.
- */
-function cnpLooksReal(value: string): boolean {
-  return /^[0-9]{13}$/.test(value)
-    && cnpControlDigitCanonical(value) === Number(value[12])
-    && cnpBirthDatePlausible(value);
-}
-
 /**
  * Two CUI control-digit keys are in circulation; a value that satisfies either one is treated as
  * real-looking. A CUI is 2–10 digits after the optional `RO`, which is itself a hard structural limit.
+ *
+ * The CUI family stays local on purpose: it is a different arithmetic over a different length, and
+ * `occupancyFixtures.ts` is the CNP guard. B-111 is the reason the two are never allowed to share a helper
+ * again — the bug was exactly a CUI formula wearing a CNP name.
  */
 const CUI_KEYS = ['132765432', '123456789'] as const;
 
@@ -264,15 +250,20 @@ describe('B110 — no fixture identifier is a real registered identifier', () =>
     expect(cuiLiterals.has('RO4455667788990')).toBe(true);
   });
 
-  it('every 13-digit fixture literal fails the CNP check digit (house variant)', () => {
+  it('every 13-digit fixture literal is not a real-looking CNP (canonical arithmetic + birth date)', () => {
     for (const value of cnpLiterals) {
-      expect(cnpCheckDigitValid(value), `${value} validates as a real CNP`).toBe(false);
+      expect(cnpLooksReal(value), `${value} is a real-looking CNP`).toBe(false);
     }
   });
 
-  it('every 13-digit fixture literal fails to be a real CNP (canonical arithmetic + birth date)', () => {
-    for (const value of cnpLiterals) {
-      expect(cnpLooksReal(value), `${value} is a real-looking CNP`).toBe(false);
+  it('the literals that DO satisfy the canonical control digit are pinned, and each is impossible on structure', () => {
+    // B-111 reclassified exactly these two: they pass the corrected arithmetic and are safe only on their
+    // decoded birth date. The set is asserted by name so that (a) a third arithmetic-valid literal cannot
+    // arrive quietly, and (b) one that gets fixed cannot stay on the list as cover.
+    const arithmeticValid = [...cnpLiterals].filter(cnpCheckDigitValid).sort();
+    expect(arithmeticValid).toEqual(['0123456789012', '1234567890123']);
+    for (const value of arithmeticValid) {
+      expect(cnpBirthDatePlausible(value), `${value} decodes to a plausible birth date`).toBe(false);
     }
   });
 
@@ -291,10 +282,26 @@ describe('B110 — no fixture identifier is a real registered identifier', () =>
     expect(cuiLooksReal(cui)).toBe(false);
   });
 
-  it('the seed CNP fails the house check digit and decodes to an impossible birth date', () => {
+  it('the guard itself computes the canonical CNP digit, not the CUI digit (B-111)', () => {
+    // The defect was the helper, not a fixture, so the helper gets its own case. These two values are chosen
+    // because the two rules disagree on them: `sum % 11` (the CUI rule) expects 8, `(sum % 11) * 10 % 11`
+    // (the CNP rule) expects 3. A regression back to the CUI formula fails here on both directions.
+    expect(cnpControlDigit('1234567890123')).toBe(3);
+    expect(cnpCheckDigitValid('1234567890123')).toBe(true);
+    expect(cnpCheckDigitValid('1234567890128')).toBe(false);
+    // Both are structurally impossible — month 45 — so naming them here cannot mint a person.
+    expect(cnpBirthDatePlausible('1234567890123')).toBe(false);
+    expect(cnpBirthDatePlausible('1234567890128')).toBe(false);
+  });
+
+  it('the seed CNP satisfies the canonical control digit and decodes to an impossible birth date', () => {
+    // B-111 changed which leg holds for this value: it never failed the arithmetic, it failed the CUI key.
+    // What makes it provably not a person is the date — month 45, day 67 — and that is the distinction this
+    // case exists to keep visible rather than re-assert a passing arithmetic check.
     const cnp = seedData.profile.identity.cnp;
-    expect(cnpCheckDigitValid(cnp)).toBe(false);
+    expect(cnpCheckDigitValid(cnp)).toBe(true);
     expect(cnpBirthDatePlausible(cnp)).toBe(false);
+    expect(cnpLooksReal(cnp)).toBe(false);
   });
 });
 

@@ -29,7 +29,7 @@ import { describe, expect, it } from 'vitest';
 import { PERSONAS, caenCoverage, caenInfo, personasByCaen } from './personas';
 import { applyPersonaToAccount } from './personas/personaTypes';
 import { CAEN_NOMENCLATOR_COUNTS } from './caenRev3';
-import { CNP_CHECK_DIGIT_WEIGHTS, cnpCheckDigitValid } from '../test/occupancyFixtures';
+import { cnpCheckDigitValid } from '../test/occupancyFixtures';
 import { getMonthlyFinancialSeries } from './dashboard';
 import { fixedInstant } from '../test/fixedInstant';
 import { pinClock, unpinClock } from '../test/clock';
@@ -170,16 +170,18 @@ describe('step 11 — the invented people stay invented (B-110)', () => {
       expect(cnp.slice(5, 7)).toBe('00');
     });
 
-    it(`${p.id}: the CNP is not a checksum-valid, date-decodable person`, () => {
+    it(`${p.id}: the CNP fails the canonical control digit as well as the date`, () => {
       // Belt to the global scan's braces: even with month/day 00 the control digit must not land, so a
       // future edit that "fixes" the date cannot quietly mint a real-looking CNP.
-      const digits = p.identity.cnp.split('').map(Number);
-      const sum = digits.slice(0, 12).reduce((acc, d, i) => acc + d * CNP_CHECK_DIGIT_WEIGHTS[i], 0);
-      const control = ((sum % 11) * 10) % 11;
-      const canonicalValid = control === digits[12];
+      //
+      // B-111 changed what this proves. It used to compute the canonical digit inline and AND it with
+      // `cnpCheckDigitValid`, which was the CUI rule — so the pair only proved that at least one of two
+      // DIFFERENT keys missed. Measured after the fix, all fifteen persona CNPs miss the canonical key, so
+      // the assertion is now the stronger one, and the repository is left with one spelling of the
+      // arithmetic instead of three.
       expect(
-        canonicalValid && cnpCheckDigitValid(p.identity.cnp),
-        `${p.id}'s CNP passes both control-digit keys`,
+        cnpCheckDigitValid(p.identity.cnp),
+        `${p.id}'s CNP satisfies the canonical CNP control digit`,
       ).toBe(false);
     });
 
