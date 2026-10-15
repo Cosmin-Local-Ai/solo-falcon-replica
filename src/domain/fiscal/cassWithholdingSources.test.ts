@@ -133,6 +133,21 @@ describe('B-122 — the arendă and asociere payers withhold too, and the credit
     expect(text(result)).toContain('cedarea folosinței bunurilor');
   });
 
+  it('several qualifying payers that would retain the SAME amount: the credit is still reported', () => {
+    // The designation under art. 174¹ alin. (4) only bites when the candidates disagree. DPI 30.000 lei and an
+    // asociere of 40.000 lei each select the 6-SMN rung, so either designated payer retains 2.430 lei and the
+    // taxpayer's `de plătit` is the same either way. Suppressing the credit here would re-commit the B-122
+    // harm behind a show of caution — and it did, on the first version of this fix: persona 6 lost its
+    // `reținută la sursă` row until the branch was narrowed to genuine disagreement.
+    const result = computed(
+      runLadder({ amounts: six({ proprietate_intelectuala: lei(30_000), asociere_persoana_juridica: lei(40_000) }) }),
+    );
+    expect(result.value).toBe(lei(4_860)); // the cumulation of 70.000 lei selects 12 SMN
+    expect(result.retinutLaSursa).toBe(lei(2_430));
+    expect(result.dePlatit).toBe(lei(2_430));
+    expect(text(result)).toContain('aceeași treaptă');
+  });
+
   it('a declared informare still wins over every derivation, whichever source produced it', () => {
     // art. 174¹ alin. (7): the informare is a fact about money a payer retained. It is not attributable to a
     // source on the form, so it is taken as given and the disagreement with the derivation is stated.

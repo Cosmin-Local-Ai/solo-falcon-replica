@@ -999,14 +999,33 @@ function cassWithheldForLadder(
   }
 
   if (retaining.length > 1) {
+    // art. 174¹ alin. (4) designates ONE payer when several sources qualify. But the designation only matters
+    // if the candidates disagree: the contribution is a single annual figure (art. 170 alin. (3) speaks of
+    // „baza anuală de calcul” a persoanei), and two payers selecting the same rung retain the same lei. Where
+    // they agree there is no ambiguity to report and suppressing the credit would be a regression — it is
+    // exactly the B-122 harm, wearing the costume of caution.
+    const amounts = new Set(retaining.map((x) => x.outcome.retinut));
+    if (amounts.size === 1) {
+      const first = retaining[0];
+      return {
+        outcome: {
+          ...first.outcome,
+          note:
+            `${first.outcome.note} Mai multe surse califică pentru reținere (art. 174¹ alin. (3): ` +
+            `${retaining.map(named).join('; ')}); art. 174¹ alin. (4) desemnează un singur plătitor, dar ` +
+            'alegerea lui nu schimbă cifra — toate selectează aceeași treaptă, deci reținerea este aceeași.',
+        },
+        notes,
+      };
+    }
     notes.push(
       `NOTĂ (PLĂTITOR NEDESEMNAT): art. 174¹ alin. (3) obligă plătitorul să calculeze, rețină și vireze CASS ` +
         `pentru trei surse — ${threeSources}. Aici mai multe surse prezente depășesc fiecare singură 6 salarii ` +
-        `minime brute și ar fi produs altă reținere: ${retaining.map(named).join('; ')}. art. 174¹ alin. (4): ` +
+        `minime brute și ar fi produs ALTĂ reținere: ${retaining.map(named).join('; ')}. art. 174¹ alin. (4): ` +
         'la mai multe surse contribuabilul desemnează prin contract plătitorul a cărui sursă depășește ' +
         'singură pragul, iar aplicația nu deține desemnarea. Nu adună reținerile — nimeni nu a virat suma — ' +
-        'și nu alege unul în tăcere. Cât anume a fost reținut rămâne nedeclarat; contribuția DATORATĂ de mai ' +
-        'sus nu se schimbă.',
+        'și nu alege una în tăcere, pentru că cele două cifre diferă și diferența se vede în „de plătit”. ' +
+        'Cât anume a fost reținut rămâne nedeclarat; contribuția DATORATĂ de mai sus nu se schimbă.',
     );
     return { notes };
   }
