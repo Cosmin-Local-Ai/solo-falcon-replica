@@ -412,7 +412,10 @@ describe('getActionItems (sync)', () => {
       // could have, which made the assertion weaker than it looked without ever failing.
       expect(['revenue', 'expense', 'threshold', 'deadline', 'completeness', 'tax', 'reserve', 'integrity']).toContain(item.source);
       // Every action is something to do, which is what routes it here.
-      expect(['rejected', 'awaiting_acceptance', 'not_submitted', 'data_missing', 'deadline_open', 'deadline_overdue']).toContain(item.state);
+      // B-143 (brief 73): `not_submitted` is out of this list because it is out of `AttentionState`. It sat
+      // here for the same reason B-78 removed `declaration` from the list above — a list that admits a
+      // member nothing can produce is a weaker assertion than it looks, and it never fails.
+      expect(['rejected', 'awaiting_acceptance', 'data_missing', 'deadline_open', 'deadline_overdue']).toContain(item.state);
     }
   });
 

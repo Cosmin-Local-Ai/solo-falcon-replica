@@ -91,16 +91,16 @@ function toAttentionItem(r: UnresolvedRecord): AttentionItem {
     };
   }
 
-  return {
-    id: `record-${r.kind}-${r.id}`,
-    severity: r.severity,
-    state: r.state,
-    source: r.kind,
-    title: attentionCopy.titles.notSubmittedDeclaration(r.reference),
-    description: attentionCopy.descriptions.notSubmittedDeclaration(r.reference, r.date),
-    action: attentionCopy.actions.notSubmitted,
-    target,
-  };
+  // B-143 — this used to end in a third branch that built a `not_submitted` item, and it was unreachable:
+  // `unresolvedRecords` never produces that state. It was also the worst kind of dead code, because its
+  // sentences were about a **declaration** ("Declarație fără depunere înregistrată", "depune declarația")
+  // in a model that has had no declaration source since B-78 — reaching it would have told this profile to
+  // file a return it does not owe. Guarded as unreachable rather than defaulted, the same way
+  // `recordTarget` above guards its unknown-kind case: defaulting to one of the two real items would print
+  // a sentence about a record that is neither rejected nor awaiting.
+  // SAFETY: `r.state` is `never` here by construction; the value is used solely to report it.
+  const seen = (r as unknown as { state?: unknown }).state;
+  throw new RangeError(`toAttentionItem: unmapped record state ${JSON.stringify(seen)}`);
 }
 
 /**

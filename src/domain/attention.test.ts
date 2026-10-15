@@ -109,7 +109,9 @@ describe('surface routing is one rule, applied once', () => {
   it('routes an item to exactly one surface from its state', () => {
     expect(surfaceFor('rejected')).toBe('action');
     expect(surfaceFor('awaiting_acceptance')).toBe('action');
-    expect(surfaceFor('not_submitted')).toBe('action');
+    // B-143 (brief 73): `not_submitted` used to be asserted here, and the assertion is what kept a dead
+    // state looking live. It is deleted with the state — see the decision comment on `AttentionState`. A
+    // pin for a state nobody produces proves only that the union and the test agree with each other.
     expect(surfaceFor('data_missing')).toBe('action');
     expect(surfaceFor('deadline_open')).toBe('action');
     expect(surfaceFor('deadline_overdue')).toBe('action');
@@ -222,6 +224,17 @@ describe('the record family: what the seed actually holds', () => {
     // TASK 9 re-pin (replaced, not deleted): old `['d2', 'e3', 'r2', 'r3']`. `d2` is gone because the
     // record it came from is gone — it described a monthly filing that was never due.
     expect([...byId.keys()].sort()).toEqual(['e3', 'r2', 'r3']);
+  });
+
+  it('B-143 — every state the producer emits is one the registers can actually say', () => {
+    // The decide-or-delete check, kept as a pin. `not_submitted` was deleted because no live fact produces
+    // it, and this is the assertion that says so in code rather than in a comment: the record family emits
+    // exactly the two states the two status vocabularies can express
+    // (`RevenueStatus` = inregistrata | in-asteptare | respinsa, `ExpenseStatus` = inregistrata | respinsa).
+    // A third state appearing here means somebody connected a producer — which is the moment the state
+    // would deserve to come back, and the moment this test should be re-read rather than re-pinned.
+    const states = new Set(unresolvedRecords(seedWithLegacy).map((r) => r.state));
+    expect([...states].sort()).toEqual(['awaiting_acceptance', 'rejected']);
   });
 
   it('r2 is awaiting acceptance, and the reason is the e-Factura status the record carries', () => {

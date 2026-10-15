@@ -45,13 +45,35 @@ export type AttentionSeverity = ThresholdSeverity;
  * Both can carry any severity. Keeping them in this field rather than in `severity` is the whole
  * point of the model.
  */
+/**
+ * **B-143 (brief 73): `'not_submitted'` is deleted, and the check that decided it is on the record.**
+ *
+ * It was dead but test-pinned, and the brief asked for a decide-or-delete rather than a drive-by removal.
+ * The check ran on the only family that could have produced it — the record family — and found no live fact:
+ *
+ * - `unresolvedRecords` below is the **only** producer of an `UnresolvedRecord`, and it emits
+ *   `'rejected'` and `'awaiting_acceptance'` and nothing else;
+ * - the registers it reads have no member that could mean it: `RevenueStatus` is
+ *   `'inregistrata' | 'in-asteptare' | 'respinsa'` and `ExpenseStatus` is `'inregistrata' | 'respinsa'`
+ *   (`data/types.ts:18, 94`) — there is no "registered but not submitted" state to read;
+ * - the family that used to produce it is gone, not merely unread: PG-5b deleted the monthly row, B-78
+ *   deleted the `declaration` source, and `RecordSource` carries no declaration key at all;
+ * - the one candidate that looked live — an `inregistrata` receipt with no e-Factura transmission — does
+ *   **not** mean "not submitted" for this profile. `research/35` §11.6 establishes that a CNP-identified
+ *   PFA is obliged to transmit in RO e-Factura for **29 days of 2026**, so minting a state from its absence
+ *   would assert a submission duty the corpus says does not exist for 336 days. That is precisely B-79's
+ *   failure: the obvious trigger field meaning something coarser than the state would have claimed.
+ *
+ * The wording that sat behind it confirms the reading rather than contradicting it: the copy was
+ * `„Declarație fără depunere înregistrată”` and `„Înregistrează data depunerii sau depune declarația”` —
+ * sentences about a **declaration**, in a model that no longer has a declaration source (B-78). Had the
+ * state ever been reachable, the app would have told a person to file a return this profile does not owe.
+ */
 export type AttentionState =
   /** A record was rejected, and the record itself states why. */
   | 'rejected'
   /** A record was submitted somewhere (e-Factura, ANAF) and no acceptance has come back. */
   | 'awaiting_acceptance'
-  /** A record exists in the app but no submission is recorded for it. */
-  | 'not_submitted'
   /** A completeness check is unsatisfied: a fact the app does not hold. */
   | 'data_missing'
   /** A filing term is ahead of the user. */
@@ -156,7 +178,6 @@ export type AttentionSurface = 'observation' | 'action';
 const ACTION_STATES: readonly AttentionState[] = [
   'rejected',
   'awaiting_acceptance',
-  'not_submitted',
   'data_missing',
   'deadline_open',
   'deadline_overdue',
@@ -253,7 +274,8 @@ export interface UnresolvedRecord {
   /** The record's own status code, carried so the target can land on the tab that holds it. */
   status: string;
   date: string;
-  state: Extract<AttentionState, 'rejected' | 'awaiting_acceptance' | 'not_submitted'>;
+  /** B-143: two members, because two are what the registers can actually say. See `AttentionState`. */
+  state: Extract<AttentionState, 'rejected' | 'awaiting_acceptance'>;
   severity: AttentionSeverity;
   /**
    * The reason the RECORD states, verbatim (`statusDetail`). `null` when the record holds no reason —
@@ -316,7 +338,6 @@ function recordSeverity(
   state: UnresolvedRecord['state'],
 ): AttentionSeverity {
   if (state === 'rejected') return kind === 'revenue' ? 'high' : 'medium';
-  if (state === 'awaiting_acceptance') return 'medium';
   return 'medium';
 }
 

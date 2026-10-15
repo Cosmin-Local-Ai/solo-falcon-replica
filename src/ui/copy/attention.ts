@@ -4,9 +4,15 @@
  *
  * Every sentence here states only what the record itself holds. A rejected document carries its own
  * `statusDetail` (`CUI nevalid`, `Document neconform`) and that string is interpolated verbatim; where
- * the record holds no reason, the sentence says only what the status says and invents nothing. The
- * declaration item says the app has **no recorded submission date**, not that the declaration was not
- * filed — the app cannot see what happened at ANAF.
+ * the record holds no reason, the sentence says only what the status says and invents nothing.
+ *
+ * **B-143 (brief 73) removed the declaration item — `titles.notSubmittedDeclaration`,
+ * `descriptions.notSubmittedDeclaration` and `actions.notSubmitted`.** That was the wording half of a state
+ * with no producer, and the more dangerous half: all three sentences told the person to deal with a
+ * **declaration**, in an app that has had no declaration source since B-78 and no monthly return since
+ * PG-5b. Had the state been reachable, these words would have sent a PFA în sistem real to file a return
+ * that does not exist for them. The decision, and the check behind it, are recorded on `AttentionState`
+ * in `domain/attention.ts`.
  */
 import { formatRoCalendarDate } from '../../domain/date';
 
@@ -23,8 +29,6 @@ export const attention = {
     rejectedRevenue: (reference: string): string => `Document de venit respins: ${reference}`,
     rejectedExpense: (reference: string): string => `Document de cheltuială respins: ${reference}`,
     awaitingRevenue: (reference: string): string => `Transmitere în așteptare: ${reference}`,
-    notSubmittedDeclaration: (reference: string): string =>
-      `Declarație fără depunere înregistrată: ${reference}`,
   },
 
   descriptions: {
@@ -41,12 +45,6 @@ export const attention = {
       `Documentul ${reference} din ${at(date)} are starea e-Factura „${status}”. Transmiterea nu este confirmată, deci suma nu intră în totalurile înregistrate.`,
     awaitingRevenue: (reference: string, date: string): string =>
       `Documentul ${reference} din ${at(date)} este în așteptare. Transmiterea nu este confirmată, deci suma nu intră în totalurile înregistrate.`,
-    /**
-     * What the app holds: a registration date and no submission date. It does not hold the filing
-     * itself, so the sentence cannot say the declaration was not filed — only that nothing records it.
-     */
-    notSubmittedDeclaration: (reference: string, registeredOn: string): string =>
-      `Declarația pentru ${reference} este înregistrată în aplicație din ${at(registeredOn)}, dar nu are nicio dată de depunere înregistrată.`,
   },
 
   actions: {
@@ -54,7 +52,6 @@ export const attention = {
       `Corectează motivul („${reason}”) și înregistrează din nou documentul.`,
     rejected: 'Verifică de ce a fost respins documentul și înregistrează-l din nou.',
     awaiting: 'Verifică statusul transmiterii în SPV.',
-    notSubmitted: 'Înregistrează data depunerii sau depune declarația.',
   },
 } as const;
 
