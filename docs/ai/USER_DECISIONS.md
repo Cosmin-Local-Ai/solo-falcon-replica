@@ -340,3 +340,19 @@ This **changes a default this project has followed.** Until now the rule has bee
 **Decided 2026-10-12.** The answer is not a neutral fact. One taxable intra-community acquisition of goods while quarterly **dissolves the quarter**: the fiscal period becomes the month, the year splits into **two distinct fiscal periods each needing its own decont**, and a **separate declarație de mențiuni** becomes due **within 5 working days of month end** (art. 322 alin. (7)–(8)).
 
 **The app must state that before it saves the answer** — monthly from which month, two returns instead of one, and the 5-working-day duty — and ask the user to confirm. **The answer is then recorded as theirs**, the same discipline D-VAT-1 applies to cadence: never a guessed answer, and a consequential one attributed to the person who gave it. **Rejected:** saving on a single click, which would apply a legal change with one press and no moment of understanding.
+
+
+### D-DEMO-2 — demo personas are **named invented people**, but the active profile takes **the user's own name**
+**Decided 2026-10-14.** The fork was between invented people (warmer, legible in a showcase, and it forces B-110 hygiene because a name invites a real one) and „the persona is the user" (cleaner for a real account, blander for a demo).
+
+**The user chose both, split by surface:** the persona gallery and demo data use invented people; when a persona is applied to a real account, the identity fields become that person's own. **Consequence that is part of the decision:** persona identity data and account identity data are different things and must not be conflated in the model. **B-110 still binds** — every CNP, CUI and reg-com value in persona data is invented and visibly fake, and the demo stays labelled as demo.
+
+### D-DEMO-3 — **B-127 is out of step 11.** The lifecycle stage gets its own step
+**Decided 2026-10-14.** The app cannot currently tell a new PFA from an existing one that just registered with us: `pfaStartDate` is required at onboarding and read in exactly one place, `completeness.ts:136`, which only asks whether it is filled in.
+
+**The user kept step 11 to personas.** The reason is that the lifecycle stage is a **domain** change — a derived stage, possibly persisted, with chain-step consequences — not demo dressing. **Recorded so nobody quietly folds it into the persona work.** The raw material already exists and is not in question: `pfaStartDate` is the ONRC start date rather than the signup date, so it already separates a 2019 PFA that just installed the app from one registered last month, and the first-year law is already researched (`research/11`) and partly implemented (`deadlines.ts`, art. 122 alin. (3)).
+
+### D-DEMO-4 — a quality demo needs **counterparties**, and **full data density**
+**Decided 2026-10-14.** *„make sure the personas have proper data loaded so charts, thresholds, everything is showcased at full power. not a one month 9000 lei income type shit"* and *„make sure they have clients that make sense … clients from abroad where it makes sense."*
+
+**Rules adopted:** 12 months minimum per persona with real seasonality and **≥ 12 points on every chart**; each persona **crosses** at least two thresholds rather than approaching them; realistic annual scale per activity; multi-year where the feature is multi-year; integer bani throughout. Named invented clients and suppliers, foreign ones **only where the activity genuinely has them**, and **counterparty type kept visible** because a platform that withholds is a different fiscal shape from a corporate client. **Acceptance: a persona that loads without changing a rung is not finished.**
