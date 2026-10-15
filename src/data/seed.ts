@@ -73,7 +73,9 @@ const EMPTY_SETTINGS: SettingsState = {
   },
   personal: { nume: '', cnp: '', adresa: '', telefon: '', email: '' },
   bankAccounts: [],
-  eFactura: { trimitere: 'manual', dateContact: '' },
+  // B-140 (D-EFACT-1): no `trimitere`. The key is retired — the v21→v22 step drops it from every payload,
+  // so a fresh install must not write it straight back. The e-Factura card states the legal term instead.
+  eFactura: { dateContact: '' },
 };
 
 /**
@@ -396,8 +398,8 @@ export const seedData: AppData = {
     bankAccounts: [
       { id: 'ba-1', banca: 'Banca Carpatică', moneda: 'RON' },
     ],
+    // B-140: the retired sending-deadline preference is not written by the fixture either — see `defaultSettings`.
     eFactura: {
-      trimitere: 'manual',
       dateContact: '2026-01-26',
     },
   },

@@ -547,8 +547,32 @@ const bankAccountSchema = z.object({
   moneda: z.string(),
 });
 
+/**
+ * B-140 (D-EFACT-1) — the READ vocabulary for `settings.eFactura.trimitere`.
+ *
+ * Two vocabularies meet in this one list, and both have to stay readable:
+ *
+ * - `'manual'` / `'automat'` — what `seed.ts` wrote, so the payload of anyone who never touched the
+ *   dropdown carries one of them;
+ * - `'2-zile'` / `'imediat'` — what the select on the e-Factura card wrote, and which the enum used to
+ *   REFUSE. That mismatch is a live defect, not a historical one: the load gate rejected the whole payload,
+ *   `store.tsx` turned it into a quarantine plus seed, so choosing an option on screen destroyed the dataset.
+ *
+ * The key is now OPTIONAL and no code writes it; the named `efactura-deadline` chain step drops it. It
+ * stays declared because zod strips undeclared keys — an undeclared key is erased by the gate, which would
+ * make the gate, and not the step with the recorded reason, the thing that removed the value. That is the
+ * B-141 `transmisa` argument, and it is why this list is wider than anything the app can now produce.
+ */
+export const EFACTURA_TRIMITERE_READ_VALUES = [
+  'manual',
+  'automat',
+  '2-zile',
+  'imediat',
+  '5-zile-lucratoare',
+] as const;
+
 const eFacturaSchema = z.object({
-  trimitere: z.enum(['manual', 'automat']),
+  trimitere: z.enum(EFACTURA_TRIMITERE_READ_VALUES).optional(),
   dateContact: z.string(),
 });
 

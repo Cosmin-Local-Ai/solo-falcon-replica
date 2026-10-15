@@ -1391,18 +1391,26 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
 
           <Card title={settingsCopy.eFactura.preferences}>
             <div className="form-grid" style={{ gridTemplateColumns: '1fr' }}>
+              {/* B-140 (D-EFACT-1) — the deadline is stated, not chosen. The select that used to sit here
+                  offered „În decurs de 2 zile de la emitere” above the card's own citation of OUG 120/2021
+                  art. 10 alin. (7) as amended by OUG 89/2025, which says 5 zile lucrătoare; the app
+                  contradicted itself about a legal deadline in two places on one screen. It also wrote a
+                  value the load gate refused, so choosing an option quarantined the dataset — the
+                  `efactura-deadline` step retires the key, and the sentence below is what tells a person who
+                  chose it what became of that choice. */}
               <div className="field">
                 <label>{settingsCopy.eFactura.sending}</label>
-                <select
-                  className="input"
-                  value={ef.trimitere}
-                  onChange={e => setEf({ ...ef, trimitere: e.target.value as typeof ef.trimitere })}
-                >
-                  <option value="2-zile">{settingsCopy.eFactura.sendWithinTwoDays}</option>
-                  <option value="imediat">{settingsCopy.eFactura.sendAsap}</option>
-                </select>
+                <span className="hint">{settingsCopy.eFactura.retiredChoice}</span>
                 <FieldLegal
                   hint={settingsCopy.eFactura.sendingHint}
+                  source={copy.sources.eFacturaDeadline}
+                />
+              </div>
+              <div className="field">
+                <label>{settingsCopy.eFactura.deadlineLabel}</label>
+                <span className="hint">{settingsCopy.eFactura.deadlineValue}</span>
+                <FieldLegal
+                  hint={settingsCopy.eFactura.deadlineNote}
                   source={copy.sources.eFacturaDeadline}
                 />
               </div>

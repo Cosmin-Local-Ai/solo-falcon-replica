@@ -66,6 +66,13 @@ export const settings = {
   // network layer and no credential store. `Q-EFACT-API` is not started. The card now states the state
   // that is actually true, and the preference below is labelled as a note to the person, not as a
   // sending rule the app obeys.
+  //
+  // B-140 (D-EFACT-1) — the sending-deadline SELECT is gone, and the two option labels with it. The card
+  // offered a legal deadline as a preference and the deadline it offered was wrong: „În decurs de 2 zile de
+  // la emitere” against the citation the app itself prints underneath, OUG 120/2021 art. 10 alin. (7) as
+  // amended by OUG 89/2025 — **5 zile lucrătoare**. A deadline is not a preference, so the number is now
+  // stated rather than chosen, and the `efactura-deadline` chain step retires the stored value. The retired
+  // sentence below is what tells a person who did choose what happened to that choice.
   eFactura: {
     connect: 'Starea conectării la e-Factura',
     notConnected:
@@ -74,9 +81,13 @@ export const settings = {
     preferences: 'Preferințe e-Factura',
     sending: 'Când transmiți tu factura',
     sendingHint:
-      'Alegerea nu trimite nimic de aici — în sistemul e-Factura transmiți tu. Termenul legal rămâne același indiferent de alegere.',
-    sendWithinTwoDays: 'În decurs de 2 zile de la emitere',
-    sendAsap: 'Cât mai repede după emitere',
+      'Alegerea nu trimite nimic de aici — în sistemul e-Factura transmiți tu. Termenul legal rămâne același indiferent de preferință.',
+    retiredChoice:
+      'Alegerea „când transmiți factura” a fost retrasă din setări. Cine bifează „În decurs de 2 zile de la emitere” a primit un termen greșit: legea spune 5 zile lucrătoare, nu 2 zile. Aplicația nu a ales nimic în locul tău și nu a modificat nicio altă preferință.',
+    deadlineLabel: 'Termenul-limită de la emitere',
+    deadlineValue: '5 zile lucrătoare de la data emiterii facturii',
+    deadlineNote:
+      'Termenul este fixat de lege, nu de o bifă. Unitatea este în zile lucrătoare, nu în zile calendaristice — s-a întors la zile lucrătoare de la 01.01.2026.',
     contactData: 'Date de contact',
     contactOmitted: 'Nu sunt incluse în e-Factura',
     contactIncluded: 'Include e-mail și telefon în e-Factura',

@@ -357,7 +357,8 @@ export function personaSettings(id: PersonaIdentity, caen: readonly CaenCode[]):
       email: id.email,
     },
     bankAccounts: [{ id: 'ba-1', banca: id.banca, moneda: 'RON' }],
-    eFactura: { trimitere: 'manual', dateContact: `${PERSONA_FISCAL_YEAR}-01-10` },
+    // B-140 (D-EFACT-1): no `trimitere` — the key is retired, and a persona is a payload the app writes.
+    eFactura: { dateContact: `${PERSONA_FISCAL_YEAR}-01-10` },
   };
 }
 

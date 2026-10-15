@@ -87,13 +87,20 @@ describe('the document-blob-ref step', () => {
 });
 
 describe('the chain around it', () => {
-  it('the head moved by exactly one, and the previous head is the second-to-last rung', () => {
-    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_DOCUMENT_BLOB_REF);
+  it('the head moved by exactly one when this step landed, and this step is no longer the head', () => {
+    // Brief 76 re-pin (replaced, not deleted). PG-11 asserted that `document-blob-ref` was the head; the
+    // chain has moved on, and the property this test guards is not "which rung is last" but "a rung moves
+    // by exactly one and nothing was renumbered to put it there". Both edges are still stated: v20 → v21 is
+    // still a one-step gap, and `document-blob-ref` still sits at that edge — it is now the second-to-last
+    // rung rather than the last.
     expect(DATA_VERSION_DOCUMENT_BLOB_REF - DATA_VERSION_LEASE_FACTS).toBe(1);
+    const previous = MIGRATION_CHAIN[MIGRATION_CHAIN.length - 2]!;
+    expect(previous.from).toBe(DATA_VERSION_LEASE_FACTS);
+    expect(previous.to).toBe(DATA_VERSION_DOCUMENT_BLOB_REF);
+    expect(previous.name).toBe('document-blob-ref');
     const last = MIGRATION_CHAIN[MIGRATION_CHAIN.length - 1]!;
-    expect(last.from).toBe(DATA_VERSION_LEASE_FACTS);
-    expect(last.to).toBe(DATA_VERSION_DOCUMENT_BLOB_REF);
-    expect(last.name).toBe('document-blob-ref');
+    expect(last.from).toBe(DATA_VERSION_DOCUMENT_BLOB_REF);
+    expect(last.to).toBe(CURRENT_DATA_VERSION);
   });
 
   it('the chain is contiguous: no gap, no overlap, no renumbered rung', () => {
@@ -111,10 +118,13 @@ describe('the chain around it', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it('a v20 payload runs exactly one step to reach the current version', () => {
+  it('a v20 payload runs this step and the one that followed it, and no byte moves', () => {
+    // Brief 76 re-pin: v20 used to run exactly one step. It now runs two — `document-blob-ref`, then the
+    // `efactura-deadline` retirement. The guarded property is untouched: this step still declares a shape
+    // and relocates nothing.
     const outcome = migratePersistedData(v20Payload());
     expect(outcome.fromVersion).toBe(DATA_VERSION_LEASE_FACTS);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
-    expect(outcome.stepsApplied).toEqual(['document-blob-ref']);
+    expect(outcome.stepsApplied).toEqual(['document-blob-ref', 'efactura-deadline']);
   });
 });

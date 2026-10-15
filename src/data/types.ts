@@ -610,7 +610,32 @@ export interface SettingsState {
   };
   bankAccounts: BankAccount[];
   eFactura: {
-    trimitere: 'manual' | 'automat';
+    /**
+     * B-140 (D-EFACT-1) — **retired from the write vocabulary; still readable.**
+     *
+     * The screen used to offer a sending deadline, and the option it offered was wrong: it read „În decurs
+     * de 2 zile de la emitere” while the app's own cited source — OUG 120/2021 art. 10 alin. (7) as amended
+     * by OUG 89/2025, in force from 01.01.2026 — states **5 zile lucrătoare**. `docs/ai/research/16` §Q2
+     * confirms the article and the unit, and records that the unit flipped from calendar days back to
+     * working days on 01.01.2026. The card now states the deadline as a cited fact instead of offering it as
+     * a preference, because the date-limit of a legal deadline is not something a person can choose.
+     *
+     * **Why the key stays on the type and in the schema.** This is read-wide / write-narrow, the same shape
+     * B-141 pinned for `transmisa`. zod strips undeclared keys, so deleting the declaration would make the
+     * LOAD GATE the thing that destroys the value — and before this step the gate did worse: it *refused*
+     * the payload. The select wrote `'2-zile'` and `'imediat'` while the enum declared only `'manual'` and
+     * `'automat'`, so a person who touched that dropdown quarantined their own dataset. The union below is
+     * therefore the union of **both** vocabularies this app has ever written, and the named
+     * `efactura-deadline` step is what drops the key, with a recorded reason.
+     *
+     * **Nothing maps one vocabulary onto the other.** `'manual'` / `'automat'` answer *how* the invoice gets
+     * into e-Factura; `'2-zile'` / `'imediat'` answer *when*. Picking a correspondence would put a sentence
+     * in the person's mouth that they never wrote, so the step retires the key rather than re-pointing it,
+     * and the e-Factura card says on screen what happened to the choice.
+     *
+     * Optional, and no code writes it any more.
+     */
+    trimitere?: 'manual' | 'automat' | '2-zile' | 'imediat' | '5-zile-lucratoare';
     dateContact: string;
   };
 }

@@ -390,8 +390,43 @@ export const DATA_VERSION_LEASE_FACTS = 20;
  * rather than a wipe.
  */
 export const DATA_VERSION_DOCUMENT_BLOB_REF = 21;
+/**
+ * B-140 (D-EFACT-1) — the e-Factura sending-deadline preference is retired.
+ *
+ * **What was wrong, in one sentence:** the app offered a legal deadline as a preference, and the deadline it
+ * offered was not the one it cites. `src/ui/copy/settings.ts` read „În decurs de 2 zile de la emitere” while
+ * `src/ui/copy/notes.ts` `eFacturaDeadline` quotes OUG 120/2021 art. 10 alin. (7), as amended by OUG 89/2025
+ * pct. 2 art. X in force from 01.01.2026: **5 zile lucrătoare**. `docs/ai/research/16` §Q2 confirms the
+ * article, the unit and the date the unit flipped back to working days. D-EFACT-1 settled it without a new
+ * Researcher pass — the corpus already held the correct citation, so the contradiction was a stale option,
+ * not an open legal question.
+ *
+ * **Why this is a chain step and not a string edit:** the option was backed by a stored enum value, and the
+ * two vocabularies this app wrote into that one field never agreed. `seed.ts` wrote `'manual'`; the select
+ * wrote `'2-zile'` and `'imediat'`; the persisted enum declared only `'manual'` and `'automat'`. So the load
+ * gate **refused** any payload whose owner had touched the dropdown — `store.tsx` → `rejected()` → quarantine
+ * plus seed. The on-screen contradiction and the data-loss were the same defect seen from two sides.
+ *
+ * **Retire, not re-point.** `'2-zile'` / `'imediat'` answer *when* the person transmits; `'manual'` /
+ * `'automat'` answer *how*. No correspondence between the two pairs is licensed by anything the person
+ * recorded, and mapping `'2-zile'` onto a 5-working-day option would tell the taxpayer they chose a deadline
+ * they never chose. So the step **drops the key** and the e-Factura card states, on screen, what the choice
+ * was, what the legal term is, and that the app chose nothing in its place. That is the recorded reason, in
+ * the place the person will actually read it — the same argument that closed B-106.
+ *
+ * **What this step drops, stated plainly:** one stored preference that no code ever read. It changed no
+ * figure, produced no deadline and sent nothing — B-56 had already established the app has no e-Factura
+ * client, so the card labelled the choice „o notă pentru tine”, not a rule the app obeys. Nothing else in
+ * `settings.eFactura` moves: `dateContact` is a separate answer and stays exactly where it was.
+ *
+ * **Read-wide first.** The value is only droppable if the gate lets it in, so `EFACTURA_TRIMITERE_READ_VALUES`
+ * in `data/schema.ts` widens the read union to all five tokens the app has ever written, at every version.
+ * Brief 67's finding is the reason the ordering is pinned by a test rather than asserted here: a step that
+ * runs *after* the data holding the value is gone proves nothing.
+ */
+export const DATA_VERSION_EFACTURA_DEADLINE = 22;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_DOCUMENT_BLOB_REF;
+export const CURRENT_DATA_VERSION = DATA_VERSION_EFACTURA_DEADLINE;
 
 export interface MigrationStep {
   readonly from: number;
@@ -1127,6 +1162,28 @@ export function migrateDocumentBlobRefV21(data: PersistedAppData): PersistedAppD
   return { ...data, version: DATA_VERSION_DOCUMENT_BLOB_REF };
 }
 
+/**
+ * v21 → v22 (`efactura-deadline`). Drops `settings.eFactura.trimitere`. See
+ * `DATA_VERSION_EFACTURA_DEADLINE` for what the value claimed, why nothing maps it onto another value, and
+ * why the load gate had to be widened before this step could be the thing that decides.
+ *
+ * Idempotent-safe for the same reason v13-v21 are: deleting an absent key is a no-op, the payload copy is
+ * returned with the version stamped unconditionally, and `dateContact` is carried through untouched — the
+ * step retires one key, it does not rebuild the block.
+ */
+export function migrateEfacturaDeadlineV22(data: PersistedAppData): PersistedAppData {
+  const ef = data.settings?.eFactura;
+  if (ef === undefined || !('trimitere' in ef)) {
+    return { ...data, version: DATA_VERSION_EFACTURA_DEADLINE };
+  }
+  const { trimitere: _retired, ...eFacturaRest } = ef;
+  return {
+    ...data,
+    version: DATA_VERSION_EFACTURA_DEADLINE,
+    settings: { ...data.settings, eFactura: eFacturaRest },
+  };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -1295,6 +1352,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Un document poate purta acum `blobRef` — o trimitere la octeții lui, păstrați în afara `localStorage` — în loc de octeții inline. Nimic nu a fost completat în acest pas, și acesta este tot conținutul lui: forma s-a schimbat, datele nu. Octeții sunt mutați de un pas asincron de realocare, dincolo de lanț, după încărcare, și numai după ce scrierea în depozitul de octeți a fost confirmată — acest lanț este în întregime sincron (nicio funcție `async` și niciun `Promise` în `migration.ts`), deci un pas care ar atinge depozitul ar fie să rupă contractul lui, fie să nu facă nimic în tăcere. O înregistrare care nu a avut niciodată octeți rămâne fără trimitere. O înregistrare care îi are rămâne cu ei inline până când scrierea a reușit: realocarea care pierde un document este mai gravă decât lipsa realocării.',
     apply: migrateDocumentBlobRefV21,
+  },
+  {
+    from: DATA_VERSION_DOCUMENT_BLOB_REF,
+    to: DATA_VERSION_EFACTURA_DEADLINE,
+    name: 'efactura-deadline',
+    summary:
+      'Preferința „când transmiți factura” a fost retrasă. Ecranul oferea termenul ca pe o alegere și termenul oferit era greșit: „În decurs de 2 zile de la emitere”, în timp ce sursa citată de aplicație — OUG 120/2021 art. 10 alin. (7), modificată de OUG 89/2025 pct. 2 art. X, în vigoare de la 01.01.2026 — spune 5 ZILE LUCRĂTOARE de la data emiterii. Niciun răspuns vechi nu a fost transformat într-un răspuns nou: „2 zile / imediat” răspund la ÎNCÂND, „manual / automat” răspund la CUM, și nicio corespondență între ele nu este susținută de ce a înregistrat persoana. A alege una în locul ei ar pune în gura contribuabilului o frază pe care nu a scris-o niciodată. Cheia ștearsă este singura faptă pierdută de acest pas: nicio sumă, niciun termen și nicio trimitere nu se calculau din ea, iar cardul e-Factura spune pe ecran ce a fost alegerea, care este termenul legal și că aplicația nu a ales nimic în locul tău. „dateContact” rămâne neschimbat. Câmpul a rămas acceptat la citire în toate versiunile, pentru că altfel poarta de încărcare — nu pasul cu motivul înregistrat — ar fi fost cea care distruge valoarea.',
+    apply: migrateEfacturaDeadlineV22,
   },
 ];
 

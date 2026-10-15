@@ -397,7 +397,7 @@ describe('import — an older file runs the chain (acceptance 3)', () => {
     if (outcome!.status !== 'imported') return;
     expect(outcome!.fromVersion).toBe(DATA_VERSION_VAT_RETURNS);
     expect(outcome!.toVersion).toBe(CURRENT_DATA_VERSION);
-    expect(outcome!.stepsApplied).toEqual(['lease-facts', 'document-blob-ref']);
+    expect(outcome!.stepsApplied).toEqual(['lease-facts', 'document-blob-ref', 'efactura-deadline']);
 
     // The restored dataset is on screen and is written back at the current version.
     expect(storeRef!.dataOrigin).toBe('persisted');
