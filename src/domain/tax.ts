@@ -105,6 +105,20 @@ export interface TaxCalculationInput {
    * (`data/derived.ts`, `data/dashboard.ts`) pass the leg the assembler produced.
    */
   depreciation?: DepreciationLeg | null;
+
+  /**
+   * B-121 — CF art. 118 alin. (4)-(5): fiscal losses reported in earlier years, offered to the engine.
+   *
+   * Optional, and that is deliberate: a call site that predates B-121 computes exactly the number it always
+   * did, because no losses carried in means `pierderiReportate = 0`, which is what the engine hardcoded.
+   * What it can no longer do is claim the figure is complete while the person's reported loss is nowhere —
+   * the result now carries `lossCarryIn` saying what was given, what was used, and what expired.
+   *
+   * **This is an in-memory input, not a persisted field.** D212 rd.5 asks for one total with no per-year
+   * column, so there is nothing to migrate and no ageing store to build; wiring it to a screen needs a
+   * persisted field and a migration step, which is a separate change and is reported rather than started.
+   */
+  priorYearLosses?: readonly PriorYearFiscalLoss[];
 }
 
 /** CF art. 118 alin. (2) lit. a) + alin. (4)-(5): a fiscal loss on this source, surfaced for
@@ -115,6 +129,128 @@ export interface FiscalLossCarryForward {
   capPercent: number;
   sameSourceOnly: true;
   rule: string;
+}
+
+/**
+ * B-121 — the sources art. 118 alin. (4) names, in the article's own words: „pierderea fiscală anuală
+ * înregistrată pe fiecare sursă din activități independente, din drepturi de proprietate intelectuală și din
+ * activități agricole, silvicultură și piscicultură, determinată în sistem real”.
+ *
+ * The list is closed because the article is closed: a loss from any other source has no carry-forward route
+ * in art. 118 alin. (4), and alin. (6) further excludes normă de venit agricultural income and any income
+ * type where the tax is final.
+ */
+export type FiscalLossSource =
+  | 'activitate_independenta'
+  | 'drepturi_proprietate_intelectuala'
+  | 'activitati_agricole';
+
+/**
+ * B-121 — a fiscal loss reported in an EARLIER year, offered to the engine as an input.
+ *
+ * The engine has produced a `lossCarryForward` for the year being computed since Phase 5, but had no way to
+ * be told about a loss from a year already filed. `tax.ts` therefore carried `pierderiReportate = lei(0)` as
+ * a hardcoded constant and every later year's tax was overstated by the amount the person had already lost
+ * and reported.
+ *
+ * `amount` is a positive magnitude, never a signed negative: every money row in this codebase is a magnitude
+ * with its direction in the label, and D212 rd.5 validates „Doar valori pozitive”.
+ *
+ * `lossYear` is what makes art. 118 alin. (5) lit. a) — „reportul se efectuează cronologic, în funcție de
+ * veşimea pierderii” — expressible at all. **It is an input, not a store**: the return itself asks for one
+ * total on rd.5 with no per-year column, so nothing here persists an ageing schedule. A caller that only has
+ * the form's aggregate can pass one entry with the oldest year it can stand behind.
+ */
+export interface PriorYearFiscalLoss {
+  source: FiscalLossSource;
+  /** The fiscal year the loss was determined in — the year that produced rd.4 of that year's return. */
+  lossYear: number;
+  amount: Bani;
+}
+
+/** What the engine did with the losses it was given, reported rather than assumed away. */
+export interface FiscalLossCarryInReport {
+  /** D212 rd.5 — the same-source losses still inside the 5-year window, as one total. */
+  reportate: Bani;
+  /** D212 rd.6 — what this year may actually offset, after the 70 % ceiling. */
+  compensata: Bani;
+  /** D212 rd.7 — `venit net anual − rd.6`, the figure art. 118 alin. (2⁴) caps deductions against. */
+  recalculat: Bani;
+  /** The 70 % ceiling itself, computed on the net of THIS source (rd.3). */
+  plafon: Bani;
+  /** Inside the window, not yet used: still reportable in a later year. */
+  ramase: { lossYear: number; amount: Bani }[];
+  /** art. 118 alin. (5) lit. c): „pierdere definitivă a contribuabilului”. */
+  expirate: { lossYear: number; amount: Bani }[];
+  /** Given, but from another source — art. 118 alin. (4) compensates „din aceeași sursă de venit”. */
+  altaSursa: { source: FiscalLossSource; lossYear: number; amount: Bani }[];
+}
+
+/**
+ * B-121 — apply art. 118 alin. (4)-(5) to the losses the engine was given.
+ *
+ * Four things the article states and the code must therefore do, each asserted in
+ * `tax.lossCarryIn.test.ts`:
+ *
+ * 1. **per source** — „pe fiecare sursă … obținute din aceeași sursă de venit”. A loss from another source
+ *    is seen and named, never applied.
+ * 2. **70 % of the net of that same source** — rd.6 = min(rd.5, 70 % × rd.3). The ceiling is a ceiling, so it
+ *    is floored to whole bani: rounding it upward would let more offset through than the article allows.
+ * 3. **chronologically by age** — alin. (5) lit. a). Oldest first.
+ * 4. **not elective** — „se reportează **și** se compensează”. Where a loss is inside the window and there is
+ *    net to absorb it, it is applied; the taxpayer is not asked whether they would like to.
+ *
+ * The window is **5 ani fiscali consecutivi** (art. 118 alin. (4), as amended by OUG 115/2023 pct. 70 art.
+ * LIII, from 2024 incomes — it was 7 before). A loss outside it is a *pierdere definitivă* under alin. (5)
+ * lit. c) and is reported as such rather than dropped. `docs/ai/research/52_dividends_losses_withholding_fy2026.md`
+ * §Q1 corrects the register, which had this as alin. (3) and 6 years; alin. (3) is the fracțiune-de-an rule.
+ */
+/**
+ * A ceiling is floored, never rounded. `roundArt66` would push a fractional ceiling up to the next leu and
+ * let more loss through than art. 118 alin. (4) permits; the article's word is „limită”, so the direction of
+ * the rounding is fixed by what the number IS, not by a house convention. This is the one place in this file
+ * that does not use `roundArt66`, and it is deliberate.
+ */
+function floorDecimalBani(value: Decimal): Bani {
+  return Math.floor(value.toNumber()) as Bani;
+}
+
+function resolveCarriedInLosses(
+  losses: readonly PriorYearFiscalLoss[] | undefined,
+  source: FiscalLossSource,
+  fiscalYear: number,
+  net: Bani,
+): FiscalLossCarryInReport {
+  const given = losses ?? [];
+  const plafon: Bani = net > 0 ? floorDecimalBani(new Decimal(net).times(70).div(100)) : lei(0);
+  const inWindow = given
+    .filter((l) => l.source === source && l.lossYear < fiscalYear && fiscalYear - l.lossYear <= 5)
+    .sort((a, b) => a.lossYear - b.lossYear); // alin. (5) lit. a): oldest first
+  const expirate = given
+    .filter((l) => l.source === source && l.lossYear < fiscalYear && fiscalYear - l.lossYear > 5)
+    .map((l) => ({ lossYear: l.lossYear, amount: l.amount }));
+  const altaSursa = given
+    .filter((l) => l.source !== source)
+    .map((l) => ({ source: l.source, lossYear: l.lossYear, amount: l.amount }));
+
+  let headroom = plafon;
+  let compensata: Bani = lei(0);
+  const ramase: { lossYear: number; amount: Bani }[] = [];
+  for (const loss of inWindow) {
+    const used = loss.amount <= headroom ? loss.amount : headroom;
+    compensata = sumBani([compensata, used]);
+    headroom = subBani(headroom, used);
+    if (loss.amount > used) ramase.push({ lossYear: loss.lossYear, amount: subBani(loss.amount, used) });
+  }
+  return {
+    reportate: sumBani(inWindow.map((l) => l.amount)),
+    compensata,
+    recalculat: subBani(net, compensata),
+    plafon,
+    ramase,
+    expirate,
+    altaSursa,
+  };
 }
 
 /**
@@ -325,6 +461,12 @@ export type TaxEstimateResult =
        */
       contributionCategories: ContributionCategories;
       lossCarryForward?: FiscalLossCarryForward;
+      /**
+       * B-121 — what the engine did with the losses carried in from earlier years: rd.5, rd.6, rd.7, the 70 %
+       * ceiling, what is left inside the window, what became a `pierdere definitivă`, and what was refused for
+       * belonging to another source. Present only when a loss was offered.
+       */
+      lossCarryIn?: FiscalLossCarryInReport;
     }
   | { status: 'review_required'; reason: string; lines: CalculationLine[] };
 
@@ -358,7 +500,7 @@ export const CASS_FLAG_REVIEW_REASON =
   + 'rămâne valoarea calculată, dar nu poate fi prezentată ca o scutire dovedită.';
 
 export async function computeTaxEstimate(input: TaxCalculationInput): Promise<TaxEstimateResult> {
-  const { inputs, profile, revenues, expenses, revenuesNet, expensesNet, expenseBase, flatRatioGross, flatRatioMethod, flatRatioWithholdingBlocked, ruleRelease, rules, depreciation } = input;
+  const { inputs, profile, revenues, expenses, revenuesNet, expensesNet, expenseBase, flatRatioGross, flatRatioMethod, flatRatioWithholdingBlocked, ruleRelease, rules, depreciation, priorYearLosses } = input;
   // `leiText`, not the raw value: these sentences are read by a person, and a person reads leu.
   if (!Number.isFinite(revenues) || revenues < 0) return rr(`Veniturile trebuie să fie >= 0, s-a obținut ${leiText(revenues)}`);
   if (!Number.isFinite(expenses) || expenses < 0) return rr(`Cheltuielile trebuie să fie >= 0, s-a obținut ${leiText(expenses)}`);
@@ -1067,11 +1209,60 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
 
   // ---- CF art. 118 alin. (2): the taxable base, composed in the order the law states it ----
   // alin. (2) lit. a): „venit net anual recalculat = venit net anual (sistem real) − pierderi fiscale
-  // reportate”, PE SURSĂ, before incomes are summed. The app models one sistem-real source and has no
-  // prior-year loss store (Phase 7 owns persistence), so the reported-loss term is 0 here and the
-  // current-year loss is surfaced below rather than silently dropped.
-  const pierderiReportate: Bani = lei(0);
+  // reportate”, PE SURSĂ, before incomes are summed.
+  //
+  // B-121 — the reported-loss term used to be the constant `lei(0)`, with the comment pointing at a
+  // prior-year store that never arrived. The store is still not built, and does not need to be: the return
+  // asks for one total on rd.5. What was missing was an INPUT, and it is `inputs.priorYearLosses` now.
+  //
+  // **The ordering, which the brief calls a trap, is settled by the text and is not chosen here.**
+  // art. 118 alin. (2⁴) caps the CAS/CASS deductions against „venitul anual impozabil **recalculat**”, and
+  // alin. (2) lit. a) defines that word as the net AFTER the carried-in loss: „venitul net anual recalculat …
+  // prin deducerea din venitul net anual, determinat în sistem real, a pierderilor fiscale reportate”. So the
+  // loss is applied first and the cap is measured against what survives it — the mutual dependence dissolves
+  // because the two figures are capped by different things: rd.6 by 70 % of rd.3 (the PRE-loss net), the
+  // deductions by the POST-loss net. Confirmed three independent ways in
+  // `docs/ai/research/52_dividends_losses_withholding_fy2026.md` §Q3: the D212 rd.7 label itself
+  // („rd.3 − rd.6”), ANAF Iași („Venit net anual impozabil = Venit net anual recalculat − cas − cass”), and
+  // ANAF Galați's worked example (15.000 − 1.000 = 14.000; (14.000 − 1.500) × 10 % = 1.250).
+  //
+  // What the loss does NOT touch is asserted, not assumed: art. 170 alin. (1) final sentence excludes
+  // „pierderile fiscale anuale prevăzute la art. 118” from the CASS base outright, and art. 148 alin. (3)
+  // measures the CAS ceiling on the venit net struck before art. 118 offsetting. Both are pinned in
+  // `tax.lossCarryIn.test.ts`; the composition below sits after those calculators for that reason.
+  const carriedIn = resolveCarriedInLosses(
+    priorYearLosses,
+    'activitate_independenta',
+    inputs.fiscalYear,
+    net,
+  );
+  const pierderiReportate: Bani = carriedIn.compensata;
   const vnaRecalculat = subBani(net, pierderiReportate);
+  if (carriedIn.reportate > 0 || carriedIn.expirate.length > 0 || carriedIn.altaSursa.length > 0) {
+    lines.push({
+      label: 'Pierderi fiscale reportate din anii precedenți (art. 118 alin. (4), rd. 5 — aceeași sursă, 5 ani fiscali)',
+      value: carriedIn.reportate,
+    });
+    lines.push({
+      label: 'Pierdere fiscală compensată în anul de raportare (art. 118 alin. (4), rd. 6 — cel mult 70 % din venitul net anual)',
+      value: carriedIn.compensata,
+    });
+    lines.push({
+      label: 'Venit net anual recalculat (art. 118 alin. (2) lit. a), rd. 7 = rd.3 − rd.6)',
+      value: vnaRecalculat,
+    });
+    for (const expired of carriedIn.expirate) {
+      lines.push({
+        label: `Pierdere definitivă — cei 5 ani fiscali au expirat (art. 118 alin. (5) lit. c), pierderea din ${expired.lossYear})`,
+        value: expired.amount,
+      });
+    }
+  }
+
+  // The report travels on the result whenever a loss was offered, even when none of it could be used: a
+  // caller that offered a loss and gets no `lossCarryIn` back cannot tell whether the engine ignored it or
+  // refused it for a reason.
+  const carryInReport = priorYearLosses !== undefined && priorYearLosses.length > 0 ? { lossCarryIn: carriedIn } : {};
 
   // alin. (2^2): CAS deductibilă = (venit net anual determinat în sistem real ÷ total venituri cumulate
   // potrivit art. 148 alin. (3)) × contribuția de asigurări sociale calculată potrivit art. 151 alin. (1).
@@ -1136,6 +1327,10 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // alin. (2^4): „Nivelul contribuției de asigurări sociale și al contribuției de asigurări sociale de
   // sănătate deductibile … nu poate depăși nivelul venitului net anual recalculat.” Without this cap a
   // low-net year could drive the base negative and hide a loss behind a negative tax.
+  //
+  // B-121: the base of this cap is `vnaRecalculat`, which since B-121 is genuinely post-loss. That is what
+  // the word „recalculat” in alin. (2^4) means, and it is why a carried-in loss lowers the ceiling on how much
+  // CAS/CASS may be deducted: a year that lost most of its income may deduct less contribution, not more.
   const deduceriCalculat = sumBani([casDeductibila, cassDeductibila]);
   const plafonDeduceri: Bani = vnaRecalculat > 0 ? vnaRecalculat : lei(0);
   const deduceriRetinute: Bani = deduceriCalculat < plafonDeduceri ? deduceriCalculat : plafonDeduceri;
@@ -1170,7 +1365,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     const computed: TaxEstimateResult = {
       status: 'computed',
       lines,
-      output: { total },
+      output: { total, ...carryInReport },
       snapshot: snap,
       bases: contributionBases(gross, deductibleBase, net, legs, cassLadderBase),
       contributionCategories,
@@ -1197,7 +1392,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   return {
     status: 'computed',
     lines,
-    output: { total },
+    output: { total, ...carryInReport },
     snapshot: snap,
     bases: contributionBases(gross, deductibleBase, net, legs, cassLadderBase),
     contributionCategories,
