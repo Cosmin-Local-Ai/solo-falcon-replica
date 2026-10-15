@@ -395,3 +395,14 @@ This **changes a default this project has followed.** Until now the rule has bee
 
 ### D-RUN-1 — RAM caps stay a documented rule, not a package.json change
 **User decision, 2026-10-15.** The capped commands (`--pool=threads --poolOptions.threads.maxThreads=2`, `--workers=2`) live in §12.17 as mandatory commands. **`package.json` is left alone** so the user's own `npm run test` keeps its default behaviour. Accepted trade-off: the uncapped form remains one command away, and the rule has already failed twice by being rediscovered instead of read.
+
+### D-ROUND-1 — B-113 is settled by evidence, not by judgement
+**Raised by brief 68's follow-up, which refused to fix it and reported instead.** The engine already applies `roundArt66` (CF art. 66, inclusive-50 boundary) in roughly twenty places — income tax, CAS, CASS — and applied to the ANAF București Sector 4 FY2024 example it reproduces **every** published figure: 2.488,50 → 2.488; six months → 14.928; forfetar 2.985,60 → 2.986; net → 11.942; impozit → 1.194. What it does **not** do is apply art. 66 to the **product of a currency conversion** — `fx/convert.ts:46` deliberately skips it, so the engine keeps 2.488,50 where ANAF writes 2.488.
+
+**The finding that reframes the defect: the corpus cannot distinguish art. 66 from a plain floor.** ANAF's two published examples are `2.488,50 → 2.488` and `3.726,45 → 3.726`. Both are consistent with art. 66 (fraction ≤ 50 bani → drop) **and** with truncation. **Neither has a fraction exceeding 50 bani — the only case that separates the two rules.** `research/23` grades the scope question UNVERIFIED, twice, in the same file that cites art. 66 for this app's conversion rules.
+
+**User decision, 2026-10-15: send the Researcher to find the separating example first.** Not "apply it because it matches", and not "leave it and disclose" — the choice is deferred until the evidence exists.
+
+**What would settle it:** an ANAF example whose converted fraction **exceeds** 50 bani, or a `decizie de soluționare` / normă metodologică / court decision applying art. 66 to a conversion product.
+
+**Cost recorded so nobody underestimates the fix later:** applying it moves up to 0,50 lei per converted amount, 3 lei across the six-month example, and every converted figure in the app. **This is why B-113 is resolved before the CASS and expense Workers run** — otherwise their pins move twice.
