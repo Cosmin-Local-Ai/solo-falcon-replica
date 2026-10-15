@@ -707,6 +707,31 @@ export interface AssetDepreciationForYear {
   posted: AssetDepreciationYear[];
   /** Assets that refused. The refusal is the schedule's, verbatim — nothing is filled in here. */
   refused: AssetDepreciationRefusal[];
+  /**
+   * B-65 (brief 74) — assets that have left the register, with the Titlul II norm pct. 27 figure beside
+   * them. **Computed and reported, never posted.** See `selectAssetDepreciation` in `../estimateBasis.ts`
+   * for why the estimate does not take it.
+   */
+  disposals: AssetDepreciationDisposal[];
+}
+
+/**
+ * B-65 — one disposed asset and the pct. 27 figure the schedule computed for it.
+ *
+ * The shape is `DepreciationOutcome['disposal']` plus the identity of the asset, because the schedule
+ * already refuses to state a disposal figure without a declared duration (pct. 27 measures the remaining
+ * months out of „durata normală de funcţionare stabilită de contribuabil”).
+ */
+export interface AssetDepreciationDisposal {
+  assetId: string;
+  label: string;
+  unamortised: Bani;
+  remainingMonths: number;
+  /** 1.500 lei × the remaining months — the pct. 27 ceiling itself. */
+  cap: Bani;
+  deductible: Bani;
+  lost: Bani;
+  capped: boolean;
 }
 
 /**
@@ -734,11 +759,18 @@ export function depreciationForFiscalYear(
 ): AssetDepreciationForYear {
   const posted: AssetDepreciationYear[] = [];
   const refused: AssetDepreciationRefusal[] = [];
+  const disposals: AssetDepreciationDisposal[] = [];
   for (const asset of assets) {
     const outcome = depreciationSchedule(rule, asset);
     if (outcome.status === 'review_required') {
       refused.push({ assetId: asset.id, label: asset.label, gap: outcome.gap, reason: outcome.reason });
       continue;
+    }
+    // B-65 — the pct. 27 figure is carried out of the schedule even for a year in which the asset produced
+    // no amortisation row. Before this it was computed, rendered on `pages/Assets.tsx`, and then dropped
+    // here, so the only place a disposal figure existed was a screen the estimate never consulted.
+    if (outcome.disposal !== undefined) {
+      disposals.push({ assetId: asset.id, label: asset.label, ...outcome.disposal });
     }
     const year = outcome.years.find((y) => y.fiscalYear === fiscalYear);
     if (year === undefined) continue;
@@ -753,7 +785,7 @@ export function depreciationForFiscalYear(
       branch: year.branch,
     });
   }
-  return { fiscalYear, posted, refused };
+  return { fiscalYear, posted, refused, disposals };
 }
 
 /**

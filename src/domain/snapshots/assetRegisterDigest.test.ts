@@ -25,10 +25,11 @@ const base: DepreciationLeg = {
   ],
   conflicts: [],
   refused: [],
+  disposals: [],
   total: lei(36000),
 };
 
-const empty: DepreciationLeg = { fiscalYear: 2026, lines: [], conflicts: [], refused: [], total: lei(0) };
+const empty: DepreciationLeg = { fiscalYear: 2026, lines: [], conflicts: [], refused: [], disposals: [], total: lei(0) };
 
 describe('assetRegisterDigest — determinism', () => {
   it('is a 64-char lowercase hex digest', () => {
@@ -48,6 +49,7 @@ describe('assetRegisterDigest — determinism', () => {
     const rebuilt: DepreciationLeg = {
       total: base.total,
       refused: base.refused,
+      disposals: base.disposals,
       conflicts: base.conflicts,
       lines: base.lines.map((l) => ({
         branch: l.branch,
@@ -119,6 +121,7 @@ describe('assetRegisterDigest — it moves when the register moves', () => {
       ],
       conflicts: [],
       refused: [],
+      disposals: [],
       total: lei(36000),
     };
     expect(assetRegisterDigest(split)).not.toBe(assetRegisterDigest(base));
@@ -134,6 +137,7 @@ describe('assetRegisterDigest — it moves when the register moves', () => {
       lines: [],
       conflicts: [{ assetId: 'asset-a', label: 'Laptop A', expenseIds: ['exp-2', 'exp-1'], withheld: lei(6000) }],
       refused: base.refused,
+      disposals: [],
       total: lei(0),
     };
     expect(assetRegisterDigest(conflicted)).not.toBe(assetRegisterDigest(empty));

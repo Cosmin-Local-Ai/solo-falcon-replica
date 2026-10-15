@@ -31,6 +31,7 @@ const legFixture: DepreciationLeg = {
   ],
   conflicts: [],
   refused: [],
+  disposals: [],
   total: lei(6000),
 };
 

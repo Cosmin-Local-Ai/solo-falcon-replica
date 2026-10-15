@@ -94,6 +94,10 @@ export type DigestAssetLeg = {
 
 /** Project the leg onto the subset the digest covers. */
 export function digestAssetLeg(leg: DepreciationLeg): DigestAssetLeg {
+  // B-65 (brief 74) — `leg.disposals` is deliberately NOT part of the digest. The digest is a content
+  // address over „the effective inputs the arithmetic consumed”, and the pct. 27 disposal figure is
+  // reported but never posted, so it feeds no number here. Folding it in would let a purely
+  // informational field move a pinned digest, and would read as though the estimate had deducted it.
   return {
     fiscalYear: leg.fiscalYear,
     total: leg.total,

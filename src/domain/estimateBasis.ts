@@ -58,6 +58,7 @@ import { selectApplicableRules } from './fiscal/select';
 import {
   depreciationForFiscalYear,
   FISCAL_DEPRECIATION_RULE_ID,
+  type AssetDepreciationDisposal,
   type AssetDepreciationRefusal,
   type AssetDepreciationYear,
 } from './fiscal/depreciation';
@@ -80,7 +81,7 @@ import {
   type LedgerConversion,
   type UnconvertedLedgerRecord,
 } from './fx/ledger';
-import { addBani, applyRateDecimal, isRon, lei, leiText, money, requireRon, subBani, sumBani, type Bani, type CurrencyCode, type Money } from './money';
+import { addBani, applyRateDecimal, formatBani, isRon, lei, leiText, money, requireRon, subBani, sumBani, type Bani, type CurrencyCode, type Money } from './money';
 // PG-6h-2 — the accommodation title is resolved in `domain/models.ts`, the one place the art. 83 alin. (4)
 // boundary is read. This module threads the answer; it does not compare the count.
 // B-105 adds the lease-facts reader from the same module, for the same reason: the regime split is decided
@@ -1163,6 +1164,25 @@ export interface DepreciationLeg {
   conflicts: DepreciationConflict[];
   /** Assets whose schedule refused for want of a declared fact. The reason is the schedule's own. */
   refused: AssetDepreciationRefusal[];
+  /**
+   * B-65 (brief 74) — assets that have left the register, with the Titlul II norm pct. 27 figure the
+   * schedule computed for them. **Reported, never added to `total`.**
+   *
+   * pct. 27 is real and already computed: „la momentul scăderii din gestiune a mijloacelor de transport
+   * din categoria M1, valoarea rămasă neamortizată este deductibilă în limita a 1.500 lei înmulţită cu
+   * numărul de luni rămase de amortizat”. What the app cannot do is **post** it, because Titlul IV caps
+   * the same residual a second time and by a fact the register does not hold. Normele pct. 7 alin. (5)
+   * lit. o) makes the deductible residual „valoarea rămasă neamortizată … **limitată la nivelul venitului
+   * realizat din înstrăinare**” — the proceeds of the disposal. Posting pct. 27's figure without that
+   * second cap would deduct more than the norm allows whenever the car sold for less than it was worth,
+   * which is the usual case. The proceeds are not a field on `FixedAsset`, and adding one is a persisted
+   * shape change this brief's boundary forbids (chain head stays v21).
+   *
+   * So the figure is surfaced as a coverage row rather than silently dropped. That is the same rule that
+   * closed B-106 and B-112: a computed amount that reaches no surface is a silent omission, and a half-
+   * applied rule at disposal is exactly the inconsistency this acceptance criterion exists to prevent.
+   */
+  disposals: AssetDepreciationDisposal[];
   /** What the estimate adds to the expense leg. `0` while a conflict stands. */
   total: Bani;
 }
@@ -1198,7 +1218,9 @@ export function selectAssetDepreciation(
   rules: readonly FiscalRule[],
 ): DepreciationLeg {
   const fiscalYear = data.profile?.fiscalYear ?? 0;
-  const empty: DepreciationLeg = { fiscalYear, lines: [], conflicts: [], refused: [], total: lei(0) };
+  const empty: DepreciationLeg = {
+    fiscalYear, lines: [], conflicts: [], refused: [], disposals: [], total: lei(0),
+  };
   // No rule package selected for this year means no expensing threshold, no ceiling and no coefficients.
   // The year's own missing-release refusal already says that; this adds a second `durata_lipsa`-shaped
   // message about every asset, which would be a second producer for one finding.
@@ -1233,6 +1255,7 @@ export function selectAssetDepreciation(
         withheld: p.deductible,
       })),
       refused: schedule.refused,
+      disposals: schedule.disposals,
       total: lei(0),
     };
   }
@@ -1251,6 +1274,7 @@ export function selectAssetDepreciation(
     lines,
     conflicts: [],
     refused: schedule.refused,
+    disposals: schedule.disposals,
     total: sumBani(lines.map((l) => l.deductible)),
   };
 }
@@ -1300,6 +1324,29 @@ export function depreciationCoverageGaps(leg: DepreciationLeg | null | undefined
       currency: 'RON',
       fixTarget: '/assets',
       detail: `Mijlocul fix „${r.label}”: ${r.reason}`,
+    });
+  }
+  // B-65 — the pct. 27 disposal figure, reported rather than posted. `amount: null` is the same pair the
+  // conflict rows above use, and for the same reason: this is not a sum that left the estimate, it is a
+  // sum that was never in it, so the weighted completeness denominator does not move.
+  for (const d of leg.disposals) {
+    out.push({
+      recordId: `asset:${d.assetId}:disposal`,
+      kind: 'profile',
+      reason: 'fact_missing',
+      amount: null,
+      currency: 'RON',
+      fixTarget: '/assets',
+      detail:
+        `Mijlocul fix „${d.label}” a fost scos din gestiune. Plafonul pct. 27 din Normele Titlului II a ` +
+        `fost calculat: valoare neamortizată ${formatBani(d.unamortised)}, ${d.remainingMonths} luni rămase ` +
+        `din durata declarată, plafon 1.500 lei × luni = ${formatBani(d.cap)}, deductibil sub pct. 27 = ` +
+        `${formatBani(d.deductible)}. Suma NU este adăugată în estimare. Normele Titlului IV pct. 7 alin. (5) ` +
+        'lit. o) limitează aceeași valoare rămasă neamortizată „la nivelul venitului realizat din ' +
+        'înstrăinare” — adică la prețul cu care bunul a fost vândut. Aplicația nu înregistrează prețul ' +
+        'înstrăinării, deci nu poate măsura a doua limită; ar deduce mai mult decât permite norma ori de ' +
+        'câte ori vehiculul s-a vândut sub valoarea neamortizată. Cifra de mai sus este plafonul de la ' +
+        'pct. 27, nu deductibilul final.',
     });
   }
   return out;

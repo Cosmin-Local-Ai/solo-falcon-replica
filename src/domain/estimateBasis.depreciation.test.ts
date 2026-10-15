@@ -464,3 +464,75 @@ describe('B-65 acceptance 3 (brief 74) — the 50 % mixed-use limit is NOT also 
     expect(leg.total).toBe(lei(30000));
   });
 });
+
+describe('B-65 acceptance 4 (brief 74) — the pct. 27 disposal figure is reported, and is not posted', () => {
+  /**
+   * The pct. 27 ceiling is already computed by `depreciationSchedule` and already rendered on
+   * `pages/Assets.tsx`. What it never did was reach the seam between the schedule and the estimate:
+   * `depreciationForFiscalYear` read `outcome.years` and dropped `outcome.disposal`, so the estimate had
+   * no idea an asset had left the register at all.
+   *
+   * The figure is now carried to the estimate as a **reported** amount and deliberately not added to
+   * `total`. The reason is Titlul IV norm pct. 7 alin. (5) lit. o), which caps the same residual a second
+   * time at „nivelul venitului realizat din înstrăinare" — the disposal proceeds. No `FixedAsset` field
+   * holds those proceeds, so posting pct. 27's number would deduct more than the norm allows whenever the
+   * asset sold below its unamortised value. Adding the field is a persisted-shape change, and this brief's
+   * boundary keeps the chain head at v21.
+   */
+  const DISPOSED_M1: FixedAsset = {
+    ...M1_CAR,
+    id: 'asset-m1-disposed',
+    label: 'Autoturism M1 vândut',
+    disposedOn: '2026-10-15',
+    disposalKind: 'vanzare',
+  };
+
+  it('the year read carries the disposal figure out of the schedule instead of dropping it', () => {
+    const out = depreciationForFiscalYear(depreciationRule, [DISPOSED_M1], 2026);
+    expect(out.disposals).toHaveLength(1);
+    const d = out.disposals[0]!;
+    expect(d.assetId).toBe('asset-m1-disposed');
+    // 120.000 lei / 60 luni = 2.000 lei/lună. `disposalFigure` counts the months actually taken up to the
+    // disposal month — Martie–Octombrie = 8 — against the year's UNCAPPED row (20.000 lei over 10 months),
+    // so 16.000 lei is treated as amortised and 104.000 lei remains, with 60 − 8 = 52 months left.
+    expect(d.unamortised).toBe(lei(104000));
+    expect(d.remainingMonths).toBe(52);
+    // pct. 27: 1.500 lei × lunile rămase.
+    expect(d.cap).toBe(lei(78000));
+    expect(d.deductible).toBe(lei(78000));
+    expect(d.capped).toBe(true);
+  });
+
+  it('the disposal amount never enters the expense leg, so the estimate does not move by it', () => {
+    const leg = selectAssetDepreciation(withAssets([DISPOSED_M1]), AS_OF, RULES);
+    expect(leg.disposals).toHaveLength(1);
+    // The amortisation rows for the year are posted; the disposal residual is not.
+    // 1.500 lei/lună × the 10 months the schedule runs for 2026. NOTE, reported not fixed: the schedule
+    // still amortises Noiembrie and Decembrie although the car left the register in Octombrie, while
+    // `disposalFigure` counts only 8 months used. The two halves of the same rule disagree about the last
+    // two months of the year. That is a real finding, it moves money, and it is not one of B-114 or B-65 —
+    // it is recorded in the handoff rather than quietly corrected here.
+    expect(leg.total).toBe(lei(15000));
+    expect(leg.total).not.toBe(lei(15000) + lei(78000));
+  });
+
+  it('the unposted figure is a coverage row the user can read, not a silent omission', () => {
+    const gaps = depreciationCoverageGaps(selectAssetDepreciation(withAssets([DISPOSED_M1]), AS_OF, RULES));
+    const row = gaps.find((g) => g.recordId === 'asset:asset-m1-disposed:disposal');
+    expect(row, 'the disposal must be reported on the one coverage channel').toBeDefined();
+    // `amount: null` is the pair the conflict rows use, and it is what keeps the weighted completeness
+    // denominator unmoved: this is a sum that was never in the figure, not a sum that left it.
+    expect(row!.amount).toBeNull();
+    expect(row!.reason).toBe('fact_missing');
+    expect(row!.fixTarget).toBe('/assets');
+    expect(row!.detail).toContain('pct. 27');
+    expect(row!.detail).toContain('78.000,00');
+    expect(row!.detail).toContain('înstrăinare');
+    expect(row!.detail).toContain('NU este adăugată în estimare');
+  });
+
+  it('an asset still in the register produces no disposal row', () => {
+    const gaps = depreciationCoverageGaps(selectAssetDepreciation(withAssets([M1_CAR]), AS_OF, RULES));
+    expect(gaps.some((g) => g.recordId.endsWith(':disposal'))).toBe(false);
+  });
+});
