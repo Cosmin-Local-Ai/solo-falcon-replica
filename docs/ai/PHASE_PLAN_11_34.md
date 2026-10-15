@@ -748,6 +748,20 @@ Written 2026-10-12, after I briefed a Researcher to **read a research file and w
 5. **New tests stay targeted to the defect.** Do not grow a 1.200-line test file to cover one assertion; do not add a new e2e spec where a component test proves the same thing. The five largest test files are already 900–1.200 lines each.
 6. **Report the shape of your runs in the handoff**, under `TESTS:` — which targeted runs, and the one full-suite result with its newly measured counts. If you ran the full suite more than twice, **say why.**
 
+### 12.18 — check the research corpus before minting or briefing anything (standing user rule, 2026-10-15)
+
+**Before minting a defect, and before writing any brief that turns on a legal or technical fact, search `docs/ai/research/` for that fact and cite the file in the brief.** If the corpus answers it, the brief says so and the Worker is told **not to re-litigate it**. If the corpus is silent, or grades the point **UNVERIFIED**, that is a **Researcher task, not a Worker guess.**
+
+**Why this is a rule and not a habit.** Three misses in one day, all the same shape:
+
+- **B-150** was minted as needing *„an answer independent of the B-116 fork"*. `research/48` §1 had already answered it — the art. 72 alin. (3) set gets no quota *and* no CAS, *„one flag, two consequences"*. The register row had to be corrected the same day it was written.
+- **B-113** was briefed as an open question about rounding. `research/23` already graded the scope **UNVERIFIED twice, at lines 193 and 207, in the very file that cites art. 66 for this app's conversion rules.** Had that been read first, the Researcher would have been sent for the *separating example* instead of for the rule.
+- **The 40 % DPI quota** was nearly re-derived. It was already banked in `research/48` §1 as a **correction** — 40 %, not 20 % — with the article text quoted.
+
+**The cost is not just wasted search.** A brief that contradicts the corpus teaches the Worker to distrust the corpus, and a minted defect that the corpus already answers pollutes the register — which is the thing the whole plan exists to keep honest.
+
+**The check is cheap.** `grep -rn "<fact>" docs/ai/research/` before the brief is written, and the brief carries the citation. A Worker who is told the answer already exists spends its context on the wiring instead of the argument.
+
 **The commands are mandatory, not the intention — added 2026-10-15 after the user asked for it.** Brief 66's Worker discovered on its own that capping parallelism makes the full suite slower but survivable; brief 67's Worker did the same. **Two Workers, one discovery each, and the third would have had to find it again.** `npm run test` and `npm run test:e2e` use the **default full-parallel pool**, which is what exhausts the machine. The gate is therefore these exact commands:
 
 ```
