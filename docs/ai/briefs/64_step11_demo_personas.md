@@ -84,19 +84,30 @@ From `FiscalRegime` in `src/domain/fiscal/rules.ts`:
 ## Part C — The persona set
 **Eight, not five.** Five cannot cover 13 regimes plus four unexercised ladder categories without turning each persona into a grab-bag. **Each is a real person you could meet, and each carries only regimes that person would plausibly have.**
 
-**⚠️ The CAEN columns below are UNVERIFIED placeholders from my memory — the questions this step must answer against the shipped nomenclator, not its inputs. The user types are the design. The codes are to be looked up.**
+**The CAEN codes below are now VERIFIED against `docs/ai/data/caen_rev3.csv` (651 clase, parsed from the MO 385 text).** Five of my original guesses were wrong, which is exactly what the warning below was for:
 
-| # | Persona | Principal CAEN *(unverified)* | Secondary CAEN ≤4 *(unverified)* | What it teaches |
+| I wrote | Reality in CAEN Rev.3 |
+|---|---|
+| `6201` | **does not exist.** Rev.3 has `621` → **`6210` Activități de realizare a soft-ului la comandă** |
+| `6311` / `6312` | **do not exist.** Rev.3 collapses them to **`6310` Prelucrarea datelor, administrarea paginilor web și activități conexe** |
+| `9003` | **does not exist.** The creator class is **`9011` Activități de creație literară și compoziție muzicală** |
+| `4110` | **does not exist.** Rev.3 has only **`4100`** |
+| `4791` = „Comerț cu amănuntul” | wrong meaning. **`4791` = Intermedieri în comerțul cu amănuntul nespecializat** — the intermediation class, which is also the one ONRC uses for online commerce |
+
+| # | Persona | Principal CAEN | Secondary CAEN ≤4 | What it teaches |
 |---|---|---|---|---|
-| 1 | **IT freelance** | **6201** | 6202, 6311, 7311, 8559 | `income-tax`, `cas`, `cass` lit. b), `expense-deductibility`, **FX with EUR clients**, `vat` registration route + cadence (B-96/B-100), `deadlines` |
-| 2 | **Content creator / author** | **9003** | 5811, 5911, 6312, 7420 | **`dpi-flat-quota`**, **`contribution-withholding`**, CAS lit. b¹) + CASS lit. c), and **the pension case: art. 154 alin. (1) lit. h¹) → CASS 0 on DPI** |
-| 3 | **Rideshare / courier driver** | **4932** | 5320, 4939, 7711 | **depreciation + the one car**, **art. 298 vehicle VAT status (B-94)**, art. 68 alin. (5) capped expenses, B-93's schedule-vs-hand-recorded reconciliation |
-| 4 | **Airbnb host** | **5520** | 5590, 5621, 6820 | **`short-term-rooms-flat-ratio` (art. 85, 1–7 rooms)**, the occupancy sheet, the tourism-CAEN prompt, and **the art. 67 alin. (1¹) boundary at >7 rooms → art. 68³** |
-| 5 | **Long-term landlord** | **6820** | 4110, 6831, 5520 | **`cedare-art84-flat-ratio` vs `cedare-art84x1-withheld`** — same 20 %, different gross measure, different FX date, different declaration duty; CASS **lit. e)**; **surfaces B-122** (arendă withholding not modelled) |
+| 1 | **IT freelance** | **6210** Activități de realizare a soft-ului la comandă | 6220, 6290, 6310, 5829 | `income-tax`, `cas`, `cass` lit. b), `expense-deductibility`, **FX with EUR clients**, `vat` registration route + cadence (B-96/B-100), `deadlines` |
+| 2 | **Content creator / author** | **9011** Activități de creație literară și compoziție muzicală | 5811, 5920, 6391, 7420 | **`dpi-flat-quota`**, **`contribution-withholding`**, CAS lit. b¹) + CASS lit. c), and **the pension case: art. 154 alin. (1) lit. h¹) → CASS 0 on DPI** |
+| 3 | **Rideshare / courier driver** | **4933** Transporturi terestre de pasageri cu vehicule cu șofer, pe bază de comandă | 4932, 5320, 4941, 7711 | **depreciation + the one car**, **art. 298 vehicle VAT status (B-94)**, art. 68 alin. (5) capped expenses, B-93's schedule-vs-hand-recorded reconciliation |
+| 4 | **Airbnb host** | **5520** Facilități de cazare pentru vacanțe și perioade de scurtă durată | 5540, 5590, 5510, 6820 | **`short-term-rooms-flat-ratio` (art. 85, 1–7 rooms)**, the occupancy sheet, the tourism-CAEN prompt, and **the art. 67 alin. (1¹) boundary at >7 rooms → art. 68³** |
+| 5 | **Long-term landlord** | **6820** Închirierea și subînchirierea bunurilor imobiliare proprii sau închiriate | 6811, 6812, 6831, 5520 | **`cedare-art84-flat-ratio` vs `cedare-art84x1-withheld`** — same 20 %, different gross measure, different FX date, different declaration duty; CASS **lit. e)**; **surfaces B-122** (arendă withholding not modelled) |
 | 6 | **Passive investor** | *no PFA — CAEN not applicable* | — | **`investitii` lit. g) — dividends at 16 %**, **dobânzi at 10 %**, **art. 97¹ self-assessed bonds**, **`asociere_persoana_juridica` lit. d)**, `alte_surse` lit. h), **and the salariat case: art. 150 alin. (2)** |
-| 7 | **Agricultural producer** | **0125** | 0130, 0322, 1039, 4721 | **`activitati_agricole` lit. f)**, art. 103–106, **normă de venit vs sistem real** (D-NORMA-2 still awaits a user decision — **do not resolve it here**), **art. 118 alin. (6): losses not reportable for normă de venit agricultural income** |
-| 8 | **Online commerce / dropshipper** | **4791** | 4799, 5210, 6311, 8299 | **cash-basis goods costs** (art. 68 alin. (2) lit. a) / alin. (4) lit. b) — **no stock model, and none is needed**), art. 68 alin. (5) lit. d) perisabilități, **and the real trap: TVA art. 310 alin. (2) measures *livrări efectuate*, so income and VAT diverge by exactly the stock movement** |
+| 7 | **Agricultural producer** | **0125** Cultivarea altor pomi fructiferi, arbuștilor fructiferi, căpșunilor și nuciferelor | 0113, 0161, 1039, 4721 | **`activitati_agricole` lit. f)**, art. 103–106, **normă de venit vs sistem real** (D-NORMA-2 still awaits a user decision — **do not resolve it here**), **art. 118 alin. (6): losses not reportable for normă de venit agricultural income** |
+| 8 | **Online commerce** | **4791** Intermedieri în comerțul cu amănuntul nespecializat | 4792, 5210, 5320, 6310 | **cash-basis goods costs** (art. 68 alin. (2) lit. a) / alin. (4) lit. b) — **no stock model, and none is needed**), art. 68 alin. (5) lit. d) perisabilități, **and the real trap: TVA art. 310 alin. (2) measures *livrări efectuate*, so income and VAT diverge by exactly the stock movement** |
 
+**Two things the verified codes give us for free:**
+- **Personas 4 and 5 genuinely overlap** — `5520` and `6820` appear in each other's secondary lists. **That is the tie case from Part B, and it is real, not a contrived test.**
+- **`4933` („cu vehicule cu șofer, pe bază de comandă") is the ride-hailing class**, not `4932` („ocazionale") as I first wrote. Getting that wrong would have put the demo driver in the wrong activity.
 **Deliberate choices, and why:**
 - **The pension/salary statuses ride on personas 2 and 6** rather than getting their own persona, because a pensionari *is* a content creator or an investor — inventing a "pensioner persona" would be a status, not a user type.
 - **Persona 6 has no CAEN.** That is correct and must stay visible: **a dividend recipient is not a PFA and has no obiect de activitate.** It also proves the CAEN→persona mapping must tolerate "no CAEN".
