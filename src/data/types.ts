@@ -99,10 +99,18 @@ export type ExpenseStatus = 'inregistrata' | 'respinsa';
  *
  * PG-5b removed `DeclStatus`, which used to own this union: the four words came from the monthly row.
  * The registers still use them, so the union now says so directly instead of borrowing its shape from a
- * record type that no longer exists. One word, `transmisa`, has no live producer any more — no revenue or
- * expense schema accepts it, and the monthly row that did is dropped by the v10→v11 step. It stays
- * because the status vocabulary is not this task's to redraw; it is recorded here so the next hygiene
- * pass can find it.
+ * record type that no longer exists.
+ *
+ * **B-141 (brief 67) — `transmisa` is the union's one legacy member, and the decision is read-wide /
+ * write-narrow, not deletion.** It is not producible: `revenueSchema` enumerates three words and
+ * `expenseSchema` two, neither list contains it, no status select offers it, no seed row or demo persona
+ * carries it, and the only stored key that ever could hold it — `declarations[]` — is dropped whole by
+ * the v10→v11 `annual-filing` step. It stays **readable** because that is the half a user's bytes depend
+ * on: `declarationSchema` still accepts it so a pre-v11 payload passes the one load gate instead of
+ * being refused there, and the named chain step — not the gate — is what drops the row. Removing the
+ * word from the read vocabulary would turn „a record nobody can make any more” into „a payload we refuse
+ * to open”, which on a local-first app is data loss. Same rule as `impozit_pe_cit` in `PFA_REGIME_VALUES`.
+ * Pinned by `stored-status.transmisa.test.ts`; what did move is `statusBadge` below.
  */
 export type StoredStatusCode = RevenueStatus | ExpenseStatus | 'transmisa';
 
@@ -790,15 +798,26 @@ export const sumTotalsByCurrency = (rows: readonly (Revenue | Expense)[]): Money
 
 export type BadgeKind = 'badge-neutral' | 'badge-info' | 'badge-success' | 'badge-warning' | 'badge-danger';
 
-export const statusBadge = (status: string): BadgeKind => {
-  switch (status) {
-    case 'in-asteptare': return 'badge-warning';
-    case 'respinsa': return 'badge-danger';
-    case 'transmisa': return 'badge-success';
-    case 'inregistrata': return 'badge-neutral';
-    default: return 'badge-neutral';
-  }
-};
+/**
+ * The colour a stored status code wears, **total over `StoredStatusCode`**: `satisfies` makes a new
+ * status a compile error here rather than a badge that quietly falls through to a default. The parameter
+ * is the read-wide union, not `string`, so the union has a consumer and the map cannot drift from it.
+ *
+ * **B-141:** `transmisa` used to map to `badge-success`. This app transmits nothing to anyone — the
+ * sentence that claimed it was deleted in brief 66 (B-56) — so green asserted an external system had
+ * accepted something, and it painted that assertion for a status no producer can create. It now wears
+ * `badge-neutral`: the word remains readable (see the `StoredStatusCode` note) and stops rendering as an
+ * achievement. `badge-success` is not reachable from this map at all.
+ */
+const STATUS_BADGE = {
+  'in-asteptare': 'badge-warning',
+  respinsa: 'badge-danger',
+  inregistrata: 'badge-neutral',
+  // Legacy and readable, never a success: see `StoredStatusCode`.
+  transmisa: 'badge-neutral',
+} satisfies Record<StoredStatusCode, BadgeKind>;
+
+export const statusBadge = (status: StoredStatusCode): BadgeKind => STATUS_BADGE[status];
 
 // ── Secțiuni documente ────────────────────────────────────
 /**
