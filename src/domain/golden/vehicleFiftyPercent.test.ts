@@ -17,20 +17,35 @@
  * since 1 augustie 2025. **That source is never used here, and the 9.500 lei figure appears in this file only
  * as a negative**, so a later edit cannot quietly reintroduce it.
  *
- * ── What the engine does not produce ──────────────────────────────────────────────────────────────────
+ * ── The non-recoverable half: B-114 ───────────────────────────────────────────────────────────────────
  *
  * The sources state the non-deductible half as a figure of its own — „TVA nedeductibilă 10.500", „Restul de
- * 52,50 lei de TVA nedeductibil se adaugă la cheltuială". The engine reports the **claimable** half
- * (`decideInputVat` → `claimableTotal`) and does **not** report a total for the non-recoverable half of a
- * 50 %-restricted line: `nonRecoverableTotal` counts only lines decided at a hard zero. The half is
- * recoverable by subtraction from the invoiced VAT, and that subtraction is asserted below — but the
- * "adds to the expense" step is a separate finding, recorded in the phase doc.
+ * 52,50 lei de TVA nedeductibil se adaugă la cheltuială". **B-114 (brief 74) closed the first half of that
+ * gap**: `decideInputVat` now reports `nonRecoverableTotal` for a 50 %-restricted line, derived per line
+ * from the same `fraction` that produces `claimableTotal` — not by subtracting one total from the other.
+ * The figure is rendered on the dashboard beside the deductible one.
+ *
+ * **The second half is still open and is still asserted as open below.** „se adaugă la cheltuială" is B-87:
+ * `research/35` §1.5 and `research/42` §10 gap 2 are documented negatives — no Titlul IV rule says whether
+ * non-recoverable VAT enters a PFA's deductible expense. The engine does not add it, and that is pinned
+ * against `applyVatToExpenseBase` itself, which is the code that decides the base.
  */
 import { describe, expect, it } from 'vitest';
-import { decideInputVat } from '../fiscal/vat';
+import {
+  applyVatToExpenseBase,
+  decideInputVat,
+  lineNonRecoverableVat,
+} from '../fiscal/vat';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from '../fiscal/package2026';
 import { depreciationSchedule, FISCAL_DEPRECIATION_RULE_ID } from '../fiscal/depreciation';
-import { money, lei, subBani, formatBani, type Bani } from '../money';
+import { addBani, money, lei, subBani, formatBani, type Bani } from '../money';
+import type { InputVatLine } from '../fiscal/vat';
+
+/** The claimable half of a line, floored the way `decideInputVat` floors it — for the residue assertion. */
+function floorPercentOf(line: InputVatLine): Bani {
+  const o = line.outcome;
+  return o.kind === 'claimable' ? (Math.floor(line.tvaBani * o.fraction) as Bani) : lei(0);
+}
 
 const depRule = PFA_2026_SYSTEM_REAL_PACKAGE.find((r) => r.ruleId === FISCAL_DEPRECIATION_RULE_ID)!;
 
@@ -132,29 +147,123 @@ describe('FIXTURE 6B (FACT — expertcontabiltim.ro 2026, TVA 21 %, income year 
   });
 });
 
-describe('FIXTURE 6 — what the engine does NOT report, stated rather than glossed', () => {
-  it('nonRecoverableTotal counts hard-zero lines only, so the 50 % half has no reported total', () => {
-    // The sources print „TVA nedeductibilă 10.500" as a figure. The engine's `nonRecoverableTotal` is 0 for a
-    // 50 %-restricted line, because that field counts lines decided at a full zero (art. 300 alin. (4) and
-    // friends). The amount is recoverable by subtraction, and the subtraction is pinned above — but a surface
-    // that reads `nonRecoverableTotal` will show 0 lei beside a published 10.500 lei. Recorded as a finding.
+describe('FIXTURE 6 (B-114, brief 74) — the published „TVA nedeductibilă 10.500" is a figure the engine reports', () => {
+  it('B-114 — a 50 %-restricted line reports the published 10.500 lei, not 0', () => {
+    // The defect: `nonRecoverableTotal` filtered on `kind === 'zero'`, and a line under art. 298 alin. (1)
+    // is `kind: 'claimable', fraction: 0.5` — so it contributed nothing and the field read 0 lei beside a
+    // published 10.500 lei. A user shown 0 lei concludes the restriction never applied to them. It did.
     const d = vehicleVat(21_000);
-    expect(d.nonRecoverableTotal).toBe(lei(0));
-    expect(d.nonRecoverableTotal).not.toBe(lei(10_500));
-    expect(formatBani(subBani(lei(21_000), d.claimableTotal))).toBe('10.500,00');
+    expect(d.claimableTotal).toBe(lei(10_500)); // „TVA deductibilă 10.500" — already correct before B-114
+    expect(d.nonRecoverableTotal).toBe(lei(10_500)); // „TVA nedeductibilă 10.500" — the B-114 half
+    expect(formatBani(d.nonRecoverableTotal)).toBe('10.500,00');
   });
 
-  it('the non-recoverable half of a 50 % line is not added to the expense base either', () => {
-    // `applyVatToExpenseBase` adds the VAT of lines decided at a hard zero, and nothing for a 50 % line. The
-    // practitioner source says the 52,50 lei „se adaugă la cheltuială". The engine does not do that. Whether
-    // it must is not settled for a PFA — `research/35` §1.5 and `research/42` §10 gap 2 found no Titlul IV
-    // ordering rule, which is why `expenseBase.divergent` refuses rather than choosing. Pinned as the current
-    // behaviour, with the dissent named.
+  it('the two published halves sum to the VAT on the document, so they are one rule read twice', () => {
+    const d = vehicleVat(21_000);
+    expect(addBani(d.claimableTotal, d.nonRecoverableTotal)).toBe(lei(21_000));
+  });
+
+  it('B-114 — the smaller published figure: 52,50 lei of the bon, both halves', () => {
+    // expertcontabiltim.ro prints „52,50 lei de TVA nedeductibil" for a 105 lei bon. Asserted so the
+    // 10.500 lei above is not the only size at which the derivation is checked.
     const d = vehicleVat(105);
-    const base = lei(500);
-    expect(d.nonRecoverableTotal).toBe(lei(0));
-    // The expense measure the assembler would carry for this bon, under the engine's rule:
-    expect(base + d.nonRecoverableTotal).toBe(lei(500)); // not 552,50 lei
+    expect(d.claimableTotal).toBe(lei(52) + 50);
+    expect(d.nonRecoverableTotal).toBe(lei(52) + 50);
+  });
+
+  it('B-114 — the total is NOT `sum(tvaBani) − claimableTotal`: an undecided line is not a lost line', () => {
+    // THE TRAP this brief names. Subtracting assumes claimable and non-recoverable are complementary, and
+    // art. 298 has cases where they are not. Here the register holds one 50 % vehicle line and one line
+    // whose supplier standing was never declared, so it is `unresolved` — the app has not decided whether
+    // that VAT is recoverable. A subtraction books it as lost and mints a non-recoverable amount the
+    // person may in fact be entitled to claim. The two answers differ by exactly that line.
+    const d = decideInputVat({
+      fiscalYear: 2026,
+      asOfDate: '2026-12-31',
+      registration: { status: 'inregistrat_art316' },
+      vehicles: [{ id: 'veh-1', years: [{ fiscalYear: 2026, use: 'mixed' }] }],
+      expenses: [
+        {
+          id: 'line-1', date: '2026-03-10', paid: '2026-03-10', supplierCui: '1234567', tip: 'factura',
+          tva: money(lei(21_000), 'RON'), vehicleId: 'veh-1',
+          vatFacts: { destination: 'taxabila', supplierRegime: 'inregistrat', documentKind: 'factura', eFactura: 'da' },
+        },
+        {
+          id: 'line-2', date: '2026-04-10', paid: '2026-04-10', tip: 'factura',
+          tva: money(lei(8_000), 'RON'),
+          vatFacts: { destination: 'nedeclarata' },
+        },
+      ],
+    });
+    const vatTotal = d.lines.reduce((acc, l) => addBani(acc, l.tvaBani), lei(0));
+    expect(d.unresolved.map((l) => l.id)).toEqual(['line-2']);
+    // What the rule says: only the 50 % half is lost.
+    expect(d.nonRecoverableTotal).toBe(lei(10_500));
+    // What the subtraction says: the undecided 8.000 lei swept in as lost too.
+    expect(subBani(vatTotal, d.claimableTotal)).toBe(lei(18_500));
+    expect(d.nonRecoverableTotal).not.toBe(subBani(vatTotal, d.claimableTotal));
+  });
+
+  it('B-114 — a hard-zero line loses all its VAT; an art. 298 alin. (3) category loses none', () => {
+    // The two ends of the same derivation. `zero` is a whole denial; the alin. (3) exception categories and
+    // the alin. (2) size carve-out lift the restriction entirely, so the non-recoverable half is 0 and the
+    // figure is not a flat "half of everything a vehicle line carries".
+    const zero = decideInputVat({
+      fiscalYear: 2026,
+      asOfDate: '2026-12-31',
+      registration: { status: 'inregistrat_art316' },
+      vehicles: [{ id: 'veh-1', years: [{ fiscalYear: 2026, use: 'not_used' }] }],
+      expenses: [
+        {
+          id: 'line-1', date: '2026-03-10', paid: '2026-03-10', supplierCui: '1234567', tip: 'factura',
+          tva: money(lei(21_000), 'RON'), vehicleId: 'veh-1',
+          vatFacts: { destination: 'taxabila', supplierRegime: 'inregistrat', documentKind: 'factura', eFactura: 'da' },
+        },
+      ],
+    });
+    expect(zero.nonRecoverableTotal).toBe(lei(21_000)); // art. 300 alin. (4): „nu se deduce"
+
+    const excepted = decideInputVat({
+      fiscalYear: 2026,
+      asOfDate: '2026-12-31',
+      registration: { status: 'inregistrat_art316' },
+      vehicles: [{ id: 'veh-1', years: [{ fiscalYear: 2026, use: 'mixed', exceptionCategory: 'transport_persoane_cu_plata' }] }],
+      expenses: [
+        {
+          id: 'line-1', date: '2026-03-10', paid: '2026-03-10', supplierCui: '1234567', tip: 'factura',
+          tva: money(lei(21_000), 'RON'), vehicleId: 'veh-1',
+          vatFacts: { destination: 'taxabila', supplierRegime: 'inregistrat', documentKind: 'factura', eFactura: 'da' },
+        },
+      ],
+    });
+    expect(excepted.claimableTotal).toBe(lei(21_000));
+    expect(excepted.nonRecoverableTotal).toBe(lei(0));
+  });
+
+  it('B-114 — the per-line derivation is exported, so a surface cannot re-derive it by subtraction', () => {
+    const d = vehicleVat(21_000);
+    expect(lineNonRecoverableVat(d.lines[0]!)).toBe(lei(10_500));
+    // The floor stays on the claimable side, exactly where `floorPercent` puts it, so an odd amount leaves a
+    // one-bani residue on the denied side and the pair still sums to the line's VAT. Flooring the denied
+    // side instead would understate the loss and round a taxpayer into a bigger claim than the law gives.
+    const odd: InputVatLine = {
+      id: 'odd', tvaBani: 10_501 as Bani, vehicle: true, preRegistrationAdjustment: false,
+      outcome: { kind: 'claimable', fraction: 0.5, rule: 'art. 298 alin. (1); Norme pct. 68 alin. (4)' },
+    };
+    expect(lineNonRecoverableVat(odd)).toBe(5_251); // 10.501 − floor(5.250,5) = 5.251
+    expect(addBani(floorPercentOf(odd), lineNonRecoverableVat(odd))).toBe(10_501);
+  });
+
+  it('B-87 unchanged — the non-recoverable half is still NOT added to the expense base', () => {
+    // Asserted against `applyVatToExpenseBase`, the code that actually decides the base, and not against
+    // `nonRecoverableTotal`: B-114 changed what the reporting total means, and the base must not move with
+    // it. The practitioner source says the 52,50 lei „se adaugă la cheltuială"; whether it must is B-87,
+    // and research/35 §1.5 and research/42 §10 gap 2 found no Titlul IV rule either way.
+    const d = vehicleVat(105);
+    expect(d.nonRecoverableTotal).toBe(lei(52) + 50); // the reporting figure now exists
+    const base = applyVatToExpenseBase(d, lei(500), [{ id: 'line-1', tva: lei(105), capped: false }]);
+    expect(base.netFirst).toBe(lei(500)); // not 552,50 lei
+    expect(base.grossFirst).toBe(lei(500));
   });
 });
 

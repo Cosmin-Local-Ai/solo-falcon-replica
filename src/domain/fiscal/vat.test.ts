@@ -27,7 +27,7 @@ import {
   type VatRegistration,
 } from './vat';
 import { VEHICLE_EXCEPTION_CATEGORIES } from './deductibility';
-import { lei, type Bani } from '../money';
+import { lei, subBani, sumBani, type Bani } from '../money';
 
 /** 1.000,00 lei of VAT, the amount every case below starts from. */
 const TVA = lei(1000);
@@ -419,8 +419,14 @@ describe('the totals', () => {
     expect(d.claimableTotal).toBe(lei(1500));
     expect(d.unresolved.map((l) => l.id)).toEqual(['noef']);
     expect(d.zero.map((l) => l.id)).toEqual(['zero']);
-    // The zero line's VAT is the amount that becomes a cost — the B-87 figure, per line.
-    expect(d.nonRecoverableTotal).toBe(lei(1000));
+    // B-114 changed what this total means, and this case shows all four outcomes at once. The zero line's
+    // whole 1.000 lei plus the 50 % car's denied half of 500 lei = 1.500 lei. The e-Factura-less line
+    // contributes nothing: its recoverability is undecided, so counting its VAT as lost would mint a
+    // non-recoverable amount the person may still claim once a compliant e-Factura exists
+    // (art. 301 alin. (2)). That exclusion is why the figure is not `sum(tvaBani) − claimableTotal`,
+    // which here would read 2.500 lei.
+    expect(d.nonRecoverableTotal).toBe(lei(1500));
+    expect(subBani(sumBani(d.lines.map((l) => l.tvaBani)), d.claimableTotal)).toBe(lei(2500));
   });
 
   it('a foreign-currency line is unresolved rather than summed at an unstamped rate', () => {

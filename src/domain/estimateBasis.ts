@@ -2543,7 +2543,19 @@ export function selectEstimateOperands(
   //   from the taxpayer's claim.
   // - The period and status filter is the SAME one `selectYtd` and `selectDeductibleExpenses` apply, so
   //   the claim, the totals and the coverage rows are counts of one record set and not of three.
-  const periodExpenses = scoped.expenses.filter(
+  //
+  // B-114 — the population is `ledger.data.expenses`, **not** `scoped.expenses`. `scoped.expenses` is
+  // `deductible.records`, and those records have been through `applyExpenseCap`, which scales **both**
+  // `valoareFaraTva` and `tva` (it must, for the expense-base purpose `applyVatToExpenseBase` describes).
+  // Feeding them to `decideInputVat` applied the art. 68 alin. (7) lit. k) income-tax half-count to the VAT
+  // before art. 298 alin. (1) halved it again: a 21.000-lei VAT on a mixed-use car reached the VAT decision
+  // as 10.500 lei and reported 5.250 lei non-recoverable where the published source prints 10.500
+  // (`research/47` §101-103). `research/42` §1 is explicit that these are **two separate regimes** — six
+  // VAT categories against five income-tax ones — and §6 rows 12-13 record that no ordering rule exists to
+  // license chaining them. The VAT decision is a Titlul VII question about the document, so it reads the
+  // document's own amounts. This also finally matches the population to the comment above it, which already
+  // said „every registered expense line in the period, NOT only the deductible subset”.
+  const periodExpenses = (ledger.data.expenses ?? []).filter(
     (e) => e.status === 'inregistrata' && inPeriod(expenseFiscalDate(e), asOfDate, scoped.profile.fiscalYear),
   );
   const inputVat: InputVatDecision = decideInputVat({
