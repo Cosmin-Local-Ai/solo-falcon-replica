@@ -52,7 +52,7 @@
  */
 
 import { Decimal } from 'decimal.js-light';
-import { type Bani, type Money, type RonMoney, isRon, money, toBaniNearest } from '../money';
+import { type Bani, type Money, type RonMoney, isRon, money, roundArt66 } from '../money';
 import type { FxRateRecord } from './rates';
 import type { FxRateProvider, RateCurrency } from './provider';
 
@@ -113,16 +113,27 @@ export const CONVERSION_HIERARCHY_CONFLICT = {
   note: 'No primary text reconciles the two. The app applies the basis the caller names and shows both readings; it does not choose between them.',
 } as const;
 
-/** The rounding decision, stated rather than assumed. */
+/**
+ * The rounding decision, stated rather than assumed. **Changed 2026-10-15 by D-ROUND-2 (B-113).** The
+ * previous choice is quoted below rather than deleted, because the change is a judgement and a reader has
+ * to be able to see what was replaced and on what grounds.
+ */
 export const ROUNDING_CHOICE = {
-  applied: 'nearest ban, half-up',
-  notApplied: 'art. 66 rounding to a whole leu',
-  reason: 'art. 66 governs the sum of tax being calculated; whether it reaches an intermediate conversion product is not established by any text read for this task, and applying it would move every converted amount by up to 0,50 lei on an unverified reading.',
-  status: 'app decision, not a cited rule',
+  applied: 'art. 66 rounding to a whole leu, at the point of conversion (D-ROUND-2)',
+  notApplied:
+    'nearest ban, half-up — the behaviour until 2026-10-15, kept on the record because the change is a '
+    + 'reasoned choice and the alternative has to stay visible',
+  reason:
+    'ANAF converts and then publishes a whole-leu figure, and multiplies that figure downstream (2.488, not '
+    + '2.488,50; 2.488 × 6 = 14.928), so the product is rounded before use. Which rule rounds it is NOT '
+    + 'settled: the same document applies art. 66 at two intermediate steps and a plain floor at the final '
+    + 'one. Art. 66\'s rule was chosen because HG 1/2016 Norme metodologice, Titlul IV, Cap. I, Secț. 1, '
+    + 'pct. 4 applies it to bazele de calcul, which defeats the "only final sums owed" reading, and because '
+    + 'roundArt66 is already the rule everywhere else in this codebase.',
+  status: 'app decision on an undetermined point — NOT a cited rule, and not a claim that art. 66 governs conversion',
   /**
-   * B-113 — where this decision was researched, and what the research graded it. Recorded here rather than
-   * left in a commit message, because the honest form of this decision is a citation to a corpus that says
-   * it does not know.
+   * Where this was researched, and what the research graded. Recorded here rather than left in a commit
+   * message, because the honest form of this decision is a citation to a corpus that says it does not know.
    *
    * The article's text is CONFIRMED verbatim in three research files — Titlul IV, Capitolul I, titled
    * „Stabilirea sumelor fixe", one unnumbered paragraph: „Sumele sunt calculate prin rotunjire la un leu,
@@ -141,19 +152,29 @@ export const ROUNDING_CHOICE = {
       'docs/ai/research/23_fx_conversion_and_bnr_rates_2026.md:193',
       'docs/ai/research/23_fx_conversion_and_bnr_rates_2026.md:207',
     ],
+    decisionResearch: 'docs/ai/research/53_anaf_sector4_rounding_inconsistency.md',
     /**
-     * The finding that turns B-113 from a bug into a decision request. The engine already implements art.
-     * 66 correctly — `money.ts roundArt66` neglects a fraction of **50 bani or less** and raises a larger
-     * one, which is the article's own boundary. Applied to the conversion product it reproduces every
-     * published ANAF figure in the Sector 4 example: 2.488,50 → 2.488, and the forfetar 2.985,60 → 2.986
-     * with net 11.942. So the disagreement is not about the rounding **mode**, which already matches ANAF,
-     * and not about the rate or the basis — the control case at 4,974 agrees exactly. It is only about
-     * **where the rule applies**, which is the part no primary text in this corpus settles.
-     *
-     * Pinned as passing assertions in `golden/fxTruncation.test.ts`, labelled as what art. 66 WOULD give,
-     * so the decision can be taken on numbers rather than on a comment.
+     * **CORRECTED 2026-10-15, and the correction is carried rather than smoothed over.** The brief-68 pass
+     * recorded at this spot that „the engine's rounding mode already matches ANAF's". That was **true of the
+     * payment-date chain only.** The same ANAF Sector 4 document prices the same rent a second time at the
+     * BNR annual average, and across the two chains it produces three separating cases pointing opposite
+     * ways — so the document is not an oracle for any single rule, and no test in this repo may treat its
+     * published chain as a specification. See `docs/ai/research/53_anaf_sector4_rounding_inconsistency.md` §3.
      */
-    roundingModeAlreadyMatchesAnaf: true,
+    publishedChainsContradictEachOther: true,
+    separatingCases: [
+      { step: 'chain 1 forfetar', exact: '2.985,60', anaf: '2.986', art66: '2.986', floor: '2.985', follows: 'art. 66' },
+      { step: 'chain 2 net', exact: '11.937,60', anaf: '11.938', art66: '11.938', floor: '11.937', follows: 'art. 66' },
+      { step: 'chain 2 impozit', exact: '1.193,80', anaf: '1.193', art66: '1.194', floor: '1.193', follows: 'floor' },
+    ],
+    /** The conversion line itself separates neither way: 2.488,50 sits exactly on the inclusive-50 boundary. */
+    conversionLineSeparates: false,
+    contraryArguments: [
+      'CF art. 310 alin. (1) and HG 1/2016 Titlul VII prescribe a DIFFERENT rounding for the conversions they do regulate; HG 1/2016 Titlul II prescribes none at all.',
+      'OUG 59/2005 art. 7 expressly declines to round intermediate conversion elements — for local taxes.',
+      'Art. 66 says „Sumele"; „fixe" appears only in the heading. No official source reads it either way here.',
+      'Art. 6 alin. (2) CPPF (UNVERIFIED against a primary source) has the OPPOSITE 50-bani boundary for a sum actually paid.',
+    ],
   },
 } as const;
 
@@ -346,14 +367,63 @@ function carryFromProvider(provider: FxRateProvider, currency: RateCurrency, dat
 }
 
 /**
- * amount × rate, in bani, rounded to the nearest ban. See `ROUNDING_CHOICE` for why not to a whole leu.
+ * amount × rate, **rounded to a whole leu at the point of conversion**.
  *
- * The rate is parsed from its printed decimal string through `Decimal`, so no binary float ever touches a
- * money figure — the same reason `Bani` is an integer.
+ * **D-ROUND-2 (B-113, 2026-10-15) — this is a reasoned choice, not a rule the record settles.** Read
+ * `docs/ai/research/53_anaf_sector4_rounding_inconsistency.md` before changing anything here.
+ *
+ * What **is** established: ANAF converts, then publishes a **whole-leu** figure, and it is that whole-leu
+ * figure — 2.488 lei, not 2.488,50 — that it multiplies by 6 to reach the gross of 14.928. The product is
+ * rounded before it is used. research/53 §4.
+ *
+ * What is **not** established: **which rule** produces that whole-leu figure. The ANAF București Sector 4
+ * document that generated our two examples contains **two chains** for the same rent — the payment-date rate
+ * 4,977 and the BNR annual average 4,974 — and across them it produces three cases where art. 66 and a
+ * plain floor disagree: `2.985,60 → 2.986` (art. 66), `11.937,60 → 11.938` (art. 66), `1.193,80 → 1.193`
+ * (floor). **It contradicts itself.** The conversion line itself separates neither way: 2.488,50 sits
+ * exactly on art. 66's inclusive-50 boundary, and 2.487,00 has no fraction at all. So nothing in this file
+ * may be read as "art. 66 governs currency conversion" — **no primary text says that, and this file does
+ * not claim it.**
+ *
+ * Why art. 66's rule was chosen anyway: HG nr. 1/2016, Norme metodologice, Titlul IV, Cap. I, Secț. 1,
+ * pct. 4 applies the same rounding to „bazele de calcul al impozitului”, which defeats the „only the final
+ * sum owed” reading this file used to rest on; and `roundArt66` is already the rule this codebase applies in
+ * some twenty places across income tax, CAS and CASS, so a converted amount now arrives at those places in
+ * the shape they already expect.
+ *
+ * The contrary arguments, kept reachable rather than buried:
+ * - Where the legislator **does** round a conversion product, it writes a **different** rule into the
+ *   converting provision: CF art. 310 alin. (1) rounds the 88.500-euro ceiling to the next thousand, and
+ *   HG 1/2016 Titlul VII rounds the 10.000-euro ceiling to thousands; HG 1/2016 Titlul II prescribes **no
+ *   rounding at all** on the 15.000-euro nonprofit conversion. *A contrario*, that can read as Title IV
+ *   conversions falling outside art. 66 rather than inside it.
+ * - OUG nr. 59/2005 art. 7 says the opposite expressly for local taxes: „elementele de calcul intermediare
+ *   utilizate la stabilirea acestora se convertesc fără rotunjirea zecimalelor la ordinul sutelor”. There
+ *   is no equivalent express rule for Title IV — which cuts both ways.
+ * - Art. 66's operative word is „Sumele”; „fixe” appears only in its heading. No official source was found
+ *   reading it either way for a converted amount.
+ * - Unverified lead, worth a primary check: art. 6 alin. (2) CPPF is quoted in secondary material with the
+ *   **opposite** 50-bani boundary — in the taxpayer's favour below 50, in the budget's at 50 or above. If
+ *   accurate, that is an independent reason not to treat art. 66 as the rule for a sum actually owed.
+ *
+ * **One rounding, on the exact product.** `roundArt66` is applied to the `Decimal` product, not to a
+ * ban-rounded intermediate, because two roundings disagree at the boundary: an exact product of 61.450,4
+ * bani is 614,504 lei, which art. 66 raises (50,4 bani exceeds 50), whereas rounding to bani first would
+ * give 61.450 and then neglect it. One rounding on the exact value is what the article's words describe.
+ *
+ * **Ordering, and it is not neutral.** Every producer in this app converts **per record** and sums
+ * afterwards — `fx/ledger.ts` maps each record through `convertField`, and `estimateBasis.ts
+ * selectCedareGross` converts each document before `sumBani`. So rounding here is rounding **per part**,
+ * which is what reproduces ANAF's published gross (2.488 × 6 = **14.928**) — but only when the rent is
+ * recorded as six monthly documents. One document covering the same half-year converts 3.000 EUR once and
+ * gives **14.931** lei. Both are pinned in `golden/fxTruncation.test.ts`: the difference is a fact about
+ * record granularity, not something this function can decide.
  */
 function product(amount: Money, rate: FxRateRecord, basis: ConversionBasis, carriedForward: boolean): ConversionResult {
   const value = new Decimal(amount.amount).times(new Decimal(rate.rate));
-  const rounded: Bani = toBaniNearest(value);
+  // `roundArt66` takes the exact Decimal and returns integer bani at a whole leu. It is the same function
+  // the calculators use, deliberately: a second rounding function would be a second rule.
+  const rounded: Bani = roundArt66(value);
   return {
     ok: true,
     ron: money(rounded, 'RON'),
