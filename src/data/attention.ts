@@ -26,6 +26,12 @@ import type { AppData } from './types';
  * The route that holds the record. Each register page keys its tabs off the record's own status, so
  * the tab is not guessed: it is the status the record carries. `?f=<id>` is the focus token the page
  * consumes to land the table on that one record (`src/App.tsx parseRoute`).
+ *
+ * **B-78 (brief 67):** this function used to end with a third branch that built
+ * `/declarations#!/<status>` for a `declaration` kind. PG-5b removed the only producer of that kind, so the
+ * branch was already unreachable — and it was the worst kind of dead code, because reaching it would have
+ * spliced a retired status word straight into a route segment and linked to a register with no such record
+ * in it. It is deleted, and the point below is guarded as unreachable rather than quietly defaulted.
  */
 function recordTarget(r: UnresolvedRecord): AttentionItem['target'] {
   const focus = `?f=${encodeURIComponent(r.id)}`;
@@ -36,10 +42,13 @@ function recordTarget(r: UnresolvedRecord): AttentionItem['target'] {
   if (r.kind === 'expense') {
     return { href: `/expenses#!/rejected${focus}`, record: { kind: 'expense', id: r.id, reference: r.reference } };
   }
-  return {
-    href: `/declarations#!/${r.status}${focus}`,
-    record: { kind: 'declaration', id: r.id, reference: r.reference },
-  };
+  // Unreachable through the type: `RecordKind` has two members and both are handled above. It is reachable
+  // from untyped JavaScript — a kind read out of a payload, a hand-edited call — and defaulting to one of
+  // the two registers there would send the person to a list that does not hold the record.
+  // SAFETY: `r` is `never` here by construction, so the only way to name what arrived is through an
+  // unknown; the value is used solely to report it.
+  const seen = (r as unknown as { kind?: unknown }).kind;
+  throw new RangeError(`recordTarget: unknown record kind ${JSON.stringify(seen)}`);
 }
 
 function toAttentionItem(r: UnresolvedRecord): AttentionItem {

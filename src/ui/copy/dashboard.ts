@@ -280,7 +280,6 @@ export const actions = {
     tax: 'Impozit',
     revenue: 'Venit',
     expense: 'Cheltuială',
-    declaration: 'Declarație',
     threshold: 'Prag fiscal',
     reserve: 'Rezervă fiscală',
     integrity: 'Integritatea datelor',

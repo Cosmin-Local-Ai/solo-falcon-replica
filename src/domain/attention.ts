@@ -71,11 +71,21 @@ export type AttentionState =
   /** A stored date is not a usable calendar date, so the record sits out of every period total. */
   | 'record_date_unusable';
 
-/** Dimension 3 — where the item came from. */
+/**
+ * Dimension 3 — where the item came from.
+ *
+ * **B-78 (brief 67): `declaration` is gone.** PG-5b removed the monthly row, and with it the only producer
+ * of a declaration-sourced item: no path in `src/` sets `source: 'declaration'`, and the attention model is
+ * computed at render time and is not a key in `persistedAppDataSchema`, so the word could not be reached by
+ * code nor survive in a stored payload. That makes it the third case in the §0 taxonomy — genuinely
+ * unreachable and never persisted — so it is deleted rather than kept readable. The exhaustive
+ * `copy.dashboard.sourceLabels` map is what proves nothing was left dangling: it is `satisfies
+ * Record<AttentionSource, string>`, so a member removed from the union is a compile error until its label
+ * goes too.
+ */
 export type AttentionSource =
   | 'revenue'
   | 'expense'
-  | 'declaration'
   | 'threshold'
   | 'deadline'
   | 'completeness'
@@ -96,7 +106,7 @@ export type AttentionSource =
 export interface AttentionTarget {
   href: string;
   record?: {
-    kind: 'revenue' | 'expense' | 'declaration';
+    kind: 'revenue' | 'expense';
     id: string;
     reference: string;
   };
@@ -215,18 +225,25 @@ export function partitionAttention(items: readonly AttentionItem[]): AttentionSu
 
 // ── The record family ─────────────────────────────────────
 //
-// The four seed records that were genuinely unresolved (`r2`, `r3`, `e3`, `d2`) produced no attention
-// item at all: `insights.ts` emitted only `reserve`, `completeness`, `tax` and `fiscal-dates`, and
-// `getActionItems` only deadlines, completeness keys and a tax-review row. A user looking at the
-// dashboard saw nothing actionable about a rejected invoice, a rejected expense document, an e-Factura
-// submission still waiting, or a declaration with no recorded submission.
+// The four seed records that were genuinely unresolved (`r2`, `r3`, `e3`, `d2` — the last of those a
+// monthly row PG-5b has since dropped, which is why the record family below reads two registers and not
+// three) produced no attention item at all: `insights.ts` emitted only `reserve`, `completeness`, `tax`
+// and `fiscal-dates`, and `getActionItems` only deadlines, completeness keys and a tax-review row. A user
+// looking at the dashboard saw nothing actionable about a rejected invoice, a rejected expense document,
+// an e-Factura submission still waiting, or a record with no submission recorded.
 //
 // This is presentation, not recalculation. `aggregation.ts` aggregates only `status === 'inregistrata'`
 // records and `estimateBasis.ts` classifies only `status === 'inregistrata'` expenses, so a rejected
 // record is already out of every total; surfacing it moves no figure, and nothing here re-reads or
 // re-adds it.
 
-export type RecordKind = 'revenue' | 'expense' | 'declaration';
+/**
+ * The registers the attention model can point at. **B-78: `declaration` removed** — PG-5b left it with no
+ * producer (`unresolvedRecords` reads `revenues` and `expenses` and nothing else), and this family is
+ * computed at render time rather than persisted, so the third word could not be constructed and could not
+ * have been carried in a payload either.
+ */
+export type RecordKind = 'revenue' | 'expense';
 
 export interface UnresolvedRecord {
   kind: RecordKind;

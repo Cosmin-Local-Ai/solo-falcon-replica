@@ -407,7 +407,10 @@ describe('getActionItems (sync)', () => {
       expect(typeof item.description).toBe('string');
       expect(['none', 'low', 'medium', 'high']).toContain(item.severity);
       expect(item.severity).not.toBe('none');
-      expect(['revenue', 'expense', 'declaration', 'threshold', 'deadline', 'completeness', 'tax', 'reserve', 'integrity']).toContain(item.source);
+      // B-78: `declaration` is no longer in this list because it is no longer in `AttentionSource`. PG-5b
+      // removed the monthly row and with it the only producer; the list used to admit a source no item
+      // could have, which made the assertion weaker than it looked without ever failing.
+      expect(['revenue', 'expense', 'threshold', 'deadline', 'completeness', 'tax', 'reserve', 'integrity']).toContain(item.source);
       // Every action is something to do, which is what routes it here.
       expect(['rejected', 'awaiting_acceptance', 'not_submitted', 'data_missing', 'deadline_open', 'deadline_overdue']).toContain(item.state);
     }
@@ -567,7 +570,10 @@ describe('estimateProvenance and the surfaces that consume it (TASK 9)', () => {
     // And on the seed there is at least one such row, so this is not a vacuous pass.
     expect(withProvenance.length).toBeGreaterThan(0);
     // A row about a document or a date carries nothing: no calculation produced it.
-    for (const item of all.filter(i => i.source === 'revenue' || i.source === 'expense' || i.source === 'declaration' || i.source === 'deadline')) {
+    // B-78 dropped `declaration` from this filter — the comparison could no longer typecheck, because
+    // `AttentionSource` no longer has that member. It was dead in the test for the same reason it was dead
+    // in the domain: nothing could ever produce a declaration-sourced item to filter.
+    for (const item of all.filter(i => i.source === 'revenue' || i.source === 'expense' || i.source === 'deadline')) {
       expect(item.provenance ?? null).toBeNull();
     }
   });
