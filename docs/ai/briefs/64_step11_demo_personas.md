@@ -108,6 +108,33 @@ From `FiscalRegime` in `src/domain/fiscal/rules.ts`:
 **Two things the verified codes give us for free:**
 - **Personas 4 and 5 genuinely overlap** — `5520` and `6820` appear in each other's secondary lists. **That is the tie case from Part B, and it is real, not a contrived test.**
 - **`4933` („cu vehicule cu șofer, pe bază de comandă") is the ride-hailing class**, not `4932` („ocazionale") as I first wrote. Getting that wrong would have put the demo driver in the wrong activity.
+## ⛔ Data density — the personas must run the engine at full power
+**Standing user instruction, 2026-10-14: *„make sure the personas have proper data loaded so charts, thresholds, everything is showcased at full power. not a one month 9000 lei income type shit."***
+
+**The anti-pattern is named, so it cannot be mistaken for a demo.** A persona with one month of 9.000 lei exercises nothing: it sits under every threshold, draws a one-point chart, and makes the app look like a calculator for a hobbyist. **A persona is a demonstration that the engine can hold a real business.**
+
+**Hard rules:**
+1. **Twelve months minimum per persona**, with real seasonality where the activity has it. **Every chart gets ≥ 12 data points.** A chart with one bar is a bug, not a demo.
+2. **Each persona deliberately crosses at least two thresholds.** Not brushes against — crosses, so the ladder rung changes and the UI has to show which one and why.
+3. **Realistic annual scale for the activity**, not a rounding of a hobby. Figures below are targets, not ceilings.
+4. **Multi-year where the feature is multi-year**: depreciation schedules run across years, VAT periods accumulate, prior-year figures exist for comparison. **But do not seed a prior-year *loss* — B-121's operand is not implemented.**
+5. **Money stays integer bani** throughout, per the standing rule.
+
+**Thresholds to actually cross — SMN 2026 = 4.050 lei, so: 6 SMN = 24.300 · 12 SMN = 48.600 · 24 SMN = 97.200 · 72 SMN = 291.600 lei (CASS max 29.160 lei).**
+
+| # | Persona | Annual scale | Thresholds it must **cross**, not approach |
+|---|---|---|---|
+| 1 | IT freelance | **~340.000 lei** (EUR invoicing, 12 invoices) | **TVA 395.000 lei registration crossed mid-year** — the moment and the cadence change are the point; CAS **12 → 24 SMN** rung; one car at ~60.000 lei with a multi-year depreciation schedule |
+| 2 | Content creator | **~150.000 lei** DPI | DPI 40 % quota at real scale; CAS/CASS rungs on the *proration denominator*, which is the whole lesson of art. 118 alin. (2²)/(2³) |
+| 3 | Rideshare / courier | **~180.000 lei** | art. 68 alin. (5) **capped** expenses — the cap must actually bite; the **one-car limit**; art. 298 vehicle VAT status; car ~78.000 lei depreciating |
+| 4 | Airbnb host | **~260.000 lei**, 7 rooms | **art. 85 at the top of the 1–7 room band**, and the occupancy sheet full; **seasonality across the year**; the >7-room boundary shown as a boundary, not as data |
+| 5 | Long-term landlord | **~320.000 lei**, several properties | CASS **lit. e)** well past 6 SMN; **art. 84 and art. 84¹ side by side** so the different gross measure and FX date are visible |
+| 6 | Passive investor | **~300.000 lei** dividends + interest | **dividends at 16 %** (B-126), the **CASS ladder rung driven by dividends net of withheld tax**, asociere p.j. lit. d) |
+| 7 | Agricultural | **~200.000 lei** | normă de venit vs sistem real at a scale where the two genuinely differ; CASS **lit. f)** |
+| 8 | Online commerce | **~650.000 lei** | **TVA 395.000 crossed**, perisabilități under art. 68 alin. (5) lit. d), and **the income-cash vs VAT-delivery divergence shown as a visible gap between two series** |
+
+**Acceptance, added:** for each persona, a test or e2e assertion that **the expected threshold was crossed and the expected rung/period changed**. A persona that loads without changing a rung is not finished.
+
 **Deliberate choices, and why:**
 - **The pension/salary statuses ride on personas 2 and 6** rather than getting their own persona, because a pensionari *is* a content creator or an investor — inventing a "pensioner persona" would be a status, not a user type.
 - **Persona 6 has no CAEN.** That is correct and must stay visible: **a dividend recipient is not a PFA and has no obiect de activitate.** It also proves the CAEN→persona mapping must tolerate "no CAEN".
