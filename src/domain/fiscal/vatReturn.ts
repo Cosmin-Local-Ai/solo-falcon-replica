@@ -518,8 +518,8 @@ export const VAT_ART324_NOTIFICATION_STATUS = {
      */
     isArticleText: false,
     quote:
-      'Aplicarea prevederilor art. 324 alin. (4)-(6) din Legea nr. 227/2015, cu modificările și completările '
-      + 'ulterioare, se suspendă începând cu data de 1 ianuarie 2024 și până la data de 31 decembrie 2026 inclusiv.',
+      '„Aplicarea prevederilor art. 324 alin. (4)-(6) din Legea nr. 227/2015, cu modificările și completările '
+      + 'ulterioare, se suspendă începând cu data de 1 ianuarie 2024 și până la data de 31 decembrie 2026 inclusiv.”',
   },
   /** What alin. (6) actually says — recorded so the wrong citation cannot be reintroduced. */
   alinSixIsAbout:
@@ -616,7 +616,7 @@ export function art324NotificareObligation(input: {
         : ''),
     statusNote:
       `Suspendarea nu este textul articolului: ${s.suspension.act} ${s.suspension.article} apare ca notă de modificare sub art. 324 în consolidarea ANAF, nu în alineatele articolului. ` +
-      `Textul: „${s.suspension.quote}” — deci pentru 2026 notificarea nu se datorează, iar pentru ${input.referenceYear} se reaplică. ` +
+      `Textul: ${s.suspension.quote} — deci pentru 2026 notificarea nu se datorează, iar pentru ${input.referenceYear} se reaplică. ` +
       `Art. 324 alin. (6) este ${s.alinSixIsAbout}. ` +
       `La data verificării (${s.asOf}) nu a fost găsit niciun instrument care să re-suspende obligația pentru ${input.referenceYear}; aceasta este absența unei dovezi, nu o confirmare. Se re-verifică până la ${s.recheckBy}.`,
   };
