@@ -1,7 +1,7 @@
 import type { AppData, Expense, Revenue } from '../data/types';
 // B-112 stage 1 — the income-category predicate is imported from the one layer that owns it, so the
 // aggregation pass and the estimate assembler cannot answer "is this receipt DPI?" differently.
-import { isDpiIncome } from './dpi';
+import { isDpiArt72Alin3Excluded, isDpiIncome } from './dpi';
 import { isISOCalendarDate, isoCalendarDateProblem, isoCalendarDateProblemText } from './date';
 // B-139: the field a fiscal date came from is named in Romanian, from the one map that owns those words.
 // Raw property names are what the compiler reads; they are not what a person reads. Same pattern as
@@ -88,6 +88,25 @@ export interface YtdTotals {
    * "which receipts fall in this year" — the B-70 defect class.
    */
   dpiDeclaredRecordIds: readonly string[];
+  /**
+   * B-147 / B-150 — the DPI gross cut by the ONE fact that decides both of its consequences.
+   *
+   * `dpiGross` is the whole art. 70 subset. These two are that subset cut where the Cod fiscal cuts it:
+   * art. 72 alin. (3) / art. 72¹ alin. (2) name three sums — moștenitori, drept de suită, remunerația
+   * pentru copia privată — and take them out of the forfetară mechanism. So `dpiQuotaGross` carries no
+   * art. 72 alin. (3) flag and gets the 40 % quota of art. 72 alin. (2) / art. 72¹ alin. (1) (net = 0,6 ×
+   * gross), while `dpiExcludedGross` carries one, gets **no quota at all** (net = gross), and is outside
+   * CAS because art. 137 alin. (1) lit. b¹) carves it out of the DPI CAS category at the definition.
+   *
+   * The cut is made here, not downstream, for two reasons: it is decided by the SAME predicate the rest of
+   * the app reads — `dpi.ts isDpiArt72Alin3Excluded`, one flag with two consequences — and under the SAME
+   * period, status and convertibility filter as `dpiGross`. A second cut elsewhere would be a second
+   * producer of one legal fact, the B-70/B-85 class.
+   *
+   * `dpiGross === dpiQuotaGross + dpiExcludedGross`, asserted in `aggregation.test.ts`.
+   */
+  dpiQuotaGross: Bani;
+  dpiExcludedGross: Bani;
 }
 
 export interface MonthlyTotals {
@@ -409,6 +428,8 @@ export function selectYtd(data: AppData, asOfDate: string): YtdTotals {
   let dpiGrossNet: Bani = lei(0);
   const dpiRecordIds: string[] = [];
   const dpiDeclaredRecordIds: string[] = [];
+  let dpiQuotaGross: Bani = lei(0);
+  let dpiExcludedGross: Bani = lei(0);
 
   for (const r of data.revenues) {
     const fiscalDate = revenueFiscalDate(r);
@@ -424,6 +445,14 @@ export function selectYtd(data: AppData, asOfDate: string): YtdTotals {
         dpiGross = addBani(dpiGross, total);
         dpiGrossNet = addBani(dpiGrossNet, net);
         dpiRecordIds.push(r.id);
+        // B-150 — one flag, cut once. `isDpiArt72Alin3Excluded` is the single predicate the whole app reads
+        // for both consequences (no flat quota, and outside CAS); splitting on anything else would let the
+        // quota path and the CAS path disagree about which receipts are excluded.
+        if (isDpiArt72Alin3Excluded(r.dpiExcludedKind)) {
+          dpiExcludedGross = addBani(dpiExcludedGross, total);
+        } else {
+          dpiQuotaGross = addBani(dpiQuotaGross, total);
+        }
       }
       // B-117 — field presence only, never a legal reading. A record the category puts outside art. 70 but
       // that still carries one of the two DPI contract facts is the pair `dpiRecordConflict` checks; it is
@@ -445,7 +474,7 @@ export function selectYtd(data: AppData, asOfDate: string): YtdTotals {
 
   return {
     revenue, expenses, net: subBani(revenue, expenses), revenueNet, expenseNet,
-    dpiGross, dpiGrossNet, dpiRecordIds, dpiDeclaredRecordIds,
+    dpiGross, dpiGrossNet, dpiRecordIds, dpiDeclaredRecordIds, dpiQuotaGross, dpiExcludedGross,
   };
 }
 

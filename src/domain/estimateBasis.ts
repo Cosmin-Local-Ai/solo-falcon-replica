@@ -170,6 +170,22 @@ export interface EstimateAmounts {
    * assembler read the declared facts once, and the engine is not entitled to read them again.
    */
   flatRatioWithholdingBlocked?: boolean;
+  /**
+   * B-147 / B-150 — the gross of the RECORDED art. 70 receipts, already cut by the art. 72 alin. (3) flag.
+   *
+   * They sit beside `revenues`, never inside them, for the reason B-112 stage 1 gave: an art. 70 receipt is
+   * not art. 67 income and must not run through the art. 68 sistem-real engine. What was missing was not the
+   * exclusion but the quantity that survives it — the statute measures DPI on a gross and fixes the net by a
+   * quota, so a gross has to reach the rule that states the quota. `selectYtd` struck the cut; these two
+   * fields carry it here so the engine never re-reads a record.
+   *
+   * `dpiQuotaGross` takes the 40 % quota of art. 72 alin. (2) / art. 72¹ alin. (1). `dpiExcludedGross` is the
+   * art. 72 alin. (3) / art. 72¹ alin. (2) set — moștenitori, drept de suită, copia privată — which gets no
+   * quota at all and is outside CAS. Absent when the register holds no DPI receipt, which is every payload
+   * written before B-112.
+   */
+  dpiQuotaGross?: Bani;
+  dpiExcludedGross?: Bani;
 }
 
 /**
@@ -821,6 +837,23 @@ function withFlatRatioGross(
   };
 }
 
+/**
+ * B-147 — attach the recorded DPI gross, already cut by the art. 72 alin. (3) flag.
+ *
+ * Attached rather than defaulted, in the same shape as `withFlatRatioGross`: absent means the register holds
+ * no DPI receipt, and the engine reads that as "no DPI source this year" rather than as a zero it invented.
+ * A declared zero and an absent fact are different claims, and this app has been correcting that difference
+ * all the way through.
+ */
+function withDpiGrosses(
+  amounts: EstimateAmounts,
+  quotaGross: Bani,
+  excludedGross: Bani,
+): EstimateAmounts {
+  if (quotaGross === 0 && excludedGross === 0) return amounts;
+  return { ...amounts, dpiQuotaGross: quotaGross, dpiExcludedGross: excludedGross };
+}
+
 // ── TASK 2b: the deductible subset, assembled here and nowhere else ───────────
 //
 // Until now the engine was fed `Σ expenses` and labelled it `Cheltuieli deductibile` — the assumption
@@ -1417,13 +1450,17 @@ export function dpiCoverageGaps(
       fixTarget: estimateFixTarget('revenue', id),
       detail:
         `Documentul „${record.nr}” este înregistrat ca venit din drepturi de proprietate intelectuală ` +
-        `(art. 70 din Codul fiscal), iar estimarea nu îl include încă. ${quotaWords}` +
-        'bunurilor (art. 84 alin. (2) / art. 84^1 alin. (3)). Venitul net de aici alimentează testul de ' +
-        'plafon de la art. 148 alin. (3) (CAS, art. 137 alin. (1) lit. b^1)) și cumularea de la art. 170 ' +
-        'alin. (4) lit. a) (CASS, art. 155 alin. (1) lit. c)) — iar impozitul de 10 % este reținut de ' +
-        'plătitor și este final (art. 72 alin. (4)-(5)). Acele căi nu sunt încă implementate în acest build, ' +
-        'deci cifra estimării nu acoperă acest venit; aplicația nu îl include parțial și nu îl prezintă ca ' +
-        'venit din activitate independentă (art. 67), care ar merge pe altă cale și cu altă bază.',
+        `(art. 70 din Codul fiscal) și nu trece prin motorul art. 68 — nu este venit din activitate ` +
+        `independentă, iar acela ar fi motorul greșit pentru el. ${quotaWords}` +
+        'bunurilor (art. 84 alin. (2) / art. 84^1 alin. (3)). Venitul net calculat de aici alimentează ' +
+        'ACUM testul de plafon de la art. 148 alin. (3) (CAS, art. 137 alin. (1) lit. b^1)) și reținerea la ' +
+        'sursă de la art. 151 alin. (6). CE NU ALIMENTEAZĂ ÎNCĂ: cumularea de la art. 170 alin. (4) lit. c) ' +
+        '(CASS, art. 155 alin. (1) lit. c)) — scara de la art. 170 alin. (4) cumulează șase categorii și ' +
+        'refuză un set parțial de răspunsuri, iar o singură sumă calculată nu poate răspunde pentru celelalte ' +
+        'cinci; aplicația nu completează zero. Impozitul de 10 % este reținut de plătitor și este final ' +
+        '(art. 72 alin. (4)-(5)), deci nu intră în baza de impozitare a acestui an. Aplicația nu prezintă ' +
+        'acest venit ca venit din activitate independentă (art. 67), care ar merge pe altă cale și cu altă ' +
+        'bază.',
     });
   }
   return [...out, ...art67Conflicts];
@@ -2462,6 +2499,16 @@ export function selectEstimateOperands(
   const systemRealRevenues = ledger.data.revenues.filter((r) => !isDpiIncome(r));
   const scoped: AppData = { ...ledger.data, revenues: systemRealRevenues, expenses: deductible.records };
   const ytd = selectYtd(scoped, asOfDate);
+  // B-147 — the DPI subset, read off the UNSCOPED record set because the scoping above is what keeps these
+  // receipts out of the art. 68 engine, and they are still a source the contribution arithmetic has to see.
+  //
+  // This is a second call to `selectYtd`, not a second producer of "which receipts fall in this year": it is
+  // the same function, the same `asOfDate`, the same fiscal year, the same status and convertibility test,
+  // applied to the complement of a set this function already split. It is also the exact call
+  // `dpiCoverageGaps` makes, so the coverage row and the operand cannot disagree about the DPI subset — which
+  // is the B-71 agreement this pairing exists to keep. What would be the B-70 defect is a hand-written
+  // `inPeriod` filter over `ledger.data.revenues`, and there is none here.
+  const dpiYtd = selectYtd(ledger.data, asOfDate);
   // PG-6h-1 — the flat-ratio gross, struck on the SAME ledger pass and the SAME record set as every other
   // operand here. A second FX walk would be the B-70 defect class and would drift from the first. B-88
   // widened which methods read it: art. 85 alin. (2) measures the gross the same way art. 68^3 alin. (2)
@@ -2534,13 +2581,17 @@ export function selectEstimateOperands(
     applyVatToExpenseBase(inputVat, amounts.expensesNet, deductibleForVat);
 
   if (deductible.annualCapped.length === 0) {
-    const amounts = withDepreciation(
-      withFlatRatioGross(
-        amountsForEstimate(basisBeforeCaps),
-        flatRatioGross,
-        method,
-        cedareWithholdingBlocked,
+    const amounts = withDpiGrosses(
+      withDepreciation(
+        withFlatRatioGross(
+          amountsForEstimate(basisBeforeCaps),
+          flatRatioGross,
+          method,
+          cedareWithholdingBlocked,
+        ),
       ),
+      dpiYtd.dpiQuotaGross,
+      dpiYtd.dpiExcludedGross,
     );
     return {
       kind: 'run',
@@ -2565,8 +2616,12 @@ export function selectEstimateOperands(
     claimed: claimAnnualMeasure(line),
   }));
   const { basis, adjustments } = applyAnnualDeductibilityCaps(basisBeforeCaps, claims);
-  const amounts = withDepreciation(
-    withFlatRatioGross(amountsForEstimate(basis), flatRatioGross, method, cedareWithholdingBlocked),
+  const amounts = withDpiGrosses(
+    withDepreciation(
+      withFlatRatioGross(amountsForEstimate(basis), flatRatioGross, method, cedareWithholdingBlocked),
+    ),
+    dpiYtd.dpiQuotaGross,
+    dpiYtd.dpiExcludedGross,
   );
   return {
     kind: 'run',

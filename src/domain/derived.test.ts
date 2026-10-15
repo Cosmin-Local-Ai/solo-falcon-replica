@@ -260,7 +260,7 @@ describe('selectFinancialDerived (Step 14)', () => {
     const view = selectFinancialDerived(makeData(), AS_OF);
     expect(view.lines.revenues).toEqual([]);
     expect(view.lines.expenses).toEqual([]);
-    expect(view.ytd).toEqual({ revenue: lei(0), expenses: lei(0), net: lei(0), revenueNet: 0, expenseNet: 0, dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [], dpiDeclaredRecordIds: [] });
+    expect(view.ytd).toEqual({ revenue: lei(0), expenses: lei(0), net: lei(0), revenueNet: 0, expenseNet: 0, dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [], dpiDeclaredRecordIds: [], dpiQuotaGross: lei(0), dpiExcludedGross: lei(0) });
     expect(view.monthly.size).toBe(0);
   });
 

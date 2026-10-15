@@ -6,7 +6,7 @@ import { fx } from '../ui/copy';
 
 describe('FinancialSummary', () => {
   it('renders Venituri / Cheltuieli / Profit net with formatted values', () => {
-    render(<FinancialSummary summary={{ revenue: lei(156000), expenses: lei(54000), net: lei(102000), revenueNet: lei(156000), expenseNet: lei(54000), dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [], dpiDeclaredRecordIds: [] }} />);
+    render(<FinancialSummary summary={{ revenue: lei(156000), expenses: lei(54000), net: lei(102000), revenueNet: lei(156000), expenseNet: lei(54000), dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [], dpiDeclaredRecordIds: [], dpiQuotaGross: lei(0), dpiExcludedGross: lei(0) }} />);
     expect(screen.getByText('Venituri')).toBeInTheDocument();
     expect(screen.getByText('Cheltuieli')).toBeInTheDocument();
     expect(screen.getByText('Profit net')).toBeInTheDocument();
@@ -16,7 +16,7 @@ describe('FinancialSummary', () => {
   });
 
   it('renders plain zero when values are 0 (no invented empty state)', () => {
-    render(<FinancialSummary summary={{ revenue: lei(0), expenses: lei(0), net: lei(0), revenueNet: lei(0), expenseNet: lei(0), dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [], dpiDeclaredRecordIds: [] }} />);
+    render(<FinancialSummary summary={{ revenue: lei(0), expenses: lei(0), net: lei(0), revenueNet: lei(0), expenseNet: lei(0), dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [], dpiDeclaredRecordIds: [], dpiQuotaGross: lei(0), dpiExcludedGross: lei(0) }} />);
     expect(screen.getByText('Venituri')).toBeInTheDocument();
     expect(screen.getByText('Cheltuieli')).toBeInTheDocument();
     expect(screen.getByText('Profit net')).toBeInTheDocument();
@@ -24,7 +24,7 @@ describe('FinancialSummary', () => {
   });
 
   it('renders negative net honestly (not hidden)', () => {
-    render(<FinancialSummary summary={{ revenue: lei(40000), expenses: lei(60000), net: lei(-20000), revenueNet: lei(40000), expenseNet: lei(60000), dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [], dpiDeclaredRecordIds: [] }} />);
+    render(<FinancialSummary summary={{ revenue: lei(40000), expenses: lei(60000), net: lei(-20000), revenueNet: lei(40000), expenseNet: lei(60000), dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [], dpiDeclaredRecordIds: [], dpiQuotaGross: lei(0), dpiExcludedGross: lei(0) }} />);
     const value = screen.getByText('-20.000,00 RON');
     expect(value).toBeInTheDocument();
     // Negative net keeps the `neg` tone — it is displayed, not suppressed.
@@ -39,7 +39,7 @@ describe('FinancialSummary', () => {
   it('says the totals are not complete when a foreign record is left out', () => {
     render(
       <FinancialSummary
-        summary={{ revenue: lei(0), expenses: lei(0), net: lei(0), revenueNet: lei(0), expenseNet: lei(0), dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [], dpiDeclaredRecordIds: [] }}
+        summary={{ revenue: lei(0), expenses: lei(0), net: lei(0), revenueNet: lei(0), expenseNet: lei(0), dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [], dpiDeclaredRecordIds: [], dpiQuotaGross: lei(0), dpiExcludedGross: lei(0) }}
         ledger={{
           conversions: [],
           unconverted: [
@@ -61,7 +61,7 @@ describe('FinancialSummary', () => {
   it('labels a converted total provisional when the rate behind it is provisional', () => {
     render(
       <FinancialSummary
-        summary={{ revenue: lei(5000), expenses: lei(0), net: lei(5000), revenueNet: lei(5000), expenseNet: lei(0), dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [], dpiDeclaredRecordIds: [] }}
+        summary={{ revenue: lei(5000), expenses: lei(0), net: lei(5000), revenueNet: lei(5000), expenseNet: lei(0), dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [], dpiDeclaredRecordIds: [], dpiQuotaGross: lei(0), dpiExcludedGross: lei(0) }}
         ledger={{
           conversions: [{
             recordKind: 'revenue', recordId: 'rev-eur-1', currency: 'EUR',
@@ -81,7 +81,7 @@ describe('FinancialSummary', () => {
   it('stays quiet when nothing foreign was left out', () => {
     render(
       <FinancialSummary
-        summary={{ revenue: lei(100), expenses: lei(0), net: lei(100), revenueNet: lei(100), expenseNet: lei(0), dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [], dpiDeclaredRecordIds: [] }}
+        summary={{ revenue: lei(100), expenses: lei(0), net: lei(100), revenueNet: lei(100), expenseNet: lei(0), dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [], dpiDeclaredRecordIds: [], dpiQuotaGross: lei(0), dpiExcludedGross: lei(0) }}
         ledger={{ conversions: [], unconverted: [] }}
       />,
     );

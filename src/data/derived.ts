@@ -133,6 +133,12 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
       // this taxpayer's to pay, and a second reading of the lease facts at a call site is how one register
       // ends up with two answers about the same tax.
       flatRatioWithholdingBlocked: amounts.flatRatioWithholdingBlocked ?? false,
+      // B-147 / B-150 — threading only, identical to `data/dashboard.ts getTaxEstimate` by construction:
+      // `selectYtd` cut the recorded DPI gross by the art. 72 alin. (3) flag, and this hands both halves to
+      // the engine so it can put the quota-bearing one through the rule that states the quota. Neither is
+      // re-read here — a call site that walked the register would be a second producer of the DPI subset.
+      dpiQuotaGross: amounts.dpiQuotaGross ?? null,
+      dpiExcludedGross: amounts.dpiExcludedGross ?? null,
       ruleRelease: selection ? selection.release : null,
       rules,
       // B-109 — threading only, and identical to `data/dashboard.ts getTaxEstimate` by construction: the

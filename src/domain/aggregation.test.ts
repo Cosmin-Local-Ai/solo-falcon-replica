@@ -193,7 +193,7 @@ describe('selectYtd', () => {
 
   it('returns zeros for empty data', () => {
     const ytd = selectYtd(makeData(), '2026-06-30');
-    expect(ytd).toEqual({ revenue: lei(0), expenses: lei(0), net: lei(0), revenueNet: 0, expenseNet: 0, dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [], dpiDeclaredRecordIds: [] });
+    expect(ytd).toEqual({ revenue: lei(0), expenses: lei(0), net: lei(0), revenueNet: 0, expenseNet: 0, dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [], dpiDeclaredRecordIds: [], dpiQuotaGross: lei(0), dpiExcludedGross: lei(0) });
   });
 
   it('computes negative net when expenses exceed revenue (zero income)', () => {
@@ -246,7 +246,7 @@ describe('selectYtd', () => {
     });
 
     const ytd = selectYtd(data, '2025-06-15');
-    expect(ytd).toEqual({ revenue: lei(0), expenses: lei(0), net: lei(0), revenueNet: 0, expenseNet: 0, dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [], dpiDeclaredRecordIds: [] });
+    expect(ytd).toEqual({ revenue: lei(0), expenses: lei(0), net: lei(0), revenueNet: 0, expenseNet: 0, dpiGross: lei(0), dpiGrossNet: lei(0), dpiRecordIds: [], dpiDeclaredRecordIds: [], dpiQuotaGross: lei(0), dpiExcludedGross: lei(0) });
   });
 });
 

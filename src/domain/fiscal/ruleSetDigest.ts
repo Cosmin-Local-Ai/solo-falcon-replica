@@ -20,8 +20,21 @@
  *     user (`condition`, `missing_fact`, `note`) — is the safe side of an unavoidable judgement: a
  *     digest that over-pins turns a prose change into a new release, which is what a release model is
  *     for, while a digest that under-pins lets a changed rule set masquerade as one already recorded.
- *   - `ruleId`, `taxRegime`, `calculatorId` — selectors. `tax.ts` resolves the CAS/CASS/income-tax rule
- *     by `taxRegime`, and `calculatorRegistry[rule.calculatorId]` picks the formula itself.
+ *   - `ruleId`, `taxRegime`, `calculatorId` — selectors. `tax.ts` resolves every rule by `taxRegime` and
+ *     then calls `calculatorRegistry` with a **hard-coded literal key** (`calculatorRegistry['calc-cas']`,
+ *     `calculatorRegistry['calc-cass-ladder']`, …). It does **NOT** do `calculatorRegistry[rule.calculatorId]`.
+ *     **The claim this file used to make — that `calculatorRegistry[rule.calculatorId]` picks the formula — was
+ *     false, and B-147 is the defect that hid behind it:** a rule package can declare a `calculatorId`, the
+ *     function can be registered, a test can call it directly and stay green, and the engine can still never
+ *     run it. `DPI_ART72_2026` declared `calc-dpi-flat-quota` for four briefs while nothing in `tax.ts` ever
+ *     reached it. `dpi2026.ts` and `deductibility2026.ts` both conceded in their own comments that their
+ *     `calculatorId` was „a label only”, and that concession was the honest half: for most rules it still is.
+ *     The only function that reads `rule.calculatorId` is `computeFiscal`, and it has no production caller.
+ *     `fiscal/calculatorReachability.test.ts` is the guard that stops the next agent re-introducing this by
+ *     believing this comment instead of checking it — it enumerates every `calculatorId` the registered rule
+ *     packages declare and fails on any that no production call site can reach.
+ *     `calculatorId` stays in the digest because it is part of what a release *claims* to be able to compute,
+ *     which is exactly why changing it must produce a new release.
  *   - `taxYear`, `effectiveFrom`, `effectiveTo`, `status` — gates. `selectApplicableRules` filters on
  *     all four, so changing any of them changes which arithmetic runs.
  *

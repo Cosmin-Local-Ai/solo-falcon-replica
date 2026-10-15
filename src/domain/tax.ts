@@ -85,6 +85,21 @@ export interface TaxCalculationInput {
    */
   flatRatioWithholdingBlocked?: boolean;
   /**
+   * B-147 / B-150 — the gross of the recorded art. 70 receipts, already cut by the art. 72 alin. (3) flag.
+   *
+   * The engine does not read a record to decide this, and it does not apply the quota itself: `selectYtd`
+   * cut the set by `isDpiArt72Alin3Excluded`, and `calcDpiFlatQuota` — the calculator the rule package names
+   * for `dpi-flat-quota` — is what turns a quota-bearing gross into a net. That is the whole of B-147: the
+   * calculator existed, the rule declared it, and no call site ever reached it.
+   *
+   * `dpiQuotaGross` takes the 40 % of art. 72 alin. (2) / art. 72¹ alin. (1). `dpiExcludedGross` is the
+   * art. 72 alin. (3) / art. 72¹ alin. (2) set, which gets **no quota** (net = gross) and is **outside CAS**,
+   * because art. 137 alin. (1) lit. b¹) carves it out of the DPI category at the definition. Both absent
+   * means the register holds no DPI receipt — read as "no DPI source", never as a declared zero.
+   */
+  dpiQuotaGross?: Bani | null;
+  dpiExcludedGross?: Bani | null;
+  /**
    * TASK 6: the release the calculation is bound to, or `null` when this build registers none for the
    * profile's fiscal year. `null` makes the engine refuse instead of writing a snapshot that names no law
    * — the old behaviour was to hand in the 2026 release whatever the year said, which is how a call site
@@ -500,7 +515,7 @@ export const CASS_FLAG_REVIEW_REASON =
   + 'rămâne valoarea calculată, dar nu poate fi prezentată ca o scutire dovedită.';
 
 export async function computeTaxEstimate(input: TaxCalculationInput): Promise<TaxEstimateResult> {
-  const { inputs, profile, revenues, expenses, revenuesNet, expensesNet, expenseBase, flatRatioGross, flatRatioMethod, flatRatioWithholdingBlocked, ruleRelease, rules, depreciation, priorYearLosses } = input;
+  const { inputs, profile, revenues, expenses, revenuesNet, expensesNet, expenseBase, flatRatioGross, flatRatioMethod, flatRatioWithholdingBlocked, dpiQuotaGross: dpiQuotaGrossIn, dpiExcludedGross: dpiExcludedGrossIn, ruleRelease, rules, depreciation, priorYearLosses } = input;
   // `leiText`, not the raw value: these sentences are read by a person, and a person reads leu.
   if (!Number.isFinite(revenues) || revenues < 0) return rr(`Veniturile trebuie să fie >= 0, s-a obținut ${leiText(revenues)}`);
   if (!Number.isFinite(expenses) || expenses < 0) return rr(`Cheltuielile trebuie să fie >= 0, s-a obținut ${leiText(expenses)}`);
@@ -538,6 +553,10 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // while art. 84^1's is withheld by the payer and IS final (alin. (5)-(6)).
   const cedareArt84Rule = applicable.find((r) => r.taxRegime === 'cedare-art84-flat-ratio');
   const cedareArt84x1Rule = applicable.find((r) => r.taxRegime === 'cedare-art84x1-withheld');
+  // B-147 — the DPI quota rule. A regime lookup like the six above, and it is a lookup rather than a
+  // hard-wired ruleId for the year-scoping reason this block already gives: a fiscal year with no art. 72
+  // rule must refuse a DPI gross rather than compute it under 2026 percentages it was never handed.
+  const dpiQuotaRule = applicable.find((r) => r.taxRegime === 'dpi-flat-quota');
   if (!casRule) return rr(`Regula CAS nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}`, lines);
   if (!cassRule) return rr(`Regula CASS nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}`, lines);
   if (!incomeTaxRule) return rr(`Regula de impozit pe venit nu a fost găsită pentru anul fiscal ${inputs.fiscalYear}`, lines);
@@ -856,20 +875,106 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // With one source and no DPI the two are the same number, sign included; the cumulation only becomes a
   // sum when a second genuine source exists, and B-85 is the reason one register never supplies two.
   const cumulatedNet = cumulateContributionBase(legs);
-  // B-112 STAGE 2 — the art. 137 alin. (1) lit. b¹) amount. Read, not derived: `CassLadderYear`'s
-  // `proprietateIntelectuala` is documented as „lit. c) venitul net after the art. 72 / 72¹ forfetar, or
-  // net per art. 73”, which is the same quantity art. 148 alin. (3) asks for, so one stored figure answers
-  // both the CASS ladder (art. 170 alin. (4) lit. c)) and the CAS ceiling test (art. 148 alin. (3)) —
-  // legitimately, because those are two different tests over one amount, not one test counted twice.
+  // B-112 STAGE 2 / B-147 — the art. 137 alin. (1) lit. b¹) amount, and now it has TWO producers.
   //
-  // The B-116 hazard is the other direction: if a recorded DPI document ALSO reached this cumul, the same
-  // income would enter twice and select a higher tier. It cannot, and that is structural rather than a
-  // check added here — `estimateBasis.ts selectEstimateOperands` scopes recorded DPI receipts out of the
-  // engine's record set entirely, so the ladder amount is the only DPI quantity the engine can see. Pinned
-  // in `tax.dpiCas.test.ts`, because a future stage that routes recorded DPI into the engine has to come
-  // and break that test on purpose.
+  // Producer one, unchanged since stage 2: `CassLadderYear.proprietateIntelectuala`, the DPI net a person
+  // types onto the art. 170 alin. (4) ladder in Settings. It is documented as „lit. c) venitul net after the
+  // art. 72 / 72¹ forfetar, or net per art. 73”, which is the same quantity art. 148 alin. (3) asks for, so
+  // one stored figure legitimately answers two different tests over one amount.
+  //
+  // Producer two, new in B-147: the recorded art. 70 receipts, put through `calcDpiFlatQuota`. Until this
+  // brief the ladder amount was the only DPI quantity the engine could see, and the comment here said so —
+  // „It cannot, and that is structural rather than a check added here”. That sentence is no longer true, and
+  // the test that made it true (`tax.dpiCas.test.ts`, „the CAS cumul carries the DPI amount once”) was
+  // written to be broken deliberately by exactly this stage. It is broken on purpose, and what replaced the
+  // structure is a rule, not a preference.
+  //
+  // **The rule: where both producers exist for the same year, the engine posts NEITHER.** Not the sum — the
+  // ladder cumulates the category once, so adding them would bill contributions on money received once. Not
+  // the larger, and not either one alone — that is the precedence D-DPI-1 has not yet authorised. This is the
+  // same shape as B-93's `depreciation_conflict` and as the cedare double-producer refusal above it, and it
+  // is what the coverage row already tells the person: „niciun venit din DPI nu este postat cât timp ambele
+  // există.” Until B-147 that sentence was false in the engine, which is a finding in its own right.
+  //
+  // **What the recorded producer feeds, and what it does not.** It feeds the art. 148 alin. (3) cumul and the
+  // art. 151 alin. (6) withholding source. It does NOT feed the art. 170 alin. (4) CASS ladder, and that is a
+  // boundary rather than an omission: `calcCassLadder` refuses a partial answer set because art. 170 alin.
+  // (4) cumulates all six categories, and one computed DPI amount cannot answer the other five — inventing
+  // five zeros is the exact thing that calculator's own refusal exists to prevent. The ladder therefore still
+  // reads the declared amount, and `dpiCoverageGaps` still reports the CASS limb as not modelled from
+  // records. Reported, not hidden.
   const ladderYear = cassLadderForYear(inputs.cassLadderYears, inputs.fiscalYear);
-  const dpiNet = ladderYear?.proprietateIntelectuala ?? null;
+  const typedDpiNet = ladderYear?.proprietateIntelectuala ?? null;
+  // B-147 — the recorded gross through the rule that states the quota. The engine never applies a percentage
+  // of its own here: `calculatorId` is what the rule package declares, and this is the call site that makes
+  // the declaration mean something (B-148 is the guard that keeps it meaning something).
+  const dpiQuotaGross = dpiQuotaGrossIn ?? null;
+  const dpiExcludedGross = dpiExcludedGrossIn ?? null;
+  const hasRecordedDpi = (dpiQuotaGross ?? 0) > 0 || (dpiExcludedGross ?? 0) > 0;
+  let recordedDpiQuotaNet: Bani | null = null;
+  if (hasRecordedDpi) {
+    if (!dpiQuotaRule) {
+      return rr(
+        `Regula de stabilire a venitului din drepturi de proprietate intelectuală (art. 72 / art. 72¹) nu a ` +
+          `fost găsită pentru anul fiscal ${inputs.fiscalYear}; un venit brut din art. 70 nu poate fi calculat ` +
+          'după regulile unui alt an.',
+        lines,
+      );
+    }
+    if ((dpiQuotaGross ?? 0) > 0) {
+      const quotaRes = calculatorRegistry['calc-dpi-flat-quota'](dpiQuotaRule, {
+        gross: dpiQuotaGross as Bani,
+      });
+      if ('reviewRequired' in quotaRes) return rr(quotaRes.reason, lines);
+      if (typeof quotaRes.determinedNet !== 'number') {
+        return rr(
+          'Regula art. 72 / art. 72¹ nu a raportat venitul net determinat din venitul brut din drepturi de ' +
+            'proprietate intelectuală; compoziția nu îl recalculează pe cont propriu.',
+          lines,
+        );
+      }
+      recordedDpiQuotaNet = quotaRes.determinedNet;
+    } else {
+      // Only the art. 72 alin. (3) set is recorded. There is no quota to apply to it, so the quota-bearing
+      // part is a measured zero rather than an invented one.
+      recordedDpiQuotaNet = lei(0);
+    }
+  }
+  // B-150, consequence one of the one flag: the art. 72 alin. (3) set never enters this amount. It gets no
+  // quota (net = gross, stated on the line below) and it is outside CAS — art. 137 alin. (1) lit. b¹) reads
+  // „venituri din drepturi de proprietate intelectuală, definite la art. 70, cu excepția veniturilor prevăzute
+  // la art. 72 alin. (3)”. The cut was made in `selectYtd` by `isDpiArt72Alin3Excluded`, the single predicate
+  // both consequences read; nothing here re-decides it.
+  const dpiDoubleRepresentation = typedDpiNet !== null && hasRecordedDpi;
+  let dpiNet: Bani | null;
+  if (dpiDoubleRepresentation) dpiNet = null;
+  else if (typedDpiNet !== null) dpiNet = typedDpiNet;
+  else dpiNet = hasRecordedDpi ? recordedDpiQuotaNet : null;
+  if (hasRecordedDpi && !dpiDoubleRepresentation) {
+    // The line is here because the number below moved, and a contribution figure that moved without a line
+    // naming where it came from is B-106 again: a computation nobody can read is indistinguishable from a
+    // bug. The label says which article produced it and which receipts the 40 % did NOT touch.
+    lines.push({
+      label:
+        'Venit net din drepturi de proprietate intelectuală (art. 72 alin. (2) / art. 72^1 alin. (1): '
+        + 'cota forfetară de 40 % din venitul brut)',
+      value: recordedDpiQuotaNet as Bani,
+    });
+    if ((dpiExcludedGross ?? 0) > 0) {
+      lines.push({
+        label:
+          'Venit din DPI fără cotă forfetară (art. 72 alin. (3) / art. 72^1 alin. (2): net = brut, '
+          + 'și exclus din CAS la art. 137 alin. (1) lit. b^1))',
+        value: dpiExcludedGross as Bani,
+      });
+    }
+  }
+  if (dpiDoubleRepresentation) {
+    lines.push({
+      label: 'DPI: doi producători pentru același venit — niciunul postat (vezi înregistrarea de acoperire)',
+      value: lei(0),
+    });
+  }
   // B-129 / B-130 — the category facts, produced here once from the same two inputs the contribution
   // arithmetic above just consumed. The threshold rows read these instead of re-reading the leg list,
   // because `net-income = 0` cannot tell a loss-making PFA from a landlord, and the law treats them

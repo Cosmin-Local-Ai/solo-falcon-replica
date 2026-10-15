@@ -479,6 +479,11 @@ export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEsti
     // resolved it from the declared lease facts, and the engine decides with it whether the 10 % is the
     // payer's to withhold or this taxpayer's to pay.
     flatRatioWithholdingBlocked: amounts.flatRatioWithholdingBlocked ?? false,
+    // B-147 / B-150 — threading only, identical to `data/derived.ts useLatestTaxEstimate` by construction:
+    // the recorded DPI gross was cut by the art. 72 alin. (3) flag in `selectYtd`, and both halves travel to
+    // the engine from that one pass. This call site does not read a record.
+    dpiQuotaGross: amounts.dpiQuotaGross ?? null,
+    dpiExcludedGross: amounts.dpiExcludedGross ?? null,
     ruleRelease: selection ? selection.release : null,
     rules,
     // B-109 — threading only, identical to `data/derived.ts useLatestTaxEstimate` by construction: both hand
