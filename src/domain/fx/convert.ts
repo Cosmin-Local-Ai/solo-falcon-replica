@@ -193,7 +193,11 @@ export function convertToRon(amount: Money, anchor: ConversionAnchor, provider: 
           basis: anchor.basis,
           currency,
           anchor: String(anchor.paymentYear),
-          detail: `niciun curs mediu anual publicat pentru ${currency} în ${anchor.paymentYear}. BNR publică media anuală abia după închiderea anului — nu se calculează din cursurile zilnice.`,
+          detail:
+            `niciun curs mediu anual publicat pentru ${currency} în ${anchor.paymentYear}. BNR publică media `
+            + 'anuală abia după închiderea anului — nu se calculează din cursurile zilnice, oricâte cursuri '
+            + 'zilnice ar exista în registru. Media se înregistrează așa cum a fost publicată; până atunci '
+            + 'plafonul rămâne nemăsurat.',
         };
       }
       return product(amount, rate, anchor.basis, false);
@@ -207,7 +211,9 @@ export function convertToRon(amount: Money, anchor: ConversionAnchor, provider: 
           basis: anchor.basis,
           currency,
           anchor: String(anchor.incomeRealisationYear),
-          detail: `niciun curs mediu anual publicat pentru ${currency} în ${anchor.incomeRealisationYear}`,
+          detail:
+            `niciun curs mediu anual publicat pentru ${currency} în ${anchor.incomeRealisationYear} — nu se `
+            + 'calculează din cursurile zilnice, oricâte cursuri zilnice ar exista în registru.',
         };
       }
       return product(amount, rate, anchor.basis, false);

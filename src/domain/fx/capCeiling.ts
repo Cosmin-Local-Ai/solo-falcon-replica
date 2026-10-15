@@ -14,6 +14,14 @@
  * - **It never computes an annual average.** BNR publishes `CURSA_EURM` as the average of the 12 monthly
  *   averages; a mean of daily rates is a different number (research 23 §Q2). The only way a rate enters
  *   here is through `FxRateProvider`, which is a synchronous lookup.
+ *
+ *   **D-FX-6 (B-137) did not relax this, and nothing here may.** The decision was that an open year stops
+ *   refusing, and it stops refusing through the *existing* provisional -> final lifecycle: a person records
+ *   the annual average, it is held as provisional, and it is replaced when BNR's own figure arrives. That is
+ *   a lifecycle, not a computation. A store holding every daily rate of 2026 still answers
+ *   `annualAverage(2026)` with `null`, and `strikeCapCeiling` still refuses. The count of daily rates the
+ *   register holds travels with the refusal precisely so the refusal reads as a refusal and not as a missing
+ *   datum. `annualAverageNeverDerived.test.ts` pins all of it.
  * - **It never guesses a missing rate.** A missing average is a refusal naming the currency, the year and
  *   the reason, and the caller keeps the cap `cap_unresolved`.
  * - **It does not choose a side of the hierarchy conflict.** CF art. 9 alin. (3) lit. b) + alin. (4)
@@ -32,7 +40,7 @@ import { majorToMinor, money, type Bani, type Money } from '../money';
 import { BASIS_CITATIONS, convertToRon, type ConversionBasis, type ConversionResult } from './convert';
 import { isISOCalendarDate } from '../date';
 import type { FxRateProvider, RateCurrency } from './provider';
-import type { FxRateRecord, RateKind } from './rates';
+import type { FxRateRecord, RateEntryMode, RateKind } from './rates';
 
 /** The basis the app applies to a statutory ceiling: pct. 7 alin. (6). */
 export const CAP_CEILING_BASIS: ConversionBasis = 'payment_year_annual_average';
@@ -57,6 +65,13 @@ export interface CapRateEvidence {
   seriesCode: string;
   sourceUrl: string;
   fetchedAt: string;
+  /**
+   * How this rate got into the register — `manual` or `fetched`. B-137 (D-FX-6) carries it up here because
+   * the information note the user asked for has to answer *where the number came from*, and for an annual
+   * average that is the whole answer: a person typed it in, the app did not derive it. The record already
+   * carried the field; until now the ceiling's own evidence silently dropped it.
+   */
+  entryMode: RateEntryMode;
 }
 
 export type CapCeilingReading =
@@ -86,9 +101,21 @@ export type CapCeilingRefusal =
   | 'ambiguous_payment_year'
   | 'no_rate';
 
+/**
+ * The refusal carries `dailyRatesHeld` on the `no_rate` branch only, and only when the register actually
+ * holds daily rates for the payment year. It is the difference between "the app has never heard of this
+ * currency" and "the app has the daily rates and still will not make an average out of them" — the second
+ * is the state persona 11 demonstrates, and it has to stay visible on screen (B-137, D-FX-6).
+ */
 export type CapCeilingAttempt =
   | { ok: true; strike: CapCeilingStrike }
-  | { ok: false; reason: CapCeilingRefusal; paymentYear?: number; detail: string };
+  | {
+      ok: false;
+      reason: CapCeilingRefusal;
+      paymentYear?: number;
+      detail: string;
+      dailyRatesHeld?: number;
+    };
 
 /** Build the money a ceiling is stated in. `400` euros is 40000 euro cents, never 400 bani. */
 export function capMoney(currency: RateCurrency, major: number): Money<RateCurrency> {
@@ -108,7 +135,24 @@ function evidence(record: FxRateRecord, basis: ConversionBasis, anchor: string):
     seriesCode: record.seriesCode,
     sourceUrl: record.sourceUrl,
     fetchedAt: record.fetchedAt,
+    entryMode: record.entryMode,
   };
+}
+
+/**
+ * How many daily rates the provider holds inside `year` for `currency`.
+ *
+ * This is not a step towards averaging them. It exists so a refusal can say how much it is refusing to use:
+ * persona 11's register holds twelve EUR daily rates for 2026 and the ceiling still will not strike, which
+ * is evidence of a decision rather than of a gap. `dailyRates` is not part of the minimal
+ * `FxRateProvider` contract — the same duck-type `convert.ts` uses for the carry-forward — so a provider
+ * that cannot enumerate simply reports nothing.
+ */
+function countDailyRatesInYear(provider: FxRateProvider, currency: RateCurrency, year: number): number {
+  const enumerate = (provider as { dailyRates?: (c: RateCurrency) => FxRateRecord[] }).dailyRates;
+  if (typeof enumerate !== 'function') return 0;
+  const prefix = `${year}-`;
+  return enumerate.call(provider, currency).filter(r => r.rateDate?.startsWith(prefix)).length;
 }
 
 function failureDetail(failure: Extract<ConversionResult, { ok: false }>): string {
@@ -206,7 +250,14 @@ export function strikeCapCeiling(input: {
   const paymentYear = years[0];
   const applied = capCeilingAtPaymentYear(input.cap, paymentYear, input.provider);
   if (!applied.ok) {
-    return { ok: false, reason: 'no_rate', paymentYear, detail: applied.detail };
+    const held = countDailyRatesInYear(input.provider, input.cap.currency, paymentYear);
+    return {
+      ok: false,
+      reason: 'no_rate',
+      paymentYear,
+      detail: applied.detail,
+      ...(held > 0 ? { dailyRatesHeld: held } : {}),
+    };
   }
 
   const alternative: CapCeilingReading =
