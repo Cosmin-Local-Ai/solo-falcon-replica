@@ -353,16 +353,59 @@ type WithholdingOutcome = {
  * `due − withheld` is the whole rule (art. 151 alin. (9), art. 174¹ alin. (6); D212 Subsecțiunea a 3-a
  * rd. 5 „Diferența stabilită în plus”). A negative result is not a negative payment: it means more was
  * withheld than is due, which the app reports instead of silently clamping or inventing a refund.
+ *
+ * **B-125 — what happens to the excess is now known, and it is not a refund.** The wording written before
+ * `docs/ai/research/52_dividends_losses_withholding_fy2026.md` said only that recovery was „nu este modelată
+ * de aplicație”. That sentence implied a route exists and the app had simply not implemented it. It does not
+ * exist, and the note now says what actually happens to the money. `kind` distinguishes the two
+ * contributions, because the evidence differs:
+ *
+ * - **CAS** — art. 151 alin. (4) is the only restitution text in all of Titlul V and it is a **denial**:
+ *   „contribuția plătită nu se restituie, aceasta fiind valorificată la stabilirea elementelor necesare
+ *   determinării dreptului de pensie”. D212 Subsecțiunea 1 stops at rd.5 „Diferența stabilită în plus” —
+ *   **there is no CAS minus row** — and in the Sumar no CAS amount can reach „Diferență de restituit”.
+ * - **CASS** — art. 174 alin. (12) is the only compensate/restitute route in Titlul V and it reaches only
+ *   art. 68¹ (sport). Art. 174¹ alin. (12) reads „Prevederile art. 174 alin. **(14)-(18)** se aplică în mod
+ *   corespunzător”, **deliberately excluding alin. (12)** — so for DPI, arendă and asocieri there is none
+ *   either. Where a CASS over-retention does arise on art. 68¹ income, the minus row becomes **a tax**, not
+ *   a refund (OPANAF 2736/2025 Subsecțiunea 2.1 rd.8 note).
+ *
+ * The CPF route (Legea 207/2015 art. 167-168) returns sums „plătite sau încasate fără a fi datorate”, but no
+ * Titlul V provision creates such a claim for a correctly reported CAS/CASS retention. **No refund path is
+ * built here, because there is none to build.**
  */
-function payableAfterWithholding(due: Bani, withheld: Bani): { dePlatit: Bani; note?: string } {
+function payableAfterWithholding(
+  due: Bani,
+  withheld: Bani,
+  kind: 'cas' | 'cass',
+): { dePlatit: Bani; note?: string } {
   if (withheld > due) {
+    const excess = subBani(withheld, due);
     return {
       dePlatit: lei(0),
       note:
-        `Contribuția reținută la sursă (${leiText(withheld)} lei) este mai mare decât contribuția datorată ` +
-        `(${leiText(due)} lei). Suma de plătit este 0 lei, iar excesul NU este tratat ca rambursare: ` +
-        'recuperarea unei rețineri în plus nu este modelată de aplicație și nu este acoperită de ' +
-        'docs/ai/research/50_cass_cas_verbatim_fy2026.md.',
+        kind === 'cas'
+          ? `Contribuția reținută la sursă (${leiText(withheld)} lei) este mai mare decât contribuția `
+            + `datorată (${leiText(due)} lei), cu ${leiText(excess)} lei în plus. Suma de plătit este 0 lei. `
+            + 'Excesul NU se restituie și nu este o sumă de recuperat: art. 151 alin. (4) spune în mod expres '
+            + 'că „contribuția plătită nu se restituie, aceasta fiind valorificată la stabilirea elementelor '
+            + 'necesare determinării dreptului de pensie, potrivit legii”. Banii rămân la stat și se pun în '
+            + 'seama stagiului de cotizare — aceasta este explicația, nu o cale de întoarcere pe care '
+            + 'aplicația să fi lăsat-o deoparte. Formularul confirmă: Subsecțiunea 1 (CAS) se oprește la '
+            + 'rd.5 „Diferența stabilită în plus (rd.3 − rd.4)”, nu există rând de minus pentru CAS, iar în '
+            + 'Sumar nicio sumă de CAS nu poate ajunge la „Diferență de restituit” (rd.7). '
+            + 'research/52 §Q4 a scanat tot Titlul V (art. 135 → 220⁸, 320.745 caractere): singurul text de '
+            + 'restituire pentru CAS este acest refuz.'
+          : `Contribuția reținută la sursă (${leiText(withheld)} lei) este mai mare decât contribuția `
+            + `datorată (${leiText(due)} lei), cu ${leiText(excess)} lei în plus. Suma de plătit este 0 lei. `
+            + 'Excesul NU se restituie: art. 174 alin. (12) este singura cale de compensare/restituire din '
+            + 'Titlul V și acoperă numai veniturile din art. 68¹ (contracte de activitate sportivă), iar '
+            + 'art. 174¹ alin. (12) trimite expres la „art. 174 alin. (14)-(18)”, exclinzând în mod '
+            + 'deliberat alin. (12). Pentru drepturi de proprietate intelectuală, arendă și asocieri cu '
+            + 'persoane juridice nu există deci nicio cale de restituire. Iar unde diferența în plus chiar '
+            + 'apare pe art. 68¹, OPANAF 2736/2025 (Subsecțiunea 2.1, rd.8) o transformă în IMPUZIT pe '
+            + 'venit, nu în rambursare. research/52 §Q4.' 
+            + 'Aplicația nu construiește o cale de restituire pentru că nu există una.',
     };
   }
   return { dePlatit: subBani(due, withheld) };
@@ -514,7 +557,7 @@ function calcCas(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
   }
 
   if (realized < tier1Base) {
-    const zeroPayable = withheld === undefined ? {} : { retinutLaSursa: withheld.retinut, dePlatit: payableAfterWithholding(lei(0), withheld.retinut).dePlatit };
+    const zeroPayable = withheld === undefined ? {} : { retinutLaSursa: withheld.retinut, dePlatit: payableAfterWithholding(lei(0), withheld.retinut, 'cas').dePlatit };
     return {
       value: lei(0),
       ...zeroPayable,
@@ -559,7 +602,7 @@ function calcCas(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
     );
     return { value: cas, breakdown };
   }
-  const payable = payableAfterWithholding(cas, withheld.retinut);
+  const payable = payableAfterWithholding(cas, withheld.retinut, 'cas');
   breakdown.push(withheld.note);
   if (withheld.bazaRetinuta !== undefined && withheld.bazaRetinuta < base) {
     breakdown.push(
@@ -862,6 +905,123 @@ function calcCass(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
  * `ladder_tier2_base` (12 SM), `ladder_tier3_base` (24 SM) — never from a literal, so a year with no
  * verified minimum wage cannot quietly inherit 2026's.
  */
+/**
+ * B-122 — the THREE sources art. 174¹ alin. (3) obliges a plătitor to withhold CASS for.
+ *
+ * Until now this file derived the retained amount from the DPI leg only. A taxpayer whose CASS was withheld
+ * by an *arendator* or by the *asociere* saw `reținută = 0` and `de plătit` equal to the whole contribution:
+ * the app telling a person they owe the entire amount when somebody had already paid part of it to the state
+ * on their behalf. Same article, same alineat — this is wiring, not new law, and the harm is asymmetric in a
+ * way a rate error is not.
+ *
+ * The three are named in the law's own litera order. `cedarea_folosintei_bunurilor` (lit. e), art. 83, is the
+ * arendă family this engine models; ordinary arendă outside it stays out of scope for the income regime, and
+ * that is said in `ui/copy/settings.ts`, not changed here.
+ */
+const CASS_WITHHOLDING_SOURCES: readonly CassLadderCategory[] = [
+  'proprietate_intelectuala',
+  'asociere_persoana_juridica',
+  'cedarea_folosintei_bunurilor',
+];
+
+/**
+ * B-122 — resolve the withheld CASS across those three sources.
+ *
+ * art. 174¹ alin. (4) keeps the answer a SINGLE figure: with several sources the taxpayer designates by
+ * contract the one plătitor whose source alone exceeds 6 SMN. The app does not hold that designation, so
+ * where more than one present source would each have produced a retention, the app names the candidates and
+ * declines to choose. It does not sum them — nobody paid the sum — and it does not pick one silently.
+ *
+ * A declared *informare* (art. 174¹ alin. (7)) still wins over every derivation, exactly as before: it is a
+ * fact about money a payer actually retained, and it is not attributable to a source on the form.
+ */
+function cassWithheldForLadder(
+  amounts: Partial<Record<CassLadderCategory, Bani>>,
+  declared: Bani | undefined,
+  dpiExcluded: boolean,
+  rungs: readonly Bani[],
+  ratePercent: number,
+): { outcome?: WithholdingOutcome; notes: string[] } {
+  const notes: string[] = [];
+  const threeSources = CASS_WITHHOLDING_SOURCES.map((c) => CASS_LADDER_CATEGORY_NAMES[c]).join(', ');
+  const perSource = CASS_WITHHOLDING_SOURCES
+    // art. 154 alin. (1) lit. h¹) exempts ONE category, DPI, and nothing else — the other two still have a
+    // withholding duty, so the exemption must not travel across the three.
+    .filter((c) => !(c === 'proprietate_intelectuala' && dpiExcluded))
+    .map((c) => ({ category: c, outcome: cassWithheldFromSource(undefined, amounts[c], false, rungs, ratePercent) }))
+    .filter((x): x is { category: CassLadderCategory; outcome: WithholdingOutcome } => x.outcome !== undefined);
+  const retaining = perSource.filter((x) => x.outcome.retinut > 0);
+  const named = (x: { category: CassLadderCategory; outcome: WithholdingOutcome }) =>
+    `${CASS_LADDER_CATEGORY_NAMES[x.category]}: ${leiText(x.outcome.retinut)} lei`;
+
+  if (declared !== undefined && declared > 0) {
+    const baza = retaining.length === 1 ? retaining[0].outcome.bazaRetinuta : undefined;
+    return {
+      outcome: {
+        retinut: declared,
+        ...(baza === undefined ? {} : { bazaRetinuta: baza }),
+        note:
+          `art. 174¹ alin. (7): plătitorul de venit are obligația să emită „o informare cu privire la nivelul ` +
+          `contribuției … reținute”, iar aplicația folosește suma consemnată din acea informare: ` +
+          `${leiText(declared)} lei.` +
+          (retaining.length === 1
+            ? ` Regula ar fi produs ${named(retaining[0])} pe baza aleasă de această sursă (art. 174¹ ` +
+              'alin. (3)); cele două cifre nu cad de acord, aplicația nu repară niciuna și nu alege între ' +
+              'ele — contribuția DATORATĂ nu depinde de care este corectă.'
+            : retaining.length > 1
+              ? ` Regula ar fi putut produce mai multe cifre, pentru că art. 174¹ alin. (3) numește trei ` +
+                `surse a căror plătitor reține, iar aici mai multe califică: ${retaining.map(named).join('; ')}.`
+              : ' Aplicația nu deține cuantumul niciunei surse care ar fi putut genera reținerea, deci nu ' +
+                'poate compara cifra consemnată cu cea pe care regula ar fi produs-o.') +
+          ` Sursele la care plătitorul are obligația reținerii (art. 174¹ alin. (3)): ${threeSources}.`,
+      },
+      notes,
+    };
+  }
+
+  if (retaining.length === 1) {
+    const only = retaining[0];
+    return {
+      outcome: {
+        ...only.outcome,
+        note: `${only.outcome.note} Sursa care reține este ${CASS_LADDER_CATEGORY_NAMES[only.category]} — art. 174¹ alin. (3) numește trei astfel de surse: ${threeSources}.`,
+      },
+      notes,
+    };
+  }
+
+  if (retaining.length > 1) {
+    notes.push(
+      `NOTĂ (PLĂTITOR NEDESEMNAT): art. 174¹ alin. (3) obligă plătitorul să calculeze, rețină și vireze CASS ` +
+        `pentru trei surse — ${threeSources}. Aici mai multe surse prezente depășesc fiecare singură 6 salarii ` +
+        `minime brute și ar fi produs altă reținere: ${retaining.map(named).join('; ')}. art. 174¹ alin. (4): ` +
+        'la mai multe surse contribuabilul desemnează prin contract plătitorul a cărui sursă depășește ' +
+        'singură pragul, iar aplicația nu deține desemnarea. Nu adună reținerile — nimeni nu a virat suma — ' +
+        'și nu alege unul în tăcere. Cât anume a fost reținut rămâne nedeclarat; contribuția DATORATĂ de mai ' +
+        'sus nu se schimbă.',
+    );
+    return { notes };
+  }
+
+  if (perSource.length > 0) {
+    // No present source reaches 6 SMN, so no plătitor has anything to retain (alin. (8)) — said once, for
+    // all three, rather than once per category.
+    return {
+      outcome: {
+        retinut: lei(0),
+        note:
+          `art. 174¹ alin. (8): venitul net al fiecărei surse în parte este sub 6 salarii minime brute ` +
+          `(${leiText(rungs[0])} lei), deci niciun plătitor nu reține CASS; contribuabilul depune Declarația ` +
+          `Unică. Sursele verificate: ${perSource.map((x) => CASS_LADDER_CATEGORY_NAMES[x.category]).join(', ')} — ` +
+          'art. 174¹ alin. (3).',
+      },
+      notes,
+    };
+  }
+
+  return { notes };
+}
+
 function calcCassLadder(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
   const ladder = input?.cassLadder;
   const ratePercent = paramNumber(rule, 'rate');
@@ -991,13 +1151,24 @@ function calcCassLadder(rule: FiscalRule, input?: CalculatorInput): CalculatorRe
   // `reținută` / `de plătit` — and ANAF's own literal reproduces: „Avem CASS reținută de plătitorul de venit
   // din drepturi de proprietate intelectuală = 4.860 lei • Rezultă o diferență de plată = 9.720 – 4.860 =
   // 4.860 lei.” (research/50, ANAF DGRFP București, Exemplul 3.)
-  const withheld = cassWithheldFromSource(
+  // ── B-112 STAGE 4 / B-122 — CASS reținută la sursă: art. 174¹ alin. (3)-(9), pe TREI surse ──
+  // The refusal that used to stand here is DELETED, not left dormant — the same standard `exactBani` and
+  // `leiFromDecimal` were held to when B-118 closed. It existed because the credit was not modelled: the app
+  // could either charge the contribution twice or refuse. Now the triple is computed — `datorată` /
+  // `reținută` / `de plătit` — and ANAF's own literal reproduces: „Avem CASS reținută de plătitorul de venit
+  // din drepturi de proprietate intelectuală = 4.860 lei • Rezultă o diferență de plată = 9.720 – 4.860 =
+  // 4.860 lei.” (research/50, ANAF DGRFP București, Exemplul 3.)
+  //
+  // B-122: the derivation no longer takes the DPI leg alone. art. 174¹ alin. (3) names three sources whose
+  // plătitor withholds, and `cassWithheldForLadder` resolves across them.
+  const withholding = cassWithheldForLadder(
+    amounts,
     ladder?.cassRetinutLaSursa,
-    dpiAmount,
     dpiExcluded,
     [tier1, tier2, tier3],
     ratePercent,
   );
+  const withheld = withholding.outcome;
 
   const breakdown = [
     `venit cumulat din art. 155 alin. (1) lit. c)-h), măsurat potrivit art. 170 alin. (4): ${leiText(cumulated)} lei`,
@@ -1040,7 +1211,7 @@ function calcCassLadder(rule: FiscalRule, input?: CalculatorInput): CalculatorRe
   // the art. 155 alin. (1) lit. c)-h) basin, and no payer withholds CASS on the PFA's own net. A person with
   // both limbs has two CASS figures, and ANAF's Exemplul 3 prints both (6.800 lei and 9.720 lei).
   if (withheld !== undefined) {
-    const payable = payableAfterWithholding(value, withheld.retinut);
+    const payable = payableAfterWithholding(value, withheld.retinut, 'cass');
     breakdown.push(withheld.note);
     if (withheld.bazaRetinuta !== undefined && withheld.bazaRetinuta < base) {
       breakdown.push(
@@ -1058,9 +1229,10 @@ function calcCassLadder(rule: FiscalRule, input?: CalculatorInput): CalculatorRe
     );
   } else {
     breakdown.push(
-      'NOTĂ (REȚINERE NESTABILITĂ): aplicația nu deține cuantumul sursei al cărei plătitor ar reține CASS (art. 155 alin. (1) lit. c)), deci nu raportează nicio sumă reținută și nici nu susține că nu a reținut nimeni nimic. CASS datorată rămâne cifra de mai sus.',
+      'NOTĂ (REȚINERE NESTABILITĂ): aplicația nu deține cuantumul niciunei surse al cărei plătitor ar reține CASS, deci nu raportează nicio sumă reținută și nici nu susține că nu a reținut nimeni nimic. CASS datorată rămâne cifra de mai sus.',
     );
   }
+  breakdown.push(...withholding.notes);
 
   return {
     value,
@@ -1068,7 +1240,7 @@ function calcCassLadder(rule: FiscalRule, input?: CalculatorInput): CalculatorRe
       ? {}
       : {
           retinutLaSursa: withheld.retinut,
-          dePlatit: payableAfterWithholding(value, withheld.retinut).dePlatit,
+          dePlatit: payableAfterWithholding(value, withheld.retinut, 'cass').dePlatit,
         }),
     // The base travels rather than being re-derived by the caller: the art. 174 alin. (7) lit. b) test
     // compares THIS number to 6 SM, and a quantity recomputed at the call site is a quantity that can

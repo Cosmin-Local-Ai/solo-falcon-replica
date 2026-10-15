@@ -291,7 +291,14 @@ describe('art. 170 alin. (5) and the two readings of art. 174 alin. (7) lit. b)'
     expect(result.value).toBe(lei(2_430));
     expect(result.retinutLaSursa).toBe(lei(4_860));
     expect(result.dePlatit).toBe(lei(0));
-    expect(result.breakdown.join('\n')).toMatch(/NU este tratat ca rambursare/);
+    // B-125: the wording changed from „recuperarea … nu este modelată de aplicație” — which implied a route
+    // the app had simply not built — to what research/52 §Q4 established: there is no route. The assertion
+    // moved with the copy, and now pins the denial itself rather than the absence of a model.
+    const text = result.breakdown.join('\n');
+    expect(text).toMatch(/Excesul NU se restituie/);
+    expect(text).toMatch(/art\. 174 alin\. \(12\)/);
+    expect(text).toMatch(/art\. 174\u00b9 alin\. \(12\).*\(14\)-\(18\)/s);
+    expect(text).toMatch(/nu există deci nicio cale de restituire/);
   });
 
   it('where the DPI income is exempt under art. 154 alin. (1) lit. h¹), the payer has nothing to withhold', () => {
