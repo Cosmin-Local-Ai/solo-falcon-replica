@@ -82,6 +82,21 @@ export const dashboard = {
       notOneFormLine:
         'Suma nu corespunde unei singure rubrici din decontul de TVA: o parte din ea se declară la totalul taxei deductibile și o parte la rubricile de regularizări, pentru că limitarea de 50 % pentru vehicule și cota de deducere se aplică parțial în interiorul și parțial în afara rubricilor de bază.',
       claimable: 'TVA pe care o poți deduce în perioada afișată',
+      /**
+       * B-114 — the figure the published sources print beside the deductible one: research/47 §101-103
+       * gives a vehicle line as „TVA deductibilă 10.500" and „TVA nedeductibilă 10.500". The engine
+       * already had a field for it and reported 0 lei for a line under the art. 298 alin. (1) 50 %
+       * restriction, because that field counted only lines decided at a full zero. A person shown 0 lei
+       * reasonably concludes the restriction never applied to them. It did.
+       */
+      nonRecoverable: 'TVA nedeductibilă — partea din taxa achizițiilor pe care legea nu îți permite să o deduci',
+      /**
+       * What the figure is not, said beside the figure rather than buried: it is measured per line by the
+       * same rule that produced the deductible half, it excludes amounts whose recoverability is not yet
+       * decided, and it is not added to the deductible expense — that question is B-87 and is still open.
+       */
+      nonRecoverableNote:
+        'Suma este calculată înregistrare cu înregistrare, din aceeași prevedere care stabilește partea deductibilă: o limitare de 50 % dă jumătate deductibilă și jumătate nedeductibilă, iar o prevedere care interzice deducerea dă toată taxa ca nedeductibilă. Rămân în afara sumei taxele a căror deducibilitate nu este încă stabilită și cele amânate de TVA la încasare — pentru acelea aplicația nu știe încă dacă sunt pierdute. Suma nu este adăugată la cheltuiala deductibilă: dacă taxa nedeductibilă intră în cheltuială la un PFA nu este rezolvat în Titlul IV (research/35 §1.5, research/42 §10).',
       unresolvedLead: 'Rămân afara sumei, pentru că deductibilitatea nu este stabilită:',
       deferredLead: 'Amânate de regimul TVA la încasare până la plată:',
       zeroLead: 'Taxe pe care legea nu îți permite să le deduci:',

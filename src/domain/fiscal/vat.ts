@@ -41,7 +41,7 @@
  * - **The Titlul II ordering rule** (Norme pct. 16 alin. (3)) is quoted below as the corporate-only text
  *   that it is, per D-VAT-2, and is never applied to a PFA as if it governed Titlul IV.
  */
-import { addBani, isRon, lei, sumBani, type Bani, type Money } from '../money';
+import { addBani, isRon, lei, subBani, sumBani, type Bani, type Money } from '../money';
 import { applyRateDecimal } from '../money';
 import Decimal from 'decimal.js-light';
 
@@ -542,7 +542,24 @@ export interface InputVatDecision {
    * and the pro rata fall partly inside rd. 20-28 and partly outside it. 6g owns the form.
    */
   claimableTotal: Bani;
-  /** VAT decided non-recoverable on lines that entered the expense base — the B-87 amount, per line. */
+  /**
+   * B-114 — the VAT the rules deny, summed per line from the same rule that grants the claimable half.
+   *
+   * The published sources print this figure: research/47 §101-103 shows a vehicle line with
+   * „TVA deductibilă 10.500" **and** „TVA nedeductibilă 10.500". Before B-114 this total counted only
+   * lines decided at a hard `zero`, so a line under the art. 298 alin. (1) 50 % restriction contributed
+   * nothing and a surface reading it printed 0 lei beside a published 10.500 lei. A person reading 0
+   * concludes the restriction never applied, which is the opposite of what happened.
+   *
+   * **This is NOT `sum(tvaBani) − claimableTotal`.** The two are not complementary: an `unresolved` line
+   * carries VAT whose recoverability the app has not decided, and a `deferred` line carries VAT merely
+   * postponed by TVA la încasare. Subtracting would book both as lost. Each line is measured against the
+   * rule that decided it — see `lineNonRecoverableVat`.
+   *
+   * **This is also NOT the amount that enters the expense base.** That is B-87, still open (research/35
+   * §1.5, research/42 §10 gap 2: no Titlul IV ordering rule exists), and `applyVatToExpenseBase` reads the
+   * line outcomes itself rather than this total, so fixing the reporting figure cannot settle it silently.
+   */
   nonRecoverableTotal: Bani;
   unresolved: InputVatLine[];
   deferred: InputVatLine[];
@@ -579,6 +596,40 @@ function leiOf(amount: Money): Bani | null {
  */
 function floorPercent(amountBani: Bani, percent: number): Bani {
   return applyRateDecimal(amountBani, percent).toDecimalPlaces(0, Decimal.ROUND_FLOOR).toNumber() as Bani;
+}
+
+/**
+ * B-114 — the VAT one line loses, measured by the same rule that measured what it keeps.
+ *
+ * The instruction that decides a line's claimable half is the instruction that decides its loss, so the
+ * two come from one source instead of one being recovered from the other by subtraction:
+ *
+ * - **`claimable` with a fraction** — the rule grants `fraction` of the line, so it denies the remainder.
+ *   For art. 298 alin. (1) that is the half the published sources print as „TVA nedeductibilă". The floor
+ *   stays on the **claimable** side, exactly where `floorPercent` puts it, so the rounding residue falls
+ *   on the denied side and the two halves still sum to the line's VAT. Rounding a claim up would let the
+ *   app assert more than the law gives.
+ * - **`zero`** — the rule denies the whole line, so the whole of its VAT is lost.
+ * - **`unresolved`** — **nothing.** The app has not decided whether this VAT is recoverable. Calling it
+ *   lost would mint a non-recoverable amount the person may in fact be entitled to claim; the line is
+ *   listed on its own surface for exactly that reason.
+ * - **`deferred`** — **nothing.** TVA la încasare postpones the claim until the supplier is paid
+ *   (art. 297 alin. (2)-(3)). A deferral is a timing fact, not a denial.
+ *
+ * This is why the total is not `sum(tvaBani) − claimableTotal`: that subtraction sweeps the last two
+ * categories in, and art. 298 has cases — the alin. (3) exception categories, the alin. (2) size
+ * carve-out, the art. 300 pro rata — where claimable and non-recoverable are not complements at all.
+ */
+export function lineNonRecoverableVat(line: InputVatLine): Bani {
+  switch (line.outcome.kind) {
+    case 'claimable':
+      return subBani(line.tvaBani, floorPercent(line.tvaBani, line.outcome.fraction * 100));
+    case 'zero':
+      return line.tvaBani;
+    case 'unresolved':
+    case 'deferred':
+      return lei(0);
+  }
 }
 
 export interface InputVatExpenseRecord {
@@ -823,9 +874,9 @@ export function decideInputVat(input: InputVatInput): InputVatDecision {
     .filter((l) => l.outcome.kind === 'claimable')
     .reduce((acc, l) => addBani(acc, floorPercent(l.tvaBani, (l.outcome as { fraction: number }).fraction * 100)), lei(0));
 
-  const nonRecoverable = lines
-    .filter((l) => l.outcome.kind === 'zero')
-    .reduce((acc, l) => addBani(acc, l.tvaBani), lei(0));
+  // B-114 — each line's loss is measured by the rule that decided it, never by subtracting the claimable
+  // total from the VAT total. See `lineNonRecoverableVat` for why the two are not complements.
+  const nonRecoverable = lines.reduce((acc, l) => addBani(acc, lineNonRecoverableVat(l)), lei(0));
 
   return {
     fiscalYear,

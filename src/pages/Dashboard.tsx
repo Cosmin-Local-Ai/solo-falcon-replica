@@ -362,6 +362,19 @@ export default function DashboardPage() {
                         <strong>{formatBaniRON(data.inputVat.claimableTotal)}</strong>
                       </p>
                       <p className="hint">{dashboardCopy.estimate.inputVat.notOneFormLine}</p>
+                      {/* B-114 — the published sources print a non-recoverable figure beside the deductible
+                          one („TVA deductibilă 10.500 / TVA nedeductibilă 10.500", research/47 §101-103).
+                          It goes here, next to the figure it is the other half of, because a person shown
+                          only the deductible half and no loss reads the 50 % restriction as never having
+                          applied. It is never added to the tax figure and never added to the expense base:
+                          the second of those is B-87 and is still open, which the note says out loud. */}
+                      <p className="hint">{dashboardCopy.estimate.inputVat.nonRecoverable}</p>
+                      <p className="mono">
+                        <strong data-testid="input-vat-non-recoverable">
+                          {formatBaniRON(data.inputVat.nonRecoverableTotal)}
+                        </strong>
+                      </p>
+                      <p className="hint">{dashboardCopy.estimate.inputVat.nonRecoverableNote}</p>
                       {/* B-94 — the sentence above names the 50 % cut, so the cut's status goes next to it:
                           the domestic rule has no end date, the EU authorisation above it does, and the
                           replacement is proposed but not adopted **as of a stated date**. */}
