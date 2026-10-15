@@ -3,8 +3,8 @@
  * Consumes TaxInputsReference (derived.ts) + active rule release.
  * Domain purity: no React, DOM, localStorage, or store imports.
  */
-import type { FactState, PfaProfile } from './models';
-import { cassLadderForYear } from './models';
+import type { CassLadderYear, ContributionCategories, FactState, PfaProfile } from './models';
+import { CASS_LADDER_CATEGORIES, CASS_LADDER_CATEGORY_HAS_CAS, cassLadderForYear, ladderAmountFor } from './models';
 import type { FiscalRule, RuleRelease } from './fiscal/rules';
 import type { DepreciationLeg } from './estimateBasis';
 import type { TaxInputsReference } from './derived';
@@ -314,6 +314,16 @@ export type TaxEstimateResult =
       snapshot: TaxCalculationSnapshot;
       /** The bases the computation ran on, typed (not recoverable only from `lines` labels). */
       bases: TaxAmountBases;
+      /**
+       * B-129 / B-130 — which contribution CATEGORIES this year actually feeds, as facts.
+       *
+       * Not an amount and not persisted: it is the answer the threshold rows need and `bases` cannot
+       * give them, because `venitulNetDinActivitate = 0` is true both for a loss-making PFA (inside
+       * art. 148 alin. (1), below its entry condition) and for a landlord whose income never enters that
+       * article at all. The rows that read it are `CAS_MIN_BASE`, `CAS_TIER2_FLOOR`, `CASS_MIN_BASE` and
+       * `CASS_MAX_BASE`.
+       */
+      contributionCategories: ContributionCategories;
       lossCarryForward?: FiscalLossCarryForward;
     }
   | { status: 'review_required'; reason: string; lines: CalculationLine[] };
@@ -716,7 +726,13 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // engine's record set entirely, so the ladder amount is the only DPI quantity the engine can see. Pinned
   // in `tax.dpiCas.test.ts`, because a future stage that routes recorded DPI into the engine has to come
   // and break that test on purpose.
-  const dpiNet = cassLadderForYear(inputs.cassLadderYears, inputs.fiscalYear)?.proprietateIntelectuala ?? null;
+  const ladderYear = cassLadderForYear(inputs.cassLadderYears, inputs.fiscalYear);
+  const dpiNet = ladderYear?.proprietateIntelectuala ?? null;
+  // B-129 / B-130 — the category facts, produced here once from the same two inputs the contribution
+  // arithmetic above just consumed. The threshold rows read these instead of re-reading the leg list,
+  // because `net-income = 0` cannot tell a loss-making PFA from a landlord, and the law treats them
+  // differently: one is under the art. 148 alin. (1) entry condition, the other is outside the article.
+  const contributionCategories = contributionCategoriesFor(legs, ladderYear);
   const casCumulatedNet = casCumulationBase(legs, dpiNet);
   // Two lines, because they are now two quantities. They are only printed when they differ from the net
   // the block above already shows, so a single-source year still says nothing it has no figure for.
@@ -848,7 +864,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // `taxable` and the lines unchanged; the reviewRequired case aborts with the reason and the partial
   // lines rather than reporting a wrong number.
   if (inputs.socialInsuranceStatus === 'obligatoriu') {
-    const ladderYear = cassLadderForYear(inputs.cassLadderYears, inputs.fiscalYear);
+    // B-129/B-130 hoisted `ladderYear` to where the DPI amount is read; this block reads the same one.
     // B-88 — the art. 85 net is a lit. e) amount this app COMPUTED, and art. 170 alin. (4) lit. c) names it
     // by article: „venitul net pentru veniturile din cedarea folosinței bunurilor, stabilite potrivit
     // art. 84-85”. So the ladder runs when either the person declared the six amounts or the engine holds
@@ -1045,6 +1061,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
       output: { total },
       snapshot: snap,
       bases: contributionBases(gross, deductibleBase, net, legs, cassLadderBase),
+      contributionCategories,
     };
   }
 
@@ -1156,6 +1173,7 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
       output: { total },
       snapshot: snap,
       bases: contributionBases(gross, deductibleBase, net, legs, cassLadderBase),
+      contributionCategories,
     };
     if (lossCarryForward) computed.lossCarryForward = lossCarryForward;
     return computed;
@@ -1182,7 +1200,39 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     output: { total },
     snapshot: snap,
     bases: contributionBases(gross, deductibleBase, net, legs, cassLadderBase),
+    contributionCategories,
   };
+}
+
+/**
+ * B-129 / B-130 — the ONE producer of the contribution-category facts the threshold rows read.
+ *
+ * `legs` answers art. 155 alin. (1) lit. b): a `ContributionLeg` is by definition one source of lit. b)
+ * income, and the method gate in `computeTaxEstimate` is what keeps an art. 84 / art. 84^1 / art. 85
+ * register out of that list — the comment on that gate already states the law: „The list is empty for this
+ * method, and that is a statement about the law, not an omission: CAS is not owed on rent income, and
+ * art. 170 alin. (1) does not reach it.”
+ *
+ * The ladder amounts answer the CAS question through `CASS_LADDER_CATEGORY_HAS_CAS`, so the per-category
+ * legal mapping lives in one table in `models.ts` and this function only applies it. That is deliberate:
+ * the six art. 155 alin. (1) lit. c)-h) categories do not share a CAS treatment, and a test must be able
+ * to pin each one separately.
+ *
+ * Exported so a test can drive one category at a time through the threshold layer without running a whole
+ * register — and so nothing else in the app has to re-derive it.
+ */
+export function contributionCategoriesFor(
+  legs: readonly ContributionLeg[],
+  ladderYear: CassLadderYear | undefined,
+): ContributionCategories {
+  const independentActivity: FactState = legs.length > 0 ? 'da' : 'nu';
+  const ladderCarriesCas = CASS_LADDER_CATEGORIES.some(
+    (category) =>
+      CASS_LADDER_CATEGORY_HAS_CAS[category] === 'da' &&
+      (ladderAmountFor(ladderYear, category) ?? lei(0)) > lei(0),
+  );
+  const casBearing: FactState = independentActivity === 'da' || ladderCarriesCas ? 'da' : 'nu';
+  return { independentActivity, casBearing };
 }
 
 /**

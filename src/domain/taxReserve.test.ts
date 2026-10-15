@@ -32,6 +32,9 @@ function makeComputedEstimate(total: Bani): TaxEstimateResult {
     output: { total },
     snapshot: makeSnapshot(total),
     bases: { venitulBrut: total, cheltuieliDeductibile: lei(0), venitulNetDinActivitate: total },
+    // B-129/B-130 added this field to the computed result. The fixture is a sistem-real PFA with a net,
+    // which is the register shape where both category facts are 'da'.
+    contributionCategories: { independentActivity: 'da', casBearing: 'da' },
   };
 }
 

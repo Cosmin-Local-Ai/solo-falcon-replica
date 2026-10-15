@@ -562,6 +562,11 @@ export function getThresholdStatuses(
     // make every row `applicability: 'unknown'`, and `dashboard.test.ts` pins that the production
     // path never does that.
     profile: data.profile,
+    // B-129 / B-130: the category facts come from the engine that already computed the figures, not from a
+    // second reading of the register. When the engine declined there is no category answer and none is
+    // invented — the rows fall back to the base they were given (and become `review_required` without one).
+    contributionCategories:
+      estimate && estimate.status === 'computed' ? estimate.contributionCategories : undefined,
     measuredBasis: buildThresholdBasisProvenance(estimate),
   });
 }

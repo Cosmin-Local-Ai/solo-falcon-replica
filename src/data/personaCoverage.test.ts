@@ -47,6 +47,7 @@ import { contentCreatorPersona } from './personas/persona2ContentCreator';
 import { fixedInstant } from '../test/fixedInstant';
 import { pinClock, unpinClock } from '../test/clock';
 import { CASS_LADDER_CATEGORIES, type CassLadderCategory, type CassLadderYear } from '../domain/models';
+import { lei } from '../domain/money';
 import type { FiscalRegime } from '../domain/fiscal/rules';
 import { selectRuleSet } from '../domain/fiscal';
 import { selectApplicableRules } from '../domain/fiscal/select';
@@ -277,13 +278,20 @@ describe('step 11 — every CASS ladder category is entered by at least one pers
 });
 
 describe('step 11 — a persona that loads without changing a rung is not finished', () => {
-  it('each persona moves at least one threshold row onto its engaged side, or fires a flat-ratio / withholding line', async () => {
+  it('each persona moves at least one threshold row off its default answer, or fires a flat-ratio / withholding line', async () => {
     for (const p of PERSONAS) {
       const e = await evidenceForPersona(p);
+      // RE-PINNED by B-129/B-130. The predicate used to accept only `engaged`, which silently meant "this
+      // persona's numbers sit on the consequential side of a level". For the pensioner persona that is now
+      // false by law — art. 150 alin. (1) removes CAS entirely and art. 174 alin. (7) lit. c) removes the
+      // art. 174 alin. (6) top-up — and the engine now says so instead of reporting those levels as
+      // engaged. A row the law disapplies for this person is just as much a rung moved as one crossed, so
+      // the probe asks the question it always meant: did this persona's data change the app's answer?
       const moved =
         e.thresholds.some((t) => t.engaged) ||
+        e.thresholds.some((t) => t.applicability === 'not_applicable') ||
         e.lines.some((l) => l.includes('forfetare') || l.includes('reținut') || l.includes('reținută'));
-      expect(moved, `${p.id} changes no rung, no cap and no withholding state`).toBe(true);
+      expect(moved, `${p.id} changes no rung, no cap, no relief and no withholding state`).toBe(true);
     }
   });
 
@@ -292,6 +300,100 @@ describe('step 11 — a persona that loads without changing a rung is not finish
       const e = await evidenceForPersona(p);
       expect(e.computed, `${p.id} does not produce a computed estimate`).toBe(true);
     }
+  });
+});
+
+describe('B-129 / B-130 — the flat-ratio profiles: each minimum row agrees with the figure on its own line', () => {
+  /**
+   * The three profiles the persona run surfaced the defects on. All three let their register be determined
+   * under a flat ratio — art. 85 (7 camere), art. 84 (arendă / chirii), art. 84^1 (cedare cu reținere la
+   * sursă) — which is what makes the register supply no art. 155 alin. (1) lit. b) source at all.
+   *
+   * They are asserted one at a time, not as a group, because the point of the fix is that the verdict is
+   * per category: persona 6 declares art. 72/72¹/73 intellectual-property income, which IS inside the
+   * art. 148 alin. (3) CAS cumulation, and must therefore keep the CAS rows applicable while the other two
+   * lose them.
+   */
+  const FLAT_RATIO: PersonaId[] = ['short-term-host', 'long-term-landlord', 'passive-investor'];
+
+  async function evidence(personaId: PersonaId) {
+    const p = PERSONAS.find((x) => x.id === personaId)!;
+    pinClock(fixedInstant());
+    const est = await getTaxEstimate(p.data, AS_OF);
+    if (est.status !== 'computed') throw new Error(`${personaId}: the pipeline must compute, not refuse`);
+    return { est, rows: getThresholdStatuses(p.data, AS_OF, est) };
+  }
+
+  const lineStartingWith = (est: Awaited<ReturnType<typeof evidence>>['est'], prefix: string) =>
+    est.lines.find((l) => l.label.startsWith(prefix));
+
+  for (const personaId of FLAT_RATIO) {
+    it(`${personaId}: no lit. b) source, and the engine says so`, async () => {
+      const { est } = await evidence(personaId);
+      // The fact the rows read. `venitulNetDinActivitate` is 0 for all three, which is exactly why an
+      // amount could not carry this verdict — a loss-making PFA gives the same 0 and gets the opposite one.
+      expect(est.bases.venitulNetDinActivitate, personaId).toBe(lei(0));
+      expect(est.contributionCategories.independentActivity, personaId).toBe('nu');
+    });
+
+    it(`${personaId}: the CASS 6-SM row does not claim a top-up, and says which route the CASS on the line beside it came from`, async () => {
+      const { est, rows } = await evidence(personaId);
+      const row = rows.find((t) => t.thresholdId === 'CASS_MIN_BASE')!;
+      // B-130 reported `unknown`. The law is settled for these categories, so the honest verdict is
+      // `not_applicable`, with the article that limits art. 174 alin. (6) to the lit. b) base.
+      expect(row.applicability, personaId).toBe('not_applicable');
+      expect(row.engaged, personaId).toBe(false);
+      expect(row.status, personaId).toBe('ok');
+      expect(row.severity, personaId).toBe('none');
+      expect(row.applicabilityReason ?? '', personaId).toContain('art. 174 alin. (6)');
+      expect(row.applicabilityReason ?? '', personaId).toContain('art. 155 alin. (1) lit. b)');
+      expect(row.applicabilityReason ?? '', personaId).toContain('art. 170 alin. (2)-(4)');
+      expect(row.applicabilityReason ?? '', personaId).toContain('art. 174¹ alin. (1)');
+      // And the figure beside it really is a CASS liability — reached by the ladder, not by the top-up.
+      // A row that says "this minimum does not apply" next to a non-zero CASS is only honest if it names
+      // the other route, which is what the reason above does.
+      const ladderCass = lineStartingWith(est, 'CASS pe veniturile din art. 155 alin. (1) lit. c)-h)');
+      expect(ladderCass, `${personaId}: expected a lit. c)-h) CASS line`).toBeDefined();
+      expect(ladderCass!.value, personaId).toBeGreaterThan(lei(0));
+      expect(lineStartingWith(est, 'CASS (10%)')!.value, personaId).toBe(lei(0));
+    });
+  }
+
+  for (const personaId of (['short-term-host', 'long-term-landlord'] as const)) {
+    it(`${personaId}: the CAS rows do not assert a minimum for a contribution the law never charges`, async () => {
+      const { est, rows } = await evidence(personaId);
+      expect(est.contributionCategories.casBearing, personaId).toBe('nu');
+      expect(lineStartingWith(est, 'CAS (25%)')!.value, personaId).toBe(lei(0));
+      for (const id of ['CAS_MIN_BASE', 'CAS_TIER2_FLOOR']) {
+        const row = rows.find((t) => t.thresholdId === id)!;
+        expect(row.applicability, `${personaId}/${id}`).toBe('not_applicable');
+        expect(row.engaged, `${personaId}/${id}`).toBe(false);
+        expect(row.status, `${personaId}/${id}`).toBe('ok');
+        expect(row.severity, `${personaId}/${id}`).toBe('none');
+        expect(row.applicabilityReason ?? '', `${personaId}/${id}`).toContain('art. 148 alin. (1)');
+        expect(row.applicabilityReason ?? '', `${personaId}/${id}`).toContain('art. 137 alin. (1) lit. b) și b^1)');
+      }
+    });
+  }
+
+  it('passive-investor keeps the CAS rows applicable, because its art. 72/72¹/73 amount is inside art. 148 alin. (3)', async () => {
+    // The per-category half of the acceptance. This persona declares 30.000 lei of intellectual-property
+    // income, and B-112 stage 2 put that litera into the CAS cumulation — so the 12-SMN level IS in play,
+    // the measured amount is under it, and the CAS line of 0 is the row's own consequence, not a
+    // contradiction. A blanket "flat-ratio profiles get no CAS rows" would have been wrong here.
+    const { est, rows } = await evidence('passive-investor');
+    expect(est.contributionCategories.casBearing).toBe('da');
+    expect(lineStartingWith(est, 'CAS (25%)')!.value).toBe(lei(0));
+    const row = rows.find((t) => t.thresholdId === 'CAS_MIN_BASE')!;
+    expect(row.applicability).toBe('applicable');
+    expect(row.engaged).toBe(true);
+    expect(row.consequence).toContain('nu se datorează contribuția de asigurări sociale');
+    // KNOWN GAP, minted as B-133 and NOT fixed here: the row measures `net-income`, which is the art. 170
+    // alin. (1) (lit. b)) cumulation — 0 for this register — while `calcCas` measured on the art. 148
+    // alin. (3) cumulation, which includes the 30.000 lei of DPI. Same side of the 12-SMN floor, so the
+    // verdict and the figure agree; the amount beside the row is understated. Closing it needs a second
+    // amount concept in `FiscalBase`, which is the Phase 8 base-semantics surface, not B-129/B-130.
+    expect(lineStartingWith(est, 'Venit cumulat pentru CAS (art. 148 alin. (3)')!.value).toBe(lei(30_000));
   });
 });
 

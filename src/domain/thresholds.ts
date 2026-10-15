@@ -1,6 +1,6 @@
 import type { FiscalRule } from './fiscal/rules';
 import { selectApplicableRules } from './fiscal/select';
-import type { PfaProfile } from './models';
+import type { ContributionCategories, PfaProfile } from './models';
 import {
   readCassExceptionFacts,
   readForeignSicknessInsuranceProved,
@@ -227,6 +227,16 @@ export interface ThresholdQuery {
    * comes back `unknown`.
    */
   profile?: PfaProfile;
+  /**
+   * B-129 / B-130 — which contribution CATEGORIES the taxpayer actually realises, as facts, produced by
+   * the engine (`tax.ts contributionCategoriesFor`) and threaded through by the production caller.
+   *
+   * This is the fact `bases['net-income']` cannot carry. A measured 0 is the same number for a PFA that
+   * made a loss and for a landlord whose income never enters art. 148 / art. 170 alin. (1) at all, and the
+   * law answers those two taxpayers differently. Absent means the caller did not ask the engine, and then
+   * the row may not claim the level is disapplied either — absence of the fact never becomes a verdict.
+   */
+  contributionCategories?: ContributionCategories;
   /**
    * TASK 4 — how each supplied amount was produced (annual projected vs actuals vs YTD). Absent for
    * a supplied base renders as `unattributed`; a base that was never supplied renders as `unmeasured`.
@@ -484,6 +494,50 @@ export interface ApplicabilityDecision {
 }
 
 /**
+ * B-129 — the CAS levels are stated for categories this register does not feed.
+ *
+ * CF art. 148 alin. (1) makes the 12-SMN figure the condition for the CAS obligation to exist, and it
+ * states that condition only for „veniturile prevăzute la art. 137 alin. (1) lit. b) și b^1)”; alin. (3)
+ * cumulates the nets of art. 68, 68³, 69, art. 68¹ and art. 72/72¹/73
+ * (`docs/ai/research/07_cas_2026_research.md`, verbatim). Art. 83 alin. (1) puts *cedarea folosinței
+ * bunurilor* outside independent-activity income in its own words — „altele decât veniturile din
+ * activitățile independente” (`docs/ai/research/33_income_categories_and_vat_periodicity.md:76`) — and ANAF
+ * DGRFP Ploiești states the result operationally for art. 85 in FY2026: „Nu se datorează CAS”
+ * (`docs/ai/research/47_published_worked_examples_fy2026.md:71`).
+ *
+ * So the 12-SMN and 24-SMN levels are not “not crossed” here — they have no obligation to gate. That is a
+ * different verdict from the one art. 148 alin. (1) gives a PFA under the floor, and it is the verdict
+ * B-129 was missing.
+ */
+const CAS_CATEGORY_NOT_APPLICABLE =
+  'Niciun venit din acest registru nu aparține unei categorii care să datoreze contribuție de asigurări sociale: art. 148 alin. (1) din Codul fiscal raportează pragurile de 12 și 24 de salarii minime brute exclusiv pentru „veniturile prevăzute la art. 137 alin. (1) lit. b) și b^1)", iar alin. (3) cumulează veniturile nete din art. 68, 68³, 69, art. 68¹ și art. 72/72¹/73. Registrul nu oferă nicio astfel de sursă, deci pragul nu are nicio obligație să o decidă — nu se datorează contribuția de asigurări sociale pentru aceste venituri, iar opțiunea de la art. 148 alin. (4) nu este nici ea deschisă, pentru că persoana nu realizează venituri din categoriile articolului. ANAF DGRFP Ploiești, FY2026, pliant pentru art. 85: „Nu se datorează CAS".';
+
+/**
+ * B-130 — the 6-SMN floor belongs to the lit. b) limb, and this taxpayer has no lit. b) base.
+ *
+ * CF art. 174 alin. (6) tops up „baza de calcul prevăzută la art. 170 alin. (1)”, cumulată „din una sau
+ * mai multe surse de venit din cele prevăzute la art. 155 alin. (1) lit. b)”, până la 6 salarii minime
+ * brute (`docs/ai/research/41_other_income_flags_and_cass_ladder.md:66`, verbatim). Art. 170 alin. (1) has
+ * no floor at all, only the 72-SMN ceiling (`docs/ai/research/50_cass_cas_verbatim_fy2026.md:20`). The
+ * categories art. 155 alin. (1) lit. c)-h) — where *cedarea folosinței bunurilor* sits at lit. e) — run on
+ * the art. 170 alin. (2)-(4) ladder instead, where 6 SMN is a condition precedent, not a top-up: below it
+ * no CASS is owed at all (`docs/ai/research/41_other_income_flags_and_cass_ladder.md:55`).
+ *
+ * B-130 reported this row as `unknown`. The law is settled for these categories, so `unknown` was itself
+ * the defect.
+ */
+const CASS_TOPUP_CATEGORY_NOT_APPLICABLE =
+  'Pragul de 6 salarii minime brute de pe acest rând este cel al art. 174 alin. (6) din Codul fiscal, care măsoară „baza de calcul prevăzută la art. 170 alin. (1)", adică veniturile din art. 155 alin. (1) lit. b) — activitățile independente. Registrul nu oferă nicio sursă de lit. b), deci alin. (6) nu are nicio bază să o completeze până la 6 salarii minime brute. CASS pentru aceste venituri nu se stabilește pe art. 170 alin. (1), ci pe scara art. 170 alin. (2)-(4) peste cumulul prevăzut la art. 170 alin. (4) pentru art. 155 alin. (1) lit. c)-h), cu cota de la art. 156 aplicată bazei de la art. 170 alin. (3) — art. 174¹ alin. (1). Iar sub 6 salarii minime brute cumulate în categoriile alin. (2) nu se datorează nicio contribuție de asigurări de sănătate: alin. (2) este condiția de existență a obligației, nu o cotă.';
+
+/**
+ * B-130 sibling — the 72-SMN ceiling measures the same art. 170 alin. (1) base, so with no lit. b) source
+ * it has nothing to cap. Same fact, same citation, different sentence because the row answers a different
+ * question.
+ */
+const CASS_CAP_CATEGORY_NOT_APPLICABLE =
+  'Plafonul de 72 de salarii minime brute este cel al art. 170 alin. (1) din Codul fiscal și măsoară baza din veniturile art. 155 alin. (1) lit. b) — activitățile independente. Registrul nu oferă nicio sursă de lit. b), deci plafonul nu are nicio bază să o limiteze. Veniturile din categoriile art. 155 alin. (1) lit. c)-h) se stabilesc pe scara art. 170 alin. (2)-(4), care nu are plafon.';
+
+/**
  * TASK 4 — decide whether a threshold applies to THIS profile, from the profile / fiscal context.
  *
  * Nothing here is assumed. Where the profile lacks the fact a rule needs, the answer is `unknown`
@@ -497,6 +551,7 @@ export function applicabilityFor(
   profile: PfaProfile | undefined,
   measured: Bani | undefined,
   thresholdValue: Bani,
+  categories?: ContributionCategories,
 ): ApplicabilityDecision {
   if (!profile) {
     return {
@@ -508,6 +563,13 @@ export function applicabilityFor(
 
   switch (spec.applicabilityTest) {
     case 'cas-art-150-1': {
+      // B-129 — the category question comes before the exception question. Art. 148 alin. (1) states the
+      // 12-SMN level only for the categories it names; if the register feeds none of them, the level has
+      // no obligation to gate and no exception needs to be reached. This is a different verdict from
+      // "under the floor", and it is the one that agrees with the CAS line of 0 beside the row.
+      if (categories?.casBearing === 'nu') {
+        return { applicability: 'not_applicable', reason: CAS_CATEGORY_NOT_APPLICABLE };
+      }
       // CF art. 150 alin. (1): pensioners and people insured in their own social insurance systems
       // owe NO CAS on art. 137 alin. (1) lit. b)/b^1) income. `salaryStatus` is deliberately NOT
       // consulted: art. 150 alin. (2) exempts salary earners only for lit. b^1), never for lit. b).
@@ -526,6 +588,21 @@ export function applicabilityFor(
 
     case 'cass-art-174-6':
     case 'cass-art-170-1': {
+      // B-130 — both rows measure the art. 170 alin. (1) base, and that base exists only where the person
+      // realises art. 155 alin. (1) lit. b) income. With no lit. b) source neither the art. 174 alin. (6)
+      // top-up nor the 72-SMN ceiling has anything to act on, and that is settled by the text of the
+      // articles — it is not the undecided art. 174 alin. (2) vs alin. (6) question below, which is why
+      // this check runs before it. A profile that never had a lit. b) base must not be reported as
+      // undecided for the reason a loss-making PFA is.
+      if (categories?.independentActivity === 'nu') {
+        return {
+          applicability: 'not_applicable',
+          reason:
+            spec.applicabilityTest === 'cass-art-170-1'
+              ? CASS_CAP_CATEGORY_NOT_APPLICABLE
+              : CASS_TOPUP_CATEGORY_NOT_APPLICABLE,
+        };
+      }
       // B-19: the stored CASS status flag names the art. 154 alin. (1) categories, a closed list none
       // of which covers a PFA on independent-activity income. The engine marks that zero `reviewRequired`
       // rather than presenting it as an established exemption, and the threshold layer must not be more
@@ -827,7 +904,13 @@ export function computeThresholds(
     const computedFrom = computedLeiFor(spec, thresholdValue, smRef, vintages, query.taxYear);
 
     const currentValue = query.bases[spec.requiredFiscalBase];
-    const applicability = applicabilityFor(spec, query.profile, currentValue, thresholdValue);
+    const applicability = applicabilityFor(
+      spec,
+      query.profile,
+      currentValue,
+      thresholdValue,
+      query.contributionCategories,
+    );
     if (currentValue === undefined) {
       // A base mismatch used to `continue`, silently deleting a threshold card. It is now a
       // loud row: the threshold is citable, but it cannot be measured, so no verdict is faked.
@@ -867,8 +950,19 @@ export function computeThresholds(
     }
 
     const distance = subBani(currentValue, thresholdValue);
-    const engaged = engagedSide(spec.type, distance);
-    const status = statusFor(spec.type, distance, warningDistance, spec.kind);
+    // B-129 / B-130 — a level the law does not apply to this taxpayer is not engaged, and it does not
+    // warn. `engagedSide` answers an arithmetic question (which side of the number is the measured value
+    // on) and `statusFor` answers what a crossing would mean *for a level that is in play*; neither of
+    // them knows that the level was never in play. Before this, a row could read `engaged: true`,
+    // `status: 'warning'` and `applicability: 'not_applicable'` at once — B-129 is exactly that row: a
+    // 12-SMN floor reported as engaged against a measured 0, beside a CAS line of 0. `severityFor`
+    // already returned `none` for such a row, so the flags and the severity disagreed with each other;
+    // this makes the row state one thing.
+    const inapplicable = applicability.applicability === 'not_applicable';
+    const engaged = inapplicable ? false : engagedSide(spec.type, distance);
+    const status: ThresholdStatus = inapplicable
+      ? 'ok'
+      : statusFor(spec.type, distance, warningDistance, spec.kind);
     results.push({
       thresholdId: spec.thresholdId,
       type: spec.type,

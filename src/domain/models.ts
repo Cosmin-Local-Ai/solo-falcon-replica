@@ -400,6 +400,68 @@ export const CASS_LADDER_CATEGORY_NAMES: Record<CassLadderCategory, string> = {
 };
 
 /**
+ * B-129 / B-130 — for each of the six ladder categories, whether that SAME income also carries **CAS**.
+ *
+ * The six are CF art. 155 alin. (1) lit. c)-h): they are the **CASS** list. CAS has a different, closed
+ * list. CF art. 148 alin. (1) states the 12-SMN and 24-SMN levels only for „veniturile prevăzute la
+ * art. 137 alin. (1) lit. b) și b^1)" (`research/07_cas_2026_research.md`, verbatim), and art. 148 alin.
+ * (3) cumulates the nets from art. 68, 68³, 69, art. 68¹ and art. 72/72¹/73.
+ * `research/33_income_categories_and_vat_periodicity.md:48` states the same finding in one line: „art. 155
+ * is the CASS list … the parallel CAS list is art. 137 alin. (1)”. So the six categories **do not share the
+ * CAS treatment**, and the one of them that does carry CAS is intellectual property — exactly the litera
+ * B-112 stage 2 added to `casCumulationBase`.
+ *
+ * `cedarea_folosintei_bunurilor` is the category the flat-ratio registers produce — art. 84, art. 84^1 and
+ * art. 85, because art. 170 alin. (4) lit. c) names „venitul net pentru veniturile din cedarea folosinței
+ * bunurilor, stabilite potrivit art. 84-85” (`research/41_other_income_flags_and_cass_ladder.md:35`) — and
+ * art. 83 alin. (1) puts it outside independent-activity income in its own words: „altele decât veniturile
+ * din activitățile independente” (`research/33_income_categories_and_vat_periodicity.md:76`). ANAF DGRFP
+ * Ploiești's FY2026 art. 85 leaflet says the same operationally: „Nu se datorează CAS”
+ * (`research/47_published_worked_examples_fy2026.md:71`).
+ *
+ * A `FactState`, not a boolean: `unknown` stays available for a category whose CAS treatment a future
+ * fiscal year has not established, and a threshold row may never treat an unestablished category as
+ * CAS-bearing by default.
+ */
+export const CASS_LADDER_CATEGORY_HAS_CAS: Record<CassLadderCategory, FactState> = {
+  proprietate_intelectuala: 'da',
+  asociere_persoana_juridica: 'nu',
+  cedarea_folosintei_bunurilor: 'nu',
+  activitati_agricole: 'nu',
+  investitii: 'nu',
+  alte_surse: 'nu',
+};
+
+/**
+ * B-129 / B-130 — which contribution **categories** a computed year actually feeds, stated as facts
+ * rather than as amounts.
+ *
+ * These two facts exist because an amount cannot answer them. A `net-income` base of 0 is the same number
+ * for a PFA that made a loss and for a landlord whose income never enters the contribution base at all,
+ * and the law treats those two taxpayers differently: the first is below the art. 148 alin. (1) entry
+ * condition, the second is outside the article. B-129 is that confusion rendered — a 12-SMN floor reported
+ * as engaged against a measured 0, beside a CAS line of 0.
+ *
+ * Derived once, by `tax.ts contributionCategoriesFor`, from the same two inputs the contribution
+ * arithmetic already uses: the `ContributionLeg` list and the declared ladder amounts. A second producer
+ * would be the B-70 defect class — two derivations of one legal fact, free to drift.
+ */
+export interface ContributionCategories {
+  /**
+   * CF art. 155 alin. (1) lit. b) — venituri din activități independente (art. 67). This is the only
+   * category art. 170 alin. (1) measures, so it is also the only one the art. 174 alin. (6) top-up to
+   * 6 SMN can complete and the only one the 72-SMN ceiling caps.
+   */
+  independentActivity: FactState;
+  /**
+   * CF art. 148 alin. (1) și (3) — is there income in ANY category that carries CAS at all, i.e. a
+   * lit. b) source or an art. 72/72¹/73 intellectual-property amount? If not, the 12-SMN and 24-SMN
+   * levels decide nothing, because the obligation they gate never arises for this income.
+   */
+  casBearing: FactState;
+}
+
+/**
  * PG-6d (D-OTH-1) — the amounts the person **declared** for ONE fiscal year, one per ladder category.
  *
  * This is the shape DU 212 subsecțiunea 2.2 has: six per-category lines feeding one cumulated total

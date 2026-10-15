@@ -107,6 +107,9 @@ function taxComputed(total: Bani): TaxEstimateResult {
     output: { total },
     snapshot: undefined as unknown as TaxCalculationSnapshot,
     bases: { venitulBrut: total, cheltuieliDeductibile: lei(0), venitulNetDinActivitate: total },
+    // B-129/B-130 added this field to the computed result. This fixture is a sistem-real PFA with a net,
+    // so both category facts are 'da' — the same answer the engine gives for that shape of register.
+    contributionCategories: { independentActivity: 'da', casBearing: 'da' },
   };
 }
 

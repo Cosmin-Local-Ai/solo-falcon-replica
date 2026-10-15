@@ -19,7 +19,9 @@ import {
   type MeasuredBasis,
 } from './thresholds';
 import { measuredBasisLabels } from '../ui/copy';
-import type { PfaProfile } from './models';
+import type { CassLadderCategory, CassLadderYear, PfaProfile } from './models';
+import { CASS_LADDER_CATEGORIES, CASS_LADDER_CATEGORY_HAS_CAS } from './models';
+import { contributionCategoriesFor } from './tax';
 import { lei, type Bani } from './money'
 
 /**
@@ -837,13 +839,21 @@ describe('TASK 4 — severity, applicability and the measured basis', () => {
     expect(exempt.applicability).toBe('applicable');
   });
 
-  it('an inapplicable row cannot render as a breach even when its level is engaged', () => {
-    // The VAT profile is already registered (row not applicable) while the turnover is far above the
-    // plafon: the status may say the level was passed, the severity must still be none.
+  it('an inapplicable row is not engaged, does not warn, and cannot render as a breach', () => {
+    // RE-PINNED by B-129/B-130. This test used to assert `engaged: true` and let the status say the level
+    // was passed, on the argument that the arithmetic is arithmetic: the VAT profile is already registered
+    // (row not applicable) while the turnover sits far above the plafon. That is the same shape B-129 was
+    // minted for — a row whose flags assert a level is in play while the law says it never was — so the
+    // row now states one thing: not applicable, not engaged, `ok`, severity none. The measurement itself
+    // still travels, unchanged, and the plafon and the turnover stay visible.
     const row = byId(rowsFor({ ...APPLICABLE_PROFILE, vatRegistration: { status: 'inregistrat_art316' as const } }, lei(900000)), 'VAT_REGISTRATION');
-    expect(row.engaged).toBe(true);
     expect(row.applicability).toBe('not_applicable');
+    expect(row.engaged).toBe(false);
+    expect(row.status).toBe('ok');
+    expect(row.status).not.toBe('breached');
     expect(row.severity).toBe('none');
+    expect(row.currentValue).toBe(lei(900000));
+    expect(row.distance).toBe(lei(900000) - lei(395000));
   });
 
   it('no profile supplied → every row is unknown, never assumed applicable', () => {
@@ -949,6 +959,147 @@ describe('TASK 4 — severity, applicability and the measured basis', () => {
     }
     expect(specOf('CASS_MIN_BASE').applicabilityTest).toBe('cass-art-174-6');
     expect(specOf('CASS_MAX_BASE').applicabilityTest).toBe('cass-art-170-1');
+  });
+});
+
+describe('B-129 / B-130 — the minimum rows follow the category the law states them for', () => {
+  /**
+   * A ladder year that answers all six categories and pays exactly one of them, so each test below asks
+   * about ONE category and nothing else. The field map mirrors `ladderAmountFor` in `models.ts`; it is
+   * written here rather than imported because the domain has no writer-side map to reuse.
+   */
+  const FIELD_FOR: Record<CassLadderCategory, keyof CassLadderYear> = {
+    proprietate_intelectuala: 'proprietateIntelectuala',
+    asociere_persoana_juridica: 'asocierePersoanaJuridica',
+    cedarea_folosintei_bunurilor: 'cedareaFolosinteiBunurilor',
+    activitati_agricole: 'activitatiAgricole',
+    investitii: 'investitii',
+    alte_surse: 'alteSurse',
+  };
+
+  const yearPayingOnly = (category: CassLadderCategory, amount: Bani): CassLadderYear => {
+    const year: CassLadderYear = { fiscalYear: 2026 };
+    for (const c of CASS_LADDER_CATEGORIES) {
+      (year as unknown as Record<string, Bani | undefined>)[FIELD_FOR[c]] = c === category ? amount : lei(0);
+    }
+    return year;
+  };
+
+  /** Rows for a register that supplies no lit. b) leg and measured 0 — the flat-ratio shape. */
+  const rowsForCategories = (categories: ReturnType<typeof contributionCategoriesFor>) =>
+    computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, {
+      ...QUERY,
+      bases: allBases(lei(0)),
+      profile: APPLICABLE_PROFILE,
+      contributionCategories: categories,
+    });
+
+  it('the six ladder categories are not one verdict: exactly one of them carries CAS', () => {
+    // The point of the whole task. `CASS_LADDER_CATEGORIES` is the art. 155 alin. (1) lit. c)-h) list, and
+    // CAS has a different, closed list (art. 137 alin. (1) lit. b) și b^1)), cumulated by art. 148 alin. (3)
+    // over art. 68, 68³, 69, art. 68¹ and art. 72/72¹/73). Only intellectual property crosses over — the
+    // litera B-112 stage 2 put into `casCumulationBase`.
+    expect(CASS_LADDER_CATEGORIES).toHaveLength(6);
+    expect(CASS_LADDER_CATEGORY_HAS_CAS.proprietate_intelectuala).toBe('da');
+    for (const c of CASS_LADDER_CATEGORIES.filter((c) => c !== 'proprietate_intelectuala')) {
+      expect(CASS_LADDER_CATEGORY_HAS_CAS[c], c).toBe('nu');
+    }
+  });
+
+  for (const category of CASS_LADDER_CATEGORIES) {
+    it(`${category}: the CAS rows answer this category, not the profile's arithmetic`, () => {
+      const rows = rowsForCategories(contributionCategoriesFor([], yearPayingOnly(category, lei(30_000))));
+      for (const id of ['CAS_MIN_BASE', 'CAS_TIER2_FLOOR']) {
+        const row = byId(rows, id);
+        if (CASS_LADDER_CATEGORY_HAS_CAS[category] === 'da') {
+          // Intellectual property IS inside the art. 148 alin. (3) cumulation, so the level is in play and
+          // the honest answer is the ordinary one: measured 0 is under the 12-SMN entry condition, so no
+          // CAS is owed. `CAS_TIER2_FLOOR` is a `tier-floor` — engaged AT or ABOVE the rung — so at a
+          // measured 0 it is correctly not engaged; the two rows differ by arithmetic shape, not by law.
+          expect(row.applicability, id).toBe('applicable');
+          expect(row.engaged, id).toBe(id === 'CAS_MIN_BASE');
+          expect(row.applicabilityReason ?? '', id).toBe('');
+          continue;
+        }
+        expect(row.applicability, id).toBe('not_applicable');
+        expect(row.engaged, id).toBe(false);
+        expect(row.status, id).toBe('ok');
+        expect(row.severity, id).toBe('none');
+        // The verdict carries the article that says so — the one that names the categories the level is
+        // stated for — and not a bare "0".
+        expect(row.applicabilityReason ?? '', id).toContain('art. 148 alin. (1)');
+        expect(row.applicabilityReason ?? '', id).toContain('art. 137 alin. (1) lit. b) și b^1)');
+      }
+    });
+
+    it(`${category}: no ladder category creates the art. 170 alin. (1) base the 6-SM top-up measures`, () => {
+      // CF art. 174 alin. (6) tops up „baza de calcul prevăzută la art. 170 alin. (1)”, cumulată „din una
+      // sau mai multe surse de venit din cele prevăzute la art. 155 alin. (1) lit. b)”. All six ladder
+      // categories are lit. c)-h), so for every one of them the top-up has no base to complete — and the
+      // 72-SMN ceiling, which measures the same base, has nothing to cap.
+      const rows = rowsForCategories(contributionCategoriesFor([], yearPayingOnly(category, lei(30_000))));
+      const topUp = byId(rows, 'CASS_MIN_BASE');
+      expect(topUp.applicability).toBe('not_applicable');
+      expect(topUp.engaged).toBe(false);
+      expect(topUp.status).toBe('ok');
+      expect(topUp.severity).toBe('none');
+      expect(topUp.applicabilityReason ?? '').toContain('art. 174 alin. (6)');
+      expect(topUp.applicabilityReason ?? '').toContain('art. 155 alin. (1) lit. b)');
+      // And the row says where this person's CASS actually comes from, so it agrees with the CASS figure
+      // printed beside it instead of contradicting it.
+      expect(topUp.applicabilityReason ?? '').toContain('art. 170 alin. (2)-(4)');
+      expect(topUp.applicabilityReason ?? '').toContain('art. 174¹ alin. (1)');
+      const cap = byId(rows, 'CASS_MAX_BASE');
+      expect(cap.applicability).toBe('not_applicable');
+      expect(cap.applicabilityReason ?? '').toContain('art. 170 alin. (1)');
+    });
+  }
+
+  it('a lit. b) leg keeps every row applicable — the category check never reaches a PFA', () => {
+    // The other half of the fix: this is not "flat-ratio profiles get a different answer". A sistem-real
+    // register is a lit. b) source whichever way its net comes out, so both facts are 'da' and the rows
+    // behave exactly as they did before B-129.
+    const categories = contributionCategoriesFor([{ method: 'sistem-real', net: lei(0) }], undefined);
+    expect(categories).toEqual({ independentActivity: 'da', casBearing: 'da' });
+    const rows = rowsForCategories(categories);
+    expect(byId(rows, 'CAS_MIN_BASE').applicability).toBe('applicable');
+    expect(byId(rows, 'CAS_TIER2_FLOOR').applicability).toBe('applicable');
+    expect(byId(rows, 'CASS_MAX_BASE').applicability).toBe('not_applicable');
+    expect(byId(rows, 'CASS_MAX_BASE').applicabilityReason ?? '').toContain('art. 174 alin. (2)');
+  });
+
+  it('a zero-net PFA still gets the undecided art. 174 alin. (2) vs alin. (6) note, not a category verdict', () => {
+    // B-130 must not become a way of answering research 25 gap 2 by inference. A loss-making or zero-net
+    // PFA HAS a lit. b) base, so the genuinely unresolved question stays unresolved; only the taxpayer who
+    // never had a lit. b) base is answered, and answered from the text of art. 174 alin. (6).
+    const rows = rowsForCategories(contributionCategoriesFor([{ method: 'sistem-real', net: lei(0) }], undefined));
+    const topUp = byId(rows, 'CASS_MIN_BASE');
+    expect(topUp.applicability).toBe('unknown');
+    expect(topUp.applicabilityReason ?? '').toContain('Notă de interpretare');
+    expect(topUp.applicabilityReason ?? '').toContain('research 25');
+  });
+
+  it('a register with no leg and no ladder amount answers both facts as nu', () => {
+    // The B-88 invariant stated as a fact rather than as an empty array: an art. 84 / art. 84^1 / art. 85
+    // register supplies no lit. b) source, and nothing else fills one in.
+    expect(contributionCategoriesFor([], undefined)).toEqual({
+      independentActivity: 'nu',
+      casBearing: 'nu',
+    });
+  });
+
+  it('no category fact supplied never fabricates not_applicable', () => {
+    // Absence of the fact is not a verdict. A hand-built query that never asked the engine keeps the
+    // behaviour it had before: the rows are applicable on the profile facts alone, and the pensioner
+    // exception is still the only route to `not_applicable` for the CAS rows.
+    const rows = computeThresholds(PFA_2026_SYSTEM_REAL_PACKAGE, {
+      ...QUERY,
+      bases: allBases(lei(0)),
+      profile: APPLICABLE_PROFILE,
+    });
+    expect(byId(rows, 'CAS_MIN_BASE').applicability).toBe('applicable');
+    expect(byId(rows, 'CASS_MIN_BASE').applicability).toBe('unknown');
+    expect(byId(rows, 'CASS_MIN_BASE').applicabilityReason ?? '').toContain('Notă de interpretare');
   });
 });
 
