@@ -523,3 +523,76 @@ describe('B-103 — the panel headline describes the year the user actually has'
     expect(decontRows()).toHaveLength(8);
   });
 });
+
+/*
+ * B-64 (brief 73) — the FY2027 art. 324 alin. (5) notification on the declarations surface.
+ *
+ * The profile here is deliberately the one the VAT calendar answers nothing for: a PFA neînregistrată în
+ * scopuri de TVA has no art. 322 fiscal period, so `getVatObligations` used to return an empty list and the
+ * screen said "no obligations". That silence is the defect — `research/34` §Gaps-3: „otherwise the app
+ * silently misses a 2027 obligation for neplătitori de TVA”, and 392B is exactly the neînregistrate variant.
+ * The row must be dated, prospective, and cited to the suspension as corrected — OUG 115/2023 art. LXII, a
+ * modification note — never to art. 324 alin. (6), which is the international bus-ticket notification.
+ */
+describe('B-64 — the 392B notification reaches the person it is owed by', () => {
+  function renderNeinregistrata(overrides: Record<string, unknown> = {}) {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        ...seedData,
+        version: CURRENT_DATA_VERSION,
+        profile: {
+          ...seedData.profile,
+          fiscalYear: 2026,
+          vatRegistration: { status: 'scutit_art310' },
+          vatPeriodicityYears: [],
+          ...overrides,
+        },
+      }),
+    );
+    return render(<StoreProvider><Declarations /></StoreProvider>);
+  }
+
+  it('shows the FY2027 notification with its 25 februarie 2028 term, for a profile with no VAT calendar at all', () => {
+    renderNeinregistrata();
+    const row = document.querySelector('[data-obligation-id="notificare-392b-2027"]');
+    expect(row).not.toBeNull();
+    expect(row!.textContent).toContain('Notificare scrisă (formular 392B)');
+    // The term cell is rendered by `formatRoCalendarDate`, so the date appears in the app's own format.
+    expect(row!.textContent).toContain('25.02.2028');
+    expect(row!.textContent).toContain('art. 324 alin. (5)');
+  });
+
+  it('gives the notification no payment date, and says why in the cell', () => {
+    renderNeinregistrata();
+    const row = document.querySelector('[data-obligation-id="notificare-392b-2027"]')!;
+    expect(row.textContent).toContain('fără sumă de plată');
+    // The blanket "payment the same day" line no longer claims a payment exists for every row.
+    expect(document.body.textContent).toContain('nu produce nicio sumă de plată');
+  });
+
+  it('cites the suspension as OUG 115/2023 art. LXII and refuses the art. 324 alin. (6) error on screen', () => {
+    renderNeinregistrata();
+    const row = document.querySelector('[data-obligation-id="notificare-392b-2027"]')!;
+    expect(row.textContent).toContain('OUG 115/2023 art. LXII');
+    expect(row.textContent).toContain('notă de modificare');
+    expect(row.textContent).toContain('bilete pentru transportul rutier internațional de persoane');
+    // The re-check date travels with the absence finding, because an undated absence is not a finding.
+    expect(row.textContent).toContain('Se re-verifică până la 2027-01-31');
+  });
+
+  it('is not a debt of this year: the row names the conditions the app cannot check for 2027', () => {
+    renderNeinregistrata();
+    const row = document.querySelector('[data-obligation-id="notificare-392b-2027"]')!;
+    expect(row.textContent).toContain('Nu este o datorie a anului curent');
+    expect(row.textContent).toContain('31 decembrie');
+    expect(row.textContent).toContain('300.000');
+  });
+
+  it('shows no 392B row for a person înregistrată în scopuri de TVA — they owe the alin. (4) variant', () => {
+    // The seed profile is `inregistrat_art316`, which is also what the rest of this file renders. If a
+    // 392B row ever appears there, the gate has widened past the half of art. 324 this app models.
+    renderWithFiling();
+    expect(document.querySelector('[data-obligation-id^="notificare-392b-"]')).toBeNull();
+  });
+});

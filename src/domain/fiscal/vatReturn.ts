@@ -54,6 +54,10 @@ import type {
   VatPeriodicity,
   VatPeriodicityFacts,
 } from './vatPeriodicity';
+// B-64 — the art. 324 notification is gated on the VAT registration state, and `VatRegistrationStatus` is
+// the vocabulary that state already has. It is imported, not restated: a second spelling of the six states
+// is the B-70 defect class, and `research/42` §11.2 is explicit that `vatExempt` expressed none of them.
+import type { VatRegistrationStatus } from './vat';
 
 // ── 1. The fiscal period ─────────────────────────────────────────────────────────
 
@@ -214,7 +218,7 @@ export function aicFlipForQuarter(year: number, quarter: number, monthOfExigibil
 
 // ── 2. The three obligations ─────────────────────────────────────────────────────
 
-export type VatObligationKind = 'decont' | 'mentiuni_annuale' | 'mentiuni_achizitie';
+export type VatObligationKind = 'decont' | 'mentiuni_annuale' | 'mentiuni_achizitie' | 'notificare_art324';
 
 export interface VatObligation {
   /** Stable id, used as the row key and as the join to a filing record. */
@@ -224,8 +228,14 @@ export interface VatObligation {
   year: number;
   /** The term itself. */
   dueOn: string;
-  /** art. 326 alin. (1): the payment is due the same day as the filing. */
-  paymentDueOn: string;
+  /**
+   * art. 326 alin. (1): the payment is due the same day as the filing.
+   *
+   * **Optional, because not every obligation in this union produces a sum to pay.** The art. 324 alin. (5)
+   * notification (B-64) is a written notice with no tax figure behind it; giving it a payment date equal to
+   * its term would put a lei amount in front of a person who owes none.
+   */
+  paymentDueOn?: string;
   citation: string;
   /** What the obligation IS, in Romanian. */
   label: string;
@@ -235,6 +245,12 @@ export interface VatObligation {
   holidayCaveat?: string;
   /** Set when an exception in the article could not be checked against the record. */
   exceptionNote?: string;
+  /**
+   * Set when whether the obligation exists at all rests on a **dated legal status the app checked once and
+   * has to check again** — B-64's suspension is that case. Carried on the row rather than left in a source
+   * comment, because an absence finding with no date on it is not a finding.
+   */
+  statusNote?: string;
 }
 
 /** The months a fiscal period spans, as inclusive month numbers within its own year. */
@@ -453,6 +469,156 @@ export function aicMentiuniObligation(input: {
       `Termenul a fost numărat sărind doar sâmbăta și duminica (${skippedWeekendDays} zile); aplicația nu are `
       + 'nicio listă de sărbători legale, iar Reg. (CEE, Euratom) 1182/71 art. 2 alin. (2) definește ziua '
       + 'lucrătoare ca orice zi care nu este sărbătoare legală, duminică sau sâmbătă. Verifică sărbătorile.',
+  };
+}
+
+// ── 2d. B-64 — the art. 324 written notification, and the suspension that hides it ──────────
+
+/**
+ * The status of the CF art. 324 alin. (4)-(6) written notifications, as data rather than as prose — the
+ * same shape `fiscal/vat.ts` uses for the art. 298 derogation, for the same reason: every date and every
+ * citation is interpolated from here, so no surface can restate one wrongly.
+ *
+ * **The citation this register used to get wrong, and how.** `research/32` P3 A #17 recorded the suspension
+ * as **art. 324 alin. (6)**. It is not. `research/35` §4.1 reads the current text: alin. (4) is the
+ * notification for persons **înregistrate** în scopuri de TVA, alin. (5) is the one for persons
+ * **neînregistrate** — this profile's variant — and **alin. (6) is the international bus-ticket
+ * notification** („suma totală a veniturilor obținute din vânzarea de bilete pentru transportul rutier
+ * internațional de persoane cu locul de plecare din România”). The suspension is **OUG 115/2023 art. LXII**,
+ * which the ANAF consolidation reproduces as a *modification note* under art. 324, not as article text.
+ * `research/35` §4.2 draws the lesson in the register's own words: „the consolidation's modification notes
+ * are not the article text”. This object exists so the corrected reading is the only one a surface can
+ * reach.
+ *
+ * **The threshold is 300.000 lei, not 220.000** (`research/35` §4.3), and it is tied to the art. 310 alin. (2)
+ * turnover — **not** to the 395.000-lei art. 310 alin. (1) plafon that OG 22/2025 introduced. Two different
+ * numbers in two different articles, and conflating them would set the wrong duty for the wrong people.
+ */
+export const VAT_ART324_NOTIFICATION_STATUS = {
+  /** CF art. 324 is „Decontul special de taxă și alte declarații”; alin. (1)-(3) are the decont, alin. (4)-(6) the „alte declarații”. */
+  articleForUnregistered: 'art. 324 alin. (5)',
+  /** The variant this profile is in. 392A is the înregistrate variant under alin. (4). */
+  form: '392B',
+  formOrder: 'OPANAF nr. 522/2016 din 26 ianuarie 2016',
+  /** lei. `research/35` §4.3 — not 220.000, and not the 395.000-lei art. 310 alin. (1) plafon. */
+  thresholdLei: 300_000,
+  /** The turnover the alineat measures — Norme Titlului VII pct. 104 alin. (5). */
+  turnoverScope:
+    'livrările de bunuri și prestările de servicii în interiorul țării și, după caz, achizițiile efectuate din țară (art. 310 alin. (2))',
+  /** The term, expressed as the article expresses it; the year is supplied by the caller. */
+  term: 'până la data de 25 februarie inclusiv a anului următor',
+  suspension: {
+    act: 'OUG 115/2023',
+    article: 'art. LXII',
+    from: '2024-01-01',
+    through: '2026-12-31',
+    /**
+     * The suspension is a **modification note** in the ANAF consolidation, not the text of art. 324. The
+     * flag is here because that distinction is the exact error this register already made once.
+     */
+    isArticleText: false,
+    quote:
+      'Aplicarea prevederilor art. 324 alin. (4)-(6) din Legea nr. 227/2015, cu modificările și completările '
+      + 'ulterioare, se suspendă începând cu data de 1 ianuarie 2024 și până la data de 31 decembrie 2026 inclusiv.',
+  },
+  /** What alin. (6) actually says — recorded so the wrong citation cannot be reintroduced. */
+  alinSixIsAbout:
+    'notificarea veniturilor din vânzarea de bilete pentru transportul rutier internațional de persoane, nu suspendarea',
+  /**
+   * Absence finding, with its own date. `research/35` §4.5 and §Gaps-3: the consolidation still carries the
+   * suspension note with its 31.12.2026 end date and no later instrument, and secondary press confirms
+   * resumption. **That is absence of evidence, not a confirmation that the duty revived.**
+   */
+  resuspendingInstrumentFound: false,
+  asOf: '2026-10-10',
+  /** The corpus's own re-check trigger: ianuarie 2027, before any 392B flow is trusted. */
+  recheckBy: '2027-01-31',
+  /** Norme Titlului VII pct. 104 alin. (3)-(4) — the two conditions the notification is not owed without. */
+  conditions: {
+    onlyForYearsWithOperations:
+      'Normele Titlului VII pct. 104 alin. (3): notificările se depun numai pentru anii în care persoana desfășoară operațiuni de natura celor pentru care există obligația notificării.',
+    statusAtYearEnd:
+      'Normele Titlului VII pct. 104 alin. (4): când statutul persoanei din punctul de vedere al înregistrării în scopuri de TVA s-a modificat în anul de referință, este relevant statutul de la data de 31 decembrie a anului de referință.',
+  },
+} as const;
+
+export type VatArt324NotificationStatus = typeof VAT_ART324_NOTIFICATION_STATUS;
+
+/** The registration states in which a person IS înregistrată în scopuri de TVA conform art. 316. */
+const VAT_REGISTERED_STATUSES: readonly VatRegistrationStatus[] = [
+  'inregistrat_art316',
+  'inregistrare_voluntara',
+  'plafon_depasit',
+  'reinregistrat',
+];
+
+/**
+ * B-64 — the art. 324 alin. (5) written notification (formular 392B) for a reference year.
+ *
+ * **Why this obligation is modelled at all when the app cannot compute the year it is for.** It should be
+ * surfaced, and it should say plainly that it is prospective. The alternative — silence — is the defect:
+ * `research/34` §Gaps-3 put it as „otherwise the app silently misses a 2027 obligation for neplătitori de
+ * TVA”, and 392B is exactly the *neînregistrate* variant this profile belongs to. What the app must not do
+ * is present it as a current-year debt, so three things are structural here rather than editorial:
+ *
+ * 1. the row is emitted only for a reference year the suspension does **not** cover — for FY2026 the answer
+ *    is that nothing is owed, and that is stated rather than left blank;
+ * 2. it carries **no `paymentDueOn`**: a notificare scrisă produces no sumă de plată, and giving it a
+ *    payment date would put a lei figure in front of a person who owes none;
+ * 3. both conditions that decide whether it exists at all are named on the row — the registration status
+ *    **at 31 decembrie** of the reference year (Norme pct. 104 alin. (4)) and the 300.000-lei threshold —
+ *    because the app holds neither for a year it has not seen.
+ *
+ * **Gating, and what is deliberately not emitted.** A person in one of `VAT_REGISTERED_STATUSES` owes the
+ * alin. (4) variant (392A), not 392B; this brief models the *neînregistrată* half, so no row is produced
+ * for a registrant rather than a row with the wrong form on it. `inregistrare_anulata` also produces
+ * nothing: such a person is outside the register, but which notification they owe turns on the status at
+ * 31 December of a year the app has no facts for, and guessing it is the B-79 class. An **undeclared**
+ * status does produce the row, and the row says the status is undeclared — silence there would be the
+ * missing-obligation defect again, while a row that names its own condition is a fact the person can check.
+ */
+export function art324NotificareObligation(input: {
+  /** The calendar year whose turnover is being notified — not the year the notification is filed in. */
+  referenceYear: number;
+  vatRegistration: VatRegistrationStatus | undefined;
+}): VatObligation | null {
+  const s = VAT_ART324_NOTIFICATION_STATUS;
+  // The suspension covers 2024, 2025 and 2026 inclusive. For those years the honest answer is that the
+  // notification is not owed, and `decontObligations` has no row to carry that answer — so nothing is
+  // emitted, exactly as `annualMentiuniObligation` returns null when the person does not owe the mențiuni.
+  if (input.referenceYear <= 2026) return null;
+  if (input.vatRegistration !== undefined && VAT_REGISTERED_STATUSES.includes(input.vatRegistration)) {
+    return null;
+  }
+  if (input.vatRegistration === 'inregistrare_anulata') return null;
+
+  const dueOn = `${input.referenceYear + 1}-02-25`;
+  const statusUndeclared = input.vatRegistration === undefined;
+  return {
+    id: `notificare-392b-${input.referenceYear}`,
+    kind: 'notificare_art324',
+    year: input.referenceYear,
+    dueOn,
+    // Deliberately absent: art. 326 alin. (1) ties payment to the deconturi and declarații that carry a
+    // tax; a written notification carries none.
+    citation: `CF ${s.articleForUnregistered}, formularul ${s.form}; ${s.formOrder}; suspendare: ${s.suspension.act} ${s.suspension.article}`,
+    label:
+      `Notificare scrisă ${s.form} pentru anul ${input.referenceYear}, ${s.term} ${input.referenceYear + 1}. `
+      + `Este obligația persoanei neînregistrate în scopuri de TVA conform art. 316 a cărei cifră de afaceri `
+      + `(${s.turnoverScope}) realizată la finele anului ${input.referenceYear} este sub ${s.thresholdLei.toLocaleString('ro-RO')} lei. `
+      + 'Nu este o datorie a anului curent și nu are nicio sumă de plată: este o notificare.',
+    exceptionNote:
+      `Se datorează numai dacă ambele condiții se împlinesc pentru ${input.referenceYear}: `
+      + `${s.conditions.statusAtYearEnd} ` + 'Aplicația nu are fapte despre un an pe care nu l-a văzut și nu completează niciuna dintre ele. ' +
+      `${s.conditions.onlyForYearsWithOperations}` +
+      (statusUndeclared
+        ? ' Inregistrarea în scopuri de TVA a persoanei nu este declarată în aplicație: rândul acesta este afișat pentru persoana neînregistrată, iar dacă situația ta este alta, obligația care te privește este cea de la art. 324 alin. (4) (formularul 392A), nu aceasta.'
+        : ''),
+    statusNote:
+      `Suspendarea nu este textul articolului: ${s.suspension.act} ${s.suspension.article} apare ca notă de modificare sub art. 324 în consolidarea ANAF, nu în alineatele articolului. ` +
+      `Textul: „${s.suspension.quote}” — deci pentru 2026 notificarea nu se datorează, iar pentru ${input.referenceYear} se reaplică. ` +
+      `Art. 324 alin. (6) este ${s.alinSixIsAbout}. ` +
+      `La data verificării (${s.asOf}) nu a fost găsit niciun instrument care să re-suspende obligația pentru ${input.referenceYear}; aceasta este absența unei dovezi, nu o confirmare. Se re-verifică până la ${s.recheckBy}.`,
   };
 }
 

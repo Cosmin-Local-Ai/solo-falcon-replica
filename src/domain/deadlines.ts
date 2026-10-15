@@ -413,12 +413,24 @@ export function vatReturnForDeadline(
  * rather than a rule id, because there is no rule behind these rows — see the note on
  * `DEADLINE_EVENT_TYPES`. `legalSource` is filled from the obligation's own citation, so a rendered term
  * always names the provision it came from; an obligation with no citation cannot be built.
+ *
+ * **B-64 — the art. 324 notification is filtered out here, and the reason is the shape of `Deadline`, not
+ * convenience.** A `Deadline` carries one `taxYear` for the whole batch, and every kind mapped here is a
+ * term **of the year being walked** (a Q4 decont's term falls in January, but it is still that year's
+ * return). The 392B row is a notification **for a year the app has no facts about**, filed two years after
+ * the profile's fiscal year. Minting an event type for it and stamping it with the walked `taxYear` would
+ * assert that a 2028 term belongs to 2026 — and would then feed it to the attention pipeline as an open
+ * obligation of this year, which is precisely the „current-year debt” framing the brief forbids. It is
+ * surfaced on the declarations calendar, where its own row states its year and its conditions. If it ever
+ * needs to reach the deadline card, the event type and the per-obligation year have to be designed
+ * together, not inferred from the `else` branch below.
  */
 export function vatObligationDeadlines(
   obligations: readonly VatObligation[],
   taxYear: number,
 ): Deadline[] {
-  return obligations.map((o) => {
+  const termsOfThisYear = obligations.filter((o) => o.kind !== 'notificare_art324');
+  return termsOfThisYear.map((o) => {
     const act = o.citation.split(';')[0]!.trim();
     return {
       deadlineId: o.id,

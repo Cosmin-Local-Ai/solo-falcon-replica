@@ -58,6 +58,7 @@ import {
   aicMentiuniObligation,
   alin8PremiseForYear,
   annualMentiuniObligation,
+  art324NotificareObligation,
   decontObligations,
   type AicFlip,
   type VatObligation,
@@ -649,13 +650,29 @@ export function getVatPeriodicity(data: AppData): VatPeriodicityOutcome {
  *   through that same declaration in order to return to the quarter;
  * - the art. 322 alin. (8) 5-working-day mențiuni for an intra-community goods acquisition.
  *
+ * **B-64 adds a fourth kind, and it is deliberately not gated on the periodicity.** The art. 324 alin. (5)
+ * written notification (formular 392B) is owed by a person **neînregistrată** în scopuri de TVA — the one
+ * profile this function otherwise answers nothing for, because art. 322 answers only a registrant. Leaving
+ * it behind the periodicity gate would reproduce the defect exactly as `research/34` §Gaps-3 framed it:
+ * „otherwise the app silently misses a 2027 obligation for neplătitori de TVA”. It is therefore computed
+ * before the gate and returned on both paths, and it is the only row a non-registrant ever sees here.
+ *
  * The alin. (7) split is applied only when the month of exigibility is declared; a bare `da` cannot pick
  * between lit. a), lit. b) and lit. c), and picking one would invent a fiscal period.
  */
 export function getVatObligations(data: AppData, asOfDate: string): VatObligation[] {
   const periodicity = getVatPeriodicity(data);
-  if (periodicity.kind !== 'derived' && periodicity.kind !== 'user_confirmed') return [];
   const year = data.profile.fiscalYear;
+  // The next reference year whose notification the suspension does not already cover. For a 2026 profile
+  // that is FY2027 — a year the app cannot compute for, which is why the row is written as a condition
+  // with a date, never as a debt.
+  const notificare = art324NotificareObligation({
+    referenceYear: year + 1,
+    vatRegistration: data.profile.vatRegistration?.status,
+  });
+  if (periodicity.kind !== 'derived' && periodicity.kind !== 'user_confirmed') {
+    return notificare ? [notificare] : [];
+  }
   const facts = (data.profile.vatPeriodicityYears ?? []).find((y) => y.year === year);
 
   const flips: AicFlip[] = [];
@@ -703,6 +720,8 @@ export function getVatObligations(data: AppData, asOfDate: string): VatObligatio
     }),
     ...(mentiuni ? [mentiuni] : []),
     ...extra,
+    // B-64 last, because it is the one row here that is not a term of this year.
+    ...(notificare ? [notificare] : []),
   ];
 }
 

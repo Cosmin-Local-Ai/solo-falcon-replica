@@ -19,6 +19,7 @@ import {
   aicFlipForQuarter,
   aicMentiuniObligation,
   annualMentiuniObligation,
+  art324NotificareObligation,
   D300_DEDUCTIBLE_LINES,
   decontObligations,
   decontTerm,
@@ -27,6 +28,7 @@ import {
   periodLabel,
   periodStart,
   unfiledFigureNote,
+  VAT_ART324_NOTIFICATION_STATUS,
   vatFiscalPeriods,
   type VatFiscalPeriod,
 } from './vatReturn';
@@ -577,8 +579,7 @@ describe('the D300 line layout — 6f\'s number is not one number on one line', 
     expect(rd33.appTreatment).not.toMatch(/ar intra/);
   });
 
-  it('B-98 — the allocation between rd. 33 and rd. 34 is reported as unknown, on the rows themselves', () => {
-    // Acceptance 2's second branch: the corpus does not establish which figure goes on which line, so the
+  it('B-98 — the allocation between rd. 33 and rd. 34 is reported as unknown, on the rows themselves', () => {    // Acceptance 2's second branch: the corpus does not establish which figure goes on which line, so the
     // app says that instead of placing one. The statement has to live where a reader would otherwise fill
     // the gap — on the row — not only in a source comment.
     const rd34 = D300_DEDUCTIBLE_LINES.find((l) => l.row === 'rd. 34')!;
@@ -591,5 +592,99 @@ describe('the D300 line layout — 6f\'s number is not one number on one line', 
       const line = D300_DEDUCTIBLE_LINES.find((l) => l.row === row)!;
       expect(line.appTreatment).not.toMatch(/\d[\d.]*,\d{2} lei/);
     }
+  });
+});
+
+/*
+ * B-64 (brief 73) — the art. 324 alin. (5) written notification, and the three corrections the register
+ * already carries about it (`research/35` §4). The test that matters most here is the negative one: for
+ * FY2026 nothing is owed, because the suspension runs to 31 decembrie 2026 inclusiv. The second is that
+ * the row is **prospective** — a year the app cannot compute for, with its conditions named — and the third
+ * is the citation: **art. 324 alin. (6) is the international bus-ticket notification**, and the suspension
+ * is OUG 115/2023 art. LXII recorded as a *modification note*, not as article text. Our register had that
+ * backwards once, and a test is the only thing that keeps it from going backwards again.
+ */
+describe('B-64 — the art. 324 alin. (5) notification (formular 392B) for a year the app cannot compute', () => {
+  it('is not owed for FY2026: the suspension covers 2024, 2025 and 2026 inclusive', () => {
+    for (const referenceYear of [2024, 2025, 2026]) {
+      expect(art324NotificareObligation({ referenceYear, vatRegistration: 'scutit_art310' })).toBeNull();
+    }
+  });
+
+  it('is owed for FY2027 by a person neînregistrată în scopuri de TVA, and is dated 25 februarie 2028', () => {
+    const o = art324NotificareObligation({ referenceYear: 2027, vatRegistration: 'scutit_art310' })!;
+    expect(o.kind).toBe('notificare_art324');
+    expect(o.year).toBe(2027);
+    expect(o.dueOn).toBe('2028-02-25');
+    expect(o.citation).toContain('art. 324 alin. (5)');
+    expect(o.citation).toContain('392B');
+    expect(o.citation).toContain('OPANAF nr. 522/2016');
+  });
+
+  it('carries no payment date: a written notification produces no sumă de plată', () => {
+    // art. 326 alin. (1) ties payment to the deconturi and declarații that carry a tax. Printing the term
+    // twice would read as a payment date, and that is how a notification becomes an invented debt.
+    const o = art324NotificareObligation({ referenceYear: 2027, vatRegistration: 'scutit_art310' })!;
+    expect(o.paymentDueOn).toBeUndefined();
+    expect(o.label).toContain('nu are nicio sumă de plată');
+  });
+
+  it('is prospective, and says so — never a current-year debt', () => {
+    const o = art324NotificareObligation({ referenceYear: 2027, vatRegistration: 'scutit_art310' })!;
+    expect(o.label).toContain('Nu este o datorie a anului curent');
+    // Both conditions that decide whether it exists are named, because the app holds neither for 2027:
+    // the status at 31 December (Norme pct. 104 alin. (4)) and the 300.000-lei threshold.
+    expect(o.exceptionNote).toContain('31 decembrie');
+    // The threshold sits on the label, where the person reads the duty itself.
+    expect(o.label).toContain('300.000');
+    expect(o.exceptionNote).toContain('pct. 104 alin. (3)');
+    // The threshold is 300.000 lei, not 220.000, and it is NOT the 395.000-lei art. 310 alin. (1) plafon.
+    expect(o.exceptionNote + o.label).not.toMatch(/395\.000/);
+    expect(o.exceptionNote + o.label).not.toMatch(/220\.000/);
+  });
+
+  it('cites the suspension as OUG 115/2023 art. LXII, names it as a modification note, and refuses the alin. (6) error', () => {
+    const o = art324NotificareObligation({ referenceYear: 2027, vatRegistration: 'scutit_art310' })!;
+    expect(o.citation).toContain('OUG 115/2023 art. LXII');
+    expect(o.statusNote).toContain('notă de modificare');
+    expect(o.statusNote).toContain('31 decembrie 2026 inclusiv');
+    // The correction, asserted as a positive statement so a reintroduced error fails.
+    expect(o.statusNote).toContain('bilete pentru transportul rutier internațional de persoane');
+    expect(o.statusNote).toMatch(/Art\. 324 alin\. \(6\) este/);
+  });
+
+  it('dates its own absence of evidence, and carries the re-check trigger', () => {
+    // `research/35` §4.5 and §Gaps-3: no 2026 instrument re-suspending the duty was found. That is absence
+    // of evidence, and an absence finding with no date on it is not a finding.
+    const o = art324NotificareObligation({ referenceYear: 2027, vatRegistration: 'scutit_art310' })!;
+    expect(o.statusNote).toContain('absența unei dovezi');
+    expect(o.statusNote).toMatch(/Se re-verifică până la \d{4}-\d{2}-\d{2}/);
+  });
+
+  it('is not emitted for a person înregistrată în scopuri de TVA — they owe the alin. (4) variant, not this one', () => {
+    for (const status of ['inregistrat_art316', 'inregistrare_voluntara', 'plafon_depasit', 'reinregistrat'] as const) {
+      expect(art324NotificareObligation({ referenceYear: 2027, vatRegistration: status })).toBeNull();
+    }
+    // And nothing for an annulled code either: which notification such a person owes turns on the status at
+    // 31 December of a year the app has no facts for, and guessing it is the B-79 class.
+    expect(art324NotificareObligation({ referenceYear: 2027, vatRegistration: 'inregistrare_anulata' })).toBeNull();
+  });
+
+  it('is emitted when the registration is undeclared, and the row says the status is undeclared', () => {
+    // Silence here would be the missing-obligation defect again; a row that names its own condition is a
+    // fact the person can check. It also names the other variant, so an înregistrată reader is not left
+    // with the wrong form.
+    const o = art324NotificareObligation({ referenceYear: 2027, vatRegistration: undefined })!;
+    expect(o.exceptionNote).toContain('nu este declarată în aplicație');
+    expect(o.exceptionNote).toContain('art. 324 alin. (4)');
+    expect(o.exceptionNote).toContain('392A');
+  });
+
+  it('the status object keeps the corrected citations in one place, with the check date attached', () => {
+    expect(VAT_ART324_NOTIFICATION_STATUS.suspension.isArticleText).toBe(false);
+    expect(VAT_ART324_NOTIFICATION_STATUS.thresholdLei).toBe(300_000);
+    expect(VAT_ART324_NOTIFICATION_STATUS.resuspendingInstrumentFound).toBe(false);
+    expect(VAT_ART324_NOTIFICATION_STATUS.asOf).toBe('2026-10-10');
+    expect(VAT_ART324_NOTIFICATION_STATUS.recheckBy).toBe('2027-01-31');
   });
 });

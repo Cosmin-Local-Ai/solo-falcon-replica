@@ -441,7 +441,10 @@ export const vatReturn = {
   capUnresolved: 'Plafonul nu poate fi exprimat în lei fără un curs BNR înregistrat.',
 
   // ── the calendar ──
-  calendarHeading: 'Calendarul depunerilor pentru acest an',
+  // B-64 — the heading used to say „pentru acest an”, and the calendar stopped being only that: the art.
+  // 324 alin. (5) notification for FY2027 is dated 25 februarie 2028 and is surfaced here on purpose.
+  // A row that is honest about its own year is better than a heading that quietly excludes it.
+  calendarHeading: 'Calendarul depunerilor: termenele cunoscute, inclusiv obligațiile care cad în ani următori',
   calendarEmpty:
     'Nicio obligație de depus care să poată fi datată: fără perioadă fiscală stabilită, un decont nu are '
     + 'perioada acoperită, deci nu are termen. Aplicația nu inventează unul.',
@@ -456,8 +459,19 @@ export const vatReturn = {
     decont: 'Decont de taxă',
     mentiuni_annuale: 'Declarație de mențiuni (25 ianuarie)',
     mentiuni_achizitie: 'Declarație de mențiuni (achiziție intracomunitară)',
+    // B-64 — a written notification, not a return. It is its own kind precisely because it is not a
+    // decont and not a mențiuni: it carries no tax figure and discharges nothing.
+    notificare_art324: 'Notificare scrisă (formular 392B)',
   } as const,
-  paymentSameDay: 'Plata se face în aceeași zi cu depunerea (art. 326 alin. (1) CF).',
+  /**
+   * B-64 — widened, not duplicated. art. 326 alin. (1) ties the payment to the deconturi and declarații
+   * that carry a tax; the art. 324 alin. (5) notification carries none, and a blanket „plata se face în
+   * aceeași zi” above a table that now holds a notification would invent a sum nobody owes.
+   */
+  paymentSameDay:
+    'Când obligația produce o sumă de plată, plata se face în aceeași zi cu depunerea (art. 326 alin. (1) CF). Notificarea scrisă de la art. 324 alin. (5) nu produce nicio sumă de plată.',
+  /** B-64 — the cell for an obligation that produces no sum to pay. A dash would read as an omission. */
+  noPaymentDue: 'fără sumă de plată',
   recordFiling: 'Înregistrează depunerea',
   recordFiled: (label: string): string => `Depunerea pentru ${label} a fost consemnată în aplicație`,
   filedBadge: 'Depusă',

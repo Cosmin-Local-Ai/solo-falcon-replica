@@ -373,9 +373,14 @@ function VatPeriodicityPanel() {
                     <div className="hint">{o.label}</div>
                     {o.holidayCaveat ? <div className="hint">{o.holidayCaveat}</div> : null}
                     {o.exceptionNote ? <div className="hint">{o.exceptionNote}</div> : null}
+                    {/* B-64 — where an obligation's existence rests on a dated legal status the app checked
+                        once and has to check again, the date travels on the row. */}
+                    {o.statusNote ? <div className="hint">{o.statusNote}</div> : null}
                   </td>
                   <td>{formatRoCalendarDate(o.dueOn)}</td>
-                  <td>{formatRoCalendarDate(o.paymentDueOn)}</td>
+                  {/* B-64 — an art. 324 notification produces no sumă de plată. Printing the term date twice
+                      would read as a payment date, and printing zero would be worse. */}
+                  <td>{o.paymentDueOn ? formatRoCalendarDate(o.paymentDueOn) : vatReturnCopy.noPaymentDue}</td>
                   <td className="muted">{o.citation}</td>
                   <td>
                     <Badge kind={filedIds.has(o.id) ? 'success' : 'neutral'}>
