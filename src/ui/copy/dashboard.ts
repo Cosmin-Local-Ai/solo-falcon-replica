@@ -527,13 +527,13 @@ export const moneyPrecision = {
     n === 1 ? 'O sumă nu a putut fi reprodusă exact.' : 'Sumele nu au putut fi reproduse exact.',
   /**
    * „la banul cel mai apropiat (0,01 lei)", not „la leul cel mai apropiat": the conversion rounds to
-   * 0,01 lei, while rounding to a whole leu is CF art. 66 alin. (1) and happens only at the three
+   * 0,01 lei, while rounding to a whole leu is CF art. 66 and happens only at the three
    * tax lines. Saying „leu" here would overstate what happened to the money by 100×.
    */
   adjusted: (n: number): string =>
     n === 1
-      ? `${n} ${moneyPrecision.noun(n)} a fost rotunjită la banul cel mai apropiat (0,01 lei), jumătate în jos — aceeași direcție pe care o folosește art. 66 alin. (1).`
-      : `${n} ${moneyPrecision.noun(n)} au fost rotunjite la banul cel mai apropiat (0,01 lei), jumătate în jos — aceeași direcție pe care o folosește art. 66 alin. (1).`,
+      ? `${n} ${moneyPrecision.noun(n)} a fost rotunjită la banul cel mai apropiat (0,01 lei), jumătate în jos — aceeași direcție pe care o folosește art. 66.`
+      : `${n} ${moneyPrecision.noun(n)} au fost rotunjite la banul cel mai apropiat (0,01 lei), jumătate în jos — aceeași direcție pe care o folosește art. 66.`,
   carried: (n: number): string =>
     n === 1
       ? `${n} ${moneyPrecision.noun(n)} nu este un număr valid și a fost păstrată neschimbată, nu înlocuită cu 0.`

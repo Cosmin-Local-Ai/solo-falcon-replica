@@ -17,7 +17,7 @@
  * truncated monthly amount: 2.488 × 6 = 14.928, not 14.931.
  *
  * The app's converter (`domain/fx/convert.ts`, `product()`) rounds the product **to the nearest ban** and
- * deliberately does not apply CF art. 66 alin. (1)'s whole-leu rounding to it — `ROUNDING_CHOICE` in that
+ * deliberately does not apply CF art. 66's whole-leu rounding to it — `ROUNDING_CHOICE` in that
  * file records the decision and says art. 66 governs sums of tax that are due, and that whether it also
  * governs a converted amount is not established. So the engine keeps 2.488,50 lei where ANAF writes 2.488.
  *

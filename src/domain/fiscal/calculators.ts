@@ -8,7 +8,7 @@ export type ReviewRequired = { reviewRequired: true; reason: string };
 
 export type CalculatorResult =
   | {
-      /** The amount this rule computes as DUE, in integer bani. For the three sums art. 66 alin. (1)
+      /** The amount this rule computes as DUE, in integer bani. For the three sums art. 66
        * governs (income tax, CAS, CASS) this is already rounded exactly once, by `roundArt66` — no caller may
        * round it again, and no caller may round a base to get here. */
       value: Bani;
@@ -327,7 +327,7 @@ function calcCas(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
   const chosen = input?.chosenBase;
   // Not Math.max: that returns a plain `number` and would drop the Bani brand. Same comparison, kept typed.
   const base = chosen === undefined ? floor : chosen > floor ? chosen : floor;
-  // CF art. 66 alin. (1) — EXTENDED to CAS by this app's policy (Titlul V states no rounding rule). The base
+  // CF art. 66 — EXTENDED to CAS by this app's policy (Titlul V states no rounding rule). The base
   // stays exact integer bani; only the contribution owed is rounded, and it is rounded here, once.
   const cas = roundArt66(applyRateDecimal(base, ratePercent));
   const breakdown = [
@@ -816,7 +816,7 @@ function calcIncomeTax(rule: FiscalRule, input?: CalculatorInput): CalculatorRes
   if (typeof base !== 'number') {
     return { reviewRequired: true, reason: 'No base provided for income tax calculation' };
   }
-  // CF art. 66 alin. (1) proper — this is the sum the article actually governs. One rounding, here.
+  // CF art. 66 proper — this is the sum the article actually governs. One rounding, here.
   const tax = roundArt66(applyRateDecimal(base, baseRatePercent));
   return {
     value: tax,
@@ -861,7 +861,7 @@ function calcIncomeTax(rule: FiscalRule, input?: CalculatorInput): CalculatorRes
  * It also does not prorate anything. art. 68^3 alin. (5) makes a fraction-of-year amount the annual
  * amount, and art. 151 alin. (2) keeps the 12/24-SM and 6/72-SM figures whole for a mid-year taxpayer.
  *
- * Rounding follows the house boundary: art. 66 alin. (1) rounds the sums that are DUE, so the tax is
+ * Rounding follows the house boundary: art. 66 rounds the sums that are DUE, so the tax is
  * rounded once here; the net is a BASE, and an inexact base is reported, never repaired — the same
  * discipline `exactBani` applies to a prorated deduction in `tax.ts`.
  */
@@ -893,12 +893,12 @@ function calcAccommodationFlatRatio(rule: FiscalRule, input?: CalculatorInput): 
       reviewRequired: true,
       reason:
         `art. 68^3 alin. (2): venitul net rezultat din ${leiText(gross)} lei × ${(100 - expenseRatioPercent) / 100} ` +
-        'nu este un număr întreg de bani. art. 66 alin. (1) rotește sumele datorate, nu bazele, deci ' +
+        'nu este un număr întreg de bani. art. 66 rotește sumele datorate, nu bazele, deci ' +
         'aplicația nu rotunjește o bază ca să obțină un număr rotund — raportează în schimb.',
     };
   }
   const net = netDec.toNumber() as Bani;
-  // CF art. 66 alin. (1) — the one rounding, on the sum that is due.
+  // CF art. 66 — the one rounding, on the sum that is due.
   const tax = roundArt66(applyRateDecimal(net, taxRatePercent));
 
   const filingDeadline = paramValue(rule, 'filing_deadline');
@@ -943,7 +943,7 @@ function calcAccommodationFlatRatio(rule: FiscalRule, input?: CalculatorInput): 
  *
  * It does not prorate anything: art. 85 alin. (5) makes a fraction-of-year amount the annual amount.
  *
- * Rounding follows the house boundary: art. 66 alin. (1) rounds the sums that are DUE, so the tax is
+ * Rounding follows the house boundary: art. 66 rounds the sums that are DUE, so the tax is
  * rounded once here; the net is a BASE, and an inexact base is reported, never repaired.
  */
 function calcShortTermRoomsFlatRatio(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
@@ -974,12 +974,12 @@ function calcShortTermRoomsFlatRatio(rule: FiscalRule, input?: CalculatorInput):
       reviewRequired: true,
       reason:
         `art. 85 alin. (2): venitul net rezultat din ${leiText(gross)} lei × ${(100 - expenseRatioPercent) / 100} ` +
-        'nu este un număr întreg de bani. art. 66 alin. (1) rotește sumele datorate, nu bazele, deci ' +
+        'nu este un număr întreg de bani. art. 66 rotește sumele datorate, nu bazele, deci ' +
         'aplicația nu rotunjește o bază ca să obțină un număr rotund — raportează în schimb.',
     };
   }
   const net = netDec.toNumber() as Bani;
-  // CF art. 66 alin. (1) — the one rounding, on the sum that is due.
+  // CF art. 66 — the one rounding, on the sum that is due.
   const tax = roundArt66(applyRateDecimal(net, taxRatePercent));
 
   const filingDeadline = paramValue(rule, 'filing_deadline');
@@ -1024,7 +1024,7 @@ function calcShortTermRoomsFlatRatio(rule: FiscalRule, input?: CalculatorInput):
  * realisation year (alin. (3^1)). This calculator does not choose any of that; it applies the ratio to the
  * gross it is given, and the gross rule is what separates this from art. 84^1 and art. 85.
  *
- * Rounding follows the house boundary: art. 66 alin. (1) rounds the sums that are DUE, so the tax is
+ * Rounding follows the house boundary: art. 66 rounds the sums that are DUE, so the tax is
  * rounded once here; the net is a BASE, and an inexact base is reported, never repaired.
  */
 function calcCedareArt84FlatRatio(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
@@ -1053,7 +1053,7 @@ function calcCedareArt84FlatRatio(rule: FiscalRule, input?: CalculatorInput): Ca
       reviewRequired: true,
       reason:
         `art. 84 alin. (3): venitul net rezultat din ${leiText(gross)} lei × ${(100 - expenseRatioPercent) / 100} ` +
-        'nu este un număr întreg de bani. art. 66 alin. (1) rotește sumele datorate, nu bazele, deci ' +
+        'nu este un număr întreg de bani. art. 66 rotește sumele datorate, nu bazele, deci ' +
         'aplicația nu rotunjește o bază ca să obțină un număr rotund — raportează în schimb.',
     };
   }
@@ -1184,7 +1184,7 @@ function calcCedareArt84x1Withheld(rule: FiscalRule, input?: CalculatorInput): C
  *    holds; this calculator returns the sum and the caller decides whose sum it is — exactly the split
  *    `calcCedareArt84x1Withheld` and `tax.ts` already use for art. 84^1 alin. (8).
  *
- * Rounding follows the house boundary: art. 66 alin. (1) rounds the sums that are DUE, so the tax is rounded
+ * Rounding follows the house boundary: art. 66 rounds the sums that are DUE, so the tax is rounded
  * once here; the net is a BASE, and an inexact base is reported, never repaired.
  */
 function calcDpiFlatQuota(rule: FiscalRule, input?: CalculatorInput): CalculatorResult {
@@ -1215,7 +1215,7 @@ function calcDpiFlatQuota(rule: FiscalRule, input?: CalculatorInput): Calculator
       reviewRequired: true,
       reason:
         `art. 72 alin. (2): venitul net rezultat din ${leiText(gross)} lei × ${(100 - expenseRatioPercent) / 100} ` +
-        'nu este un număr întreg de bani. art. 66 alin. (1) rotește sumele datorate, nu bazele, deci ' +
+        'nu este un număr întreg de bani. art. 66 rotește sumele datorate, nu bazele, deci ' +
         'aplicația nu rotunjește o bază ca să obțină un număr rotund — raportează în schimb.',
     };
   }

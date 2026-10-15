@@ -43,7 +43,7 @@
  * The product of an amount and a rate is generally fractional. This module rounds it **to the nearest ban**
  * (half-up), because the money type's unit is the ban and a fraction of a ban is not representable.
  *
- * It deliberately does **not** apply `roundArt66` (CF art. 66 alin. (1), which rounds to a whole **leu**) to
+ * It deliberately does **not** apply `roundArt66` (CF art. 66, which rounds to a whole **leu**) to
  * that product. art. 66 is the rule for rounding a sum of tax that is being calculated; whether it also
  * reaches an intermediate currency-conversion product is **not established by any text I read**, and
  * applying it here would move every converted amount by up to 0,50 lei on an unverified reading. The
@@ -116,7 +116,7 @@ export const CONVERSION_HIERARCHY_CONFLICT = {
 /** The rounding decision, stated rather than assumed. */
 export const ROUNDING_CHOICE = {
   applied: 'nearest ban, half-up',
-  notApplied: 'art. 66 alin. (1) rounding to a whole leu',
+  notApplied: 'art. 66 rounding to a whole leu',
   reason: 'art. 66 governs the sum of tax being calculated; whether it reaches an intermediate conversion product is not established by any text read for this task, and applying it would move every converted amount by up to 0,50 lei on an unverified reading.',
   status: 'app decision, not a cited rule',
 } as const;

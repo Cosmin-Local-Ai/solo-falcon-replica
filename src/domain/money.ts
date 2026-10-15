@@ -8,7 +8,7 @@
  * that is converted back to `Bani` at exactly one place. A raw `67450` must never reach a screen: the
  * bani→lei boundary is `formatBani`, a single named conversion that performs **no rounding**.
  *
- * **Rounding — CF art. 66 alin. (1).** `roundLeiArt66` is the only place money rounds.
+ * **Rounding — CF art. 66.** `roundLeiArt66` is the only place money rounds.
  *
  * > „Sumele sunt calculate prin rotunjire la un leu, prin neglijarea fracțiunilor de până la 50 de bani
  * > inclusiv și majorarea la leu a fracțiunilor ce depășesc 50 de bani."
@@ -305,8 +305,15 @@ export function baniFromLei(value: number): BaniConversion {
 }
 
 /**
- * **The only place money rounds.** CF art. 66 alin. (1): rotunjire **la un leu** — fracțiuni de până la
+ * **The only place money rounds.** CF art. 66: rotunjire **la un leu** — fracțiuni de până la
  * 50 de bani **inclusiv** sunt neglijate, fracțiuni peste 50 de bani sunt majorate la leu.
+ *
+ * **Citation corrected 2026-10-15 (research/49).** This function and its call sites used to cite
+ * „art. 66 alin. (1)”. **The current article has no alineate** — it is a single paragraph, and the numbering
+ * was removed by Pct. 29, art. I din Legea 296/2020. The pre-2020 article that carried the number 66 was
+ * about *deducerea personală* and rounded to 10 lei, so the old citation did not merely over-specify: it
+ * pointed at a different, repealed rule. The rule this function implements is unchanged; only the reference
+ * was wrong, and it was wrong in 38 places including user-facing copy.
  *
  * It takes the **unrounded** sum, as a `Decimal` of bani, and returns whole lei. Order matters and is the
  * whole point: rounding a computed sum to integer bani *first* and then applying art. 66 gives the wrong

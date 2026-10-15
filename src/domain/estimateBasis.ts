@@ -1494,7 +1494,7 @@ export interface DeductibleExpenseSet {
 /**
  * A statutory cap is a CEILING, so the deductible part is the largest whole-ban amount that does not
  * exceed it: the fraction is floored, never rounded up. `roundArt66` is deliberately not used — CF
- * art. 66 alin. (1) rounds the sums that are DUE, and a cap is neither a sum due nor a base.
+ * art. 66 rounds the sums that are DUE, and a cap is neither a sum due nor a base.
  */
 function capBaniCeiling(amount: Bani, percent: number): Bani {
   return applyRateDecimal(amount, percent).toDecimalPlaces(0, Decimal.ROUND_FLOOR).toNumber() as Bani;

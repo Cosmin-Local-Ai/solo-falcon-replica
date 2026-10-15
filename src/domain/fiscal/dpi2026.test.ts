@@ -111,11 +111,11 @@ describe('B-112 — the calculator: gross → 40 % quota → net → 10 % final 
   });
 
   it('a gross whose 40 % quota does not land on a whole ban is reported, not rounded', () => {
-    // One ban of gross: 0,6 × 1 ban is not a whole ban. The house boundary is that art. 66 alin. (1) rounds
+    // One ban of gross: 0,6 × 1 ban is not a whole ban. The house boundary is that art. 66 rounds
     // the sums that are DUE, not the bases, so a base that lands on a fraction of a ban must be reported
     // rather than quietly rounded into a plausible number.
     const r = refused(run({ gross: lei(0.01) }));
-    expect(r.reason).toContain('art. 66 alin. (1)');
+    expect(r.reason).toContain('art. 66');
   });
 
   it('zero gross is zero net and zero tax, not a refusal', () => {

@@ -120,7 +120,7 @@ test.describe('Dashboard — cockpit cards (seed data)', () => {
     // still inside 0 < VNA < 6 SM, so B-13 still applies: CASS owed = 2.430 lei (art. 174 alin. (6)
     // difference to the 6 SM floor), but only 10% × VNA = 758,00 lei (art. 174 alin. (1)) is deductible;
     // the 1.672,00 lei difference is excluded by art. 118 alin. (2) lit. b). CAS: VNA is below 12 SM
-    // (48.600,00 lei), so art. 148 alin. (1) is not met and none is owed. CF art. 66 alin. (1) rounds
+    // (48.600,00 lei), so art. 148 alin. (1) is not met and none is owed. CF art. 66 rounds
     // each sum DUE to a whole leu, fracțiuni de până la 50 de bani inclusiv neglijate:
     //   deductibilă 758,00 (already whole)
     //   bază        7.580,00 − 758,00 = 6.822,00 lei (the base is never itself rounded)

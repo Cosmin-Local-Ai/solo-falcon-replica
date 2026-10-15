@@ -437,7 +437,7 @@ describe('computeTaxEstimate', () => {
     expect(cass).toBe(lei(29_160));
   });
 
-  // ── Rounding: CF art. 66 alin. (1) — sums DUE are rounded to the last ban ──
+  // ── Rounding: CF art. 66 — sums DUE are rounded to the last ban ──
 
   it('net = 71,281 → total = 24478 (art. 66: fractions under 50 bani are neglected)', async () => {
     const res = await computeTaxEstimate({ inputs: makeInputs(), profile: makeProfile(), revenues: lei(71_281), expenses: lei(0), revenuesNet: lei(71_281), expensesNet: lei(0), expenseBase: { netFirst: lei(0), grossFirst: lei(0), divergent: false }, ruleRelease: PFA_2026_RELEASE, rules: PFA_2026_SYSTEM_REAL_PACKAGE });

@@ -21,7 +21,7 @@ import { Disclosure } from './ui/Disclosure';
  *   and it is labelled as the stored value so nobody reads it as a rounded one.
  *
  * Wording note: the copy says „la banul cel mai apropiat (0,01 lei)", not „la leul cel mai apropiat". The
- * conversion rounds to 0,01 lei; rounding to a whole leu is CF art. 66 alin. (1) and happens only at the
+ * conversion rounds to 0,01 lei; rounding to a whole leu is CF art. 66 and happens only at the
  * three tax lines, so saying „leu" here would overstate what was done to the user's money by 100×.
  */
 

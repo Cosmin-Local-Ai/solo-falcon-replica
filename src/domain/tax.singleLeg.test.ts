@@ -289,7 +289,7 @@ describe('B-85 keeps the contributions cumulation, because two SOURCES still cum
     expect(ratio.toString()).toBe('0.375');
     // 0,375 × 24.300 lei CAS = 9.112,5 lei deductible, against 24.300 lei with no DPI in the denominator.
     // The fraction is the point, and it is the reason Stage 2 cannot close the golden fixture on its own:
-    // a deduction is not one of the three sums art. 66 alin. (1) rounds, so the engine refuses rather than
+    // a deduction is not one of the three sums art. 66 rounds, so the engine refuses rather than
     // inventing a rounding rule — see `tax.dpiCas.test.ts`.
     expect(ratio.times(24_300).toString()).toBe('9112.5');
   });

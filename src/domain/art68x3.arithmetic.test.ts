@@ -548,14 +548,14 @@ describe('the gross is an input, never a default (B-80)', () => {
 });
 
 describe('the rounding boundary', () => {
-  it('an inexact net base is reported, never repaired (art. 66 alin. (1) rounds sums due, not bases)', async () => {
+  it('an inexact net base is reported, never repaired (art. 66 rounds sums due, not bases)', async () => {
     // 1 ban of gross: 70 % × 1 ban = 0,7 bani, which is not a whole number of bani. The calculator
     // refuses rather than inventing a rounding rule for a base — the same discipline `exactBani` applies
     // to a prorated deduction in tax.ts.
     const res = await run({ flatRatioGross: 1 as Bani });
     expect(res.status).toBe('review_required');
     if (res.status !== 'review_required') return;
-    expect(res.reason).toContain('art. 66 alin. (1)');
+    expect(res.reason).toContain('art. 66');
   });
 
   it('a gross with no receipts is a zero, not a refusal', async () => {

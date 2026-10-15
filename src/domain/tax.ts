@@ -24,7 +24,7 @@ import {
 import { formatBani } from './money';
 import { createCalculationSnapshot } from './snapshots/snapshot';
 import Decimal from 'decimal.js-light';
-import { addBani, lei, leiText, subBani, sumBani, type Bani } from './money';
+import { addBani, lei, leiText, roundArt66, subBani, sumBani, type Bani } from './money';
 
 export interface TaxCalculationInput {
   inputs: TaxInputsReference;
@@ -316,26 +316,12 @@ function rr(reason: string, lines: CalculationLine[] = []): TaxEstimateResult {
   return { status: 'review_required', reason, lines };
 }
 
-/**
- * Accept a Decimal money amount only when it is already a whole number of bani.
- *
- * Deliberately NOT a rounding function. CF art. 66 alin. (1) rounds the sums that are DUE; it says nothing
- * about a deduction or a base, and rounding either of those changes the tax itself. So an inexact
- * intermediate is reported, never repaired.
- */
-function exactBani(value: Decimal): Bani | null {
-  return value.isInteger() ? (value.toNumber() as Bani) : null;
-}
-
-/**
- * Bani held as a Decimal → the lei text a refusal sentence shows. B-118 uses it for the two candidate
- * readings of the art. 118 alin. (2²) proration, which are Decimals that have already been reduced to a
- * whole ban for display. It is deliberately a *display* helper: it returns a string, never a `Bani`, so it
- * cannot become a rounding path by accident the way a `Decimal → Bani` conversion would.
- */
-function leiFromDecimal(bani: Decimal): string {
-  return leiText(bani.toNumber() as Bani);
-}
+// B-118 removed the two helpers this file used to refuse a fractional proration with: `exactBani`,
+// which accepted only an already-whole Decimal, and `leiFromDecimal`, which existed solely to print the
+// two candidate readings inside that refusal. The proration now rounds once at the product through
+// `roundArt66`, so neither has a caller. They are deleted rather than left dormant: a rounding policy
+// that has been decided must not leave an undecided-looking helper behind it for the next reader to
+// re-open.
 
 /**
  * B-19 — the one sentence the engine says out loud whenever CASS is zeroed by the profile flag
@@ -1047,48 +1033,36 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   const cassRaw = ratioCass.times(subBani(cassValue, cassNonDeductibila));
   // decimal.js-light has no static `Decimal.max`; and the comparison keeps the Decimal, not a float.
   const cassDeductibilaDec = cassRaw.isNegative() ? new Decimal(0) : cassRaw;
-  // A deduction is NOT one of the three sums CF art. 66 alin. (1) governs, so `roundArt66` must not touch it:
-  // rounding a deduction changes the taxable base, and art. 66 rounds sums due, never bases (the A-3 boundary
-  // in docs/ai/phases/10_money_precision.md). With a single income source each ratio is exactly 1, so these
-  // products are already whole bani. If a second source ever makes one fractional, the engine REFUSES rather
-  // than inventing a rounding rule the law does not state.
-  const casDeductibila = exactBani(casDeductibilaDec);
-  const cassDeductibila = exactBani(cassDeductibilaDec);
-  if (casDeductibila === null || cassDeductibila === null) {
-    // B-118 — the refusal names its cause, and it names it because a bare „nu putem calcula” tells the
-    // person the app is broken when in fact the app is refusing to guess. The precedent is B-93's
-    // `depreciation_conflict`: two routes to one fiscal quantity, both defensible, no authority saying
-    // which, and the app states the conflict instead of picking one silently.
-    //
-    // What is undecided is NOT whether to round. It is **at what precision the ponderea of art. 118 alin.
-    // (2^2) is carried**, and the two readings give different money:
-    //
-    //   A. round the product to the nearest ban            — exact ratio, rounded result
-    //   B. round the ratio first (to 0,1 %), then multiply  — what ANAF's own worked example appears to do
-    //
-    // On ANAF DGRFP București's Exemplul 3 (ratio 68.000 ÷ 118.000 over a CAS of 24.300 lei) A gives
-    // 14.003 lei and B gives 13.997 lei — **6 lei apart, inferred from a single example.** Adopting either
-    // here would bake one worked case into a rule, which is the exact thing `exactBani` exists to prevent.
-    // So both candidates are computed and shown, and neither is used.
-    const ratioPct = ratioCas.times(100);
-    const produsRotunjit = casDeductibilaDec.toDecimalPlaces(0);
-    const pondereRotunjita = ratioCas.toDecimalPlaces(3).times(casRes.value).toDecimalPlaces(0);
-    const diferenta = produsRotunjit.minus(pondereRotunjita).abs();
-    return rr(
-      'Nu putem stabili partea din contribuția de asigurări sociale care se deduce din impozit '
-      + '(art. 118 alin. (2²)). '
-      + `Ponderea venitului net anual în sistem real în veniturile cumulate potrivit art. 148 alin. (3) este `
-      + `${ratioPct.toFixed(4)} %, iar Codul fiscal nu spune cu ce precizie se păstrează acea pondere. `
-      + 'Cele două lecturi posibile dau sume diferite: rotunjind produsul la banul cel mai apropiat rezultă '
-      + `${leiFromDecimal(produsRotunjit)} lei, iar rotunjind întâi ponderea la 0,1 % rezultă ${leiFromDecimal(pondereRotunjita)} lei — `
-      + `${leiFromDecimal(diferenta)} lei diferență pe o singură deducere. `
-      + 'Contribuțiile calculate mai sus sunt corecte; deducerea este cea care nu poate fi stabilită. '
-      + 'Art. 66 alin. (1) rotunjește sumele datorate, nu deducerile sau bazele, deci o regulă de rotunjire '
-      + 'luată dintr-un singur exemplu ar modifica baza impozabilă în funcție de acel exemplu. Aplicația nu '
-      + 'ghicește: așteptăm îndrumarea oficială despre precizia ponderii.',
-      lines,
-    );
-  }
+  // B-118 — RESOLVED 2026-10-14 with authority. See
+  // docs/ai/research/49_proration_precision_fy2026.md. The *ponderea* is carried EXACTLY, and only the
+  // final product is rounded, by CF art. 66: „Sumele sunt calculate prin rotunjire la un leu, prin
+  // neglijarea fracțiunilor de până la 50 de bani inclusiv și majorarea la leu a fracțiunilor ce depășesc
+  // 50 de bani." (Pct. 29, art. I din Legea 296/2020 — **art. 66 has no alineate**; the pre-2020 article of
+  // that number was about *deducerea personală* and rounded to 10 lei.)
+  //
+  // **The refusal this replaces was correct to exist, and is now correct to remove.** It existed because the
+  // precision of the ponderea is regulated nowhere — the words „rotunjire", „zecimale" and „procente" do not
+  // occur anywhere in the 78-page OPANAF 2736/2025 order, and the ratio row is defined only mechanically as
+  // „(rd. 1 / rd. 2)" in a table headed (lei). Choosing a convention from one worked example would have been
+  // the B-70 two-producers defect. What settled it:
+  //   - ANAF's own D212 web application returns **14.004 lei** on ANAF București's own numbers, contradicting
+  //     the 13.997 lei in București's leaflet;
+  //   - the same application uses the **exact** ratio in Subsecțiunea 5.1, the DPI CAS deductibilă path this
+  //     repository builds;
+  //   - ANAF Galați and Cluj carry the ratio at 2 decimals of a percent, București alone at one;
+  //   - CECCAR's FY2024 examples carry 5 decimals and match the exact route, and would not match 4.
+  // So: exact ratio, rounded once at the product, in the one place money rounds. The application's
+  // 4-decimal rule was rejected — no citable authority (it is minified code in a bundle), it promotes a
+  // display artefact into arithmetic, and it would add a second rounding point against `money.ts`'s own
+  // invariant. The difference is 1 leu either way; exact is defensible, 4-decimal only by appeal to
+  // undocumented code.
+  //
+  // **What stays open and is recorded, not hidden** (research/49, open question 1): whether art. 66 reaches a
+  // DEDUCTION line at all is a textual question no source settles. The current wording says simply
+  // „Sumele", unqualified within Titlul IV — which is why the app rounds here, and why it says so in the
+  // breakdown rather than presenting the rounding as settled law about deductions.
+  const casDeductibila = roundArt66(casDeductibilaDec);
+  const cassDeductibila = roundArt66(cassDeductibilaDec);
   lines.push({ label: 'CAS deductibilă (art. 118 alin. (2^2))', value: casDeductibila });
   lines.push({ label: 'CASS deductibilă (art. 118 alin. (2^3), fără diferența art. 174 alin. (6))', value: cassDeductibila });
 

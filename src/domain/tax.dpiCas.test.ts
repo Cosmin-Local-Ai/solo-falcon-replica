@@ -38,11 +38,10 @@ import { PFA_2026_RELEASE } from './fiscal/release2026';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal/package2026';
 import { selectEstimateOperands } from './estimateBasis';
 import { selectRuleSet } from './fiscal';
-import { lei, money, type Bani } from './money';
+import { addBani, lei, money, type Bani } from './money';
 
-// A sistem-real year of the same shape as ANAF's — brut minus cheltuieli deductibile — tuned so the
-// art. 118 alin. (2^2) ratio is a terminating decimal and the composition can run to completion.
-const GROSS = lei(104_000);
+// A sistem-real year of the same shape as ANAF's — brut minus cheltuieli deductibile. The brut is derived
+// from `AI_NET + EXPENSES` at the call site, so the net is the fact under test and the brut is scaffolding.
 const EXPENSES = lei(32_000);
 const AI_NET = lei(72_000);
 
@@ -102,14 +101,17 @@ function inputs(over: Partial<TaxInputsReference> = {}): TaxInputsReference {
   };
 }
 
-function engine(over: { dpi?: Bani; ladderYears?: CassLadderYear[]; inputs?: Partial<TaxInputsReference> } = {}) {
+function engine(over: { dpi?: Bani; aiNet?: Bani; ladderYears?: CassLadderYear[]; inputs?: Partial<TaxInputsReference> } = {}) {
   const ladderYears = over.ladderYears ?? ladder(over.dpi ?? lei(0));
+  // The sistem-real net is parameterised because the discriminating proration cases in research/49 are
+  // stated as (net, cumulated) pairs, and the pair decides both the CAS tier and the ratio.
+  const aiNet = over.aiNet ?? AI_NET;
   return computeTaxEstimate({
     inputs: inputs({ cassLadderYears: ladderYears, ...over.inputs }),
     profile: profile({ cassLadderYears: ladderYears }),
-    revenues: GROSS,
+    revenues: addBani(aiNet, EXPENSES),
     expenses: EXPENSES,
-    revenuesNet: GROSS,
+    revenuesNet: addBani(aiNet, EXPENSES),
     expensesNet: EXPENSES,
     expenseBase: { netFirst: EXPENSES, grossFirst: EXPENSES, divergent: false },
     flatRatioGross: null,
@@ -287,40 +289,112 @@ describe('B-112 — the B-116 double count cannot reach the CAS cumul through th
   });
 });
 
-describe('B-112 — the ANAF amounts refuse, and the refusal names the proration rather than the cumul', () => {
-  it('with DPI 50.000 the CAS line is ANAF\'s 24.300 lei, and the engine refuses one step later', async () => {
-    // 24.300 lei × 72.000/122.000 is not a whole number of bani. A deduction is not one of the three sums
-    // art. 66 alin. (1) rounds — rounding it would change the taxable base, which is a base — so `exactBani`
-    // reports and the composition returns review_required. Asserted here so the blocker is on the record
-    // as arithmetic, not as a missing rule: the income category is represented, the tier is right, and what
-    // is undecided is how to round a prorated deduction.
-    const res = await engine({ dpi: lei(50_000) });
-    expect(res.status).toBe('review_required');
-    if (res.status !== 'review_required') return;
-    expect(line(res, 'CAS (25%)')).toBe(lei(24_300));
-    expect(line(res, 'Venit cumulat pentru CAS')).toBe(lei(122_000));
-    expect(res.reason).toContain('art. 118 alin. (2²)');
+describe('B-112 stage 5 — art. 118 alin. (2⁴): widening the CAS base with DPI does not make the deduction cap reachable', () => {
+  /**
+   * The cap itself — „Nivelul contribuției de asigurări sociale și al contribuției de asigurări sociale de
+   * sănătate deductibile … nu poate depăși nivelul venitului net anual recalculat” — is already pinned in
+   * `tax.test.ts`, which proves the mechanism by raising the CAS rate to 100 %. What that test does not
+   * cover is the question B-112 raises: **DPI enlarges the amount that selects the CAS tier without ever
+   * enlarging the net the cap is measured against**, so a reader could reasonably expect the cap to start
+   * binding. It does not, and the reason is arithmetic rather than lucky:
+   *
+   *   CAS deductibilă = CAS × net ÷ cumulat, and the tier base never exceeds the cumulation that selected
+   *   it, so CAS ≤ 0,25 × cumulat and therefore CAS deductibilă ≤ 0,25 × net.
+   *   CASS deductibilă ≤ 0,10 × net (the art. 174 alin. (6) difference is excluded by art. 118 alin. (2)
+   *   lit. b) anyway).
+   *
+   * So the two together stay under 0,35 × net, and alin. (2⁴) cannot bind at the real 2026 rates whatever
+   * the DPI amount is. That is worth stating, because a structural guard that nobody can reach is also a
+   * guard nobody will ever see fire — and this test is what keeps that claim checked rather than assumed.
+   */
+  it('a DPI-heavy year leaves the cap line absent, and the deductions under a third of the net', async () => {
+    // The most lopsided year the model can hold: 13.000 lei of sistem-real net beside 91.000 lei of DPI.
+    // The cumulation of 104.000 lei selects the 24-SMN tier, so the CAS is 24.300 lei on a net of 13.000 —
+    // nearly twice the net. The proration is what keeps the DEDUCTION inside the cap: 3.037 lei.
+    const res = await engine({ aiNet: lei(13_000), dpi: lei(91_000) });
+    if (res.status !== 'computed') throw new Error(`engine refused: ${res.status} — ${res.reason}`);
+    expect(line(res, 'CAS (25%)')).toBe(lei(24_300)); // larger than the net itself
+    expect(line(res, 'CAS deductibilă')).toBe(lei(3_037));
+    expect(line(res, 'CASS deductibilă')).toBe(lei(1_300));
+    // No cap line: nothing was blocked.
+    expect(res.lines.some((l) => l.label.startsWith('Deduceri blocate de plafonul'))).toBe(false);
+    // And the structural bound, asserted rather than argued.
+    const deduceri = addBani(line(res, 'CAS deductibilă') as Bani, line(res, 'CASS deductibilă') as Bani);
+    expect(deduceri).toBeLessThan(lei(4_550)); // 0,35 × 13.000 lei
+    expect(deduceri).toBeLessThan(lei(13_000));
+  });
+});
+
+describe('B-118 closed — the proration carries the exact ratio and rounds once at the product, and the discriminating cases are pinned', () => {
+  /**
+   * **Why these three cases and no others.** research/49 enumerates five worked examples with a
+   * non-terminating ratio, and they do not agree with each other. The two ANAF leaflets that carry the ratio
+   * at 2 decimals of a percent (Galați, Cluj) are the ones that discriminate, and Galați is the case where
+   * **our chosen rule and a published ANAF figure disagree by 1 leu.** Pinning it is the point: the
+   * repository states the difference instead of hiding it, and a future change cannot drift back to the
+   * coarse ratio without breaking a test that says out loud which ANAF leaflet it is disagreeing with.
+   *
+   * The rule, as decided 2026-10-14: **exact ratio, rounded once at the final product by CF art. 66** —
+   * „Sumele sunt calculate prin rotunjire la un leu, prin neglijarea fracțiunilor de până la 50 de bani
+   * inclusiv și majorarea la leu a fracțiunilor ce depășesc 50 de bani." (Pct. 29, art. I din Legea 296/2020
+   * — **art. 66 has no alineate**; the pre-2020 article of that number dealt with *deducerea personală* and
+   * rounded to 10 lei.)
+   */
+
+  it('ANAF Galați: we compute 6.542 lei and knowingly differ from the leaflet\'s 6.543 lei', async () => {
+    // SOURCE — ANAF Galați, „activ-indep.pdf": net 35.000 / cumulat 65.000, CAS datorată 12.150, ratio
+    // printed as 53,85 %, CAS deductibilă published as **6.543 lei**.
+    // OURS — exact ratio 35.000 ÷ 65.000 = 0,538461538…; 12.150 × that = 6.542,30769 lei; the fraction is
+    // 30 bani, under 50, so art. 66 neglects it → **6.542 lei**.
+    // **We knowingly differ from an ANAF leaflet on this one line.** The leaflet rounded the ratio to 4
+    // decimals before multiplying (0,5385 × 12.150 = 6.542,775 → 6.543), and that rule has no citable
+    // authority: it is minified code in ANAF's own bundle, which contradicts itself by using the exact ratio
+    // in Subsecțiunea 5.1 — the DPI CAS deductibilă path this repository builds.
+    const res = await engine({ aiNet: lei(35_000), dpi: lei(30_000) });
+    if (res.status !== 'computed') throw new Error(`engine refused: ${res.status} — ${res.reason}`);
+    expect(line(res, 'Venit cumulat pentru CAS')).toBe(lei(65_000));
+    expect(line(res, 'CAS (25%)')).toBe(lei(12_150));
+    expect(line(res, 'CAS deductibilă')).toBe(lei(6_542));
+    expect(line(res, 'CAS deductibilă')).not.toBe(lei(6_543)); // Galați's figure, asserted absent by name.
   });
 
-  it('the guard is not an edge case of ANAF\'s numbers: any non-terminating ratio trips it', async () => {
-    // 72.000 ÷ 102.000 = 70,5882… %. The ratio does not terminate, so the product is not exactly a whole
-    // number of bani and `exactBani` refuses. This is the case that decides how common the blocker is: it
-    // is not confined to awkward amounts, it is every ratio that does not terminate — and 72.000 of AI
-    // beside 30.000 of DPI is an ordinary year, not a contrived one.
-    const res = await engine({ dpi: lei(30_000) });
-    expect(res.status).toBe('review_required');
-    if (res.status !== 'review_required') return;
+  it('ANAF Cluj: 42.000 ÷ 87.000 gives 5.866 lei, and here the exact route and the leaflet agree', async () => {
+    // SOURCE — ANAF Cluj, 22 Apr 2026: net 42.000 / cumulat 87.000, CAS 12.150, ratio 48,28 %, CAS
+    // deductibilă **5.866 lei**. Exact: 12.150 × 0,482758620… = 5.865,5172 lei; the fraction is 51,72 bani,
+    // over 50, so art. 66 majors to the leu → 5.866 lei. Recorded because an agreement is evidence too: the
+    // chosen rule is not merely the one that flatters our own fixtures.
+    const res = await engine({ aiNet: lei(42_000), dpi: lei(45_000) });
+    if (res.status !== 'computed') throw new Error(`engine refused: ${res.status} — ${res.reason}`);
+    expect(line(res, 'CAS (25%)')).toBe(lei(12_150));
+    expect(line(res, 'CAS deductibilă')).toBe(lei(5_866));
+  });
+
+  it('the 50-bani tie goes DOWN, because art. 66 says „până la 50 de bani inclusiv”', async () => {
+    // THE EDGE NO SOURCE TESTS. Art. 66 neglects fracțiuni **până la 50 de bani inclusiv** — half-DOWN at a
+    // true tie. ANAF's web application uses `Math.round`, which is half-UP, so the two diverge at exactly
+    // 0,50 bani and nothing published settles it. Our choice is the statute's own wording, and it is pinned
+    // here on the proration path rather than only on `roundArt66` in isolation, because this is the path
+    // where a fractional product actually arises.
+    //
+    // Constructed to land on the tie exactly: net 13.000 / cumulat 104.000 gives a ratio of exactly 1/8, and
+    // the cumulation clears 24 SMN so the CAS is 24.300 lei. 24.300 × 1/8 = **3.037,50 lei** — a fraction of
+    // exactly 50 bani.
+    const res = await engine({ aiNet: lei(13_000), dpi: lei(91_000) });
+    if (res.status !== 'computed') throw new Error(`engine refused: ${res.status} — ${res.reason}`);
     expect(line(res, 'CAS (25%)')).toBe(lei(24_300));
-    // B-118, pinned by name. The refusal has to say which deduction is undecided and what the two readings
-    // would each produce — otherwise the screen is a dead end and the reader cannot tell a missing rule
-    // from an undecided one. Here the candidates are 17.152,94 lei (round the product) and 17.155,80 lei
-    // (round the ponderea to 0,1 % first), 2,86 lei apart on a 24.300 lei contribution.
-    expect(res.reason).toContain('art. 118 alin. (2²)');
-    expect(res.reason).toContain('17152.94');
-    expect(res.reason).toContain('17155.8');
-    expect(res.reason).toContain('2.86');
-    // And the contributions the person does owe are still on the screen: the refusal stops the income tax,
-    // not the contributions.
-    expect(line(res, 'CASS (10%)')).toBeDefined();
+    expect(line(res, 'CAS deductibilă')).toBe(lei(3_037)); // art. 66: neglected, down.
+    expect(line(res, 'CAS deductibilă')).not.toBe(lei(3_038)); // what Math.round (ANAF's app) would give.
+  });
+
+  it('the refusal that used to stand here is gone, not dormant: a non-terminating ratio computes', async () => {
+    // The case that motivated B-118's refusal — 72.000 ÷ 102.000 = 70,5882… %, a ratio that does not
+    // terminate and never did. It used to return `review_required`; it now returns a number, and the whole
+    // year composes. Asserted as `computed` rather than as an amount, because the point is that no refusal
+    // path survives on this input.
+    const res = await engine({ dpi: lei(30_000) });
+    expect(res.status).toBe('computed');
+    if (res.status !== 'computed') return;
+    expect(line(res, 'CAS deductibilă')).toBeDefined();
+    expect(res.lines.some((l) => l.label.startsWith('Impozit'))).toBe(true);
   });
 });

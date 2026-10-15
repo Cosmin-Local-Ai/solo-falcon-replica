@@ -57,9 +57,9 @@ export const notes = {
   /** A run-rate projection is an assumption about the rest of the year. */
   runRateProjection:
     'Restul anului nu este încă înregistrat, așa că aplicația proiectează ritmul curent pentru întreg anul și spune că această cifră este o presupunere, nu o sumă încasată.',
-  /** The money-conversion report: rounding direction (CF art. 66 alin. (1)). */
+  /** The money-conversion report: rounding direction (CF art. 66). */
   roundingDirection:
-    'Legea nu spune cum se rotunjesc sumele la conversie, așa că aplicația rotunjește la banul cel mai apropiat, jumătate în jos — aceeași direcție pe care o folosește art. 66 alin. (1).',
+    'Legea nu spune cum se rotunjesc sumele la conversie, așa că aplicația rotunjește la banul cel mai apropiat, jumătate în jos — aceeași direcție pe care o folosește art. 66.',
   /**
    * TASK 10a — a calendar date with no published rate. The carry-forward rule that exists in the Codul
    * fiscal sits in the CASS articles (art. 68^3 alin. (4) and art. 85 alin. (4) — the only two occurrences
@@ -89,7 +89,7 @@ export const notes = {
     'Media anuală publicată de BNR este media a 12 medii lunare, nu media cursurilor zilnice, așa că aplicația nu o calculează și lasă suma în afara calculelor până când media este înregistrată.',
   /**
    * TASK 10a — rounding the product of an amount and a rate. Deliberately distinct from
-   * `roundingDirection` above, which describes the Phase 10 lei→bani storage conversion. art. 66 alin. (1)
+   * `roundingDirection` above, which describes the Phase 10 lei→bani storage conversion. art. 66
    * rounds a sum of tax to a whole leu; whether it reaches an intermediate conversion product is not
    * established, and applying it there would move every converted amount by up to 0,50 lei on an
    * unverified reading.

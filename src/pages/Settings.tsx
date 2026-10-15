@@ -2412,7 +2412,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
             <InterpretationNote note={copy.notes.fxAnnualNotComputable} />
             <InterpretationNote
               note={copy.notes.fxRoundingAtConversion}
-              citation="art. 66 alin. (1) Codul fiscal"
+              citation="art. 66 Codul fiscal"
             />
           </Card>
         </div>

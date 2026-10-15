@@ -31,7 +31,7 @@ import {
  * These are the assertions the whole phase exists to make. The boundary cases below are not arbitrary:
  * they are the exact cases on which the previous implementation disagreed with itself.
  */
-describe('money — CF art. 66 alin. (1) rounding policy', () => {
+describe('money — CF art. 66 rounding policy', () => {
   // „rotunjire la un leu, prin neglijarea fracțiunilor de până la 50 de bani inclusiv și majorarea la leu
   // a fracțiunilor ce depășesc 50 de bani."
   it('neglects a fraction of up to 50 bani INCLUSIVE, and majors anything above 50', () => {
