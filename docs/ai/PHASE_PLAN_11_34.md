@@ -751,6 +751,18 @@ npx playwright test --workers=2                                      # e2e   —
 
 Slower, and that is the point: **the user's RAM is the scarce resource, not wall-clock time.** A Worker that runs the uncapped default and forces a PI restart has lost more time than it saved. Run them as **two separate commands, never concurrently.**
 
+**But a capped run is a slow run, and a slow foreground command kills the Worker's own connection — amended 2026-10-15 after `worker-fx` was lost to a `Connection error` at 13m 11s with auto-retry exhausted.** The cap is correct; the failure mode is holding one tool call open for minutes. **Neither gate may be run as a bare foreground command.** Run it in the background to a log, then read the log:
+
+```
+npx vitest run --pool=threads --poolOptions.threads.maxThreads=2 > /tmp/unit.log 2>&1 &
+# then, once, when it is expected to be done:
+tail -n 30 /tmp/unit.log
+```
+
+Same shape for `npx playwright test --workers=2 > /tmp/e2e.log 2>&1 &`. **One gate at a time.** If the log is still incomplete, wait once and re-read — do not re-run the suite, and do not start a second gate while the first is writing.
+
+**This is a rule, not a suggestion:** a Worker that loses its connection mid-gate has to be resumed, and every resume costs a phase boundary the plan did not budget. Brief 69 lost two resumes to exactly this.
+
 **What this does not license:** skipping the full suite. §9 is unchanged — `tsc`, `build`, `test`, `test:e2e` all run before handoff, and a handoff without them is not a handoff. The rule is about **not running them repeatedly**, not about running them less at the end.
 
 ### 12.13 Never `git add -A` while a Worker is in flight — **orchestrator error, 2026-10-12**
