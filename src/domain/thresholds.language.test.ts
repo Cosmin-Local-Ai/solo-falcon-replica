@@ -219,3 +219,248 @@ describe('no internal cap identifier reaches a rendered Romanian sentence (B-138
     }
   });
 });
+
+/**
+ * B-139 — the guard widened to the general case, instead of extended with a fourth family list.
+ *
+ * Three briefs have fixed one defect. B-55 added `const FISCAL_BASES`, B-138 added `const CAP_BASES`, and
+ * each added a loop over its own list. A hand-written list can only police the families somebody already
+ * thought of, so the next enum guarantees a fourth brief and then a fifth — which is what happened.
+ *
+ * Two rules replace the lists, and neither names a family:
+ *
+ * **Rule 1 — the code universe is derived, not written out.** Every code→Romanian map the app ships is a
+ * runtime object, and the house pattern makes those maps exhaustive over their union (`satisfies
+ * Record<Union, string>`). So `Object.keys()` of every such map in the copy layer IS the set of internal
+ * codes that have wordings, including families this file has never heard of. No app source may quote one
+ * inside „…”.
+ *
+ * **Rule 2 — an interpolation inside „…” is denied by default.** The three leaks were never literal codes;
+ * they were `„${spec.requiredFiscalBase}”`, `„${cap.base}”` and `„${field}”`, and a literal-code scan cannot
+ * see those. What can be decided without knowing the family is *what kind of thing is being quoted*: a
+ * wording lookup, or a value the person typed or a record carries, are allowed; anything else is an internal
+ * name and fails until a human adds it with a reason. The test `the three historical families fail the shape
+ * rule on shape alone` is the proof this is a rule and not a renamed list — it rejects the exact expressions
+ * B-55, B-138 and B-139 shipped, without knowing the names `FiscalBase`, `CapBase` or `FiscalDateField`.
+ *
+ * **What these rules cannot do, stated plainly.** They cannot prove an interpolation is safe; they can only
+ * make an unjustified one fail. `„${status}”` is a person's e-Factura status in `ui/copy/attention.ts` and
+ * could be an internal enum in another file — the syntax is identical, so the guard cannot tell them apart
+ * and the difference has to be written down by a person next to the site. Neither rule follows data flow: a
+ * sentence assembled as `const w = cap.base; … „${w}”` is invisible to a text scan, and so is a code that
+ * reaches a sentence through a template built in another module. Closing that would need the type checker,
+ * and this suite runs in the browser with no `@types/node` and no compiler API (the choice recorded at the
+ * top of this file). The honest deliverable is therefore default-deny with a named, countable exemption
+ * list: it converts „someone leaked an enum” into „someone had to justify a site, by name, with a reason”.
+ */
+
+/** A key that reads as an internal code rather than as Romanian. */
+function codeShaped(key: string): boolean {
+  return /^[a-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)*$/.test(key);
+}
+
+interface DerivedCodeMap {
+  path: string;
+  /** The exported binding; `parent.child` for a map nested inside a copy namespace. */
+  name: string;
+  labels: Record<string, string>;
+}
+
+const COPY_MODULES = import.meta.glob('../ui/copy/**/*.ts', {
+  eager: true,
+}) as Record<string, unknown>;
+
+function collectCodeMaps(value: unknown, path: string, name: string, out: DerivedCodeMap[]): void {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length > 0 && entries.every(([k, v]) => codeShaped(k) && typeof v === 'string' && v.trim().length > 0)) {
+    out.push({ path, name, labels: Object.fromEntries(entries) as Record<string, string> });
+    return; // the values of a code map are words; there is nothing below it to descend into
+  }
+  for (const [k, v] of entries) collectCodeMaps(v, path, name ? `${name}.${k}` : k, out);
+}
+
+const CODE_MAPS: DerivedCodeMap[] = [];
+for (const [path, mod] of Object.entries(COPY_MODULES)) {
+  // `index.ts` only re-exports the others; counting it twice would inflate the map list without adding a code.
+  if (path.endsWith('/index.ts')) continue;
+  for (const [name, value] of Object.entries((mod ?? {}) as Record<string, unknown>)) {
+    collectCodeMaps(value, path, name, CODE_MAPS);
+  }
+}
+
+const DERIVED_CODES: readonly string[] = [...new Set(CODE_MAPS.flatMap(m => Object.keys(m.labels)))].sort();
+
+/**
+ * What may sit inside `„${…}”` without a per-site exemption: the names of values a person typed or a record
+ * carries. This is a list of *kinds of value*, not of enum families — which is what makes the rule general.
+ */
+const QUOTABLE_VALUE_NAMES: ReadonlySet<string> = new Set([
+  'value', 'name', 'shown', 'code', 'status', 'reason', 'onDate', 'd',
+  'label', 'nr', 'nume', 'denumire', 'reference', 'currency',
+]);
+
+/**
+ * Decide whether an expression interpolated inside `„…”` is justified.
+ *
+ * Three ways to pass, and everything else fails: it is a copy-layer wording lookup; it is a member chain
+ * whose final segment is a value name; or it is a bare value name. A wording lookup passes whatever it is
+ * indexed by, because the index is the code the compiler reads and the map is what the person reads.
+ */
+function justifiesQuotedExpression(expr: string): boolean {
+  if (/(Labels|labels|Source)\[/.test(expr)) return true;
+
+  // String literals are prose, not names — `'(necompletat)'` must not be read as an identifier.
+  const withoutStrings = expr.replace(/'[^']*'/g, ' ').replace(/"[^"]*"/g, ' ');
+  const chains = withoutStrings.match(/[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+/g) ?? [];
+  const standalone = withoutStrings
+    .replace(/[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+/g, ' ')
+    .match(/[A-Za-z_$][\w$]*/g) ?? [];
+
+  return (
+    chains.every(c => QUOTABLE_VALUE_NAMES.has(c.slice(c.lastIndexOf('.') + 1)))
+    && standalone.every(n => QUOTABLE_VALUE_NAMES.has(n))
+  );
+}
+
+/**
+ * A derived code quoted literally, listed per site. There is one, and it is a false positive kept visible
+ * rather than hidden: `aport` is simultaneously a code in `ui/copy/assets.ts` and an ordinary Romanian
+ * legal noun, and the v17 migration summary uses it as the noun („Un „aport” … inventat decide întrebarea
+ * contestată”). No shape test can separate the two either — `aport` is a perfectly ordinary lowercase
+ * identifier-shaped Romanian word — so the exemption records the judgement instead of the rule pretending
+ * not to have made one.
+ */
+const LITERAL_QUOTE_EXEMPTIONS: ReadonlyArray<{ file: string; code: string; why: string }> = [
+  // ── Romanian words that are also map keys. The derivation cannot tell these apart from codes, because
+  //    `da`, `nu` and `aport` are ordinary lowercase Romanian words AND keys in a copy map. Each is a word
+  //    used as a word, in a sentence that is *about* the answer or the noun, not a value substituted in.
+  {
+    file: '../data/migration.ts',
+    code: 'aport',
+    why: 'Romanian legal noun in the v17 summary („Un „aport” … inventat decide întrebarea contestată”), not the `ui/copy/assets.ts` acquisition-kind code. The word and the code coincide.',
+  },
+  { file: '../data/migration.ts', code: 'da', why: 'the Romanian word for „yes”, discussing a stored yes/no answer.' },
+  { file: '../ui/copy/settings.ts', code: 'da', why: 'the Romanian word for „yes”; D-AIC-2 is about what a „da” commits the person to.' },
+  { file: './fiscal/package2026.ts', code: 'nu', why: 'the Romanian word for „no”, used as „no” in prose.' },
+  // ── The fourth instance the guard found, reported rather than fixed. Migration step summaries quote the
+  //    storage key or the stored status they are *about*. Rewriting shipped migration copy is a separate
+  //    decision from a copy sweep — the summary is the record of what a step did, and here the key IS the
+  //    subject of the sentence („pensionStatus” a fost redenumit în „pensionerStatus”), not a value dropped
+  //    into prose. Recorded so the next pass can decide, not quietly reworded by this one.
+  { file: '../data/migration.ts', code: 'declarations', why: 'the v10 summary names the storage key it left in lei.' },
+  { file: '../data/migration.ts', code: 'inregistrata', why: 'the v11 summary quotes the monthly row\'s status to explain why it was not read as proof of a filing.' },
+  { file: '../data/migration.ts', code: 'pensionerStatus', why: 'the v8 summary names the key it renamed — the key is the subject, not a substituted value.' },
+];
+
+/**
+ * Sites the shape rule cannot justify, listed one per site so the count is visible and a new one fails. An
+ * entry here is not a pass — it is a leak or a judgement call with a name and a reason attached, and the
+ * last test in this block fails if the site stops existing, so an exemption cannot outlive the code it excuses.
+ */
+const QUOTED_INTERPOLATION_EXEMPTIONS: ReadonlyArray<{ file: string; expr: string; why: string }> = [
+  {
+    file: './regimes.ts',
+    expr: 'regime',
+    why: 'B-139 boundary: the regime refusal quotes the stored value it refused. `PFA_REGIME_DESCRIPTORS[regime].label` exists and should be used, but four B-9/B-14 tests pin this wording and §4 of brief 67 puts the regime vocabulary out of scope. Reported, not fixed.',
+  },
+  {
+    file: './regimes.ts',
+    expr: 'String(regime)',
+    why: 'same site family as the line above — the unknown-regime branch.',
+  },
+  {
+    file: '../ui/copy/onboarding.ts',
+    expr: 'regime',
+    why: 'the same leak in the onboarding copy; outside brief 67\'s boundary, reported as a finding.',
+  },
+  {
+    file: './estimateBasis.ts',
+    expr: 'c.treatment',
+    why: 'a rule-package treatment code quoted at a person; found by this guard, outside brief 67\'s boundary, reported as a finding.',
+  },
+];
+
+/** Every `„${…}”` in one app source, as the expression text being quoted. */
+function quotedInterpolations(path: string): string[] {
+  const code = codeOnly(SOURCES[path] ?? '');
+  const out: string[] = [];
+  const re = /„\$\{([^}]*)\}/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(code)) !== null) out.push(match[1].trim());
+  return out;
+}
+
+describe('the general identifier-leak guard (B-139)', () => {
+  it('derives a code universe without being told which families exist', () => {
+    // A guard that quietly finds nothing is worse than the lists it replaces.
+    expect(CODE_MAPS.length).toBeGreaterThan(10);
+    expect(DERIVED_CODES.length).toBeGreaterThan(50);
+
+    // The families this file has already been asked about are all in the derived set — which is the proof
+    // the derivation reaches them without naming them.
+    for (const code of ['net-income', 'annual_eur_per_person', 'collected', 'paid', 'valoareFaraTva', 'tva']) {
+      expect(DERIVED_CODES.includes(code), `the derived universe does not contain '${code}'`).toBe(true);
+    }
+  });
+
+  it('no app source quotes a code that has a Romanian wording', () => {
+    const found: string[] = [];
+    for (const code of DERIVED_CODES) {
+      const pattern = quote(`„${code}”`);
+      for (const path of offenders(pattern, p => codeOnly(SOURCES[p]))) {
+        if (LITERAL_QUOTE_EXEMPTIONS.some(e => e.file === path && e.code === code)) continue;
+        found.push(`${path}: „${code}”`);
+      }
+    }
+    expect(found, 'a code that has a Romanian wording is quoted at a person').toEqual([]);
+  });
+
+  it('every derived code has a wording, and the wording is not the code', () => {
+    for (const map of CODE_MAPS) {
+      for (const [code, label] of Object.entries(map.labels)) {
+        expect(label, `${map.path} ${map.name}[${code}] has no wording`).toBeTruthy();
+        expect(label, `${map.path} ${map.name}[${code}] labels the code with itself`).not.toBe(code);
+      }
+    }
+  });
+
+  it('every „${…}” in an app source is justified by shape or listed by name', () => {
+    const unjustified: string[] = [];
+    for (const path of APP_FILES) {
+      for (const expr of quotedInterpolations(path)) {
+        if (justifiesQuotedExpression(expr)) continue;
+        if (QUOTED_INTERPOLATION_EXEMPTIONS.some(e => e.file === path && e.expr === expr)) continue;
+        unjustified.push(`${path}: „\${${expr}}”`);
+      }
+    }
+    expect(unjustified, 'an internal name is quoted at a person').toEqual([]);
+  });
+
+  it('the three historical families fail the shape rule on shape alone', () => {
+    // The proof the rule is general: these are the expressions B-55, B-138 and B-139 actually shipped, and
+    // the rule rejects them without knowing the names FiscalBase, CapBase or FiscalDateField.
+    for (const expr of ['spec.requiredFiscalBase', 'cap.base', 'field', 'c.treatment', 'regime', 'onDateSource']) {
+      expect(justifiesQuotedExpression(expr), `'${expr}' must not be justified`).toBe(false);
+    }
+    // …and it accepts the forms that replaced them, plus the value quotations that were always fine.
+    for (const expr of [
+      'fiscalBaseLabels[base]', 'capBaseLabels[base]', 'fiscalDateSource[field]', 'moneyFieldLabels[field]',
+      "value === '' ? '(necompletat)' : value", 'record.nr', 'resolution.label', 'shown', 'onDate',
+    ]) {
+      expect(justifiesQuotedExpression(expr), `'${expr}' must be justified`).toBe(true);
+    }
+  });
+
+  it('no exemption outlives the site it excuses', () => {
+    const staleInterpolations = QUOTED_INTERPOLATION_EXEMPTIONS
+      .filter(e => !quotedInterpolations(e.file).includes(e.expr))
+      .map(e => `${e.file}: \${${e.expr}}`);
+    expect(staleInterpolations, 'an interpolation exemption outlived its site').toEqual([]);
+
+    const staleLiterals = LITERAL_QUOTE_EXEMPTIONS
+      .filter(e => !offenders(quote(`„${e.code}”`), p => codeOnly(SOURCES[p])).includes(e.file))
+      .map(e => `${e.file}: „${e.code}”`);
+    expect(staleLiterals, 'a literal-quote exemption outlived its site').toEqual([]);
+  });
+});
