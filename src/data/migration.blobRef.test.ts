@@ -94,7 +94,7 @@ describe('the chain around it', () => {
     // still a one-step gap, and `document-blob-ref` still sits at that edge — it is now the second-to-last
     // rung rather than the last.
     expect(DATA_VERSION_DOCUMENT_BLOB_REF - DATA_VERSION_LEASE_FACTS).toBe(1);
-    const previous = MIGRATION_CHAIN[MIGRATION_CHAIN.length - 3]!;
+    const previous = MIGRATION_CHAIN[MIGRATION_CHAIN.length - 4]!;
     expect(previous.from).toBe(DATA_VERSION_LEASE_FACTS);
     expect(previous.to).toBe(DATA_VERSION_DOCUMENT_BLOB_REF);
     expect(previous.name).toBe('document-blob-ref');
@@ -118,13 +118,13 @@ describe('the chain around it', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it('a v20 payload runs this step and the two that followed it, and no byte moves', () => {
-    // Brief 76 re-pin: v20 used to run exactly one step. It now runs three — `document-blob-ref`, the
-    // `efactura-deadline` retirement and the `expense-asset-link` opening. The guarded property is
-    // untouched: this step still declares a shape and relocates nothing.
+  it('a v20 payload runs this step and the three that followed it, and no byte moves', () => {
+    // Brief 76 re-pin: v20 used to run exactly one step. It now runs four — `document-blob-ref`, the
+    // `efactura-deadline` retirement, the `expense-asset-link` opening and the `fixed-asset-disposal-proceeds`
+    // opening. The guarded property is untouched: this step still declares a shape and relocates nothing.
     const outcome = migratePersistedData(v20Payload());
     expect(outcome.fromVersion).toBe(DATA_VERSION_LEASE_FACTS);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
-    expect(outcome.stepsApplied).toEqual(['document-blob-ref', 'efactura-deadline', 'expense-asset-link']);
+    expect(outcome.stepsApplied).toEqual(['document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds']);
   });
 });

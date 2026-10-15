@@ -234,6 +234,28 @@ export interface FixedAssetFacts {
   m1ExceptionCategory?: M1ExceptionCategory;
   disposedOn?: string;
   disposalKind?: AssetDisposalKind;
+  /**
+   * B-65 / brief 76 — „venitul realizat din înstrăinare”: what the asset actually brought in when it left.
+   *
+   * Titlul II norm pct. 27 caps the unamortised residual of an M1 at 1.500 lei × the months left of the
+   * declared duration. Titlul IV norm pct. 7 alin. (5) lit. o) caps **the same residual a second time**,
+   * „la nivelul venitului realizat din înstrăinare” — the proceeds. Brief 74 implemented the first cap and
+   * deliberately did not post the figure, because nothing in the app held the second one: posting pct. 27's
+   * number would over-deduct whenever the asset sold for less than it was still worth, which is the usual
+   * case.
+   *
+   * **Optional, and the v23→v24 step backfills nothing.** A sale price is a fact about a transaction, and no
+   * stored field records it; deriving one from the fiscal value, from the residual or from the declared
+   * duration would be inventing the number the norm measures against. Absence is not zero: it means the
+   * second limit cannot be measured, and the app says so instead of treating the first limit as the answer.
+   *
+   * **Adding this field does not make the figure postable.** B-153 is still open: the schedule keeps
+   * amortising past the month of the *scoatere din gestiune* while `disposalFigure` counts only the months
+   * actually used, so the residual is measured off a `monthsUsed` the posted schedule does not match. With
+   * both limits known the reported number is the correct ceiling; it is still not a deductible amount, and
+   * `complete` on the outcome is what carries that.
+   */
+  disposalProceeds?: Bani;
 }
 
 // ── The outcome ─────────────────────────────────────────────────────────────
@@ -290,10 +312,30 @@ export type DepreciationOutcome =
       disposal?: {
         unamortised: Bani;
         remainingMonths: number;
+        /** Titlul II pct. 27 — 1.500 lei × the months left of the declared duration. */
         cap: Bani;
+        /**
+         * Titlul IV pct. 7 alin. (5) lit. o) — „nivelul venitului realizat din înstrăinare”. `null` when the
+         * proceeds were never recorded, which means this second limit exists and cannot be measured.
+         */
+        proceedsCap: Bani | null;
+        /** The declared proceeds themselves, or `null`. Kept beside the cap so the screen can name its source. */
+        proceeds: Bani | null;
+        /**
+         * `unamortised` after whichever limit binds. **Only a deductible amount when `complete` is true** —
+         * with no proceeds recorded this is the pct. 27 ceiling alone, and the norm's second limit is still
+         * unapplied.
+         */
         deductible: Bani;
         lost: Bani;
         capped: boolean;
+        /** Which limit bound: pct. 27, the proceeds, or neither. */
+        bound: 'pct-27' | 'proceeds' | 'none';
+        /**
+         * False while the proceeds are missing. Named so no caller can read `deductible` as postable without
+         * deciding whether the second cap was ever measured.
+         */
+        complete: boolean;
       };
     }
   | { status: 'review_required'; gap: DepreciationGap; reason: string };
@@ -660,14 +702,25 @@ function disposalFigure(
   const unamortised = toBaniNearest(new Decimal(asset.fiscalValue).minus(depreciated));
   const remainingMonths = Math.max(0, (asset.normalLifeMonths ?? 0) - monthsUsed);
   const cap = applyRateDecimal(monthlyCap, remainingMonths * 100).toNumber() as Bani;
-  const deductible = unamortised < cap ? unamortised : cap;
+  // Titlul IV norm pct. 7 alin. (5) lit. o) caps the same residual a second time, at the proceeds of the
+  // disposal. Where the proceeds are recorded the two limits are applied together and the smaller binds;
+  // where they are not, the pct. 27 figure is a ceiling and nothing more — `complete` says which.
+  const proceeds = asset.disposalProceeds ?? null;
+  const binding: Bani = proceeds === null ? cap : proceeds < cap ? proceeds : cap;
+  const deductible: Bani = unamortised < binding ? unamortised : binding;
+  const bound: 'pct-27' | 'proceeds' | 'none' =
+    unamortised <= binding ? 'none' : proceeds !== null && proceeds < cap ? 'proceeds' : 'pct-27';
   return {
     unamortised,
     remainingMonths,
     cap,
+    proceeds,
+    proceedsCap: proceeds,
     deductible,
     lost: subBani(unamortised, deductible),
-    capped: unamortised > cap,
+    capped: unamortised > binding,
+    bound,
+    complete: proceeds !== null,
   };
 }
 
@@ -727,11 +780,21 @@ export interface AssetDepreciationDisposal {
   label: string;
   unamortised: Bani;
   remainingMonths: number;
-  /** 1.500 lei × the remaining months — the pct. 27 ceiling itself. */
+  /** 1.500 lei × the remaining months — the Titlul II pct. 27 ceiling itself. */
   cap: Bani;
+  /**
+   * Titlul IV pct. 7 alin. (5) lit. o) — the proceeds, or `null` when they were never recorded and the
+   * second limit therefore cannot be measured.
+   */
+  proceedsCap: Bani | null;
+  /** The declared proceeds, or `null`. */
+  proceeds: Bani | null;
   deductible: Bani;
   lost: Bani;
   capped: boolean;
+  bound: 'pct-27' | 'proceeds' | 'none';
+  /** False while the proceeds are missing — see `DepreciationOutcome['disposal']['complete']`. */
+  complete: boolean;
 }
 
 /**

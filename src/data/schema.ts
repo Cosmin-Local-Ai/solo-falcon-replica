@@ -400,6 +400,12 @@ export const fixedAssetSchema = z.object({
     .optional(),
   disposedOn: z.string().optional(),
   disposalKind: z.enum(['vanzare', 'casare', 'scoatere_din_gestiune']).optional(),
+  // B-65 / brief 76 — „venitul realizat din înstrăinare”, the second ceiling Titlul IV pct. 7 alin. (5)
+  // lit. o) puts on the same residual pct. 27 measures. Declared because **zod strips undeclared keys**: an
+  // undeclared price would be erased on the next load and the second limit would silently stop being
+  // measured. Optional and never defaulted — the v23→v24 step backfills nothing, because a sale price is a
+  // fact about a transaction and no stored field records one.
+  disposalProceeds: bani().optional(),
 });
 
 export const documentItemSchema = z.object({

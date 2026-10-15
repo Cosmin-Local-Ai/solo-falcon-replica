@@ -449,8 +449,34 @@ export const DATA_VERSION_EFACTURA_DEADLINE = 22;
  * no-op rather than a wipe.
  */
 export const DATA_VERSION_EXPENSE_ASSET_LINK = 23;
+/**
+ * B-65 (carried from brief 74) — a disposed fixed asset may now record what it brought in.
+ *
+ * **The half-rule that has been waiting on this field.** Titlul II norm pct. 27 caps the unamortised
+ * residual of an M1 taken out of the register at 1.500 lei × the months left of the duration the taxpayer
+ * declared. Titlul IV norm pct. 7 alin. (5) lit. o) caps **that same residual a second time**, „la nivelul
+ * venitului realizat din înstrăinare” — the proceeds of the disposal. Brief 74 implemented the first cap,
+ * surfaced it as a coverage row, and deliberately did not post it, because nothing in the app held the
+ * second one. Posting pct. 27's figure without it would over-deduct every time the asset sold for less than
+ * it was still worth, which is the ordinary case rather than the exception.
+ *
+ * **What this step opens, and what it refuses to fill in.** `FixedAsset.disposalProceeds` appears on the
+ * record. The step writes the version and nothing else. A sale price is a fact about a transaction: no
+ * stored field records it, and deriving one from the fiscal value, from the residual or from the declared
+ * duration would invent the very number the norm measures the deduction against. Absence is not zero — it
+ * means the second limit exists and cannot be measured, and the app now says that instead of treating the
+ * first limit as the answer.
+ *
+ * **What this step does NOT settle, stated plainly.** B-153 is still open. `depreciationSchedule` keeps
+ * amortising an asset past the month it left the register, while `disposalFigure` counts only the months
+ * actually used — two halves of one rule, two month counts. The residual this field caps is measured off the
+ * shorter of the two, so with the proceeds recorded the reported figure is the correct **ceiling** and still
+ * not a safe amount to post. Neither the truncation point nor the interaction with the last-year-takes-the-
+ * remainder rule is settled by the corpus (`research/36` §12.5, §12.9), so it is not decided here either.
+ */
+export const DATA_VERSION_DISPOSAL_PROCEEDS = 24;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_EXPENSE_ASSET_LINK;
+export const CURRENT_DATA_VERSION = DATA_VERSION_DISPOSAL_PROCEEDS;
 
 export interface MigrationStep {
   readonly from: number;
@@ -1222,6 +1248,18 @@ export function migrateExpenseAssetLinkV23(data: PersistedAppData): PersistedApp
   return { ...data, version: DATA_VERSION_EXPENSE_ASSET_LINK };
 }
 
+/**
+ * v23 → v24 (`fixed-asset-disposal-proceeds`). Opens `FixedAsset.disposalProceeds` by writing nothing. See
+ * `DATA_VERSION_DISPOSAL_PROCEEDS` for the second ceiling the field makes measurable, for the inference this
+ * step refuses, and for the month-count disagreement (B-153) that still keeps the figure unposted.
+ *
+ * The body is the version stamp and nothing else. A payload that already carries `disposalProceeds` keeps it
+ * untouched, which is what makes re-running the step a no-op rather than a wipe.
+ */
+export function migrateDisposalProceedsV24(data: PersistedAppData): PersistedAppData {
+  return { ...data, version: DATA_VERSION_DISPOSAL_PROCEEDS };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -1406,6 +1444,14 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'O cheltuială poate înregistra acum mijlocul fix căruia îi aparține, prin legătura pe care o face persoana. Nimic nu a fost completat în acest pas și nimic nu putea fi completat: art. 68 alin. (4) lit. d) leagă cele două căi de calcul — planul de amortizare și cheltuiala tastată de mână — dar nu dă nicio regulă prin care o linie tastată să fie atribuită unui bun. O legătură ghicită după sumă, după dată sau după furnizor ar îngusta refuzul pe o ficțiune, ceea ce este mai grav decât un refuz care spune sincer că e larg. Până când legătura există, conflictul rămâne la nivelul registrului, iar aplicația spune asta pe ecran. Un payload care are deja cheia `assetId` o păstrează neschimbată.',
     apply: migrateExpenseAssetLinkV23,
+  },
+  {
+    from: DATA_VERSION_EXPENSE_ASSET_LINK,
+    to: DATA_VERSION_DISPOSAL_PROCEEDS,
+    name: 'fixed-asset-disposal-proceeds',
+    summary:
+      'Un bun scos din gestiune poate înregistra acum suma realizată din înstrăinare. Normele Titlul II pct. 27 pun o primă limită valorii neamortizate — 1.500 lei × lunile rămase din durata declarată — iar normele Titlul IV pct. 7 alin. (5) lit. o) pun aceleiași valori a doua limită, „la nivelul venitului realizat din înstrăinare”. Aplicația cunoștea prima și nu avea unde să scrie a doua, de aceea cifra pct. 27 era arătată și nu era postată: fără preț, ea ar fi dedus mai mult decât permite norma ori de câte ori bunul s-a vândut sub valoarea neamortizată. Nimic nu a fost completat în acest pas: prețul este o faptă despre o tranzacție, și niciun câmp stocat nu o înregistrează; derivată din valoarea fiscală sau din residual, ea ar inventa chiar numărul față de care norma măsoară. Cifra este acum plafonul corect, nu deductibilul final: B-153 rămâne deschis — planul de amortizare continuă după luna ieșirii din gestiune, în timp ce figura calculată numără doar lunile folosite, iar cele două numărători nu se împacă.',
+    apply: migrateDisposalProceedsV24,
   },
 ];
 

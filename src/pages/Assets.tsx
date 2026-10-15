@@ -109,6 +109,9 @@ interface AssetFormState {
   m1ExceptionCategory: string;
   disposedOn: string;
   disposalKind: string;
+  // B-65 / brief 76 — „venitul realizat din înstrăinare”. '' means "not recorded", which is not zero: it
+  // means Titlul IV pct. 7 alin. (5) lit. o)'s second ceiling cannot be measured.
+  disposalProceeds: string;
 }
 
 const blankForm = (): AssetFormState => ({
@@ -127,6 +130,7 @@ const blankForm = (): AssetFormState => ({
   m1ExceptionCategory: '',
   disposedOn: '',
   disposalKind: '',
+  disposalProceeds: '',
 });
 
 const fromAsset = (a: FixedAsset): AssetFormState => ({
@@ -146,6 +150,7 @@ const fromAsset = (a: FixedAsset): AssetFormState => ({
   m1ExceptionCategory: a.m1ExceptionCategory ?? '',
   disposedOn: a.disposedOn ?? '',
   disposalKind: a.disposalKind ?? '',
+  disposalProceeds: a.disposalProceeds === undefined ? '' : leiInputValue(a.disposalProceeds),
 });
 
 function AssetForm({ initial, onSave, onClose }: {
@@ -175,6 +180,8 @@ function AssetForm({ initial, onSave, onClose }: {
     }
     const vat = f.nonDeductibleVatIncluded.trim() === '' ? undefined : parseLeiInput(f.nonDeductibleVatIncluded);
     if (f.nonDeductibleVatIncluded.trim() !== '' && vat === null) e.nonDeductibleVatIncluded = validation.leiInvalid;
+    const proceeds = f.disposalProceeds.trim() === '' ? undefined : parseLeiInput(f.disposalProceeds);
+    if (f.disposalProceeds.trim() !== '' && proceeds === null) e.disposalProceeds = validation.leiInvalid;
     setErrors(e);
     if (Object.keys(e).length) return;
 
@@ -195,6 +202,7 @@ function AssetForm({ initial, onSave, onClose }: {
       m1ExceptionCategory: (f.m1ExceptionCategory || undefined) as M1ExceptionCategory | undefined,
       disposedOn: f.disposedOn || undefined,
       disposalKind: (f.disposalKind || undefined) as AssetDisposalKind | undefined,
+      disposalProceeds: proceeds ?? undefined,
     });
   };
 
@@ -260,6 +268,7 @@ function AssetForm({ initial, onSave, onClose }: {
         {select('m1ExceptionCategory', assetsCopy.form.m1ExceptionCategory, M1_EXCEPTION_CATEGORIES)}
         {text('disposedOn', assetsCopy.form.disposedOn, 'date')}
         {select('disposalKind', assetsCopy.form.disposalKind, ASSET_DISPOSAL_KINDS, assetsCopy.form.disposalKindHint)}
+        {text('disposalProceeds', assetsCopy.form.disposalProceeds, 'text', assetsCopy.form.disposalProceedsHint)}
       </div>
     </Modal>
   );

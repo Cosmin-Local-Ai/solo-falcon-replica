@@ -1437,6 +1437,22 @@ export function depreciationCoverageGaps(leg: DepreciationLeg | null | undefined
   // conflict rows above use, and for the same reason: this is not a sum that left the estimate, it is a
   // sum that was never in it, so the weighted completeness denominator does not move.
   for (const d of leg.disposals) {
+    // Brief 76 — the row now carries BOTH ceilings when the proceeds are recorded, and names the one that
+    // bound. It still does not post the figure, and the reason is stated rather than hidden: B-153 leaves
+    // the schedule and the residual counting different month totals.
+    const whichBinds: Record<'pct-27' | 'proceeds' | 'none', string> = {
+      proceeds: 'A doua limită este cea care scade cifra.',
+      'pct-27': 'Plafonul pct. 27 este cel care scade cifra, pentru că prețul este mai mare.',
+      none: 'Niciun plafon nu scade cifra: valoarea neamortizată este sub ambele.',
+    };
+    const secondLimit =
+      d.proceedsCap === null
+        ? 'Normele Titlului IV pct. 7 alin. (5) lit. o) pune aceleiași valori neamortizate a doua limită, '
+          + '„la nivelul venitului realizat din înstrăinare”, iar prețul înstrăinării nu este înregistrat. '
+          + 'A doua limită nu poate fi măsurată, deci cifra de mai sus este doar plafonul de la pct. 27.'
+        : `Prețul înregistrat al înstrăinării este ${formatBani(d.proceedsCap)}, iar normele Titlului IV `
+          + 'pct. 7 alin. (5) lit. o) limitează aceeași valoare neamortizată „la nivelul venitului realizat '
+          + `din înstrăinare”. Ambele plafoane sunt aplicate: ${whichBinds[d.bound]}`;
     out.push({
       recordId: `asset:${d.assetId}:disposal`,
       kind: 'profile',
@@ -1447,13 +1463,12 @@ export function depreciationCoverageGaps(leg: DepreciationLeg | null | undefined
       detail:
         `Mijlocul fix „${d.label}” a fost scos din gestiune. Plafonul pct. 27 din Normele Titlului II a ` +
         `fost calculat: valoare neamortizată ${formatBani(d.unamortised)}, ${d.remainingMonths} luni rămase ` +
-        `din durata declarată, plafon 1.500 lei × luni = ${formatBani(d.cap)}, deductibil sub pct. 27 = ` +
-        `${formatBani(d.deductible)}. Suma NU este adăugată în estimare. Normele Titlului IV pct. 7 alin. (5) ` +
-        'lit. o) limitează aceeași valoare rămasă neamortizată „la nivelul venitului realizat din ' +
-        'înstrăinare” — adică la prețul cu care bunul a fost vândut. Aplicația nu înregistrează prețul ' +
-        'înstrăinării, deci nu poate măsura a doua limită; ar deduce mai mult decât permite norma ori de ' +
-        'câte ori vehiculul s-a vândut sub valoarea neamortizată. Cifra de mai sus este plafonul de la ' +
-        'pct. 27, nu deductibilul final.',
+        `din durata declarată, plafon 1.500 lei × luni = ${formatBani(d.cap)}, deductibil sub plafon = ` +
+        `${formatBani(d.deductible)}. Suma NU este adăugată în estimare. ${secondLimit} ` +
+        'Rămâne deschisă și o a doua neconcordanță: planul de amortizare continuă să amortizeze după luna ' +
+        'în care bunul a ieșit din gestiune, în timp ce figura de mai sus numără doar lunile efectiv ' +
+        'folosite — aceeași regulă, două numărători de luni. Cifra de mai sus este plafonul corect, nu ' +
+        'deductibilul final.',
     });
   }
   return out;
