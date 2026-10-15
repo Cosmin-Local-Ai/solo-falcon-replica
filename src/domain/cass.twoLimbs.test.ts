@@ -2,7 +2,9 @@
  * B-112 STAGE 3 — the two CASS limbs, and the one exemption that reaches only one of them.
  *
  * **What this file is not.** Limb 1 (`calcCass`, art. 170 alin. (1)) and limb 2 (`calcCassLadder`, art. 170
- * alin. (2)-(5)) were already built, and built well: the 72-SM cap, the art. 174 alin. (2) loss case, the
+ * alin. (2)-(4) — the base is alin. (3), the cumulation alin. (4); the pre-2025 text put the ladder at
+ * alin. (5) and OUG 128/2024 moved it, per research/50) were already built, and built well: the 72-SM cap,
+ * the art. 174 alin. (2) loss case, the
  * 6-SM top-up with its three relief branches, the six-category completeness refusal, the art. 114
  * qualification, the art. 83 alin. (1) cedarea gate. This file does not re-prove those. It pins the two
  * things stage 3 actually adds or exposes:

@@ -33,6 +33,141 @@ import type { FiscalRule } from './rules';
  * is the base. Neither is a DPI-specific rate, and duplicating 48.600 or 97.200 here would be the drift
  * this package's own history records (Phase 5 deleted `multiple_6x`…`multiple_72x` for exactly that reason).
  */
+/**
+ * Shared provenance for the DPI rules: one object, so the pair cannot drift apart on jurisdiction, entity
+ * type, tax year, verification date or lifecycle status, and a later stage that appends a third DPI rule
+ * inherits the same provenance instead of restating it.
+ */
+const PROVENANCE_2026_DPI = {
+  jurisdiction: 'RO',
+  entityType: 'PFA',
+  taxYear: 2026,
+  verifiedAt: '2026-10-14',
+  status: 'ACTIVE',
+  version: 1,
+} as const;
+
+/**
+ * B-112 STAGE 4 — the payer-side withholding machines, recorded with the alineate that are in force for
+ * FY2026.
+ *
+ * **Why this rule exists at all.** The two machines produce no number of their own: every figure they need —
+ * the 25 % of art. 138 lit. a), the 10 % of art. 156, the 12/24-SMN floors of art. 148 alin. (2), the
+ * 6/12/24-SMN rungs of art. 170 alin. (3) — is already a parameter on `CAS_2026` and `CASS_2026`, and
+ * repeating 48.600 or 97.200 here would be the drift this package's own history records (Phase 4 deleted
+ * `min_cass`/`max_cass`, Phase 5 deleted `multiple_6x`…`multiple_72x`). What this rule carries is the
+ * **citation**, and in this phase the citation is the thing that keeps breaking: `research/48` §4 states the
+ * CASS machine as „art. 174¹ alin. (2), (6)–(10)”, which is the numbering OUG 128/2024 (MO 1125/11.11.2024)
+ * replaced when it cut art. 174¹ from 21 alineate to 12. `research/50` gives the current text. A rule that
+ * states the machine with the wrong alineate is how a correct rule becomes a wrong brief for the third time
+ * in this phase.
+ *
+ * **`calculatorId` is a label only**, as in `./deductibility2026.ts`: no calculator is registered for this
+ * regime, because the triple is computed inside `calc-cas` and `calc-cass-ladder`, which already own the
+ * DUE figure. A second calculator producing the same contribution is the two-producers defect (B-70).
+ */
+export const DPI_WITHHOLDING_RULE_2026: FiscalRule = {
+  ...PROVENANCE_2026_DPI,
+  ruleId: 'DPI_CONTRIB_WITHHOLDING_2026',
+  name: 'DPI 2026 — contribuții reținute la sursă: art. 151 alin. (5)-(11) (CAS) și art. 174¹ alin. (3)-(9) (CASS)',
+  taxRegime: 'contribution-withholding',
+  effectiveFrom: '2026-01-01',
+  effectiveTo: null,
+  parameters: [
+    {
+      id: 'cass_machine',
+      label: 'CASS reținută — art. 174¹ alin. (3)-(9), numerotarea de după OUG 128/2024',
+      value:
+        'alin. (3): un singur plătitor de venit, cu un venit net estimat de cel puțin 6 salarii minime brute, ' +
+        'calculează contribuția aplicând cota de la art. 156 asupra bazei de la art. 170 alin. (3), o reține ' +
+        'și o virează. alin. (4): la mai multe surse, contribuabilul desemnează prin contract plătitorul a ' +
+        'cărui sursă depășește singură 6 salarii minime brute. alin. (5): același plătitor depune D112 ' +
+        '(art. 147 alin. (1)) până la data de 25 a lunii următoare. alin. (6) — COMPLETAREA: reținerea s-a ' +
+        'făcut pe o bază sub 12/24 salarii minime brute, dar venitul cumulat atinge 12/24; Declarația Unică ' +
+        'stabilește baza mai mare, iar „contribuția reținută … este luată în calcul”. alin. (7): plătitorul ' +
+        'emite, la cerere, „o informare cu privire la nivelul contribuției … reținute”. alin. (8): fiecare ' +
+        'sursă în parte sub 6 salarii minime brute, dar cumulate cel puțin egale cu 6 — NU se reține nimic, ' +
+        'contribuabilul depune Declarația Unică. alin. (9): pentru celelalte venituri din art. 155 alin. (1) ' +
+        'lit. c)-h) se depune Declarația Unică, în afară de cazul în care suma reținută este deja egală cu ' +
+        'cea datorată.',
+      unit: 'text',
+      description:
+        'Nu este o cotă și nu este un prag nou: cota (10 %, art. 156) și treptele (6 / 12 / 24 SM, art. 170 ' +
+        'alin. (3)) sunt parametri ai CASS_2026, citiți de calc-cass-ladder. Această regulă consemnează ' +
+        'numai lanțul de condiții și alineatele corecte — research/50 arată că OUG 128/2024 a mutat scara de ' +
+        'la art. 170 alin. (5) la alin. (3) și a redus art. 174¹ de la 21 la 12 alineate.',
+    },
+    {
+      id: 'cas_machine',
+      label: 'CAS reținută — art. 151 alin. (5)-(11), același lanț cu prag de 12 salarii minime brute',
+      value:
+        'alin. (6): un singur plătitor de venit din art. 137 alin. (1) lit. b) sau b^1), cu venit net estimat ' +
+        'de cel puțin 12 salarii minime brute, calculează contribuția prin aplicarea cotei de la art. 138 ' +
+        'lit. a) asupra bazei de la art. 148 alin. (2), o reține și o virează; „venitul ales” se menționează ' +
+        'în contract. alin. (7): la mai multe surse, contribuabilul desemnează prin contract plătitorul a ' +
+        'cărui sursă depășește singură 12 salarii minime brute. alin. (8): D112 (art. 147 alin. (1)) până la ' +
+        'data de 25 a lunii următoare. alin. (9) — COMPLETAREA: reținerea s-a făcut pe o bază sub 24 de ' +
+        'salarii minime brute, dar venitul cumulat atinge 24; Declarația Unică stabilește baza de 24 de ' +
+        'salarii minime brute, iar „contribuția reținută … este luată în calcul”. alin. (10): fiecare sursă ' +
+        'în parte sub 12 salarii minime brute, dar cumulate cel puțin egale cu 12 — NU se reține nimic, ' +
+        'contribuabilul depune Declarația Unică. alin. (11): plătitorul are obligația să emită „o informare ' +
+        'cu privire la nivelul contribuției … reținute”.',
+      unit: 'text',
+      description:
+        'Cota (25 %, art. 138 lit. a)) și pragurile (12 / 24 SM, art. 148 alin. (2)) sunt parametri ai ' +
+        'CAS_2026, citiți de calc-cas. Art. 151 nu are alineate indexate și nu conține nicio cotă de 12,5 % ' +
+        'și niciun prag de 80.000 lei — research/50 demonstrează negativ acest lucru; alin. (14) este ' +
+        'bonificația de până la 10 %.',
+    },
+    {
+      id: 'due_withheld_payable',
+      label: 'Cei trei termeni: datorată / reținută la sursă / de plătit',
+      value:
+        'de plătit = datorată − reținută. CAS: Subsecțiunea a 3-a a Declarației Unice, rd. 3 „CAS stabilită”, ' +
+        'rd. 4 „CAS reținută de plătitorul de venit conform art. 151 alin. (9)”, rd. 5 „Diferența stabilită ' +
+        'în plus” (rd. 3 − rd. 4). CASS: Subsecțiunea a 2-a, rd. 6 „CASS reținută … conform art. 174¹ ' +
+        'alin. (6)”. Cei doi termeni nu se combină niciodată într-o singură cifră: CAS și CASS au fiecare ' +
+        'triplul lor, iar CASS are două limbi (art. 170 alin. (1) și art. 170 alin. (2)-(4)) care nu se ' +
+        'cumulează între ele.',
+      unit: 'text',
+      description:
+        'ANAF DGRFP București, „Noutăți privind DU 2026 – exemple”, Exemplul 3: „CAS datorată = 97.200 × 25% ' +
+        '= 24.300 lei • CAS reținută de plătitorul de venit din DPI = 12.150 lei • Diferență de plată CAS = ' +
+        '24.300 − 12.150 = 12.150 lei” și „Avem CASS reținută de plătitorul de venit din drepturi de ' +
+        'proprietate intelectuală = 4.860 lei • Rezultă o diferență de plată = 9.720 – 4.860 = 4.860 lei.”',
+    },
+    {
+      id: 'no_payment_register',
+      label: 'Ce NU consemnează aplicația: niciun registru al plăților',
+      value:
+        'Aplicația nu are registru de plăți și, pentru CAS, niciun câmp unde informarea plătitorului ' +
+        '(art. 151 alin. (11)) să fie înregistrată; pentru CASS există un singur astfel de câmp, ' +
+        'CassLadderYear.cassRetinutLaSursa. Suma reținută raportată este derivată din cuantumul declarat al ' +
+        'sursei, potrivit obligației plătitorului, și nu este o plată consemnată de persoană. Un an fără ' +
+        'răspuns la veniturile din art. 137 alin. (1) lit. b^1) nu produce o sumă reținută de 0 lei — ' +
+        'produce absență.',
+      unit: 'text',
+      description:
+        'Limitare asumată, nu omisă. Reprezentarea reținerii ca faptă înregistrată ar cere un câmp nou ' +
+        'persistat; etapa aceasta a fost limitată la derivarea din datele pe care profilul deja le deține, ' +
+        'iar capul lanțului de migrare rămâne neschimbat.',
+    },
+  ],
+  calculatorId: 'calc-contribution-withholding',
+  sourceAct: 'Cod fiscal — art. 151 și art. 174¹, astfel cum au fost modificate prin OUG nr. 128/2024, Art. I (MO 1125/11.11.2024), aplicabile veniturilor realizate din 2025',
+  sourceArticle:
+    'CAS: art. 151 alin. (5)-(11) — alin. (6) reținerea la sursă cu prag de 12 SM, alin. (7) desemnarea ' +
+    'plătitorului prin contract, alin. (8) D112 (art. 147 alin. (1)), alin. (9) completarea la 24 SM cu ' +
+    '„contribuția reținută … este luată în calcul”, alin. (10) cazul fără reținere, alin. (11) informarea ' +
+    'plătitorului. CASS: art. 174¹ alin. (3)-(9) — alin. (3) reținerea cu prag de 6 SM pe baza din art. 170 ' +
+    'alin. (3) cu cota din art. 156, alin. (4) desemnarea, alin. (5) D112, alin. (6) completarea, alin. (7) ' +
+    'informarea, alin. (8) cazul fără reținere, alin. (9) Declarația Unică pentru celelalte venituri. ' +
+    '⚠️ Numerotarea anterioară (art. 174¹ alin. (2), (6)-(10), art. 170 alin. (5)) este cea de dinainte de ' +
+    '1 ianuarie 2025 și nu se mai citează în acest pachet — research/50.',
+  sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/312601',
+};
+
+
 export const DPI_RULES_2026: FiscalRule[] = [
   {
     jurisdiction: 'RO',
@@ -137,7 +272,8 @@ export const DPI_RULES_2026: FiscalRule[] = [
           'CAS: art. 137 alin. (1) lit. b^1) — „venituri din drepturi de proprietate intelectuală, definite la ' +
           'art. 70, cu excepția veniturilor prevăzute la art. 72 alin. (3)”. CASS: art. 155 alin. (1) lit. c) ' +
           '— „venituri din drepturi de proprietate intelectuale, definite conform art. 70”. Același venit, ' +
-          'două litere diferite; cele două căi CASS (alin. (1) cu net real și alin. (2)-(5) cu treapta) nu se ' +
+          'două litere diferite; cele două căi CASS (alin. (1) cu net real și alin. (2)-(4) cu treapta — ' +
+          'baza este la alin. (3), cumularea la alin. (4)) nu se ' +
           'cumulează niciodată între ele — ANAF DGRFP Cluj, 22 aprilie 2026: „Veniturile din activități ' +
           'independente nu se cumulează cu alte venituri pentru determinarea obligației de plată a CASS.”',
         unit: 'text',
@@ -159,6 +295,11 @@ export const DPI_RULES_2026: FiscalRule[] = [
       'contribuabil în lipsa reținerii)',
     sourceUrl: 'https://legislatie.just.ro/Public/DetaliiDocument/312601',
   },
+  // B-112 STAGE 4 — the withholding machine rides on the same release as the quota rule that produces the
+  // income it withholds on. It is a SECOND rule, not an edit of the first: `DPI_ART72_2026` was minted at
+  // stage 1 and keeps its parameters, citations and `version: 1` byte-for-byte, exactly as the release's own
+  // notes require of an inherited rule.
+  DPI_WITHHOLDING_RULE_2026,
 ];
 
 /**
@@ -167,6 +308,7 @@ export const DPI_RULES_2026: FiscalRule[] = [
  * registry content-addresses.
  */
 export const DPI_RULE_IDS_2026: string[] = DPI_RULES_2026.map((r) => r.ruleId);
+
 
 /**
  * The art. 72 alin. (3) exclusion set as the rule states it, read back as data.

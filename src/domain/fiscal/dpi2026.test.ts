@@ -183,6 +183,49 @@ describe('B-112 — the rule reaches the engine only through the FY2026 revision
   });
 });
 
+describe('B-112 stage 4 — the withholding machine is on the rule package, with the alineate that are in force', () => {
+  const rule = DPI_RULES_2026.find((r) => r.ruleId === 'DPI_CONTRIB_WITHHOLDING_2026')!;
+
+  it('it rides on the FY2026 revision, not on v5, and a FY2026 date selects it', () => {
+    const v5 = defaultRuleReleaseRegistry.rulesOf('PFA_2026_SYSTEM_REAL')!;
+    expect(v5.some((r) => r.ruleId === 'DPI_CONTRIB_WITHHOLDING_2026')).toBe(false);
+    expect(PFA_2026_DPI_PACKAGE.some((r) => r.ruleId === 'DPI_CONTRIB_WITHHOLDING_2026')).toBe(true);
+    expect(selectRuleSetFor2026().some((r) => r.ruleId === 'DPI_CONTRIB_WITHHOLDING_2026')).toBe(true);
+  });
+
+  it('it carries NO lei parameter: the rates and the SMN figures stay owned by CAS_2026 and CASS_2026', () => {
+    // Phase 4 deleted `min_cass`/`max_cass` and Phase 5 deleted `multiple_6x`…`multiple_72x` for exactly
+    // this reason. A withholding rule that restates 48.600 or 97.200 is a second source of truth for a
+    // statutory figure, and the year that changes the minimum wage updates one of the two.
+    expect(rule.parameters.filter((p) => p.unit === 'lei')).toEqual([]);
+    expect(rule.parameters.length).toBeGreaterThan(0);
+  });
+
+  it('it cites the post-OUG 128/2024 alineate, and names the old numbering as the old numbering', () => {
+    // The point of the rule. `research/48` §4 states the CASS machine as „art. 174¹ alin. (2), (6)-(10)”,
+    // which is the pre-2025 text; `research/50` gives the current one. A rule that carried the old chain
+    // would keep re-producing wrong briefs, which is the failure mode this phase has now hit three times.
+    expect(rule.sourceArticle).toMatch(/art\. 174¹ alin\. \(3\)-\(9\)/);
+    expect(rule.sourceArticle).toMatch(/art\. 151 alin\. \(5\)-\(11\)/);
+    expect(rule.sourceAct).toMatch(/OUG nr\. 128\/2024/);
+    const cass = rule.parameters.find((p) => p.id === 'cass_machine')!.value as string;
+    for (const step of ['alin. (3)', 'alin. (4)', 'alin. (5)', 'alin. (6)', 'alin. (7)', 'alin. (8)', 'alin. (9)']) {
+      expect(cass).toContain(step);
+    }
+    expect(cass).toMatch(/contribuția reținută … este luată în calcul/);
+    const cas = rule.parameters.find((p) => p.id === 'cas_machine')!.value as string;
+    for (const step of ['alin. (6)', 'alin. (7)', 'alin. (8)', 'alin. (9)', 'alin. (10)', 'alin. (11)']) {
+      expect(cas).toContain(step);
+    }
+  });
+
+  it('it states, as a limitation and not as a gap, that the app holds no payment register', () => {
+    const note = rule.parameters.find((p) => p.id === 'no_payment_register')!.value as string;
+    expect(note).toMatch(/nu are registru de plăți/);
+    expect(note).toMatch(/absență/);
+  });
+});
+
 function selectRuleSetFor2026() {
   const entry = defaultRuleReleaseRegistry.entryByReleaseId(PFA_2026_DPI_RELEASE_ID)!;
   return selectApplicableRules([...entry.rules], { taxYear: 2026, asOfDate: '2026-01-01' });

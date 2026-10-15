@@ -259,8 +259,14 @@ export function cumulateContributionBase(legs: readonly ContributionLeg[]): Bani
  * amount from the art. 148 alin. (3) ceiling test, or only from the contribution the payer withholds, is
  * not resolved by the text: alin. (3) speaks of the ceiling test and names DPI without carve-out, while
  * alin. (2) speaks of the contribution. This function always cumulates, which is the literal reading of
- * alin. (3); the exemption bites at the withholding step (art. 151 alin. (5), Stage 4). Recorded as an
- * inference, not a fact, and `tax.dpiCas.test.ts` pins the reading so a later change is a decision.
+ * alin. (3); the exemption, if it bites at all, bites at the withholding step — art. 151 alin. (5)-(11),
+ * which stage 4 now implements. What stage 4 deliberately did NOT do is apply art. 150 alin. (2) to that
+ * step: it withholds on the DPI source whenever that source reaches 12 SMN, whether or not the person is a
+ * salariat, because the question above is still unresolved in the corpus and `research/50` does not reach
+ * it. A salariat's DPI leg is therefore carried into the ceiling test AND produces a derived withheld
+ * figure — one consistent reading, recorded as an inference, not a fact. Closing it needs a source, not a
+ * choice. `tax.dpiCas.test.ts` pins the cumulation reading and `tax.dpiWithholding.test.ts` pins the
+ * machine, so a later change is a decision with a test to break.
  */
 export function casCumulationBase(legs: readonly ContributionLeg[], dpiNet: Bani | null): Bani {
   const independent = cumulateContributionBase(legs);
@@ -747,9 +753,35 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
     // input, not the arithmetic.
     base: casCumulatedNet,
     pensionerStatus,
+    // B-112 STAGE 4 — the art. 137 alin. (1) lit. b^1) amount BY ITSELF, which is what art. 151 alin. (6)
+    // makes the payer's withholding depend on. It is not the cumulation above: the cumulation selects the
+    // floor the CONTRIBUTION is owed on, while the payer withholds on the floor its OWN source selects.
+    // Handing the cumulation to both would make the withheld figure equal the whole contribution and the
+    // `de plătit` difference disappear — which is the conflation this stage exists to remove.
+    // `dpiNet` is null exactly when the year was never answered, and `undefined` here means "unknown", not
+    // "nobody withheld".
+    casWithholdingSourceNet: dpiNet ?? undefined,
   });
   if ('reviewRequired' in casRes) return rr(casRes.reason, lines);
   lines.push({ label: 'CAS (25%)', value: casRes.value });
+  // B-112 STAGE 4 — `datorată`, `reținută`, `de plătit`, on their own lines. ANAF's Exemplul 3 prints all
+  // three for CAS: „CAS datorată = 97.200 × 25% = 24.300 lei • CAS reținută de plătitorul de venit din DPI =
+  // 12.150 lei • Diferență de plată CAS = 24.300 − 12.150 = 12.150 lei”. The due line keeps its old label, so
+  // every existing reader of it still reads the DUE amount; the two new lines are additive.
+  if (
+    casRes.retinutLaSursa !== undefined &&
+    casRes.dePlatit !== undefined &&
+    (casRes.retinutLaSursa > 0 || casRes.value > 0)
+  ) {
+    lines.push({
+      label: 'CAS reținută la sursă de plătitorul de venit (art. 151 alin. (6))',
+      value: casRes.retinutLaSursa,
+    });
+    lines.push({
+      label: 'CAS de plătit după reținerea la sursă (art. 151 alin. (9): diferența stabilită în plus)',
+      value: casRes.dePlatit,
+    });
+  }
 
   let cassValue: Bani = lei(0);
   let cassNonDeductibila: Bani = lei(0);
@@ -901,6 +933,24 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
         label: 'Baza de calcul CASS art. 155 alin. (1) lit. c)-h) (scara art. 170 alin. (2)-(4))',
         value: cassLadderBase,
       });
+      // B-112 STAGE 4 — the same triple for this limb, and for THIS limb only. The art. 170 alin. (1) CASS
+      // above has no withholding line at all, because art. 174¹ reaches only the lit. c)-h) basin: no payer
+      // withholds CASS on the PFA's own net, so for that limb `datorată` and `de plătit` are the same number
+      // and saying so with a second line would invite the reader to add the two limbs together.
+      if (
+        ladderRes.retinutLaSursa !== undefined &&
+        ladderRes.dePlatit !== undefined &&
+        (ladderRes.retinutLaSursa > 0 || cassLadderValue > 0)
+      ) {
+        lines.push({
+          label: 'CASS reținută la sursă pe veniturile art. 155 alin. (1) lit. c)-h) (art. 174¹ alin. (3))',
+          value: ladderRes.retinutLaSursa,
+        });
+        lines.push({
+          label: 'CASS de plătit pentru veniturile art. 155 alin. (1) lit. c)-h) (art. 174¹ alin. (6))',
+          value: ladderRes.dePlatit,
+        });
+      }
     }
     const cassRes = calculatorRegistry['calc-cass'](cassRule, {
       // PG-6h-1: the CUMULATED lit. b) amount, per art. 170 alin. (1) — which names art. 68^3 expressly

@@ -59,6 +59,17 @@ export type FiscalRegime =
   // final (art. 72 alin. (4)-(6)); and the net goes to a different contribution basin from every one of them
   // — CAS art. 137 alin. (1) lit. b^1) and CASS art. 155 alin. (1) lit. c), not lit. b) and not lit. e).
   | 'dpi-flat-quota'
+  // B-112 stage 4 adds the payer-side withholding machine, and it is a fresh string for the same reason
+  // every other one above is: `tax.ts` resolves a regime with `applicable.find(r => r.taxRegime === ...)`,
+  // so a rule sharing 'cas' or 'cass' would be silently shadowed by whichever ruleId sorts first — and the
+  // two are not interchangeable. CAS_2026 and CASS_2026 own the RATES and the SMN FIGURES the withholding is
+  // computed from; this rule owns the CONDITION CHAIN that decides whether a payer withholds at all, and it
+  // deliberately carries no lei figure of its own, because a second copy of 48.600 or 97.200 is the drift
+  // this package's history already records twice (Phase 4 deleted `min_cass`/`max_cass`, Phase 5 deleted
+  // `multiple_6x`…`multiple_72x`). No calculator is registered for it: the triple is produced inside
+  // `calc-cas` and `calc-cass-ladder`, which already own the due figure — a second calculator producing the
+  // same contribution is the two-producers defect (B-70).
+  | 'contribution-withholding'
   | 'fiscal-depreciation';
 
 /**

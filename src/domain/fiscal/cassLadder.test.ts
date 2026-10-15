@@ -241,15 +241,80 @@ describe('art. 170 alin. (5) and the two readings of art. 174 alin. (7) lit. b)'
     expect(result.readingDivergence).toBeUndefined();
   });
 
-  it('CASS withheld at source is a credit this build does not model, so it refuses rather than double-charging', () => {
-    const reason = refusal(run({ amounts: spread(lei(60_000)), cassRetinutLaSursa: lei(2_430) }));
-    expect(reason).toMatch(/art\. 174¹ alin\. \(3\)-\(4\)/);
-    expect(reason).toMatch(/deduce/);
+  it('a withheld amount is a credit against the due contribution, never a second charge — the refusal is deleted, not dormant', () => {
+    // B-112 STAGE 4. This test used to assert the refusal: the credit was not modelled, so the only honest
+    // answer was to stop. It is modelled now, and the refusal was DELETED rather than left unused — the same
+    // standard `exactBani` and `leiFromDecimal` were held to when B-118 closed. A declared amount is the
+    // *informare* the payer must issue (art. 174¹ alin. (7)) and it wins over the derived one, because it is
+    // a fact about money a payer retained while the derivation is only what the rule would have required.
+    const result = computed(run({ amounts: spread(lei(60_000)), cassRetinutLaSursa: lei(2_430) }));
+    expect(result.value).toBe(lei(4_860)); // datorată — 60.000 lei cumulat alege treapta de 12 SM
+    expect(result.retinutLaSursa).toBe(lei(2_430));
+    expect(result.dePlatit).toBe(lei(2_430)); // 4.860 − 2.430, art. 174¹ alin. (6)
+    expect(result.breakdown.join('\n')).toMatch(
+      /datorată 4860 lei • reținută la sursă 2430 lei • de plătit 2430 lei/,
+    );
+  });
+
+  it('with nothing declared, the withheld figure is the payer’s own obligation on its own source — art. 174¹ alin. (3)', () => {
+    // ANAF DGRFP București, Exemplul 3, the CASS literal research/50 quotes: DPI net 50.000 lei beside
+    // dividende de 48.000 lei. Cumulate 98.000 lei ≥ 24 SMN → baza 97.200 → CASS 9.720 lei. The DPI source
+    // ALONE reaches only the 12-SMN rung, so the payer withholds 10 % × 48.600 = 4.860 lei, and ANAF's
+    // „Rezultă o diferență de plată = 9.720 – 4.860 = 4.860 lei” is the third number of this triple.
+    const result = computed(
+      run({ amounts: six({ proprietate_intelectuala: lei(50_000), investitii: lei(48_000) }) }),
+    );
+    expect(result.value).toBe(lei(9_720));
+    expect(result.retinutLaSursa).toBe(lei(4_860));
+    expect(result.dePlatit).toBe(lei(4_860));
+    expect(result.breakdown.join('\n')).toMatch(/art\. 174¹ alin\. \(3\)/);
+    // The top-up is the reason the two bases differ, and it is named: alin. (6) „contribuția reținută …
+    // este luată în calcul”.
+    expect(result.breakdown.join('\n')).toMatch(/art\. 174¹ alin\. \(6\)/);
+  });
+
+  it('art. 174¹ alin. (8): a source under 6 SMN withholds nothing, even when the cumulation crosses 6 SMN', () => {
+    // The no-withholding branch is a fact about the machine, not a gap in it: the taxpayer files the DU and
+    // the whole contribution stays `de plătit`. Asserting 0 here is what keeps the derived figure from being
+    // a guess that happens to look like a payment.
+    const result = computed(run({ amounts: spread(lei(30_000)) }));
+    expect(result.value).toBe(lei(2_430));
+    expect(result.retinutLaSursa).toBe(lei(0));
+    expect(result.dePlatit).toBe(lei(2_430));
+    expect(result.breakdown.join('\n')).toMatch(/art\. 174¹ alin\. \(8\)/);
+  });
+
+  it('a declared withholding larger than the due contribution is reported, not refunded and not quietly clamped', () => {
+    const result = computed(
+      run({ amounts: six({ proprietate_intelectuala: lei(30_000) }), cassRetinutLaSursa: lei(4_860) }),
+    );
+    expect(result.value).toBe(lei(2_430));
+    expect(result.retinutLaSursa).toBe(lei(4_860));
+    expect(result.dePlatit).toBe(lei(0));
+    expect(result.breakdown.join('\n')).toMatch(/NU este tratat ca rambursare/);
+  });
+
+  it('where the DPI income is exempt under art. 154 alin. (1) lit. h¹), the payer has nothing to withhold', () => {
+    // Stage 3 already keeps the exempt amount out of the cumulation; stage 4 keeps it out of the withholding
+    // too, for the same reason — income that owes no CASS cannot be the base of a CASS somebody retained.
+    const result = computed(
+      run({
+        amounts: six({ proprietate_intelectuala: lei(50_000), investitii: lei(48_000) }),
+        dpiExemptArt154: 'da',
+      }),
+    );
+    expect(result.value).toBe(lei(2_430)); // only the 48.000 lei of dividends still cumulate — 6 SMN rung
+    expect(result.retinutLaSursa).toBe(lei(0));
+    expect(result.dePlatit).toBe(lei(2_430));
   });
 
   it('a withheld amount beside no contribution of its own is not a refusal', () => {
     const result = computed(run({ amounts: spread(lei(10_000)), cassRetinutLaSursa: lei(2_430) }));
     expect(result.value).toBe(lei(0));
+    // B-112 stage 4: it is not a refusal now, and it is not a charge either — the credit is stated and the
+    // amount still payable is 0 lei.
+    expect(result.retinutLaSursa).toBe(lei(2_430));
+    expect(result.dePlatit).toBe(lei(0));
   });
 });
 

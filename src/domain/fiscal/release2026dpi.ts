@@ -101,8 +101,9 @@ export const PFA_2026_DPI_RELEASE: RuleRelease = {
     // Cod fiscal, consolidated — the articles the DPI path rests on: art. 70 (defining DPI), art. 72 and
     // art. 72¹ (the 40 % forfetară quota and the withholding), art. 73 (the actual-expense election),
     // art. 137 alin. (1) lit. b¹) and art. 148 alin. (3) (CAS), art. 155 alin. (1) lit. c) and art. 170
-    // alin. (2)-(5) + art. 174¹ (CASS), art. 118 alin. (2²)-(2⁴) (the apportionment), art. 135¹ alin. (3)
-    // (the 1 January SMN anchor).
+    // alin. (2)-(4) + art. 174¹ (CASS — the base is alin. (3), the cumulation alin. (4); OUG 128/2024 moved
+    // the ladder off the old alin. (5), see research/50), art. 118 alin. (2²)-(2⁴) (the apportionment),
+    // art. 135¹ alin. (3) (the 1 January SMN anchor).
     'https://legislatie.just.ro/Public/DetaliiDocument/312601',
     // ANAF DGRFP București, „Noutăți privind Declarația Unică 2026 – exemple" — Exemplul 3, the worked
     // example this path is pinned to (AI net 68.000 + DPI net 50.000 → bază CAS 97.200 → CAS 24.300).

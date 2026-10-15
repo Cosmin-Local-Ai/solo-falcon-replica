@@ -486,9 +486,14 @@ export interface CassLadderYear {
    */
   neimpozabil?: Bani;
   /**
-   * CF art. 174¹ alin. (3)-(6): CASS already reținută la sursă on these same incomes. It is a **credit**
-   * against the contribution due (DU 212 subsecțiunea 2.2 rd. 6), not a second charge. This app does not
-   * model the credit, so a recorded amount makes the ladder refuse rather than double-charge.
+   * CF art. 174¹ alin. (3)-(7): CASS already reținută la sursă on these same incomes. It is a **credit**
+   * against the contribution due (DU 212 subsecțiunea 2.2 rd. 6), not a second charge.
+   *
+   * B-112 STAGE 4 models the credit, and this field is the DECLARED half of it: the amount the person read
+   * off the *informare* the payer must issue under art. 174¹ alin. (7). Where it is present it is used as
+   * `reținută`; where it is absent the amount is DERIVED from the declared DPI net by the same article's own
+   * trigger (alin. (3) at 6 SMN, alin. (8) below it). Where the two disagree the disagreement is reported and
+   * neither figure is repaired — the contribution DUE does not depend on which of them is right.
    */
   cassRetinutLaSursa?: Bani;
 }

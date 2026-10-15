@@ -276,9 +276,9 @@ export const settings = {
     ladderNeimpozabil: 'Sume neimpozabile consemnate (art. 93 și 105)',
     ladderNeimpozabilHint:
       'art. 170 alin. (5): „La încadrarea în plafonul prevăzut la alin. (4) nu se iau în calcul veniturile neimpozabile, prevăzute la art. 93 și 105.” Aplicația le înregistrează ca sumă pe care NU o adună — și le arată tocmai pentru că ele despart cele două lecturi ale art. 174 alin. (7) lit. b).',
-    ladderCassRetinut: 'CASS reținută la sursă de plătitorii tăi (art. 174¹ alin. (3)-(4))',
+    ladderCassRetinut: 'CASS reținută la sursă de plătitorii tăi (art. 174¹ alin. (3)-(7))',
     ladderCassRetinutHint:
-      'Se deduce din contribuția datorată (art. 174¹ alin. (6), rd. 6 din subsecțiunea 2.2 a Declarației Unice), nu se adaugă la ea. Aplicația nu modelează încă deductionea: dacă există și o sumă reținută și o contribuție calculată, refuză în loc să factureze de două ori.',
+      'Se deduce din contribuția datorată (art. 174¹ alin. (6), rd. 6 din subsecțiunea 2.2 a Declarației Unice), nu se adaugă la ea. Suma pe care o scrii aici este cea din informarea pe care plătitorul de venit are obligația s-o emită (art. 174¹ alin. (7)); dacă o lași liberă, aplicația o derivă din cuantumul declarat al sursei, potrivit pragului de 6 salarii minime brute din alin. (3) — și raportează zero doar atunci când alin. (8) spune chiar că nimeni nu reține. Dacă suma declarată nu coincide cu cea derivată, ambele se afișează și neconcordanța se semnalează: aplicația nu repară niciuna.',
     ladderShortNames: {
       proprietateIntelectuala: 'proprietate intelectuală',
       asocierePersoanaJuridica: 'asocierea cu o persoană juridică',

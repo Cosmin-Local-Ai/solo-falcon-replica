@@ -43,7 +43,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { answeredLadder, computed, driveSistemReal, lineOf, lineValue } from './harness';
-import { lei } from '../money';
+import { addBani, lei } from '../money';
 
 describe('FIXTURE 1 (FACT — ANAF DGFP București DU-2026 deck, income year 2025, SMN 4.050 lei) — PFA CASS is 10 % of the actual net, never the 6-SMN rung', () => {
   it('Exemplul 2: net 22.000 lei, salariat — CASS 2.200 lei, not 2.430 lei', async () => {
@@ -128,6 +128,66 @@ describe('FIXTURE 1 (FACT — ANAF DGFP București DU-2026 deck, income year 202
     // One income tax, on the sistem-real composition — the ladder contribution is not deducted from it
     // (art. 118 alin. (2^3) prorates the art. 174 alin. (1) contribution, not the art. 174¹ one).
     expect(lineOf(res, 'Impozit art.')).toBeUndefined();
+  });
+
+  it('B-112 stage 4 — the same example prints DUE / WITHHELD / PAYABLE, with ANAF literals as the assertions', async () => {
+    /**
+     * **SOURCE** — the same ANAF deck, Exemplul 3, recorded in `research/47` §2 with the two withheld
+     * figures named as inputs („CASS reținut DPI 4.860; CAS reținut 12.150”) and the two differences as
+     * outputs („diferență 12.150”, „diferență 4.860”). `research/50` quotes the CASS sentence verbatim:
+     * „Avem CASS reținută de plătitorul de venit din drepturi de proprietate intelectuală = 4.860 lei •
+     * Rezultă o diferență de plată = 9.720 – 4.860 = 4.860 lei.”
+     *
+     * **Why the engine can produce them without being told them.** The profile holds no payment register —
+     * minting one would be a chain step, and the head stays v21. What it holds is the DPI net, and the two
+     * withholding articles make the payer's duty a function of exactly that amount: art. 174¹ alin. (3) has
+     * the single payer apply the art. 156 rate to the art. 170 alin. (3) base its own source selects
+     * (50.000 lei → the 12-SMN rung → 48.600 → 4.860 lei), and art. 151 alin. (6) has it apply the art. 138
+     * lit. a) rate to the art. 148 alin. (2) floor that same source selects (50.000 lei → 48.600 → 12.150
+     * lei). The cumulation then lifts the DUE base to 24 SMN, and alin. (9) / alin. (6) say the retained
+     * contribution „este luată în calcul”. That is the whole arithmetic of ANAF's example, and it is the
+     * reading `research/48` §4 states: „DPI net 50.000 alone sits in the 12–24 SMN band for CAS (base
+     * 48.600 → withheld 12.150) and the 12–24 band for CASS (base 48.600 → withheld 4.860).”
+     */
+    const res = computed(
+      await driveSistemReal({
+        gross: lei(100_000),
+        expenses: lei(32_000),
+        ladderYears: answeredLadder({
+          proprietateIntelectuala: lei(50_000),
+          investitii: lei(48_000),
+          cedareaFolosinteiBunurilor: lei(0),
+        }),
+      }),
+    );
+
+    // CAS: „CAS datorată = 97.200 × 25% = 24.300 lei • CAS reținută de plătitorul de venit din DPI = 12.150
+    // lei • Diferență de plată CAS = 24.300 − 12.150 = 12.150 lei”.
+    expect(lineValue(res, 'CAS (25%)')).toBe(lei(24_300));
+    expect(lineValue(res, 'CAS reținută la sursă')).toBe(lei(12_150));
+    expect(lineValue(res, 'CAS de plătit')).toBe(lei(12_150));
+
+    // CASS, limb 2: datorată 9.720 • reținută 4.860 • de plătit 4.860.
+    expect(lineValue(res, 'CASS pe veniturile')).toBe(lei(9_720));
+    expect(lineValue(res, 'CASS reținută la sursă')).toBe(lei(4_860));
+    expect(lineValue(res, 'CASS de plătit')).toBe(lei(4_860));
+
+    // **Limb 1 stays 6.800 lei and is not merged with limb 2**, and it has no withholding line at all:
+    // art. 174¹ reaches the art. 155 alin. (1) lit. c)-h) basin, and no payer withholds CASS on the PFA's
+    // own art. 68 net. A single combined CASS figure is the defect stage 3 refused and stage 4 keeps closed.
+    expect(lineValue(res, 'CASS (10%)')).toBe(lei(6_800));
+    expect(res.lines.some((l) => l.label.startsWith('CASS (10%) reținută'))).toBe(false);
+    expect(res.lines.some((l) => l.label.startsWith('CASS de plătit pentru veniturile art. 67'))).toBe(false);
+
+    // The two conflations this stage exists to prevent, asserted ABSENT: the due figure read as the payable
+    // one, and the withheld figure read as a second charge.
+    expect(lineValue(res, 'CASS de plătit')).not.toBe(lei(9_720));
+    expect(lineValue(res, 'CAS de plătit')).not.toBe(lei(24_300));
+    // And the withheld contributions are not added to the burden: `Total taxe` is the DUE total, so a year
+    // that also prints reținută/de plătit lines must not move it.
+    expect(lineValue(res, 'Total taxe')).toBe(
+      addBani(addBani(lei(24_300), lei(6_800)), addBani(lei(9_720), lineValue(res, 'Impozit pe venit'))),
+    );
   });
 });
 
