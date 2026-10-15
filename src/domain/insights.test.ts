@@ -730,26 +730,36 @@ describe('tax', () => {
 // Invariants
 
 describe('invariants', () => {
-  it('never exposes raw key strings for the families that have labels', () => {
-    // PG-5 re-pin (replaced, not deleted): this test used to sweep every raw key into one
-    // must-not-appear list, which only held because two fallbacks papered unknown keys with plausible
-    // generics ('Termen fiscal', 'date'). Those fallbacks are gone, so the invariant is now stated for
-    // what it actually protects: a key that HAS a label must never render its identifier. A key with no
-    // label renders itself, loudly — pinned in the next test and guarded in `ui/copy/labels.test.ts`.
-    const rawKeys = ['cass-max-raw'];
-    const insights = getInsights(
+  it('renders a labelled threshold domain in Romanian, and an unlabelled one as its raw key (B-74)', () => {
+    // B-74 re-pin (replaced, not deleted). This case asserted that 'cass-max-raw' never reaches the
+    // attention list, and it held only because `thresholdLabel` answered every unknown key with
+    // 'Prag fiscal'. That generic WAS the defect: a threshold nobody had named rendered as a named one, and
+    // the suite stayed green while a rule shipped without a word written for it. The invariant is now
+    // stated for what it actually protects — a key that HAS a label never renders its identifier, and a key
+    // with no label renders itself, loudly. Guarded in `ui/copy/labels.test.ts`.
+    const labelled = getInsights(
       input({
         snapshot: snapshot({
-          thresholds: [threshold({ id: 't1', label: 'cass-max-raw', affectedTax: 'cass', ratio: 0.9 })],
+          thresholds: [threshold({ id: 't1', label: 'pfa-revenue', ratio: 0.9 })],
         }),
       }),
     );
+    expect(labelled.length).toBeGreaterThan(0);
+    const labelledText = texts(labelled);
+    expect(labelledText).toContain('Venit PFA');
+    expect(labelledText).not.toContain('pfa-revenue');
 
-    expect(insights.length).toBeGreaterThan(0);
-    const text = texts(insights);
-    for (const raw of rawKeys) {
-      expect(text).not.toContain(raw);
-    }
+    const unlabelled = getInsights(
+      input({
+        snapshot: snapshot({
+          thresholds: [threshold({ id: 't2', label: 'cass-max-raw', affectedTax: 'cass', ratio: 0.9 })],
+        }),
+      }),
+    );
+    expect(unlabelled.length).toBeGreaterThan(0);
+    const unlabelledText = texts(unlabelled);
+    expect(unlabelledText).toContain('cass-max-raw');
+    expect(unlabelledText).not.toContain('Prag fiscal');
   });
 
   it('PG-5: an unknown deadline key surfaces RAW instead of a plausible generic', () => {

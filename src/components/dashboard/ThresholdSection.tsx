@@ -7,7 +7,7 @@ import { InterpretationNote } from '../ui/InterpretationNote';
 import {
   copy,
   measuredBasisLabels,
-  thresholdDomainLabels,
+  thresholdDomainLabel,
   thresholdRowLabels,
   thresholdStatusLabels,
   thresholds as thresholdCopy,
@@ -108,7 +108,11 @@ function ThresholdRow({ threshold: t }: { threshold: FiscalThreshold }) {
       <div className="item-row">
         <div>
           <strong className="item-title">{labelFor(t)}</strong>
-          <div className="hint">{thresholdDomainLabels[t.affectedDomain] ?? t.affectedDomain}</div>
+          {/* B-74: the fallback moved out of this file into `thresholdDomainLabel`, so there is one place
+              that decides what an unknown domain key renders — and it renders the RAW key, loudly, rather
+              than 'Prag fiscal'. A component-level `?? t.affectedDomain` was the leak path this file's own
+              header claimed was gone. */}
+          <div className="hint">{thresholdDomainLabel(t.affectedDomain)}</div>
         </div>
         <span className={`badge ${statusBadgeClass(t.status)}`}>{thresholdStatusLabels[t.status]}</span>
       </div>

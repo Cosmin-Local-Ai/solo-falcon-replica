@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import ThresholdSection from './ThresholdSection';
 import type { FiscalThreshold } from '../../domain/thresholds';
 import { lei } from '../../domain/money';
+import { unmeasuredBasisReason } from '../../ui/copy/thresholds';
 
 function makeThreshold(overrides: Partial<FiscalThreshold> = {}): FiscalThreshold {
   return {
@@ -133,7 +134,9 @@ describe('ThresholdSection (Step 32 — Romanian, no raw enums)', () => {
             distance: lei(0),
             status: 'review_required',
             measuredBasis: 'unmeasured',
-            reviewReason: 'Baza „net-income” nu a fost furnizată; pragul nu poate fi evaluat.',
+            // B-55: the base in Romanian, produced by the copy layer — this fixture used to carry
+            // `Baza „net-income” nu a fost furnizată`, i.e. the machine enum on a person's screen.
+            reviewReason: unmeasuredBasisReason('net-income'),
           }),
         ]}
       />,
@@ -142,6 +145,10 @@ describe('ThresholdSection (Step 32 — Romanian, no raw enums)', () => {
     expect(screen.getByText('De verificat', { selector: '.badge' })).toBeInTheDocument();
     expect(screen.queryByText('În limite')).not.toBeInTheDocument();
     expect(screen.queryByText('review_required')).not.toBeInTheDocument();
+    // B-55: no internal identifier reaches the rendered sentence, and the base is named in Romanian.
+    expect(screen.queryByText(/net-income/)).not.toBeInTheDocument();
+    expect(screen.getByText('Baza „venitul net” nu a fost furnizată; pragul nu poate fi evaluat.'))
+      .toBeInTheDocument();
     // No invented amount is displayed for an unmeasured base.
     expect(screen.queryByText('0,00 lei')).not.toBeInTheDocument();
     expect(screen.getByText(/nu a fost furnizată/)).toBeInTheDocument();

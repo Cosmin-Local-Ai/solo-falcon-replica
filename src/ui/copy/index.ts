@@ -42,6 +42,9 @@ export {
   thresholdStatusLabels,
   measuredBasisLabels,
   thresholdDomainLabels,
+  thresholdDomainLabel,
+  fiscalBaseLabels,
+  unmeasuredBasisReason,
   thresholdRowLabels,
   thresholdKindLabels,
 } from './thresholds';
@@ -81,6 +84,7 @@ import {
 } from './dashboard';
 import {
   thresholds, thresholdStatusLabels, measuredBasisLabels, thresholdDomainLabels,
+  thresholdDomainLabel, fiscalBaseLabels, unmeasuredBasisReason,
   thresholdRowLabels, thresholdKindLabels,
 } from './thresholds';
 import { notes, sources } from './notes';
@@ -107,6 +111,7 @@ export const copy = {
   legislation, moneyPrecision, checkLabel, deadlineAppliesToLabels, deadlineLabels,
   deadlineLabelFor, vatFilingPeriodUnknown,
   thresholds, thresholdStatusLabels, measuredBasisLabels, thresholdDomainLabels,
+  thresholdDomainLabel, fiscalBaseLabels, unmeasuredBasisReason,
   thresholdRowLabels, thresholdKindLabels,
   notes, sources,
   fx,

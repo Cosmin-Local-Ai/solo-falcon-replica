@@ -9,18 +9,24 @@
  *
  * **One map is not exhaustive, and says so.** `thresholdDomainLabels` is keyed by
  * `FiscalThreshold.affectedDomain`, which `src/domain/thresholds.ts` declares as an open `string`
- * (`// e.g. 'pfa-revenue'`), not a union — so there is no union for TypeScript to check coverage
- * against, and `ThresholdSection.tsx:92` still has a `?? t.affectedDomain` fallback for a key this map
- * does not know. That fallback is the leak path this file's header otherwise claims is gone; it stays
- * only because the domain key is open. Closing `affectedDomain` to a union in the domain would let this
- * map become `Record<AffectedDomain, string>` and delete the fallback — a domain change, so TASK 7 did
- * not make it.
+ * (`// e.g. 'pfa-revenue'`), not a union — so there is no union for TypeScript to check coverage against.
+ * B-74 moved the fallback that used to sit inline in `ThresholdSection.tsx` (line 111, cited as 92 in the
+ * old comment) into `thresholdDomainLabel` below, so there is exactly one place that decides what an
+ * unknown domain key renders — and it renders the RAW key, the way `deadlineLabelFor` and `checkLabel`
+ * do, because a plausible generic is how a new key ships unnamed. `src/ui/copy/labels.test.ts` pins it.
+ * Closing `affectedDomain` to a union in the domain would let this map become `Record<AffectedDomain,
+ * string>` and delete the fallback — a domain change, so it is still not made here.
  *
- * What is NOT here: the `consequence`, `applicabilityReason` and `reviewReason` sentences. Those are
- * legal conclusions produced by `src/domain/thresholds.ts` with a citation attached, and
- * `thresholds.language.test.ts` pins their wording at the site that produces them.
+ * **B-55 changed what is not here.** The `consequence` and `applicabilityReason` sentences are still legal
+ * conclusions produced by `src/domain/thresholds.ts` with a citation attached. The `reviewReason` for an
+ * unmeasured basis is not: it interpolated `spec.requiredFiscalBase`, a machine enum, straight into a
+ * Romanian sentence, so the person read `Baza „net-income” nu a fost furnizată`. The sentence now lives
+ * here as `unmeasuredBasisReason`, keyed by the same `FiscalBase` code the domain already uses — the copy
+ * layer had no slot for that family, so one was added rather than hand-translating a second dictionary at
+ * the call site.
  */
 import type {
+  FiscalBase,
   FiscalThreshold,
   MeasuredBasis,
   ThresholdStatus,
@@ -56,12 +62,56 @@ export const measuredBasisLabels: Record<MeasuredBasis, string> = {
 
 /**
  * Labels for the affected-domain keys. **Not** exhaustive over a union: `affectedDomain` is an open
- * `string` in the domain (see the header), so this is `Record<string, string>` by necessity and the
- * call site keeps a raw-key fallback. One key is emitted today.
+ * `string` in the domain (see the header), so this is `Record<string, string>` by necessity and
+ * `thresholdDomainLabel` below keeps a raw-key fallback. One key is emitted today.
+ *
+ * B-74: this is now the only spelling of these words. `src/domain/insights.ts` carried a second map with
+ * the same `'pfa-revenue': 'Venit PFA'` row, which the copy guard's duplicate check cannot see because it
+ * scans `src/ui/copy/**` only.
  */
 export const thresholdDomainLabels: Record<string, string> = {
   'pfa-revenue': 'Venit PFA',
 };
+
+/**
+ * The label for one affected-domain key.
+ *
+ * An unknown key renders its RAW key. It used to render 'Prag fiscal' — a plausible generic that made a
+ * threshold nobody had named look named, and `src/domain/insights.test.ts` was green because of it. A raw
+ * key on screen is ugly in a way the reader notices, and `src/ui/copy/labels.test.ts` fails on it before
+ * it ships. Same contract as `deadlineLabelFor` and `checkLabel`; this is the third member of that family
+ * and the last one that had not been migrated.
+ */
+export function thresholdDomainLabel(key: string): string {
+  return thresholdDomainLabels[key] ?? key;
+}
+
+/**
+ * What each fiscal base the threshold specs can require actually counts (B-55).
+ *
+ * `FiscalBase` is a machine-readable union in `src/domain/thresholds.ts`, and until now nothing spelled it
+ * in Romanian — so the one sentence that interpolated it printed the enum. Keyed by the same code the
+ * domain uses, and exhaustive over the union, so a new base is a compile error here rather than a word
+ * nobody wrote.
+ */
+export const fiscalBaseLabels: Record<FiscalBase, string> = {
+  'revenue-incl-vat': 'venitul încasat cu TVA',
+  'revenue-excl-vat': 'venitul fără TVA',
+  'expense-incl-vat': 'cheltuiala cu TVA',
+  'expense-excl-vat': 'cheltuiala fără TVA',
+  'net-income': 'venitul net',
+};
+
+/**
+ * The review reason for a threshold whose base was never supplied.
+ *
+ * Produced here rather than in the domain because it is language, not a legal conclusion: it carries no
+ * citation and asserts nothing about the law, it says a number is missing. The domain still decides WHEN
+ * to show it; it no longer decides how it reads, which is what put `net-income` on a person's screen.
+ */
+export function unmeasuredBasisReason(base: FiscalBase): string {
+  return `Baza „${fiscalBaseLabels[base]}” nu a fost furnizată; pragul nu poate fi evaluat.`;
+}
 
 /**
  * Row captions. `tier-floor` is a rung of a ladder, never a ceiling — the wording must not read as a

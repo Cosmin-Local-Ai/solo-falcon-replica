@@ -20,6 +20,8 @@
  * choice `src/data/identity.source.test.ts` records).
  */
 import { describe, expect, it } from 'vitest';
+import { THRESHOLD_SPECS, type FiscalBase } from './thresholds';
+import { fiscalBaseLabels, unmeasuredBasisReason } from '../ui/copy/thresholds';
 
 /** Every app source file, as raw text, keyed by path relative to this file. */
 const SOURCES = import.meta.glob('../**/*.{ts,tsx}', {
@@ -108,5 +110,59 @@ describe('the deleted threshold claims stay deleted (TASK 4 acceptance)', () => 
     // And the factual consequence the research supports, cited.
     expect(thresholds).toContain('nu se datorează contribuția de asigurări sociale pentru acest an');
     expect(thresholds).toContain('art. 148 alin. (1) și (4) din Codul fiscal');
+  });
+});
+
+/**
+ * B-55 — no internal identifier inside a rendered Romanian sentence.
+ *
+ * `computeThresholds` used to write
+ *   `Baza „${spec.requiredFiscalBase}” nu a fost furnizată; pragul nu poate fi evaluat.`
+ * which put `net-income` / `revenue-excl-vat` on a person's screen. The copy guard cannot catch this: its
+ * glob is `components/**` and `pages/**`, it inspects only literal nodes, and its internal-token regex is
+ * underscore-only, so a kebab-case enum would have slipped past even in a file it does scan. This file
+ * already walks the whole `src/**` tree, so the rule lives here.
+ *
+ * It is deliberately scoped to the `FiscalBase` family rather than to "any identifier in a quote":
+ * `src/domain/estimateBasis.ts` has the same defect with the `CapBase` union and is outside this brief's
+ * boundary. Widening the rule here would have turned a reported defect into a red suite.
+ */
+const FISCAL_BASES: readonly FiscalBase[] = [
+  'revenue-incl-vat',
+  'revenue-excl-vat',
+  'expense-incl-vat',
+  'expense-excl-vat',
+  'net-income',
+];
+
+describe('no internal identifier reaches a rendered Romanian sentence (B-55)', () => {
+  it('no app source quotes a FiscalBase code inside a Romanian sentence', () => {
+    for (const base of FISCAL_BASES) {
+      const pattern = quote(`„${base}”`);
+      expect(
+        offenders(pattern, p => codeOnly(SOURCES[p])),
+        `„${base}” is still quoted at a person rather than at a compiler`,
+      ).toEqual([]);
+    }
+  });
+
+  it('every base the shipped specs can require has a Romanian wording', () => {
+    // The compile-time half is `Record<FiscalBase, string>`, so a new base is a type error. This is the
+    // runtime half: a base that can reach the screen has words before it ships.
+    const required = [...new Set(THRESHOLD_SPECS.map(s => s.requiredFiscalBase))];
+    expect(required.length).toBeGreaterThan(0);
+    for (const base of required) {
+      expect(fiscalBaseLabels[base], `no Romanian wording for the fiscal base '${base}'`).toBeTruthy();
+    }
+  });
+
+  it('the unmeasured-basis sentence names the base in Romanian and never as a code', () => {
+    for (const base of FISCAL_BASES) {
+      const reason = unmeasuredBasisReason(base);
+      expect(reason).toContain(fiscalBaseLabels[base]);
+      for (const code of FISCAL_BASES) expect(reason).not.toContain(code);
+      // Still the sentence the component test and `e2e/dashboard.spec.ts` match on.
+      expect(reason).toContain('nu a fost furnizată');
+    }
   });
 });

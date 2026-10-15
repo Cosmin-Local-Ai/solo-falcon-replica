@@ -7,6 +7,10 @@ import {
   readPensionerStatus,
 } from './pensionFacts';
 import { formatBaniLei, lei, subBani, type Bani } from './money';
+// B-55 — the one threshold sentence that was language rather than a legal conclusion. It interpolated
+// `spec.requiredFiscalBase`, a machine enum, into a Romanian sentence, so the person read
+// `Baza „net-income” nu a fost furnizată`. The words are keyed by the same code in the copy layer.
+import { unmeasuredBasisReason } from '../ui/copy/thresholds';
 
 /**
  * `tier-floor` is not a ceiling and not a disqualification — it is a **step in a ladder**.
@@ -944,7 +948,7 @@ export function computeThresholds(
         measuredBasis: 'unmeasured',
         consequence: UNMEASURED_CONSEQUENCE,
         computedFrom,
-        reviewReason: `Baza „${spec.requiredFiscalBase}” nu a fost furnizată; pragul nu poate fi evaluat.`,
+        reviewReason: unmeasuredBasisReason(spec.requiredFiscalBase),
       });
       continue;
     }

@@ -1,17 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { CHECK_LABELS, checkLabel, deadlineLabels, deadlineLabelFor } from './dashboard';
+import { thresholdDomainLabels, thresholdDomainLabel } from './thresholds';
+import { THRESHOLD_SPECS } from '../../domain/thresholds';
 
 /**
- * PG-5 — the two label fallbacks, pinned.
+ * PG-5 — the label fallbacks, pinned.
  *
- * Both families used to answer an unknown key with a plausible generic: `deadlineLabelFor` returned
- * 'Termen fiscal' and `completenessLabel` returned 'date'. Both made a brand-new obligation look
- * handled — a rule added next quarter would render as a sentence nobody had written, and the test
- * suite would stay green. The fallback now returns the RAW key: ugly on screen, and loud in here.
+ * The families used to answer an unknown key with a plausible generic: `deadlineLabelFor` returned
+ * 'Termen fiscal', `completenessLabel` returned 'date', and `thresholdLabel` in `domain/insights.ts`
+ * returned 'Prag fiscal'. Each made a brand-new obligation or threshold look handled — a rule added next
+ * quarter would render as a sentence nobody had written, and the test suite would stay green. The fallback
+ * now returns the RAW key: ugly on screen, and loud in here.
  *
- * This file is the loud half. It is deliberately written as a contract over the maps, so the failure
- * lands on the person who adds the key, not on a reader who wonders why a deadline is called
- * "Termen fiscal".
+ * This file is the loud half. It is deliberately written as a contract over the maps, so the failure lands
+ * on the person who adds the key, not on a reader who wonders why a deadline is called "Termen fiscal".
  */
 
 describe('deadlineLabelFor', () => {
@@ -78,5 +80,27 @@ describe('checkLabel', () => {
     // gone from `completeness.ts`. Keeping their labels would let a stale key look supported.
     expect(CHECK_LABELS.declarations).toBeUndefined();
     expect(CHECK_LABELS.taxEstimate).toBeUndefined();
+  });
+});
+
+describe('thresholdDomainLabel', () => {
+  it('renders the RAW key for an unknown one, and never the old generic (B-74)', () => {
+    // The third member of the family, and the last one still carrying a generic. `domain/insights.ts`
+    // answered every unknown `affectedDomain` with 'Prag fiscal', which made an unnamed threshold read as
+    // a named one — and `insights.test.ts` was green precisely because of it.
+    expect(thresholdDomainLabel('brand_new_domain')).toBe('brand_new_domain');
+    expect(thresholdDomainLabel('brand_new_domain')).not.toBe('Prag fiscal');
+    expect(thresholdDomainLabel('')).toBe('');
+  });
+
+  it('has a Romanian label for every affectedDomain the shipped threshold specs emit', () => {
+    // Read from the specs rather than restated by hand, so a spec added with a new domain key fails here
+    // rather than rendering its identifier on the dashboard and in the attention list.
+    const emitted = [...new Set(THRESHOLD_SPECS.map(s => s.affectedDomain))].sort();
+    expect(emitted.length).toBeGreaterThan(0);
+    for (const key of emitted) {
+      expect(thresholdDomainLabels[key], `no Romanian label for the threshold domain '${key}'`).toBeTruthy();
+      expect(thresholdDomainLabel(key)).not.toBe(key);
+    }
   });
 });

@@ -14,6 +14,10 @@ import { fiscalDateSource } from '../ui/copy/records';
 // keys, and its D212 row read "PFA". A term that names only an audience is not actionable: the row now
 // names the return and the year it declares.
 import { checkLabel, deadlineLabelFor } from '../ui/copy/dashboard';
+// B-74: the affected-domain family, third member of the same line as the two above. This file used to keep
+// its own `THRESHOLD_LABELS` map AND a generic fallback — 'Prag fiscal' — so an unnamed threshold rendered
+// as a plausible sentence, and `insights.test.ts` was green because of it.
+import { thresholdDomainLabel } from '../ui/copy/thresholds';
 import {
   deadlineSeverity,
   sortAttention,
@@ -68,14 +72,10 @@ export interface InsightInput {
 //
 // The words themselves live in `ui/copy/dashboard.ts` (`deadlineLabels` / `deadlineLabelFor`), together
 // with the card's audience chip (`deadlineAppliesToLabels`). An unknown key renders its RAW key there,
-// not a plausible generic — see the pin in `src/domain/insights.labels.test.ts`.
+// not a plausible generic — see the pin in `src/ui/copy/labels.test.ts`.
 
 /** Fiscal date field → Romanian lives in `ui/copy/records.ts` (`fiscalDateSource`). Raw property
  *  names are never rendered, and the three words are spelled in exactly one place. */
-
-const THRESHOLD_LABELS: Record<string, string> = {
-  'pfa-revenue': 'Venit PFA',
-};
 
 /**
  * PG-5: `COMPLETENESS_LABELS` is deleted. It was a second spelling of the completeness family — the
@@ -105,10 +105,6 @@ const COMPLETENESS_TARGETS: Record<string, AttentionTarget | null> = {
   vatFilingPeriod: { href: '/settings#!/fiscal' },
   statements: { href: '/documents#!/statements' },
 };
-
-function thresholdLabel(label: string): string {
-  return THRESHOLD_LABELS[label] ?? 'Prag fiscal';
-}
 
 function completenessLabel(key: string): string {
   // The copy layer's fallback is the RAW key, on purpose. The old fallback here was the word „date”,
@@ -176,7 +172,7 @@ function thresholdAction(kind: ThresholdKind): string {
 }
 
 function makeThresholdAlert(t: Threshold): ThresholdAlert {
-  const label = thresholdLabel(t.label);
+  const label = thresholdDomainLabel(t.label);
   const unmeasured = t.current === null;
   return {
     id: `threshold-${t.id}`,
