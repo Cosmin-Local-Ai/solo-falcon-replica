@@ -500,6 +500,12 @@ describe('B-131 — the six new personas: what each one proves, measured through
     expect(pensions.length).toBe(10);
     expect(new Set(pensions.map((e) => e.reason))).toEqual(new Set(['cap_unresolved']));
     expect(pensions[0].detail).toContain('cursul mediu');
+    // B-137 §4 — the refusal has to stay legible as a refusal and not decay into a missing datum. This
+    // register really does hold twelve EUR daily rates for 2026 (the platform receipts below), and the
+    // ceiling still will not strike. The sentence now says how much the app declines to average, and what
+    // would resolve it — the difference between an honest refusal and a green diff.
+    expect(pensions[0].detail).toContain('deține 12 cursuri zilnice pentru acest an');
+    expect(pensions[0].detail).toContain('Media se înregistrează așa cum a fost publicată');
     expect(pensions[0].detail).toContain('data plății');
     // The home-office utilities: the law allows the activity's share and supplies no method for the share.
     expect(x.excludedFor('home_office_shared_cost').map((e) => e.reason)).toEqual(['undetermined', 'undetermined']);
