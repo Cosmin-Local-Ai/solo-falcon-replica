@@ -68,10 +68,15 @@ test.describe('PG-4 — the fiscal year rolls over, and the app says what it doe
     await expect(page.getByText(copy.year.rulesMissingBody)).toBeVisible();
     await expect(page.locator('[data-year-state="rules-missing"]')).toBeVisible();
 
-    // 3. No figure for 2027. The hero and the cockpit card both carry the em dash, and the badge is the
-    //    refusal state — so „no number" and „zero" cannot be confused.
-    await expect(estimateHero(page)).toHaveText('—');
-    await expect(statCard(page, 'Impozit estimat').locator('.value')).toHaveText('—');
+    // 3. No figure for 2027. The badge is the refusal state and the figure slot says what it is.
+    //
+    // B-28 re-pin: the hero and the cockpit used to carry the em dash — the same glyph a still-computing
+    // estimate carries. A year with no rule package is not an estimate still arriving: the engine ran and
+    // refused, and the slot now says so. The refusal sentence is asserted too, because for this state the
+    // sentence is the whole answer — it names the year whose rules are missing.
+    await expect(estimateHero(page)).toHaveText('Calcul refuzat');
+    await expect(statCard(page, 'Impozit estimat').locator('.value')).toHaveText('Calcul refuzat');
+    await expect(page.locator('[data-estimate-reason]')).toContainText('Niciun set de reguli înregistrat pentru anul fiscal 2027');
     await expect(page.locator('[data-estimate-state="review_required"]').first()).toBeVisible();
 
     // 4. And nothing on the page presents the closed 2026 figure as the current one. 3.112,00 lei is
@@ -120,7 +125,9 @@ test.describe('PG-4 — the fiscal year rolls over, and the app says what it doe
     // not know about it, instead of quietly showing the 2026 register.
     await page.goto('/dashboard');
     await expect(page.getByText(copy.year.rulesMissing(2027))).toBeVisible();
-    await expect(estimateHero(page)).toHaveText('—');
+    // B-28 re-pin — see the first test: a year with no rules is a refusal, not a pending figure, and the
+    // hero no longer borrows the pending dash for it.
+    await expect(estimateHero(page)).toHaveText('Calcul refuzat');
 
     // The toggle back still works, and the deliberate choice still survives a reload — the PG-4 guard,
     // re-proven from a shell-mounted writer.
