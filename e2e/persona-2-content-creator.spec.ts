@@ -46,9 +46,26 @@ test.describe('persona 2 — content creator (B-123: the DPI path in a browser)'
 
   test('the art. 67 half is still computed, and the total is the persona’s own figure', async ({ page }) => {
     await loadPersona(page, 'content-creator');
-    // 109.000,00 lei gross (art. 67 only) − 4.800,00 deductible = 104.200,00 net; CAS 24.300 on the 24-smn
-    // rung + CASS 10.420 + impozit 6.948 = 41.668,00 lei.
-    await expect(taxHero(page)).toHaveText('41.668,00 RON');
+    // Re-pinned by brief 72 (B-147). The figure moved, and the movement is the point of the brief: persona 2
+    // has fifteen art. 70 receipts, and until the quota had a call site none of them reached any calculator.
+    //
+    //   art. 67: 109.000,00 gross − 4.800,00 deductible = 104.200,00 net
+    //   art. 70: 130.000,00 gross recorded → 0,6 × = 78.000,00 net (art. 72 alin. (2) / art. 72¹ alin. (1))
+    //   CAS cumul (art. 148 alin. (3)): 104.200,00 + 78.000,00 = 182.200,00 → the 24-smn rung, CAS 24.300
+    //   CAS reținută la sursă (art. 151 alin. (6)): the DPI net alone, 78.000,00, sits on the 12-smn rung →
+    //     12.150, and CAS de plătit is the difference, 12.150
+    //   CASS (art. 170 alin. (1)): 10 % × 104.200,00 = 10.420 — DPI is not this article's subject
+    //   CAS deductibilă (art. 118 alin. (2²)): 24.300 × 104.200 ÷ 182.200 = 13.897, not 24.300. That is the
+    //     whole of the movement: widening the CAS base with a second source makes only that source's share
+    //     of the contribution deductible against the Titlul II base — B-118's proration, doing its job.
+    //   taxable 104.200 − 13.897 − 10.420 = 79.883 → impozit 7.988
+    //   total 24.300 + 10.420 + 7.988 = 42.708,00 lei. CAS and CASS are unchanged; the income tax rose by
+    //     1.040 = 10 % × the 10.403 lei of CAS that stopped being deductible. (Was 41.668,00.)
+    await expect(taxHero(page)).toHaveText('42.708,00 RON');
     await expect(await estimateLine(page, 'Venit brut')).toBeVisible();
+    // And the line naming where the new money came from is on the page, citing the article that gives the
+    // quota. A figure that moves without a line naming its source is B-106, not a fix.
+    await expect(await estimateLine(page, 'Venit net din drepturi de proprietate intelectuală')).toBeVisible();
+    await expect(await estimateLine(page, 'Venit cumulat pentru CAS (art. 148')).toBeVisible();
   });
 });
