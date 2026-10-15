@@ -16,6 +16,21 @@
 | `caen_rev3.csv` | The parsed, structured classification: `cod, nivel, parinte, sectiune, denumire`. **Generated — 1,025 rows: 87 diviziuni, 287 grupe, 651 clase, 22 secțiuni A–V.** |
 | `caen_rev3_caen3ro_clase.json` | Secondary cross-check: 651 class→denumire pairs scraped from `caen3.ro/coduri-caen-rev-3` on 2026-10-14. **A private commercial site — its own footer states it is not affiliated with ONRC or INS.** Used only as a cross-check, never as a source of truth. |
 
+## ⚠️ This file is now live application data (step 11, 2026-10-15)
+`src/data/caenRev3.ts` imports `caen_rev3.csv` through Vite's `?raw` and parses it at module load.
+There is **no copy of the nomenclator under `src/`** — deliberately, so the list a user picks from
+and the list this script verifies cannot drift apart. Consequences:
+- **Moving or renaming this CSV breaks the app's build**, not just the docs.
+- `src/data/caenRev3.test.ts` re-asserts **87 / 287 / 651 / 22** and that every clasă resolves to a
+  grupă, a diviziune and a secțiune letter — independently of the ingest script, so a source swap
+  that quietly loses a level fails a test rather than shipping.
+- The header line is checked verbatim, and `nivel` must agree with the code length. A shape change
+  here is a build failure by design.
+- **Rev.2 codes are the failure this guards.** The app's own seed carried `6201` until step 11;
+  Rev.3 has no `6201` and its class is `6210`. `caenClassProblem()` refuses any 4-digit string that
+  is not in this file, so a Rev.2 list copied over would surface as a validation error rather than
+  as a working feature.
+
 ## Counts — counted from the file, and asserted by the ingest script
 **22 secțiuni (A–V) · 87 diviziuni · 287 grupe · 651 clase.**
 Structural checks that passed: no duplicate codes · no grupa without a clasă · no diviziune without a clasă · every clasă has its grupa and diviziune present.

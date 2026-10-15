@@ -805,13 +805,50 @@ export type PfaSocialInsuranceStatus = 'obligatoriu' | 'exempt' | 'neplata';
  * `SettingsState.company.caen: CompanyCaen[]` (a duplicate store no UI wrote).
  * The domain owns the type so `data/types.ts` does not become a source of
  * domain models.
+ *
+ * Step 11 (B-124) fixed the *control*, not the *shape*: the list already held
+ * several codes and the UI only ever read `[0]`. The persisted shape is
+ * unchanged and the schema head stays v21 — see the positional convention on
+ * `PfaIdentity.caen`.
+ *
+ * `cod` is a **CAEN Rev.3 class** (4 digits). `6201`, the example this comment
+ * carried until step 11, is not one: it is a Rev.2 code and Rev.3 replaced it
+ * with `6210`. Codes are resolved against the shipped nomenclator in
+ * `src/data/caenRev3.ts`; free text is not a CAEN.
  */
 export interface CaenCode {
-  /** CAEN code, e.g. '6201'. */
+  /** CAEN Rev.3 class code, e.g. '6210'. */
   cod: string;
-  /** Human-readable classification, e.g. 'Activități de programare computerizate'. */
+  /** The official Rev.3 denomination, e.g. 'Activități de realizare a soft-ului la comandă'. */
   descriere: string;
 }
+
+/**
+ * How many CAEN classes a PFA may hold in its obiect de activitate.
+ *
+ * **OUG 44/2008 art. 16 alin. (1)**: „PFA poate avea în obiectul de activitate
+ * cel mult 5 clase de activități prevăzute de codul CAEN".
+ *
+ * Two things this number is NOT, and the wording of the control has to keep them
+ * straight because the arithmetic invites both:
+ *
+ * - It is a cap on the **TOTAL**, not a quota on a category called „secundară".
+ *   „1 principal + 4 secundare" is simply the arithmetic of a 5-class total; a PFA
+ *   with 5 secondary classes and no principal one is still 5, and 6 of any kind
+ *   is 6 too many.
+ * - It is **PFA-specific**. Întreprinderile individuale are the same 5 (art. 16
+ *   alin. (1)); the SRL's secondary objects are unlimited. Do not reuse this
+ *   constant for another entity type.
+ *
+ * „Principal" versus „secundar" is an **ONRC form concept**, not a fiscal one: the
+ * cerere has one „Activitatea principală: Clasa CAEN" field plus an annex for the
+ * rest. Nothing in the engine weights one over the other.
+ */
+export const CAEN_MAX_ACTIVITY_CLASSES = 5;
+
+/** The sentence that must sit next to the cap, or „4" reads as a product decision. */
+export const CAEN_CLASS_CAP_CITATION =
+  'OUG 44/2008 art. 16 alin. (1) — „PFA poate avea în obiectul de activitate cel mult 5 clase de activități prevăzute de codul CAEN".';
 
 /**
  * Identity/contact data owned by the profile.
@@ -854,9 +891,27 @@ export interface PfaIdentity {
   /**
    * Activity classifications (CAEN). Absorbed from `settings.company.caen` by
    * migration step v0→v1, which also folds the old `PfaProfile.caen` string in.
-   * The engine reads CAEN nowhere today — no CAEN-keyed rule is citable, so this
-   * is descriptive data, not a fiscal input (and it is deliberately NOT part of
-   * `inputsKey`, see `docs/ai/phases/07_identity.md`).
+   *
+   * **Positional convention (step 11 / B-124): index 0 is the class ONRC's form
+   * calls „Activitatea principală"; indices 1..4 are the secondary classes in the
+   * annex.** The list is capped at `CAEN_MAX_ACTIVITY_CLASSES`. This is the shape
+   * the data already had and the UI already assumed — `Settings.tsx` read
+   * `caen?.[0]?.cod` and labelled it „Principal" — so making all five editable
+   * needed no new field, no migration and no schema bump. If a future step wants
+   * the role stored explicitly rather than positionally, that IS a persisted
+   * shape change and needs a migration step plus an `inputsHash` re-derivation
+   * (snapshots embed the whole profile), not a quiet edit here.
+   *
+   * ⛔ **The engine reads CAEN nowhere today — and it must not start because it
+   * is convenient.** No CAEN-keyed rule is citable, so this is descriptive data,
+   * not a fiscal input, and it is deliberately NOT part of `inputsKey` (see
+   * `docs/ai/phases/07_identity.md`). The reason is in the law, not in our
+   * design: **HG 656/1997 art. 4 alin. (1) — „încadrarea … nu presupune crearea
+   * de drepturi sau obligații".** A classification creates no rights and no
+   * obligations. Before wiring a CAEN code into a calculator, find the statutory
+   * text that names that code (Codul fiscal art. 68 alin. (5) lit. r) names
+   * 9311/9312/9313; the Normele metodologice pct. 3 list names the art. 60 pct. 4
+   * scutire classes). If no text names it, the code cannot move a number here.
    */
   caen?: CaenCode[];
   /** Free text printed on invoices (menițiuni pe factură). Absorbed from `settings.company.mentiuniFactura`. */

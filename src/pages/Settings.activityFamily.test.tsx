@@ -113,8 +113,10 @@ describe('the activity family is reviewable in Settings', () => {
     seedStorage(payload({ profile: unansweredProfile() }));
     renderFiscalTab();
 
-    const caen = document.querySelector('input[value="6201"]') as HTMLInputElement | null;
-    expect(caen, 'the fiscal tab carries the CAEN field next to this one').not.toBeNull();
+    // B-124 — the CAEN control is a list of comboboxes now, so the principal row is addressed
+    // by its own hook rather than by whatever value the seed happens to hold.
+    const caen = document.querySelector('input[data-caen-input="0"]') as HTMLInputElement | null;
+    expect(caen, 'the fiscal tab carries the CAEN control next to this one').not.toBeNull();
     act(() => {
       fireEvent.change(caen!, { target: { value: '5510' } });
     });

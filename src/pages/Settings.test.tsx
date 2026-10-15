@@ -279,7 +279,10 @@ describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () => {
     );
     openFiscalTab();
 
-    inputField('Cod CAEN', '6202');
+    // B-124 — the CAEN control takes a code from the nomenclator. `6202`, the value this test
+    // typed for four phases, is not a CAEN Rev.3 class at all; the control now refuses it, which
+    // is the point of the control. `6210` is the Rev.3 class for contract software work.
+    inputField('Clasele CAEN', '6210');
     inputField('Data înființării', '2026-04-01');
     selectField('Venit din salarii', 'da');
     inputField('Venit brut anual din salarii', '30000');
@@ -288,7 +291,7 @@ describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () => {
     const profile = readStoredProfile();
     // Phase 7 (D-1b): CAEN is written to the one canonical model,
     // `identity.caen[]`. The deprecated `profile.caen` scalar is no longer written.
-    expect(profile.identity.caen?.[0]?.cod).toBe('6202');
+    expect(profile.identity.caen?.[0]?.cod).toBe('6210');
     expect(profile.caen).toBeUndefined();
     expect(profile.pfaStartDate).toBe('2026-04-01');
     expect(profile.salaryStatus).toBe('da');
@@ -308,7 +311,7 @@ describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () => {
       </StoreProvider>,
     );
     openFiscalTab();
-    inputField('Cod CAEN', '6202');
+    inputField('Clasele CAEN', '6210');
     selectField('Venit din salarii', 'da');
     inputField('Venit brut anual din salarii', '30000');
     clickSave();
@@ -323,7 +326,11 @@ describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () => {
     );
     openFiscalTab();
 
-    expect(screen.getByDisplayValue('6202')).toBeInTheDocument();
+    // B-124 — a saved class comes back resolved: the box shows `cod — denumire`, not the bare
+    // digits, because a code the app can name should be shown with its name.
+    expect(
+      screen.getByDisplayValue('6210 — Activități de realizare a soft-ului la comandă (software orientat client)'),
+    ).toBeInTheDocument();
     expect((fieldControl('Venit din salarii') as HTMLSelectElement).value).toBe('da');
     expect(screen.getByDisplayValue('30000')).toBeInTheDocument();
   });

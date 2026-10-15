@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { leiInputValue, parseLeiInput } from '../domain/money';
 import { useStore } from '../data/store';
 import { downloadText } from '../data/types';
@@ -8,6 +8,9 @@ import { Disclosure } from '../components/ui/Disclosure';
 import { InterpretationNote } from '../components/ui/InterpretationNote';
 import { FxRateProvenance } from '../components/ui/FxRateProvenance';
 import { FxRateEntryForm } from '../components/ui/FxRateEntryForm';
+// B-124 — the CAEN control. The nomenclator, the 5-class cap and its citation all come from
+// the modules that own them; this page renders a control and writes a fact, it decides nothing.
+import { CaenClassList, type CaenDraft } from '../components/ui/CaenClassList';
 import { copy, fields, scope as scopeCopy, settings as settingsCopy, validation, occupancy as occupancyCopy, vehicles as vehiclesCopy } from '../ui/copy';
 // PG-6c (D-VEH-3) — the vehicle facts are read and written through the same resolver the classifier runs,
 // so the screen and the calculation cannot disagree about which car the one-car allowance follows. The
@@ -596,6 +599,18 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
   });
   const [mentiuni, setMentiuni] = useState(identity.mentiuniFactura ?? '');
 
+  /**
+   * B-124 — the CAEN list as the control holds it: the classes picked so far, and the reason
+   * any box cannot be saved. `onCaenChange` is `useCallback`-stable on purpose: the control
+   * reports through an effect keyed on that callback, so a fresh closure every render would be
+   * a render loop.
+   */
+  const [caenDraft, setCaenDraft] = useState<CaenDraft>({
+    codes: identity.caen ?? [],
+    problems: [],
+  });
+  const onCaenChange = useCallback((draft: CaenDraft) => setCaenDraft(draft), []);
+
   // --- Personal tab: now a real write path (Phase 7 scope item 2). These inputs
   // were `disabled` in the mock because the data had no owner; `profile.identity`
   // is that owner.
@@ -613,13 +628,14 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
   // instead of being coerced to 0 (the Revenues.tsx validation pattern).
   const [fiscal, setFiscal] = useState({
     regime: profile.regime,
-    // CAEN is identity data now (D-1); the field stays on this tab because that
+    // CAEN is identity data now (D-1); the control stays on this tab because that
     // is where its "does not change the regime" caveat belongs, but it reads and
     // writes `identity.caen`, not the deprecated `profile.caen` string.
-    caen: identity.caen?.[0]?.cod ?? '',
-    // PG-6b (B-29) — a THREE-state field, like the pension facts below it: `''` means the person has never
-    // answered, which is not the same answer as `other`. `other` asserts that the sistem real rules apply;
-    // leaving it unanswered keeps the estimate `incomplete` and says so. The app never fills this in from
+    //
+    // B-124 — it used to be one string here (`identity.caen?.[0]?.cod`), which is the whole
+    // defect: the model holds a list and the form held one box. The list now lives in
+    // `caenDraft` below, because a row is a picked class plus the text that produced it, and
+    // that pair belongs with the control that enforces it.
     // the CAEN field above — `research/30` §3 records that the CAEN columns of the nomenclator are
     // „menționate cu titlu exemplificativ”, so a code is not a statement about the taxation method.
     activityFamily: (profile.activityFamily ?? '') as ActivityFamily | '',
@@ -952,6 +968,13 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     if (!isSelectableRegime(fiscal.regime)) {
       e.regime = validation.regimeNotComputable;
     }
+    // B-124 — a box holding text that is not a CAEN Rev.3 class is refused here, and the row
+    // already shows the reason next to itself. The save is blocked rather than the bad row
+    // dropped: silently discarding a code the person typed is the failure mode this whole
+    // control exists to remove.
+    if (caenDraft.problems.length > 0) {
+      e.caen = caenDraft.problems[0];
+    }
     // PG-6h-2 — the room count is a count, not an amount: an integer ≥ 0, or no value at all. A non-number
     // must not fall through as "unanswered", because the difference between 7 and 8 rooms is the
     // difference between two income titles and a silently dropped input would leave the wrong one standing.
@@ -1092,16 +1115,15 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       // '' ⇒ undefined, never '': a stored empty string would be a malformed date.
       vatExceedanceDate: fiscal.vatExceedanceDate || undefined,
       cashFloorLei: cash,
-      // CAEN is written into the single CAEN model (D-1), keeping any description
-      // the entry already had. The deprecated `profile.caen` string is not written.
+      // CAEN is written into the single CAEN model (D-1). B-124: the whole list is written,
+      // not index 0 — the old code rebuilt `[typed, ...identity.caen.slice(1)]`, so a person
+      // who edited the principal class could never reach the secondary ones and could not see
+      // that they were still there. Each entry carries the official Rev.3 denomination, taken
+      // from the nomenclator rather than typed. The deprecated `profile.caen` string is not
+      // written.
       identity: {
         ...identity,
-        caen: [
-          ...(fiscal.caen.trim()
-            ? [{ cod: fiscal.caen.trim(), descriere: identity.caen?.[0]?.descriere ?? '' }]
-            : []),
-          ...(identity.caen?.slice(1) ?? []),
-        ],
+        caen: caenDraft.codes,
       },
     });
     toast('success', settingsCopy.toasts.fiscalProfileSaved);
@@ -1290,21 +1312,26 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
           </Card>
 
           <Card title={settingsCopy.pfaCard.caen}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '10px 12px',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-              }}
-            >
-              <Badge kind="info">{settingsCopy.pfaCard.caenPrincipal}</Badge>
-              <span style={{ fontWeight: 600 }}>{identity.caen?.[0]?.cod}</span>
-              <span style={{ color: 'var(--text-2)', fontSize: 13 }}>
-                {identity.caen?.[0]?.descriere}
-              </span>
+            {/*
+              B-124 — every class the profile holds, not just index 0. The old card printed
+              `caen?.[0]` alone, so a profile with secondary classes displayed one of them and
+              hid the rest; the list below is the same list the Regim fiscal tab edits.
+            */}
+            <div className="caen-card-list">
+              {(identity.caen ?? []).map((entry, index) => (
+                <div key={`${entry.cod}-${index}`} className="caen-card-row" data-caen-card={index}>
+                  <Badge kind={index === 0 ? 'info' : 'neutral'}>
+                    {index === 0
+                      ? settingsCopy.fiscal.caenRolePrincipal
+                      : settingsCopy.fiscal.caenRoleSecondary(index)}
+                  </Badge>
+                  <span style={{ fontWeight: 600 }}>{entry.cod}</span>
+                  <span style={{ color: 'var(--text-2)', fontSize: 13 }}>{entry.descriere}</span>
+                </div>
+              ))}
+              {(identity.caen ?? []).length === 0 ? (
+                <span className="hint">{settingsCopy.fiscal.caenClassesIntro}</span>
+              ) : null}
             </div>
           </Card>
 
@@ -1554,17 +1581,16 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
               </div>
 
               <div className="field">
-                <label htmlFor="set-caen">{settingsCopy.fiscal.caen}</label>
-                <input
-                  id="set-caen"
-                  className="input"
-                  value={fiscal.caen}
-                  onChange={e => setFiscal({ ...fiscal, caen: e.target.value })}
-                />
+                {/* B-124 — the label names the group; each combobox carries its own accessible
+                    name (group + role) because a group label alone leaves four of the five
+                    inputs unnamed, which is what axe's `label` rule is on about. */}
+                <label>{settingsCopy.fiscal.caenClasses}</label>
+                <CaenClassList value={identity.caen ?? []} onChange={onCaenChange} />
                 <FieldLegal
                   hint={settingsCopy.fiscal.caenHint}
                   source={copy.sources.caenDoesNotChangeRegime}
                 />
+                {errors.caen ? <span className="error">{errors.caen}</span> : null}
               </div>
 
               <div className="field">

@@ -200,7 +200,21 @@ export const seedData: AppData = {
       banca: 'Banca Carpatică',
       // Phase 7 (D-1): the fields that used to live only in settings.company.
       codTvaIntra: 'RO4455667788990',
-      caen: [{ cod: '6201', descriere: 'Activități de programare computerizate' }],
+      // Step 11 (B-124) — the code, not just the shape, had to be fixed. This fixture carried
+      // `6201` „Activități de programare computerizate", which is a **CAEN Rev.2** code: Rev.3
+      // has no `6201`, and its class for contract software development is `6210`. The demo
+      // taxpayer cannot ship a code the app's own type-ahead refuses to offer — that turns a
+      // demo into a defect demonstration. The denomination below is the official Rev.3 text,
+      // copied from `docs/ai/data/caen_rev3.csv`, not retyped.
+      //
+      // This moves no number: CAEN is deliberately outside `inputsKey`, so the pinned seed
+      // estimate (311.200 bani) is unchanged by it.
+      caen: [
+        {
+          cod: '6210',
+          descriere: 'Activități de realizare a soft-ului la comandă (software orientat client)',
+        },
+      ],
       mentiuniFactura: 'Mulțumesc pentru colaborare.',
     },
     updatedAt: '2026-10-05T10:00:00.000Z',

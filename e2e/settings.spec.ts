@@ -144,7 +144,10 @@ test.describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () =
       'Impozit pe venit — sistem real (Titlul IV)',
     );
 
-    await field(page, 'Cod CAEN').locator('input').fill('6202');
+    // B-124 — the CAEN control is a type-ahead over the shipped nomenclator. `6202`, the string
+    // this spec typed for four phases, is not a CAEN Rev.3 class and the control now refuses it;
+    // `6210` is the Rev.3 class for contract software work.
+    await field(page, 'Clasele CAEN').locator('input').first().fill('6210');
     await field(page, 'Data înființării').locator('input').fill('2026-04-01');
     await field(page, 'Venit din salarii').locator('select').selectOption('da');
     await field(page, 'Venit brut anual din salarii').locator('input').fill('30000');
@@ -155,7 +158,7 @@ test.describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () =
     // Phase 7: CAEN lives in profile.identity.caen[] (one store, decision D-1); the
     // profile.caen scalar is retired and must not be written back.
     const identity = saved.identity as { caen?: { cod: string }[] };
-    expect(identity.caen?.[0]?.cod).toBe('6202');
+    expect(identity.caen?.[0]?.cod).toBe('6210');
     expect(saved.caen).toBeUndefined();
     expect(saved.pfaStartDate).toBe('2026-04-01');
     expect(saved.salaryStatus).toBe('da');
@@ -166,7 +169,10 @@ test.describe('Settings — Regim fiscal tab (Phase 6 profile write path)', () =
 
     // The real proof: a fresh document must read the new values back out of storage.
     await page.reload();
-    await expect(field(page, 'Cod CAEN').locator('input')).toHaveValue('6202');
+    // A saved class comes back resolved — `cod — denumire` — not as bare digits.
+    await expect(field(page, 'Clasele CAEN').locator('input').first()).toHaveValue(
+      '6210 — Activități de realizare a soft-ului la comandă (software orientat client)',
+    );
     await expect(field(page, 'Data înființării').locator('input')).toHaveValue('2026-04-01');
     await expect(field(page, 'Venit din salarii').locator('select')).toHaveValue('da');
     await expect(field(page, 'Venit brut anual din salarii').locator('input')).toHaveValue('30000');
@@ -219,7 +225,10 @@ test.describe('pre-Phase-6 payload survives the new profile fields', () => {
 
     // The store re-persisted the payload it loaded; a second reload must not lose it either.
     await page.goto('/settings#!/fiscal');
-    await expect(field(page, 'Cod CAEN').locator('input')).toHaveValue('6201');
+    // B-124 — the legacy `profile.caen: '6201'` was folded into `identity.caen` by the migration
+    // chain, and the control shows it as the bare code with a flag: Rev.3 has no `6201`, and the
+    // app keeps a code it cannot resolve rather than deleting a person's data on load.
+    await expect(field(page, 'Clasele CAEN').locator('input').first()).toHaveValue('6201');
     await expect(field(page, 'Venit brut anual din salarii').locator('input')).toHaveValue('');
 
     await page.goto('/revenues');

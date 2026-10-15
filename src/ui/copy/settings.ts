@@ -51,7 +51,9 @@ export const settings = {
     adresa: 'Adresa',
     copy: 'Copiază',
     caen: 'Codurile tale CAEN',
-    caenPrincipal: 'Principal',
+    // B-124 — the card used to print `caen?.[0]` under a lone „Principal" badge and hide the rest
+    // of the list. The role captions now live with the control that edits them
+    // (`fiscal.caenRolePrincipal` / `caenRoleSecondary`), so they are not spelled twice here.
     invoiceNotes: 'Mențiuni pe factură',
     invoiceNotesPlaceholder: 'Text afișat pe factura (opțional)',
     vatCode: 'Cod TVA intracomunitar',
@@ -102,8 +104,50 @@ export const settings = {
     profile: 'Profil fiscal',
     regime: 'Regim fiscal',
     regimeHint: 'Un PFA nu poate alege impozit pe profit; temeiurile sunt în „Surse și note de interpretare”.',
-    caen: 'Cod CAEN',
+    // B-124 — „Cod CAEN" (singular) is gone: the model was always a list and the label said
+    // otherwise. `caenClasses` is the caption of the control that edits all five.
     caenHint: 'Codul CAEN nu schimbă regimul fiscal.',
+    /**
+     * Step 11 / B-124 — the CAEN control.
+     *
+     * The defect this copy belongs to: `identity.caen` is a **list** and the field was a **single
+     * input** that read `caen?.[0]?.cod`. A person with a principal class and secondary classes
+     * could not enter the secondary ones at all, and could not see that the app had silently kept
+     * them.
+     *
+     * Three rules these strings obey:
+     *
+     * - **The cap carries its citation.** „Cel mult 5" is OUG 44/2008 art. 16 alin. (1); without
+     *   the article on the control, „4" reads as an arbitrary product decision. And the cap is on
+     *   the **total**, not on a category called „secundară" — the wording must not imply a quota.
+     * - **A code is chosen, not typed.** Free text is not a CAEN, so the empty-result sentence has
+     *   to say what a valid one looks like.
+     * - **The classification creates nothing.** HG 656/1997 art. 4 alin. (1): „încadrarea … nu
+     *   presupune crearea de drepturi sau obligații". The hint says so exactly where the person is
+     *   about to conclude the opposite.
+     */
+    caenClasses: 'Clasele CAEN din obiectul de activitate',
+    caenClassesIntro:
+      'Clasa principală este cea din cererea ONRC; restul sunt clasele din anexă. Alege-le din nomenclator — nu se pot scrie de mână.',
+    caenRolePrincipal: 'Principală',
+    caenRoleSecondary: (n: number): string => `Secundară ${n}`,
+    caenAdd: 'Adaugă încă o clasă',
+    caenRemove: 'Elimină clasa',
+    caenSearchPlaceholder: 'Caută după cod (47) sau după denumire (cazare)',
+    caenNoResults:
+      'Nicio clasă CAEN Rev.3 nu corespunde. Caută după codul de 4 cifre sau după un cuvânt din denumire — o denumire scrisă de mână nu este un cod CAEN.',
+    caenOnlyClass:
+      'Se poate alege doar o clasă, adică un cod de 4 cifre. Diviziunile (2 cifre) și grupele (3 cifre) apar în listă doar ca să vezi sub ce se află clasa.',
+    caenCapReached:
+      'S-au atins cele 5 clase. Nu se mai poate adăuga a șasea — limita este a totalului de clase din obiectul de activitate, nu a celor secundare.',
+    caenCapCitation:
+      'OUG 44/2008 art. 16 alin. (1) — „PFA poate avea în obiectul de activitate cel mult 5 clase de activități prevăzute de codul CAEN". La SRL obiectele secundare nu sunt limitate; la PFA nu.',
+    caenCounter: (used: number, max: number): string => `${used} din ${max} clase folosite`,
+    caenNotRev3:
+      'Codul salvat nu există în CAEN Rev.3. A fost păstrat așa cum este, ca să nu se piardă o date; alege o clasă din listă ca să o înlocuiești.',
+    caenAttribution: 'Sursă: clasificarea INS — Ordinul președintelui INS nr. 377/2024, MO I 385/25.04.2024, în vigoare de la 1 ianuarie 2025.',
+    caenDoesNotSetTax:
+      'Nicio sumă din aplicație nu se calculează din aceste coduri. HG 656/1997 art. 4 alin. (1): încadrarea „nu presupune crearea de drepturi sau obligații”.',
     /**
      * PG-6b (B-29) — the declared activity family, and the three captions for it.
      *
