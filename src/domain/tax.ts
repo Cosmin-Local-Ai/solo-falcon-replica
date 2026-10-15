@@ -951,15 +951,17 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   else if (typedDpiNet !== null) dpiNet = typedDpiNet;
   else dpiNet = hasRecordedDpi ? recordedDpiQuotaNet : null;
   if (hasRecordedDpi && !dpiDoubleRepresentation) {
-    // The line is here because the number below moved, and a contribution figure that moved without a line
-    // naming where it came from is B-106 again: a computation nobody can read is indistinguishable from a
-    // bug. The label says which article produced it and which receipts the 40 % did NOT touch.
-    lines.push({
-      label:
-        'Venit net din drepturi de proprietate intelectuală (art. 72 alin. (2) / art. 72^1 alin. (1): '
-        + 'cota forfetară de 40 % din venitul brut)',
-      value: recordedDpiQuotaNet as Bani,
-    });
+    if ((recordedDpiQuotaNet ?? 0) > 0) {
+      // The line is here because the number below moved, and a contribution figure that moved without a line
+      // naming where it came from is B-106 again: a computation nobody can read is indistinguishable from a
+      // bug. The label says which article produced it and which receipts the 40 % did NOT touch.
+      lines.push({
+        label:
+          'Venit net din drepturi de proprietate intelectuală (art. 72 alin. (2) / art. 72^1 alin. (1): '
+          + 'cota forfetară de 40 % din venitul brut)',
+        value: recordedDpiQuotaNet as Bani,
+      });
+    }
     if ((dpiExcludedGross ?? 0) > 0) {
       lines.push({
         label:

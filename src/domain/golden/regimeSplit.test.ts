@@ -130,6 +130,58 @@ describe('FIXTURE 1 (FACT — ANAF DGFP București DU-2026 deck, income year 202
     expect(lineOf(res, 'Impozit art.')).toBeUndefined();
   });
 
+  /**
+   * B-147 — **the bar this brief was set by.** The CAS of 24.300 lei above has, since B-112 stage 2, been
+   * reproduced by *typing* the DPI net onto the ladder (`proprietateIntelectuala: lei(50_000)`). Same
+   * example, same published figures, one input changed: here the DPI income arrives as a **recorded gross**
+   * and the app derives the net through `calcDpiFlatQuota` — the calculator `DPI_ART72_2026` declares and
+   * that, until brief 72, nothing in `tax.ts` ever called.
+   *
+   * **A finding the fixture exposes rather than hides.** ANAF's DPI net of 50.000 lei implies a gross of
+   * 83.333,33 lei, and that gross is not representable in bani: 8.333.333 × 0,6 = 4.999.999,8 bani, and
+   * `calcDpiFlatQuota` **refuses** a non-integer net rather than rounding a base, because art. 66 rounds
+   * sums owed, not bases. So no representable gross yields exactly 50.000 lei net, and the nearest one here
+   * gives 49.999,98 lei — two bani short. The published CAS figures come out unchanged anyway, and that is
+   * the point: the DPI net only has to clear the 24-SMN rung of art. 148 alin. (1), and 117.999,98 lei
+   * clears 97.200 lei with 20.799,98 lei to spare. A 0,02-lei gap in a base cannot move a tier.
+   *
+   * **What this fixture does NOT reproduce** is the 9.720 lei of CASS on the ladder, and it is asserted
+   * absent rather than left unmentioned. The art. 170 alin. (4) ladder is a declared-answer surface with six
+   * categories and `calcCassLadder` refuses a partial answer set; one computed DPI amount cannot answer the
+   * other five, and inventing five zeros is what that refusal exists to prevent. The recorded path feeds CAS
+   * (art. 148 alin. (3)) and the art. 151 alin. (6) withholding source. The CASS limb is reported by
+   * `dpiCoverageGaps`, and the retirement brief has to settle the ladder before the typed net can go.
+   */
+  it('B-147 — the same CAS of 24.300 lei, COMPUTED from a recorded gross instead of typed as a net', async () => {
+    const res = computed(
+      await driveSistemReal({
+        gross: lei(100_000),
+        expenses: lei(32_000),
+        // 83.333,30 lei brut — the nearest representable gross to ANAF's implied 83.333,33 lei.
+        dpiQuotaGross: lei(83_333.3),
+      }),
+    );
+
+    // The quota ran. 83.333,30 lei × 0,6 = 49.999,98 lei, and the line naming it is on the result.
+    expect(lineValue(res, 'Venit net din drepturi de proprietate intelectuală')).toBe(lei(49_999.98));
+
+    // ANAF's CAS triple, unchanged, and now derived rather than declared.
+    expect(lineValue(res, 'CAS (25%)')).toBe(lei(24_300));
+    expect(lineValue(res, 'CAS reținută la sursă')).toBe(lei(12_150));
+    expect(lineValue(res, 'CAS de plătit')).toBe(lei(12_150));
+
+    // The cumul that selected the tier: 68.000 lei of art. 67 net + 49.999,98 lei of computed DPI net.
+    expect(lineValue(res, 'Venit cumulat pentru CAS')).toBe(addBani(lei(68_000), lei(49_999.98)));
+    // And the art. 170 alin. (1) CASS cumul is the art. 67 net alone — DPI does not enter that article.
+    expect(lineValue(res, 'Venit cumulat pentru CASS')).toBe(lei(68_000));
+
+    // The boundary, asserted rather than omitted: no ladder year was answered, so the ladder contributes
+    // nothing and says nothing. The recorded DPI net did not sneak into the CASS base.
+    expect(lineOf(res, 'CASS pe veniturile')).toBeUndefined();
+    expect(lineOf(res, 'Baza de calcul CASS art. 155')).toBeUndefined();
+    expect(lineValue(res, 'CASS (10%)')).toBe(lei(6_800));
+  });
+
   it('B-112 stage 4 — the same example prints DUE / WITHHELD / PAYABLE, with ANAF literals as the assertions', async () => {
     /**
      * **SOURCE** — the same ANAF deck, Exemplul 3, recorded in `research/47` §2 with the two withheld

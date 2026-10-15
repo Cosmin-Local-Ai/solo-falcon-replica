@@ -36,6 +36,7 @@ import type { CassLadderYear, PfaProfile } from './models';
 import type { AppData, Revenue } from '../data/types';
 import { PFA_2026_RELEASE } from './fiscal/release2026';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal/package2026';
+import { PFA_2026_DPI_PACKAGE, PFA_2026_DPI_RELEASE } from './fiscal/release2026dpi';
 import { selectEstimateOperands } from './estimateBasis';
 import { selectRuleSet } from './fiscal';
 import { addBani, lei, money, type Bani } from './money';
@@ -101,7 +102,21 @@ function inputs(over: Partial<TaxInputsReference> = {}): TaxInputsReference {
   };
 }
 
-function engine(over: { dpi?: Bani; aiNet?: Bani; ladderYears?: CassLadderYear[]; inputs?: Partial<TaxInputsReference> } = {}) {
+function engine(
+  over: {
+    dpi?: Bani;
+    aiNet?: Bani;
+    ladderYears?: CassLadderYear[];
+    inputs?: Partial<TaxInputsReference>;
+    /** B-147 — the recorded art. 70 gross, as the assembler would hand it over. */
+    dpiQuotaGross?: Bani;
+    /** B-150 — the art. 72 alin. (3) half: no quota, outside CAS. */
+    dpiExcludedGross?: Bani;
+    /** B-147 — the DPI revision carries the art. 72 rule; the v5 package does not. */
+    rules?: readonly unknown[];
+    release?: typeof PFA_2026_RELEASE;
+  } = {},
+) {
   const ladderYears = over.ladderYears ?? ladder(over.dpi ?? lei(0));
   // The sistem-real net is parameterised because the discriminating proration cases in research/49 are
   // stated as (net, cumulated) pairs, and the pair decides both the CAS tier and the ratio.
@@ -116,8 +131,10 @@ function engine(over: { dpi?: Bani; aiNet?: Bani; ladderYears?: CassLadderYear[]
     expenseBase: { netFirst: EXPENSES, grossFirst: EXPENSES, divergent: false },
     flatRatioGross: null,
     flatRatioMethod: null,
-    ruleRelease: PFA_2026_RELEASE,
-    rules: PFA_2026_SYSTEM_REAL_PACKAGE,
+    dpiQuotaGross: over.dpiQuotaGross ?? null,
+    dpiExcludedGross: over.dpiExcludedGross ?? null,
+    ruleRelease: over.release ?? PFA_2026_RELEASE,
+    rules: (over.rules ?? PFA_2026_SYSTEM_REAL_PACKAGE) as never,
   });
 }
 
@@ -267,25 +284,65 @@ describe('B-112 — the B-116 double count cannot reach the CAS cumul through th
     } as AppData;
   }
 
-  it('the CAS cumul carries the DPI amount once, because the recorded document never reaches the engine', async () => {
-    // Stage 1 scoped recorded DPI receipts out of `selectEstimateOperands`, so the ladder amount is the
-    // only DPI quantity the engine can see. That is structural, not a check added at the cumul — and this
-    // test is what makes it a check: a later stage that routes recorded DPI into the engine has to break
-    // it deliberately rather by accident.
+  it('the CAS cumul posts NEITHER producer once the register also carries a DPI document', async () => {
+    // **This is the test `tax.ts` named as the one a later stage would have to break on purpose, and brief 72
+    // is that stage.** It used to read „the CAS cumul carries the DPI amount once, because the recorded
+    // document never reaches the engine”, and that was true structurally: `selectEstimateOperands` scoped
+    // recorded DPI receipts out of the engine's record set, so the ladder amount was the only DPI quantity
+    // the engine could see. B-147 gave the recorded gross its own operand and its own call site, so the
+    // structure no longer decides anything. What decides is a rule, and it is not a preference: where both
+    // producers exist for the same year, the engine posts neither.
+    //
+    // Not the sum — the ladder cumulates the category once, so 28.000 + 0,6 × 40.000 would bill
+    // contributions on money received once. Not the typed one, and not the computed one — either is the
+    // precedence D-DPI-1 has not authorised. Same shape as B-93's `depreciation_conflict`.
     const data = bothRepresentations();
     const asOf = '2026-10-31';
     const rules = [...(selectRuleSet(2026, asOf)?.rules ?? [])];
     const ops = selectEstimateOperands(data, asOf, rules);
     if (ops.kind !== 'run') throw new Error('assembler refused');
-    // The recorded 40.000 lei of DPI is not in the operands at all.
+    // Half the old assertion survives and has to be re-stated honestly: the recorded 40.000 lei is still NOT
+    // in the sistem-real operands, because an art. 70 receipt is not art. 67 income and must not run through
+    // the art. 68 expense engine. What is new is that it now arrives beside them, as a DPI operand.
     expect(ops.amounts.revenuesNet).toBe(lei(0));
+    expect(ops.amounts.dpiQuotaGross).toBe(lei(40_000));
+    expect(ops.amounts.dpiExcludedGross).toBe(lei(0));
 
-    const res = await engine({ dpi: DPI_NET });
+    const res = await engine({
+      dpi: DPI_NET,
+      // 60.000 lei brut, not the fixture's 40.000, and the number is chosen: 0,6 × 60.000 = 36.000 lei, so
+      // EITHER producer alone would carry the year over 24 SMN (97.200) and charge CAS of 24.300 lei. That
+      // is what makes the pair observable — if the engine posted either one, CAS here would read 24.300.
+      // It reads 12.150, the 12-SMN floor for 72.000 lei of art. 67 net and nothing else.
+      dpiQuotaGross: lei(60_000),
+      rules: PFA_2026_DPI_PACKAGE,
+      release: PFA_2026_DPI_RELEASE,
+    });
     if (res.status !== 'computed') throw new Error(`engine refused: ${res.reason}`);
-    // And the cumul is 72.000 + 28.000, not 72.000 + 28.000 + 40.000. Had the register fed the CAS path
-    // too, the year would clear a higher tier on money counted twice.
-    expect(line(res, 'Venit cumulat pentru CAS')).toBe(lei(100_000));
-    expect(line(res, 'Venit cumulat pentru CAS')).not.toBe(lei(140_000));
+    // Neither producer is posted, so the cumul is the art. 67 leg alone — and with one leg the two CAS
+    // quantities coincide, which is exactly the case in which `tax.ts` prints no cumulation line at all.
+    expect(res.lines.some((l) => l.label.startsWith('Venit cumulat pentru CAS'))).toBe(false);
+    expect(line(res, 'CAS (25%)')).toBe(lei(12_150));
+    // And the coverage row's promise — „niciun venit din DPI nu este postat cât timp ambele există” — is now
+    // actually true in the engine. It was not before brief 72: the row said it and the engine ignored it.
+    expect(res.lines.some((l) => l.label.startsWith('Venit net din drepturi de proprietate intelectuală')))
+      .toBe(false);
+  });
+
+  it('with the typed net absent, the recorded gross alone DOES cross 24 SMN and charge 24.300 lei', async () => {
+    // The control for the test above. Without it, „CAS = 12.150 with both producers” could just mean the
+    // recorded path never reaches the cumul at all — which IS the pre-brief-72 behaviour, and the behaviour
+    // this brief exists to remove. Same operands, ladder removed: the number moves.
+    const res = await engine({
+      ladderYears: [],
+      dpiQuotaGross: lei(60_000),
+      rules: PFA_2026_DPI_PACKAGE,
+      release: PFA_2026_DPI_RELEASE,
+    });
+    if (res.status !== 'computed') throw new Error(`engine refused: ${res.reason}`);
+    expect(line(res, 'Venit cumulat pentru CAS')).toBe(addBani(AI_NET, lei(36_000)));
+    expect(line(res, 'Venit net din drepturi de proprietate intelectuală')).toBe(lei(36_000));
+    expect(line(res, 'CAS (25%)')).toBe(lei(24_300));
   });
 });
 

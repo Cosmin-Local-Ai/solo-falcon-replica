@@ -143,6 +143,14 @@ export function driveSistemReal(o: {
   expenses: Bani;
   profile?: GoldenProfileOptions;
   ladderYears?: CassLadderYear[];
+  /**
+   * B-147 — the gross of recorded art. 70 receipts, as the assembler would hand it over. It is a separate
+   * operand rather than a bump to `gross` because an art. 70 receipt is not art. 67 income: the engine must
+   * not run it through the art. 68 expense engine, and the quota is struck by `calcDpiFlatQuota`, not here.
+   */
+  dpiQuotaGross?: Bani;
+  /** B-150 — the art. 72 alin. (3) / art. 72¹ alin. (2) half: no quota, and outside CAS. */
+  dpiExcludedGross?: Bani;
 }): Promise<TaxEstimateResult> {
   const opts = o.profile ?? {};
   return computeTaxEstimate({
@@ -155,6 +163,8 @@ export function driveSistemReal(o: {
     expenseBase: { netFirst: o.expenses, grossFirst: o.expenses, divergent: false },
     flatRatioGross: null,
     flatRatioMethod: null,
+    dpiQuotaGross: o.dpiQuotaGross ?? null,
+    dpiExcludedGross: o.dpiExcludedGross ?? null,
     ...ruleSetFor(opts.fiscalYear ?? 2026),
   });
 }
