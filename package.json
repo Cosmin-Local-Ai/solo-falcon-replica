@@ -8,9 +8,11 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --pool=threads --poolOptions.threads.maxThreads=2",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test --workers=2",
+    "test:uncapped": "vitest run",
+    "test:e2e:uncapped": "playwright test"
   },
   "dependencies": {
     "decimal.js-light": "^2.5.1",

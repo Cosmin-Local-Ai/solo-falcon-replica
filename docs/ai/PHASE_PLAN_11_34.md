@@ -752,6 +752,23 @@ Written 2026-10-12, after I briefed a Researcher to **read a research file and w
 5. **New tests stay targeted to the defect.** Do not grow a 1.200-line test file to cover one assertion; do not add a new e2e spec where a component test proves the same thing. The five largest test files are already 900–1.200 lines each.
 6. **Report the shape of your runs in the handoff**, under `TESTS:` — which targeted runs, and the one full-suite result with its newly measured counts. If you ran the full suite more than twice, **say why.**
 
+### 12.20 — the capped gate is now the **default**, so the machine-exhausting form takes deliberate intent (2026-10-16)
+
+Brief 76 reported its own deviation honestly: it ran `npx vitest run` and `npx playwright test` — **not** the capped forms — and both completed. It read each once from a log, one at a time, never re-ran. **So the discipline held and the caps did not.** That is the shape of problem prose cannot solve.
+
+**`package.json` now makes the safe form the default:**
+
+| Script | Command |
+|---|---|
+| `npm run test` | `vitest run --pool=threads --poolOptions.threads.maxThreads=2` |
+| `npm run test:e2e` | `playwright test --workers=2` |
+| `npm run test:uncapped` | `vitest run` |
+| `npm run test:e2e:uncapped` | `playwright test` |
+
+**The uncapped variants still exist** — they are the right tool on a machine with headroom, and removing them would force someone to retype the command and lose the point. **What changed is that reaching them now requires naming them.** A Worker following §12.17 by habit gets the capped run; a Worker that wants the fast one has to say so in the script name.
+
+**This is the same move as the B-139 guard and the B-142 exemption list:** stop relying on the agent remembering, and make the correct action the path of least resistance.
+
 ### 12.19 — a refuted row gets its **headline** rewritten, not a note appended (standing rule, 2026-10-15)
 
 **When a register row's premise turns out to be wrong, rewrite the first sentence of the row.** Do not append the refutation below the original claim and leave the claim as the lead.
