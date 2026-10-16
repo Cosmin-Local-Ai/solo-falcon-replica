@@ -160,6 +160,31 @@ test.describe('B-93 acceptance 2 — the double count is refused, and the figure
     expect(await page.getByText(assetsCopy.posting.conflictWhyAll).all()).toHaveLength(2);
   });
 
+  test('B-155 — declare the link and the same two-asset register narrows: one card withheld, one posted', async ({
+    page,
+  }) => {
+    // The counterpart of the test above, on the SAME two-asset register, differing in one declared fact:
+    // the typed depreciation row now names `a1`. That flips `DepreciationConflict.scope` from
+    // 'register-wide' to 'asset', and the card has to change its sentence with it — the register-wide
+    // wording is not merely less precise here, it is false, because `a2`'s schedule does post.
+    await seedBrowser(page, payloadWith({
+      expenses: [...seedPayload().expenses, { ...typedDepreciation, assetId: 'a1' }],
+      fixedAssets: TWO_CARS,
+    }));
+    await fixClock(page);
+    await page.goto('/assets');
+
+    await expect(page.getByTestId('asset-conflict-a1')).toBeVisible();
+    await expect(page.getByTestId('asset-conflict-scope-a1')).toContainText(
+      'Planurile celorlalte bunuri din registru nu sunt atinse',
+    );
+    // The false sentence is gone from the whole page, not just from this card.
+    await expect(page.getByText(assetsCopy.posting.conflictWhyAll)).toHaveCount(0);
+    // And the narrowed sentence's own claim is checked against the other card.
+    await expect(page.getByTestId('asset-conflict-a2')).toHaveCount(0);
+    await expect(page.getByTestId('asset-posted-a2')).toBeVisible();
+  });
+
   test('the ceiling travels with the posted figure: the card shows the capped amount, never the gross', async ({
     page,
   }) => {

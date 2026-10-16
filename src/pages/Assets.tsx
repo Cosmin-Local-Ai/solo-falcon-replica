@@ -318,6 +318,15 @@ function AssetCard({ asset, leg }: { asset: FixedAsset; leg: DepreciationLeg }) 
     outcome?.status === 'computed' ? outcome.years.map(y => y.lost) : [],
   );
 
+  // B-155 — the conflict the card is about, read once, and its **scope** read with it. The scope is not a
+  // decoration: `selectAssetDepreciation` sets it to 'register-wide' only when some typed depreciation
+  // expense in the period names no asset at all, and to 'asset' when every one of them names one. Printing
+  // the register-wide sentence on an 'asset' conflict tells a person that no schedule in the register
+  // posts, which is false the moment the register holds a second asset — and the second asset's own card
+  // says it posted, on the same screen.
+  const conflict = leg.conflicts.find(c => c.assetId === asset.id) ?? null;
+  const narrowedConflict = conflict !== null && conflict.scope === 'asset';
+
   return (
     <Card
       title={asset.label}
@@ -406,18 +415,19 @@ function AssetCard({ asset, leg }: { asset: FixedAsset; leg: DepreciationLeg }) 
                 {assetsCopy.schedule.stoppedAtDisposal}
               </div>
             )}
-            {leg.conflicts.some(c => c.assetId === asset.id) && (
+            {conflict !== null && (
               <div className="card" style={{ padding: '12px 14px', marginTop: 8 }} data-testid={`asset-conflict-${asset.id}`}>
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>{assetsCopy.posting.conflictHeading}</div>
                 <div className="text-sm">{assetsCopy.posting.conflict}</div>
                 <div className="text-sm" data-testid={`asset-conflict-expenses-${asset.id}`}>
-                  {assetsCopy.posting.conflictExpenses.replace(
-                    '{ids}',
-                    leg.conflicts.find(c => c.assetId === asset.id)?.expenseIds.join(', ') ?? '',
-                  )}
+                  {assetsCopy.posting.conflictExpenses.replace('{ids}', conflict.expenseIds.join(', '))}
                 </div>
-                <div className="text-sm muted" style={{ marginTop: 6 }}>{assetsCopy.posting.conflictWhyAll}</div>
-                <div className="text-sm" style={{ marginTop: 6 }}>{assetsCopy.posting.conflictFix}</div>
+                <div className="text-sm muted" style={{ marginTop: 6 }} data-testid={`asset-conflict-scope-${asset.id}`}>
+                  {narrowedConflict ? assetsCopy.posting.conflictWhyAsset : assetsCopy.posting.conflictWhyAll}
+                </div>
+                <div className="text-sm" style={{ marginTop: 6 }}>
+                  {narrowedConflict ? assetsCopy.posting.conflictFixAsset : assetsCopy.posting.conflictFix}
+                </div>
               </div>
             )}
             {leg.lines.some(l => l.assetId === asset.id) && (

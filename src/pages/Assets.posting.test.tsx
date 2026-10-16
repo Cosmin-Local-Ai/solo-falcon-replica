@@ -136,3 +136,51 @@ describe('a withheld schedule names the collision', () => {
     expect(screen.getByTestId('asset-gap-a1')).toBeTruthy();
   });
 });
+
+/**
+ * B-155 — the card had to start reading the scope it was already being given.
+ *
+ * `selectAssetDepreciation` decides `DepreciationConflict.scope` per conflict: `'register-wide'` only when
+ * some typed depreciation expense in the period names **no** asset, `'asset'` when every one of them names
+ * one. The dashboard coverage row has branched on it since B-108; the card printed `conflictWhyAll` for
+ * every conflict, so on a two-asset register it told the person that nothing in the register posts while
+ * the other asset's own card, on the same screen, said its schedule had posted.
+ *
+ * Both branches are asserted **on a register with two assets**, and the two payloads differ in exactly one
+ * fact — whether the typed expense carries an `assetId`. That is what makes the difference proven rather
+ * than assumed: a card that ignored the scope could not pass this pair.
+ */
+describe('B-155 — the conflict sentence says how far the refusal reaches', () => {
+  const second = asset({ id: 'a2', label: 'Monitor de birou', fiscalValue: lei(6000) });
+  const linked = { ...typedDepreciation, assetId: 'a1' };
+
+  it('a linked expense narrows the refusal: this asset is withheld, the other posts', () => {
+    renderPage({
+      ...seedData,
+      fixedAssets: [asset(), second],
+      expenses: [...seedData.expenses, linked],
+    });
+    const scope = screen.getByTestId('asset-conflict-scope-a1').textContent ?? '';
+    expect(scope).toContain('Planurile celorlalte bunuri din registru nu sunt atinse');
+    // The register-wide sentence is the false one here, and it must not appear anywhere on the page.
+    expect(screen.queryByText(assetsCopy.posting.conflictWhyAll)).toBeNull();
+    expect(screen.getByText(assetsCopy.posting.conflictFixAsset).textContent).toContain('celorlalte bunuri');
+    // And the claim the narrowed sentence makes is checked against the other card, not taken on trust.
+    expect(screen.queryByTestId('asset-conflict-a2')).toBeNull();
+    expect(screen.getByTestId('asset-posted-a2')).toBeTruthy();
+  });
+
+  it('one unlinked expense widens it back: both cards say no schedule posts', () => {
+    renderPage({
+      ...seedData,
+      fixedAssets: [asset(), second],
+      expenses: [...seedData.expenses, typedDepreciation],
+    });
+    for (const id of ['a1', 'a2']) {
+      const scope = screen.getByTestId(`asset-conflict-scope-${id}`).textContent ?? '';
+      expect(scope).toContain('niciun plan din registru nu este postat');
+      expect(scope).not.toContain('Planurile celorlalte bunuri');
+    }
+    expect(screen.queryByTestId('asset-posted-a2')).toBeNull();
+  });
+});

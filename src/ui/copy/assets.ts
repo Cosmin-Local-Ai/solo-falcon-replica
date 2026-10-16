@@ -247,13 +247,25 @@ export const assets = {
       'adună cele două, nu alege valoarea mai mare și nu preferă în tăcere niciuna — planul este reținut ' +
       'iar cifra estimării nu se mișcă.',
     conflictExpenses: 'Cheltuieli înregistrate manual: {ids}.',
-    conflictWhyAll: 
+    conflictWhyAll:
       'Înregistrarea de cheltuială nu face legătura dintre o sumă și un mijloc fix, deci aplicația nu poate ' +
       'să spună ce bun acoperă cheltuiala tastată. Cât timp există o astfel de cheltuială în perioadă, ' +
       'niciun plan din registru nu este postat.',
     conflictFix:
       'Ce poți face: șterge cheltuiala cu amortizarea înregistrată manual și lasă registrul să calculeze, ' +
       'sau păstreaz-o și nu mai aștepta nicio deducere din registru pentru acest an.',
+    // B-155 — the narrowed half of the same card. `selectAssetDepreciation` already decides a scope per
+    // conflict (`DepreciationConflict.scope` in `domain/estimateBasis.ts`), and the dashboard coverage row
+    // has read it since B-108; the card printed `conflictWhyAll` for every conflict, which tells a person
+    // that nothing in the register posts when in fact only this asset's schedule is withheld. These two are
+    // the copy for `scope === 'asset'`, worded to agree with the coverage row rather than to contradict it.
+    conflictWhyAsset:
+      'Cheltuiala tastată care declanșează conflictul este legată de acest bun — este legătura pe care ai ' +
+      'făcut-o, nu o presupunere a aplicației. Planurile celorlalte bunuri din registru nu sunt atinse: ele ' +
+      'se postează normal, și doar planul acestui bun este reținut.',
+    conflictFixAsset:
+      'Ce poți face: șterge cheltuiala cu amortizarea legată de acest bun și lasă registrul să-i calculeze ' +
+      'planul; planurile celorlalte bunuri intră deja în estimare.',
   },
 
   // ── The three silences ───────────────────────────────────────────────────

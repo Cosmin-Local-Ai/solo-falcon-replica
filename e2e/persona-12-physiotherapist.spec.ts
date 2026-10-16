@@ -98,11 +98,15 @@ test.describe('persona 12 — cabinet de fizioterapie: două plafoane, două soa
     await expect(page.getByTestId('asset-conflict-p12-asset-aparat')).toBeVisible();
     await expect(page.getByTestId('asset-conflict-expenses-p12-asset-aparat')).toContainText('AMORT-1');
     await expect(page.getByTestId('asset-posted-p12-asset-aparat')).toHaveCount(0);
-    // FINDING, not a fix: the asset card never reads `scope`. With the link declared it still prints the
-    // register-wide sentence. For this persona that happens to remain true — the register holds exactly one
-    // asset — but the card and the cockpit state the same refusal at two different widths, and a register
-    // with a second asset would make the card wrong.
-    await expect(page.getByText(assetsCopy.posting.conflictWhyAll)).toHaveCount(1);
+    // B-155 — the card now reads the scope too, so it states the refusal at the same width as the cockpit.
+    // Before brief 81 this asserted `conflictWhyAll` and carried a FINDING saying the card ignored `scope`;
+    // that is fixed, and the two sentences are asserted against each other rather than one being absent by
+    // luck. The two-asset case — where the register-wide sentence is actually false — is proven in
+    // `src/pages/Assets.posting.test.tsx` and in `e2e/depreciation-posting.spec.ts`.
+    await expect(page.getByTestId('asset-conflict-scope-p12-asset-aparat')).toContainText(
+      'Planurile celorlalte bunuri din registru nu sunt atinse',
+    );
+    await expect(page.getByText(assetsCopy.posting.conflictWhyAll)).toHaveCount(0);
   });
 
   test('take the link away and the same refusal says it covers the whole register', async ({ page }) => {
