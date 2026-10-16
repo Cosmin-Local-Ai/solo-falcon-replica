@@ -340,9 +340,13 @@ export function auditFiscalDates(data: AppData): ExcludedFiscalDate[] {
     });
   };
   for (const r of data.revenues) {
+    // B-159: a declared non-collection is not an unusable date, it is an answer. Reporting it as
+    // `review_required` would ask the person to correct a fact they have already stated correctly.
+    if (revenueDeclaredUncollected(r)) continue;
     report(r.id, 'revenue', r.collected !== undefined ? 'collected' : 'date', revenueFiscalDate(r));
   }
   for (const e of data.expenses) {
+    if (expenseDeclaredUnpaid(e)) continue;
     report(e.id, 'expense', e.paid !== undefined ? 'paid' : 'date', expenseFiscalDate(e));
   }
   return excluded;
@@ -359,10 +363,30 @@ export function auditFiscalDates(data: AppData): ExcludedFiscalDate[] {
  * migration deliberately refuses to invent a collection event, so the fallback is where that
  * assumption lives — it is not a guess per record, it is the reading of a field that was always
  * ambiguous. The invoice **issue** date is not a timing gate (see `docs/ai/research/10` §2).
+ *
+ * **B-159 — a declared non-collection is not a legacy ambiguity.** `collected === null` is the person
+ * saying the money has not come in. Art. 68 alin. (2) lit. a) counts venit brut by „sumele încasate”,
+ * and `docs/ai/research/37` §2.1 and §5 sentence 3 say so in those words, so such a receipt has **no
+ * fiscal date at all**: the resolver returns the empty date, every `inPeriod` test fails on it, and the
+ * record stays out of the base. That is the half the copy has been asserting since PG-2 while the engine
+ * did the opposite. Absence of the key is NOT that declaration — it is the legacy reading above, and
+ * collapsing the two would have deleted the entire seed register from the base.
  */
 export function revenueFiscalDate(r: Pick<Revenue, 'date' | 'collected'>): string {
+  if (r.collected === null) return NO_MONEY_DATE;
   return r.collected ?? r.date;
 }
+
+/**
+ * The resolved date of a record whose money has provably not moved. `inPeriod` rejects it because it is
+ * not a calendar date, which is exactly the intended effect: no money date, no fiscal year, no base.
+ * It is a sentinel, not a date, and nothing may format it as one.
+ */
+export const NO_MONEY_DATE = '';
+
+/** The declared state behind `NO_MONEY_DATE` on each side — one predicate each, so no consumer re-spells it. */
+export const revenueDeclaredUncollected = (r: Pick<Revenue, 'collected'>): boolean => r.collected === null;
+export const expenseDeclaredUnpaid = (e: Pick<Expense, 'paid'>): boolean => e.paid === null;
 
 /**
  * The date an expense is attributed to a fiscal year.
@@ -372,8 +396,13 @@ export function revenueFiscalDate(r: Pick<Revenue, 'date' | 'collected'>): strin
  * The consequence is attribution, not punishment: there is no late-payment disallowance in the
  * Cod fiscal (`docs/ai/research/10` §1 — the "15-day collection threshold" does not exist), so a
  * late-paid expense simply lands in the payment year.
+ *
+ * **B-159:** `paid === null` is the declared „not paid yet” state. Art. 68 alin. (4) lit. b) is a
+ * condition, not a deadline (`docs/ai/research/37` §3.3), so a never-paid expense never enters the
+ * deductible base at all — it resolves to no fiscal date rather than to the document's date.
  */
 export function expenseFiscalDate(e: Pick<Expense, 'date' | 'paid'>): string {
+  if (e.paid === null) return NO_MONEY_DATE;
   return e.paid ?? e.date;
 }
 

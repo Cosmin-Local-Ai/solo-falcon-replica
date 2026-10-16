@@ -3,7 +3,7 @@ import { ENTRY_CURRENCIES, formatMoney, moneyInputValue, parseMoneyInput, type C
 import { useStore } from '../data/store';
 import { fmtDate, total, statusBadge } from '../data/types';
 import type { Revenue } from '../data/types';
-import { revenueFiscalDate, type FiscalDateField } from '../domain/aggregation';
+import { revenueFiscalDate, revenueDeclaredUncollected, type FiscalDateField } from '../domain/aggregation';
 // B-112 — the income-category vocabulary and its predicates, imported from the one layer that owns them
 // (B-70: a vocabulary spelled twice drifts). `DEFAULT_INCOME_CATEGORY` in particular is imported rather
 // than restated, so the form and the domain read a key-less record the same way.
@@ -62,6 +62,10 @@ function RevenueForm({ initial, onSave, onClose }: {
     // never as `''` — an empty string fails the load gate and would quarantine the payload, and inventing
     // a collection date nobody recorded would mint a legal fact (research/37 §4.4).
     collected: initial?.collected ?? '',
+    // B-159 — the declared non-collection. `collected === null` is the record saying the money has not
+    // come in, which is the only state that keeps a receipt out of venit brut; an empty input alone is
+    // the legacy single-date case and stays in the base (see `moneyDate.revenueEmptyEffect`).
+    notCollected: initial?.collected === null,
     client: initial?.client ?? '',
     cui: initial?.cui ?? '',
     // `moneyInputValue`, not `String(...)`: the stored amount is integer minor units, and an input is a screen.
@@ -111,7 +115,7 @@ function RevenueForm({ initial, onSave, onClose }: {
     if (v === null || t === null) return;
     onSave({
       tip: f.tip as Revenue['tip'], nr: f.nr, date: f.date, client: f.client, cui: f.cui,
-      collected: f.collected === '' ? undefined : f.collected,
+      collected: f.notCollected ? null : f.collected === '' ? undefined : f.collected,
       valoareFaraTva: v, tva: t, status: f.status as Revenue['status'],
       statusDetail: f.statusDetail || undefined,
       eFacturaStatus: f.status === 'inregistrata' ? 'Acceptată' : f.status === 'in-asteptare' ? 'În așteptare' : 'Respinsă',
@@ -204,11 +208,29 @@ function RevenueForm({ initial, onSave, onClose }: {
             name="revenue-collected"
             className={errors.collected ? 'invalid' : ''}
             value={f.collected}
+            disabled={f.notCollected}
             onChange={e => set('collected', e.target.value)}
           />
           {errors.collected && <span className="error">{errors.collected}</span>}
+          {/* B-159 — the declaration the sentence above describes. Without a control the sentence promised
+              an exclusion nothing could produce, which is the contradiction the row and the estimate then
+              disagreed about. */}
+          <label className="text-sm" style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
+            <input
+              type="checkbox"
+              name="revenue-not-collected"
+              checked={f.notCollected}
+              onChange={e => setF(p => ({
+                ...p,
+                notCollected: e.target.checked,
+                collected: e.target.checked ? '' : p.collected,
+              }))}
+            />
+            {moneyDate.notCollected}
+          </label>
           <span className="text-sm muted">{moneyDate.revenueHint}</span>
           <span className="text-sm muted">{moneyDate.revenueEmpty}</span>
+          <span className="text-sm muted" data-money-date-effect="revenue">{moneyDate.revenueEmptyEffect}</span>
           {/* 12C (B-38) — the fallback named as a default, on the field that decides it. */}
           <span className="text-sm muted" data-money-date-default="revenue">{moneyDate.fallbackDefault}</span>
         </div>
@@ -403,12 +425,18 @@ export default function Revenues({ initialTab, onTabChange, focusRecord }: Reven
                     <td className="muted">{r.cui}</td>
                     <td>
                       {fmtDate(r.date)}
-                      <FiscalDateNote
-                        kind="revenue"
-                        source={(r.collected !== undefined ? 'collected' : 'date') as FiscalDateField}
-                        fiscalDate={revenueFiscalDate(r)}
-                        documentDate={r.date}
-                      />
+                      {revenueDeclaredUncollected(r) ? (
+                        <div className="text-sm muted" data-money-date="absent" style={{ marginTop: 3 }}>
+                          {moneyDate.noCollection}
+                        </div>
+                      ) : (
+                        <FiscalDateNote
+                          kind="revenue"
+                          source={(r.collected !== undefined ? 'collected' : 'date') as FiscalDateField}
+                          fiscalDate={revenueFiscalDate(r)}
+                          documentDate={r.date}
+                        />
+                      )}
                     </td>
                     <td>{r.valoareFaraTva.currency}</td>
                     <td className="amount">{formatMoney(r.valoareFaraTva)}</td>

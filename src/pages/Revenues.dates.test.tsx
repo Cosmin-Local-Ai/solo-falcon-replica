@@ -253,4 +253,80 @@ describe('Revenues — the collection date (PG-2)', () => {
     await waitFor(() => expect(savedRevenue('FCT-PG2-906')?.collected).toBe('2027-01-10'));
     expect(savedRevenue('FCT-PG2-906')!.date).toBe('2026-12-20');
   });
+
+  // ── B-159 — the field stopped being the switch, and a switch was built ─────────────────────────
+  //
+  // `moneyDate.revenueEmpty` has promised since PG-2 that without a collection the sum is not venit brut.
+  // Nothing in the app could produce that result: leaving the date empty is the legacy single-date case,
+  // and the engine read the document date as the money date. Brief 82 answered by SAYING the fallback;
+  // this is the half that makes the promise actionable — a declared non-collection, and the sentence that
+  // points at it instead of at the empty input.
+
+  it('the form offers the declaration the sentence describes, and saving it writes null (B-159)', async () => {
+    pinClock(fixedInstant());
+    seedWith([]);
+    render(
+      <StoreProvider>
+        <Revenues />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Adaugă venit/ }));
+    const box = document.querySelector<HTMLInputElement>('input[name="revenue-not-collected"]')!;
+    expect(box.checked).toBe(false);
+    fireEvent.click(box);
+
+    // Declaring the money has not come in and typing the day it came in cannot both be true.
+    const collected = dateInputs()[1];
+    expect(collected.disabled).toBe(true);
+
+    fillAndSubmit('FCT-B159-001', { documentDate: '2026-12-20' });
+    await waitFor(() => expect(savedRevenue('FCT-B159-001')).toBeDefined());
+    expect(savedRevenue('FCT-B159-001')!.collected).toBeNull();
+  });
+
+  it('leaving the date empty without the declaration stays the legacy reading, not a non-collection (B-159)', async () => {
+    // The tripwire, on the form. If an empty input wrote null, every legacy record the person opened and
+    // saved would drop out of venit brut — money moving on a record whose money date was never in question.
+    pinClock(fixedInstant());
+    seedWith([revenue({ id: 'pg2-rev-untouched', nr: 'FCT-PG2-907', date: '2026-12-20' })]);
+    render(
+      <StoreProvider>
+        <Revenues />
+      </StoreProvider>,
+    );
+    fireEvent.click(document.querySelector('tr[data-record-id="pg2-rev-untouched"]')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Salvează' }));
+    await waitFor(() => expect(savedRevenue('FCT-PG2-907')).toBeDefined());
+    expect('collected' in (savedRevenue('FCT-PG2-907') as object)).toBe(false);
+  });
+
+  it('the field names what actually excludes the sum, so the legal sentence is not read as a promise about the input (B-159)', () => {
+    pinClock(fixedInstant());
+    seedWith([]);
+    render(
+      <StoreProvider>
+        <Revenues />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Adaugă venit/ }));
+    const effect = document.querySelector('[data-money-date-effect="revenue"]')?.textContent;
+    expect(effect).toBe(moneyDate.revenueEmptyEffect);
+    expect(effect).toContain('Banii nu au intrat înc\u0103');
+    // research/37 §5 sentence 3 stays on the surface — the fix removed the implication, not the law.
+    expect(moneyDate.revenueEmpty).toContain('fără încasare suma nu este venit brut');
+  });
+
+  it('a declared non-collection is said on the row, in the article\u2019s own words (B-159)', () => {
+    pinClock(fixedInstant());
+    seedWith([revenue({ id: 'pg2-rev-null', nr: 'FCT-B159-002', date: '2026-12-20', collected: null })]);
+    render(
+      <StoreProvider>
+        <Revenues />
+      </StoreProvider>,
+    );
+    const row = document.querySelector('tr[data-record-id="pg2-rev-null"]')!;
+    expect(row.querySelector('[data-money-date="absent"]')?.textContent).toBe(moneyDate.noCollection);
+    // And not the fiscal-date note: there is no fiscal date to name.
+    expect(row.querySelector('[data-fiscal-date-source]')).toBeNull();
+  });
 });

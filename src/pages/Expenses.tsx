@@ -9,7 +9,7 @@ import { selectDeductibleExpenses, selectEstimateOperands, coverageReasonForExcl
 // The page reads the same predicate the engine reads, so the label beside a ceiling and the figure inside
 // it cannot disagree about which measure was chosen.
 import { registrationChargesVat } from '../domain/fiscal/vat';
-import { expenseFiscalDate, type FiscalDateField } from '../domain/aggregation';
+import { expenseFiscalDate, expenseDeclaredUnpaid, type FiscalDateField } from '../domain/aggregation';
 import { selectRuleSet } from '../domain/fiscal';
 import type { FiscalRule } from '../domain/fiscal/rules';
 import { isoCalendarDateProblem, isoCalendarDateProblemText, localDateISO, now } from '../domain/date';
@@ -81,6 +81,11 @@ function ExpenseForm({ initial, vehicles, fixedAssets, onSave, onClose }: {
     // admits a cheltuială „al anului în cursul căruia au fost plătite”, so this is the date the deduction
     // turns on; an unpaid expense is not deductible in the document year, and nothing here invents one.
     paid: initial?.paid ?? '',
+    // B-159 — the declared non-payment. Before this the app had no state for „the money has not gone
+    // out”: an unpaid expense could only be `inregistrata` with an empty `paid`, and the engine deducted
+    // it in the document's year while the copy promised the opposite. `paid === null` is the state;
+    // an empty input alone stays the legacy single-date case.
+    notPaid: initial?.paid === null,
     furnizor: initial?.furnizor ?? '',
     cui: initial?.cui ?? '',
     // `moneyInputValue`, not `String(...)`: stored money is integer minor units; an input is a screen.
@@ -128,7 +133,7 @@ function ExpenseForm({ initial, vehicles, fixedAssets, onSave, onClose }: {
     if (v === null || t === null) return; // unreachable; narrows without a cast
     onSave({
       tip: f.tip as Expense['tip'], nr: f.nr, date: f.date, furnizor: f.furnizor, cui: f.cui,
-      paid: f.paid === '' ? undefined : f.paid,
+      paid: f.notPaid ? null : f.paid === '' ? undefined : f.paid,
       valoareFaraTva: v, tva: t, status: f.status as Expense['status'],
       statusDetail: f.statusDetail || undefined,
       category: f.category === '' ? undefined : (f.category as Expense['category']),
@@ -174,11 +179,27 @@ function ExpenseForm({ initial, vehicles, fixedAssets, onSave, onClose }: {
             name="expense-paid"
             className={errors.paid ? 'invalid' : ''}
             value={f.paid}
+            disabled={f.notPaid}
             onChange={e => set('paid', e.target.value)}
           />
           {errors.paid && <span className="error">{errors.paid}</span>}
+          {/* B-159 — the control the sentence under it has been describing since PG-2. */}
+          <label className="text-sm" style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
+            <input
+              type="checkbox"
+              name="expense-not-paid"
+              checked={f.notPaid}
+              onChange={e => setF(p => ({
+                ...p,
+                notPaid: e.target.checked,
+                paid: e.target.checked ? '' : p.paid,
+              }))}
+            />
+            {moneyDate.notPaid}
+          </label>
           <span className="text-sm muted">{moneyDate.expenseHint}</span>
           <span className="text-sm muted">{moneyDate.expenseEmpty}</span>
+          <span className="text-sm muted" data-money-date-effect="expense">{moneyDate.expenseEmptyEffect}</span>
           {/* 12C (B-38) — the fallback named as a default, on the field that decides it. */}
           <span className="text-sm muted" data-money-date-default="expense">{moneyDate.fallbackDefault}</span>
         </div>
@@ -606,12 +627,18 @@ export default function Expenses({ initialTab, onTabChange, focusRecord }: Expen
                     <td className="muted">{e.cui}</td>
                     <td>
                       {fmtDate(e.date)}
-                      <FiscalDateNote
-                        kind="expense"
-                        source={(e.paid !== undefined ? 'paid' : 'date') as FiscalDateField}
-                        fiscalDate={expenseFiscalDate(e)}
-                        documentDate={e.date}
-                      />
+                      {expenseDeclaredUnpaid(e) ? (
+                        <div className="text-sm muted" data-money-date="absent" style={{ marginTop: 3 }}>
+                          {moneyDate.noPayment}
+                        </div>
+                      ) : (
+                        <FiscalDateNote
+                          kind="expense"
+                          source={(e.paid !== undefined ? 'paid' : 'date') as FiscalDateField}
+                          fiscalDate={expenseFiscalDate(e)}
+                          documentDate={e.date}
+                        />
+                      )}
                     </td>
                     <td>{e.valoareFaraTva.currency}</td>
                     <td className="amount">{formatMoney(e.valoareFaraTva)}</td>

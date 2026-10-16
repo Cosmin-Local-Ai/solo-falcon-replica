@@ -684,6 +684,34 @@ export const moneyDate = {
     'Poți lăsa câmpul gol cât timp banul nu s-a mișcat: fără plată cheltuiala nu este deductibilă '
     + '(art. 68 alin. (4) lit. b) din Codul fiscal).',
   /**
+   * B-159 — the sentence that stops the two above from being heard as a promise the engine does not keep.
+   *
+   * `revenueEmpty` / `expenseEmpty` are true of the LAW: no collection, no venit brut. Read beside an
+   * optional input they were also heard as a promise about the FIELD — that leaving it empty is what keeps
+   * the sum out of the base. It never was: an empty money date on a `Înregistrată` record is the legacy
+   * single-date case, and the engine reads the document date as the money date (B-67's whole disclosure).
+   * Brief 82 put `fallbackDefault` beside them and still left the two halves asserting opposite things.
+   *
+   * What gives is the copy's implication, not the legal sentence: the state that excludes the sum is now a
+   * DECLARED one (`Revenue.collected === null`, `Expense.paid === null`), it is named here, and the engine
+   * honours it. Reading mere absence as non-collection was rejected — every pre-Phase-9 payload and the
+   * whole seed register has only `date`, so that reading would have deleted the seed's base outright.
+   */
+  revenueEmptyEffect:
+    'Ceea ce scoate suma din venit brut este opțiunea „Banii nu au intrat încă”, nu câmpul gol. '
+    + 'Fără opțiune și fără dată, înregistrarea rămâne în calcul.',
+  expenseEmptyEffect:
+    'Ceea ce scoate cheltuiala din calcul este opțiunea „Nu a fost plătită încă”, nu câmpul gol. '
+    + 'Fără opțiune și fără dată, cheltuiala rămâne deductibilă.',
+  /** The control that carries the declaration — one label per side. */
+  notCollected: 'Banii nu au intrat încă',
+  notPaid: 'Nu a fost plătită încă',
+  /** The register row for a record whose money provably has not moved. */
+  noCollection:
+    'Fără încasare înregistrată: suma nu este venit brut (art. 68 alin. (2) lit. a) din Codul fiscal).',
+  noPayment:
+    'Fără plată înregistrată: cheltuiala nu este deductibilă (art. 68 alin. (4) lit. b) din Codul fiscal).',
+  /**
    * 12C (B-38) — the default stated where the decision is made, not only where its result is read.
    *
    * `revenueEmpty` / `expenseEmpty` tell the person that an empty money date is a legal state: no

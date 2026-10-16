@@ -615,8 +615,15 @@ function ReportsTab() {
   // money actually moved cannot be produced at all.
   const years = useMemo(() => {
     const ys = new Set<number>([currentYear]);
-    for (const r of revenues) ys.add(Number(revenueFiscalDate(r).slice(0, 4)));
-    for (const e of expenses) ys.add(Number(expenseFiscalDate(e).slice(0, 4)));
+    // B-159: a declared non-collection / non-payment resolves to no fiscal date, and `Number('')` is NaN —
+    // which would have offered a year the register cannot produce. The RJIP logs încasări and plăți
+    // (OMFP 170/2015 cap. V), so a record with no money movement has no row in it and no year of its own.
+    const addYear = (date: string): void => {
+      const y = Number(date.slice(0, 4));
+      if (Number.isFinite(y)) ys.add(y);
+    };
+    for (const r of revenues) addYear(revenueFiscalDate(r));
+    for (const e of expenses) addYear(expenseFiscalDate(e));
     return [...ys].sort((a, b) => b - a);
   }, [revenues, expenses, currentYear]);
 

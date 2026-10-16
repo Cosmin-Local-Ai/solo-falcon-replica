@@ -230,4 +230,73 @@ describe('Expenses — the payment date (PG-2)', () => {
     await waitFor(() => expect(savedExpense('FCT-PG2-915')?.paid).toBe('2027-01-12'));
     expect(savedExpense('FCT-PG2-915')!.date).toBe('2026-12-30');
   });
+
+  // ── B-159 — the expense side is the half that had NO way to say „not paid” ───────────────────
+  //
+  // `ExpenseStatus` is `inregistrata | respinsa`: there is no pending state to fall back on, so the only
+  // way to record an unpaid cost was `inregistrata` with an empty `paid` — and the engine deducted it in
+  // the document's year while `moneyDate.expenseEmpty` promised the opposite. research/37 §3.3: art. 68
+  // alin. (4) lit. b) is a condition, not a deadline, so a never-paid expense is permanently
+  // non-deductible. The state now exists, and these are the assertions that it is reachable and persisted.
+
+  it('the form can declare that the cost has not been paid, and saving it writes null (B-159)', async () => {
+    pinClock(fixedInstant());
+    seedWith([]);
+    render(
+      <StoreProvider>
+        <Expenses />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Adaugă cheltuială/ }));
+    const box = document.querySelector<HTMLInputElement>('input[name="expense-not-paid"]')!;
+    expect(box.checked).toBe(false);
+    fireEvent.click(box);
+    expect(dateInputs()[1].disabled).toBe(true);
+
+    fillAndSubmit('FCT-B159-011', { documentDate: '2026-12-30' });
+    await waitFor(() => expect(savedExpense('FCT-B159-011')).toBeDefined());
+    expect(savedExpense('FCT-B159-011')!.paid).toBeNull();
+  });
+
+  it('leaving the payment date empty without the declaration keeps the legacy reading (B-159)', async () => {
+    pinClock(fixedInstant());
+    seedWith([expense({ id: 'pg2-exp-untouched', nr: 'FCT-PG2-916', date: '2026-12-30' })]);
+    render(
+      <StoreProvider>
+        <Expenses />
+      </StoreProvider>,
+    );
+    fireEvent.click(document.querySelector('tr[data-record-id="pg2-exp-untouched"]')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Salvează' }));
+    await waitFor(() => expect(savedExpense('FCT-PG2-916')).toBeDefined());
+    expect('paid' in (savedExpense('FCT-PG2-916') as object)).toBe(false);
+  });
+
+  it('the field names the declaration, not the empty input, as what excludes the cost (B-159)', () => {
+    pinClock(fixedInstant());
+    seedWith([]);
+    render(
+      <StoreProvider>
+        <Expenses />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Adaugă cheltuială/ }));
+    const effect = document.querySelector('[data-money-date-effect="expense"]')?.textContent;
+    expect(effect).toBe(moneyDate.expenseEmptyEffect);
+    expect(effect).toContain('Nu a fost plătită înc\u0103');
+    expect(moneyDate.expenseEmpty).toContain('fără plată cheltuiala nu este deductibilă');
+  });
+
+  it('a declared non-payment is said on the row, and the fiscal-date note is not (B-159)', () => {
+    pinClock(fixedInstant());
+    seedWith([expense({ id: 'pg2-exp-null', nr: 'FCT-B159-012', date: '2026-12-30', paid: null })]);
+    render(
+      <StoreProvider>
+        <Expenses />
+      </StoreProvider>,
+    );
+    const row = document.querySelector('tr[data-record-id="pg2-exp-null"]')!;
+    expect(row.querySelector('[data-money-date="absent"]')?.textContent).toBe(moneyDate.noPayment);
+    expect(row.querySelector('[data-fiscal-date-source]')).toBeNull();
+  });
 });

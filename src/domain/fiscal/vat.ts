@@ -636,8 +636,13 @@ export interface InputVatExpenseRecord {
   id: string;
   /** The document date, ISO. */
   date: string;
-  /** The payment date, when one was recorded. The deferral switches read this, not `date`. */
-  paid?: string;
+  /**
+   * The payment date, when one was recorded. The deferral switches read this, not `date`.
+   * B-159: `null` is the declared „not paid yet” state, which is the strongest fact the deferral
+   * switches can have — `unpaid` below already read an absent date as unpaid, so a declared
+   * non-payment has to read as unpaid too or the two halves of the app disagree again.
+   */
+  paid?: string | null;
   /** A domestic B2B line is one invoiced from another taxable person; `cui` is the recorded fact. */
   supplierCui?: string;
   tip: 'factura' | 'bon-fiscal';
@@ -850,7 +855,7 @@ export function decideInputVat(input: InputVatInput): InputVatDecision {
     // 8. TVA la încasare — the deferral, in both directions. Keyed on the payment date.
     const notImportOrReverseCharge = documentKind !== 'vamal_sau_autofactura';
     if (notImportOrReverseCharge) {
-      const unpaid = e.paid === undefined || e.paid === '' || e.paid > asOfDate;
+      const unpaid = e.paid === null || e.paid === undefined || e.paid === '' || e.paid > asOfDate;
       if (unpaid && registration.cashAccounting === 'da') {
         lines.push({ id: e.id, tvaBani, outcome: { kind: 'deferred', reason: 'plata_ammnata_regim_propriu' }, vehicle: isVehicle, preRegistrationAdjustment: preRegistration });
         continue;

@@ -119,7 +119,11 @@ export const revenueSchema = z.object({
   date: z.string(),
   // Phase 9: the fiscal date for a revenue is the date it was COLLECTED (CF art. 68 alin. (2) lit. a).
   // Optional — a legacy payload has only `date`, and no migration invents this value.
-  collected: z.string().optional(),
+  // B-159: `null` is a DECLARED state — the person says the money has not come in — so the gate has to
+  // name it or zod strips it silently and the receipt reverts to the document-date reading, which is
+  // the exact defect B-159 closes. Widening the gate owes no chain step: no payload written before this
+  // build carries the key, and nothing backfills it.
+  collected: z.string().nullable().optional(),
   client: z.string(),
   cui: z.string(),
   valoareFaraTva: moneyField(),
@@ -154,7 +158,9 @@ export const expenseSchema = z.object({
   date: z.string(),
   // Phase 9: the fiscal date for an expense is the date it was PAID (CF art. 68 alin. (4) lit. b).
   // Optional — a legacy payload has only `date`, and no migration invents this value.
-  paid: z.string().optional(),
+  // B-159: `null` is the declared „nu a fost plătită” state; see `revenueSchema.collected` for why the
+  // gate must name it and why no chain step is owed.
+  paid: z.string().nullable().optional(),
   furnizor: z.string(),
   cui: z.string(),
   valoareFaraTva: moneyField(),

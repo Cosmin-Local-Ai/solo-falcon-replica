@@ -28,11 +28,21 @@ export interface Revenue {
    * fiscal year. CF art. 68 alin. (2) lit. a) measures venit brut by „sumele încasate" (amounts
    * collected), so collection is the fiscally load-bearing date.
    *
-   * Optional by design: a payload written before Phase 9 recorded a single `date`, and that date is
-   * read as the fiscal date (`domain/aggregation.ts` `revenueFiscalDate`). The v2→v3 migration
-   * deliberately does **not** invent a collection event. The invoice issue date is not a timing gate.
+   * Three states, and the difference between the last two is the whole of B-159:
+   *
+   * - a **date** — the money came in that day, and that day decides the fiscal year;
+   * - **`null`** — the person declared that the money has NOT come in. CF art. 68 alin. (2) lit. a)
+   *   measures venit brut by „sumele încasate”, so a declared-uncollected sum is not in the base at all
+   *   (`domain/aggregation.ts` `revenueFiscalDate` resolves it to no fiscal date). `docs/ai/research/37`
+   *   §5 sentence 3 is the sentence this state exists to make true;
+   * - **absent** — a payload written before Phase 9 recorded a single `date`, and that date is read as
+   *   the fiscal date. The v2→v3 migration deliberately does **not** invent a collection event, and
+   *   reading absence as „never collected” would delete the whole seed register from the base, so
+   *   absence is NOT a declaration of non-collection. It is disclosed instead (B-67, B-38).
+   *
+   * The invoice issue date is not a timing gate.
    */
-  collected?: string;
+  collected?: string | null;
   client: string;
   cui: string;
   /**
@@ -125,10 +135,19 @@ export interface Expense {
    * financiar al anului în cursul căruia au fost plătite", i.e. the year of PAYMENT. The consequence
    * is attribution, not punishment: a late-paid expense is not disallowed, it falls into the payment year.
    *
-   * Optional by design; never invented by a migration. Art. 68 alin. (4) lit. a) only requires the
-   * expense be „justificate prin documente" — the invoice is the justificativ, its issue date is not a gate.
+   * Three states — the same three as `Revenue.collected`, and B-159 is about the middle one:
+   *
+   * - a **date** — paid that day, and that day decides the year;
+   * - **`null`** — the person declared the money has NOT gone out. Art. 68 alin. (4) lit. b) is a
+   *   condition, not a deadline (`docs/ai/research/37` §3.3), so a never-paid expense is permanently
+   *   non-deductible. Before B-159 the app could not say this at all: the only way to record an unpaid
+   *   expense was `inregistrata` with an empty `paid`, and the engine deducted it in the document's year;
+   * - **absent** — the legacy single-date reading, disclosed rather than corrected (B-67, B-38).
+   *
+   * Never invented by a migration. Art. 68 alin. (4) lit. a) only requires the expense be
+   * „justificate prin documente" — the invoice is the justificativ, its issue date is not a gate.
    */
-  paid?: string;
+  paid?: string | null;
   furnizor: string;
   cui: string;
   /** Integer **bani** (Phase 10). TASK 10a: carries its currency — see `Revenue.valoareFaraTva`. */
