@@ -76,7 +76,7 @@ test.describe('persona 3 — rideshare and courier driver', () => {
   });
 
   test('the proceeds are recorded, so the second ceiling is measured and the app names which one cuts', async ({ page }) => {
-    // Titlul IV pct. 7 alin. (5) lit. o) caps the same residual at the price realised. The price is 40.000
+    // Titlul IV pct. 7 lit. o) caps the same residual at the price realised. The price is 40.000
     // lei, above the pct. 27 ceiling of 18.000 lei, so the pct. 27 figure is the one that binds — and the
     // app can only say that because the price is a recorded fact. Without it the row would read that the
     // second limit cannot be measured at all.

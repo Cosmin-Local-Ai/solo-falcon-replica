@@ -1194,7 +1194,7 @@ export interface DepreciationLeg {
    * pct. 27 is real and already computed: „la momentul scăderii din gestiune a mijloacelor de transport
    * din categoria M1, valoarea rămasă neamortizată este deductibilă în limita a 1.500 lei înmulţită cu
    * numărul de luni rămase de amortizat”. What the app cannot do is **post** it, because Titlul IV caps
-   * the same residual a second time and by a fact the register does not hold. Normele pct. 7 alin. (5)
+   * the same residual a second time and by a fact the register does not hold. Normele pct. 7
    * lit. o) makes the deductible residual „valoarea rămasă neamortizată … **limitată la nivelul venitului
    * realizat din înstrăinare**” — the proceeds of the disposal. Posting pct. 27's figure without that
    * second cap would deduct more than the norm allows whenever the car sold for less than it was worth,
@@ -1463,14 +1463,14 @@ export function depreciationCoverageGaps(leg: DepreciationLeg | null | undefined
         `${formatBani(d.deductible)}.`;
     const secondLimit =
       d.proceedsCap === null
-        ? 'Normele Titlului IV pct. 7 alin. (5) lit. o) pune aceleiași valori neamortizate a doua limită, '
+        ? 'Normele Titlului IV pct. 7 lit. o) pune aceleiași valori neamortizate a doua limită, '
           + '„la nivelul venitului realizat din înstrăinare”, iar prețul înstrăinării nu este înregistrat. '
           + (d.cap === null
               ? 'Pentru un bun care nu este M1 aceasta este singura limită care se aplică, și rămâne '
                 + 'nemăsurată atâta vreme cât prețul nu este înregistrat.'
               : 'A doua limită nu poate fi măsurată, deci cifra de mai sus este doar plafonul de la pct. 27.')
         : `Prețul înregistrat al înstrăinării este ${formatBani(d.proceedsCap)}, iar normele Titlului IV `
-          + 'pct. 7 alin. (5) lit. o) limitează aceeași valoare neamortizată „la nivelul venitului realizat '
+          + 'pct. 7 lit. o) limitează aceeași valoare neamortizată „la nivelul venitului realizat '
           + `din înstrăinare”. ${d.cap === null
               ? 'Limita care se aplică acestui bun este prețul înstrăinării:'
               : 'Ambele plafoane sunt aplicate:'} ${whichBinds[d.bound]}`;

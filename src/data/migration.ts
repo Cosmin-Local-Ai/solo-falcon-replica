@@ -454,7 +454,7 @@ export const DATA_VERSION_EXPENSE_ASSET_LINK = 23;
  *
  * **The half-rule that has been waiting on this field.** Titlul II norm pct. 27 caps the unamortised
  * residual of an M1 taken out of the register at 1.500 lei × the months left of the duration the taxpayer
- * declared. Titlul IV norm pct. 7 alin. (5) lit. o) caps **that same residual a second time**, „la nivelul
+ * declared. Titlul IV norm pct. 7 lit. o) caps **that same residual a second time**, „la nivelul
  * venitului realizat din înstrăinare” — the proceeds of the disposal. Brief 74 implemented the first cap,
  * surfaced it as a coverage row, and deliberately did not post it, because nothing in the app held the
  * second one. Posting pct. 27's figure without it would over-deduct every time the asset sold for less than
@@ -1534,7 +1534,7 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     to: DATA_VERSION_DISPOSAL_PROCEEDS,
     name: 'fixed-asset-disposal-proceeds',
     summary:
-      'Un bun scos din gestiune poate înregistra acum suma realizată din înstrăinare. Normele Titlul II pct. 27 pun o primă limită valorii neamortizate — 1.500 lei × lunile rămase din durata declarată — iar normele Titlul IV pct. 7 alin. (5) lit. o) pun aceleiași valori a doua limită, „la nivelul venitului realizat din înstrăinare”. Aplicația cunoștea prima și nu avea unde să scrie a doua, de aceea cifra pct. 27 era arătată și nu era postată: fără preț, ea ar fi dedus mai mult decât permite norma ori de câte ori bunul s-a vândut sub valoarea neamortizată. Nimic nu a fost completat în acest pas: prețul este o faptă despre o tranzacție, și niciun câmp stocat nu o înregistrează; derivată din valoarea fiscală sau din residual, ea ar inventa chiar numărul față de care norma măsoară. Cifra este plafonul corect, nu deductibilul final. La momentul acestui pas B-153 rămânea deschis — planul de amortizare continua după luna ieșirii din gestiune, în timp ce figura calculată număra doar lunile folosite; brief 80 a închis acea neconcordanță (D-DEPR-1): planul se oprește acum în luna ieșirii, iar cele două cifre numără aceleași luni.',
+      'Un bun scos din gestiune poate înregistra acum suma realizată din înstrăinare. Normele Titlul II pct. 27 pun o primă limită valorii neamortizate — 1.500 lei × lunile rămase din durata declarată — iar normele Titlul IV pct. 7 lit. o) pun aceleiași valori a doua limită, „la nivelul venitului realizat din înstrăinare”. Aplicația cunoștea prima și nu avea unde să scrie a doua, de aceea cifra pct. 27 era arătată și nu era postată: fără preț, ea ar fi dedus mai mult decât permite norma ori de câte ori bunul s-a vândut sub valoarea neamortizată. Nimic nu a fost completat în acest pas: prețul este o faptă despre o tranzacție, și niciun câmp stocat nu o înregistrează; derivată din valoarea fiscală sau din residual, ea ar inventa chiar numărul față de care norma măsoară. Cifra este plafonul corect, nu deductibilul final. La momentul acestui pas B-153 rămânea deschis — planul de amortizare continua după luna ieșirii din gestiune, în timp ce figura calculată număra doar lunile folosite; brief 80 a închis acea neconcordanță (D-DEPR-1): planul se oprește acum în luna ieșirii, iar cele două cifre numără aceleași luni.',
     apply: migrateDisposalProceedsV24,
   },
   {

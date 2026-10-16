@@ -238,11 +238,19 @@ export interface FixedAssetFacts {
    * B-65 / brief 76 — „venitul realizat din înstrăinare”: what the asset actually brought in when it left.
    *
    * Titlul II norm pct. 27 caps the unamortised residual of an M1 at 1.500 lei × the months left of the
-   * declared duration. Titlul IV norm pct. 7 alin. (5) lit. o) caps **the same residual a second time**,
+   * declared duration. Titlul IV norm pct. 7 lit. o) caps **the same residual a second time**,
    * „la nivelul venitului realizat din înstrăinare” — the proceeds. Brief 74 implemented the first cap and
    * deliberately did not post the figure, because nothing in the app held the second one: posting pct. 27's
    * number would over-deduct whenever the asset sold for less than it was still worth, which is the usual
    * case.
+   *
+   * **The citation is `pct. 7 lit. o)` with no alineat, and that is deliberate (B-157).** `research/55` §3
+   * confirmed the letter and the verbatim text in the FY2026 Titlul IV norms (HG 1/2016, consolidated
+   * 31.03.2026) but could **not** confirm the alineat number — the free extract does not render the marker,
+   * and the Portal Legislativ consolidated norms (~5 MB) would not fetch whole. D-CITE-1 already settles what
+   * to do about that: the quoted text carries the meaning and the locator is secondary, so the shorter
+   * citation is the honest one. **Do not restore an alineat that has not been read in a primary source, and
+   * do not copy one from a commercial restatement.**
    *
    * **Optional, and the v23→v24 step backfills nothing.** A sale price is a fact about a transaction, and no
    * stored field records it; deriving one from the fiscal value, from the residual or from the declared
@@ -342,7 +350,7 @@ export type DepreciationOutcome =
          */
         cap: Bani | null;
         /**
-         * Titlul IV pct. 7 alin. (5) lit. o) — „nivelul venitului realizat din înstrăinare”. `null` when the
+         * Titlul IV pct. 7 lit. o) — „nivelul venitului realizat din înstrăinare”. `null` when the
          * proceeds were never recorded, which means this limit exists and cannot be measured.
          */
         proceedsCap: Bani | null;
@@ -923,7 +931,7 @@ export interface AssetDepreciationDisposal {
    */
   cap: Bani | null;
   /**
-   * Titlul IV pct. 7 alin. (5) lit. o) — the proceeds, or `null` when they were never recorded and the
+   * Titlul IV pct. 7 lit. o) — the proceeds, or `null` when they were never recorded and the
    * second limit therefore cannot be measured.
    */
   proceedsCap: Bani | null;

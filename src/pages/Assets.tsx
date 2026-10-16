@@ -110,7 +110,7 @@ interface AssetFormState {
   disposedOn: string;
   disposalKind: string;
   // B-65 / brief 76 — „venitul realizat din înstrăinare”. '' means "not recorded", which is not zero: it
-  // means Titlul IV pct. 7 alin. (5) lit. o)'s second ceiling cannot be measured.
+  // means Titlul IV pct. 7 lit. o)'s second ceiling cannot be measured.
   disposalProceeds: string;
 }
 

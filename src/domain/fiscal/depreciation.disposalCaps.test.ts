@@ -5,7 +5,7 @@
  * valoarea rămasă neamortizată este deductibilă în limita a 1.500 lei înmulţită cu numărul de luni rămase de
  * amortizat din durata normală de funcţionare stabilită de contribuabil".
  *
- * Titlul IV norm pct. 7 alin. (5) lit. o) caps **the same residual a second time**, „la nivelul venitului
+ * Titlul IV norm pct. 7 lit. o) caps **the same residual a second time**, „la nivelul venitului
  * realizat din înstrăinare" — the proceeds of the disposal.
  *
  * Brief 74 implemented the first and deliberately did not post the figure, because nothing in the app held
@@ -56,7 +56,7 @@ function computed(over: Partial<FixedAssetFacts> = {}) {
   return out.disposal;
 }
 
-describe('the two ceilings on the unamortised residual — pct. 27 and pct. 7 alin. (5) lit. o)', () => {
+describe('the two ceilings on the unamortised residual — pct. 27 and pct. 7 lit. o)', () => {
   it('with no proceeds recorded, only the pct. 27 ceiling is measurable, and the figure says so', () => {
     const d = computed();
     expect(d.unamortised).toBe(L(60000));

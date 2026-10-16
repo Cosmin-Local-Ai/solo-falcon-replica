@@ -18,7 +18,7 @@ import { lei } from '../domain/money';
  *
  * Two provisions cap the same number. Titlul II norm pct. 27 caps the unamortised residual of an M1 taken out
  * of the register at 1.500 lei × the months left of the duration the taxpayer declared. Titlul IV norm pct. 7
- * alin. (5) lit. o) caps **that same residual a second time**, „la nivelul venitului realizat din
+ * lit. o) caps **that same residual a second time**, „la nivelul venitului realizat din
  * înstrăinare" — the proceeds. Brief 74 implemented the first, surfaced it as a coverage row, and deliberately
  * did not post it, because nothing in the app held the second: posting pct. 27's figure would over-deduct
  * every time the asset sold for less than it was still worth, which is the ordinary case.

@@ -473,7 +473,7 @@ describe('B-65 acceptance 4 (brief 74) — the pct. 27 disposal figure is report
    * no idea an asset had left the register at all.
    *
    * The figure is now carried to the estimate as a **reported** amount and deliberately not added to
-   * `total`. The reason is Titlul IV norm pct. 7 alin. (5) lit. o), which caps the same residual a second
+   * `total`. The reason is Titlul IV norm pct. 7 lit. o), which caps the same residual a second
    * time at „nivelul venitului realizat din înstrăinare" — the disposal proceeds. No `FixedAsset` field
    * holds those proceeds, so posting pct. 27's number would deduct more than the norm allows whenever the
    * asset sold below its unamortised value. Adding the field is a persisted-shape change, and this brief's

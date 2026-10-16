@@ -115,11 +115,16 @@ export const assets = {
       '„Casare” nu înseamnă simplă scoatere din uz. pct. 29 cere scoaterea din funcțiune urmată de ' +
       'dezmembrarea părților componente și valorificarea lor.',
     // B-65 / brief 76 — the second ceiling. Titlul II pct. 27 măsoară residualul în luni; Titlul IV pct. 7
-    // alin. (5) lit. o) îl măsoară în bani, la prețul înstrăinării. Fără preț, a doua limită nu există ca
+    // lit. o) îl măsoară în bani, la prețul înstrăinării. Fără preț, a doua limită nu există ca
     // cifră, iar aplicația spune asta în loc să aplice doar prima.
+    //
+    // B-157 — citarea este „pct. 7 lit. o)” fără alineat, și asta este intenționat. research/55 §3 a
+    // confirmat litera și textul verbatim în normele Titlului IV actualizate pentru 2026, dar nu a putut
+    // confirma alineatul. D-CITE-1: sensul îl poartă textul citat, localizatorul este secundar. Nu se
+    // introduce un alineat citit dintr-o preluare comercială.
     disposalProceeds: 'Suma realizată din înstrăinare (lei)',
     disposalProceedsHint:
-      'Normele Titlului IV pct. 7 alin. (5) lit. o) limitează valoarea rămasă neamortizată „la nivelul '
+      'Normele Titlului IV pct. 7 lit. o) limitează valoarea rămasă neamortizată „la nivelul '
       + 'venitului realizat din înstrăinare”, adică la prețul cu care bunul a fost vândut. Fără această sumă '
       + 'a doua limită nu poate fi măsurată, iar cifra calculată rămâne plafonul de la pct. 27, nu '
       + 'deductibilul final. Nu este o sumă derivată din valoarea fiscală sau din residual: este prețul '

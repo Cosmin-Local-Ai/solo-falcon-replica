@@ -300,7 +300,7 @@ describe('migration chain (pure)', () => {
       // guessed link would narrow the depreciation conflict on a fiction.
       [DATA_VERSION_EFACTURA_DEADLINE, DATA_VERSION_EXPENSE_ASSET_LINK],
       // B-65 (carried from brief 74): a disposed asset may now record what it brought in, which is the fact
-      // Titlul IV pct. 7 alin. (5) lit. o) measures the unamortised residual against. Appended after v23,
+      // Titlul IV pct. 7 lit. o) measures the unamortised residual against. Appended after v23,
       // never renumbered. The step backfills NOTHING — a sale price is a fact about a transaction, and
       // deriving one from the fiscal value or the residual would invent the number the norm measures against.
       [DATA_VERSION_EXPENSE_ASSET_LINK, DATA_VERSION_DISPOSAL_PROCEEDS],
