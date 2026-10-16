@@ -197,7 +197,11 @@ describe('step 11 — the invented people stay invented (B-110)', () => {
 describe('step 11 — counterparties are named, typed, and the ones the register uses', () => {
   for (const p of PERSONAS) {
     it(`${p.id}: every register row names a counterparty the persona describes`, () => {
-      const described = new Set(p.counterparties.map((c) => c.name));
+      // The taxpayer's own name is allowed beside the counterparty list. A hand-recorded ledger entry — the
+      // amortisation persona 12 types for its own apparatus (B-108) — has no supplier, and inventing a
+      // counterparty to satisfy this rule would hand the app a party that does not exist. Naming the person
+      // is what the row actually is: their own record, attributed to them.
+      const described = new Set([...p.counterparties.map((c) => c.name), p.identity.denumire]);
       for (const r of p.data.revenues) {
         expect(described.has(r.client), `${r.nr} names ${r.client}, which the persona does not describe`).toBe(true);
       }
@@ -301,6 +305,25 @@ describe('step 11 — the facts each persona exists to carry are actually presen
     expect(after.map((e) => e.id), 'costs recorded for a car the person no longer holds').toEqual([]);
     // The disposal is one car, not the household: the second car and its costs stay.
     expect(p.data.vehicles.length).toBe(2);
+  });
+
+  // Brief 77 — chain step v23 opened `Expense.assetId` and attributed nothing. Persona 12 is the persona
+  // that states a link, and this test keeps the link from being decoration: it must name an asset the
+  // register actually holds, and it must be the same cost the register would compute for that asset.
+  it('persona 12 links its hand-recorded amortisation to an asset the register actually holds', () => {
+    const p = PERSONAS.find((x) => x.id === 'physiotherapist')!;
+    const typed = p.data.expenses.filter((e) => e.category === 'depreciation_business_asset');
+    expect(typed.map((e) => e.id)).toEqual(['AMORT-1']);
+    const held = new Set(p.data.fixedAssets.map((a) => a.id));
+    for (const e of typed) {
+      expect(
+        e.assetId !== undefined && held.has(e.assetId),
+        `${e.id} links to an asset the register does not hold`,
+      ).toBe(true);
+    }
+    // 26.000 lei over a declared 60 months is 5.200 lei a year — the same charge the schedule produces, so
+    // the conflict is a real double deduction and not two different sums pretending to be one.
+    expect(typed[0].valoareFaraTva.amount).toBe(lei(5200));
   });
 
   it('persona 4 sits at the top of the art. 85 band, not past it', () => {

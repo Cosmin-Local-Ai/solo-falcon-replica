@@ -37,6 +37,21 @@
  *   1.200-lei coleg contribution is inside it, and it is deductible in full. A cap that does not cut is a
  *   different showcase from a cap that cannot be computed, and this persona carries both.
  *
+ * ## The hand-recorded amortisation row, and the link that narrows the conflict (brief 77)
+ *
+ * This cabinet keeps its own amortisation ledger: the physiotherapist typed the year's amortisation of the
+ * electrotherapy apparatus as an expense row (`AMORT-1`, 5.200 lei — the same figure the register computes
+ * from the same declared 26.000 lei over 60 months). art. 68 alin. (4) lit. d) connects the two routes to
+ * the same deduction, and nothing in the law says **which** asset a typed row covers, so the app refuses to
+ * post the computed plan rather than deduct the same amortisation twice.
+ *
+ * Chain step v23 opened `Expense.assetId` and attributed nothing: the link is only ever the person's own.
+ * This persona states it — `AMORT-1` names `p12-asset-aparat` — and that is what the two branches of the
+ * conflict wording turn on. Linked, the refusal says it covers this one asset and that the other schedules
+ * post normally. Unlinked, the same refusal says it covers the whole register. **The figure does not move
+ * either way**: the typed 5.200 lei comes in and the withheld plan of 5.200 lei goes out, which is exactly
+ * the double deduction the refusal exists to prevent.
+ *
  * ## Thresholds it crosses
  *
  * **CAS 24-smn rung (97.200 lei)** engaged. The 400-euro health-premium ceiling is reached in money terms and
@@ -46,8 +61,10 @@
 import { lei } from '../../domain/money';
 import type { PersonaDefinition } from './personaTypes';
 import {
+  PERSONA_FISCAL_YEAR,
   caenClass,
   costs,
+  foreign,
   invoices,
   personaDataset,
   personaProfile,
@@ -157,6 +174,7 @@ export const physiotherapistPersona: PersonaDefinition = {
     'art. 68 alin. (5) lit. h): primele de asigurare voluntară de sănătate sunt excepție expresă de la art. 68 alin. (7) lit. d) — regula le găsește, dar plafonul în euro nu poate fi lovit, deci cheltuiala iese din bază cu motivul spus',
     'art. 68 alin. (5) lit. q): contribuția profesională obligatorie, plafon 5 % din venitul brut — plafon în lei, deci se poate lovi; aici nu taie, și cei 1.200 de lei rămân deductibili',
     'Un registru fără niciun vehicul: `vehicles: []` este o stare reală, nu o completare uitată',
+    'B-108: o cheltuială cu amortizarea tastată manual și legată de un bun oprit din estimare; fără legătură, refuzul acoperă tot registrul, cu legătură se strânge la bunul declarat — și cifra nu se mișcă',
     'CAS pe treapta de 24 de salarii minime, cu cheltuielile deduse înainte de treaptă',
   ],
   identity: IDENTITY,
@@ -188,6 +206,26 @@ export const physiotherapistPersona: PersonaDefinition = {
       ...costs([[2, 26, 1200]] as const, {
         party: COLEGIUL, prefix: 'COL', vat: false, category: 'mandatory_professional_contribution',
       }),
+      // Brief 77 — the amortisation this cabinet recorded by hand, and the asset it belongs to. Not built
+      // with `costs()`: there is no supplier behind a ledger entry, and the app must not be able to infer
+      // the link from a party, a sum or a category. The 5.200 lei is the year's charge for the same
+      // apparatus on the same declared duration, which is why adding both routes would deduct it twice.
+      {
+        id: 'AMORT-1',
+        tip: 'factura',
+        nr: 'AMORT-001',
+        date: `${PERSONA_FISCAL_YEAR}-10-05`,
+        paid: `${PERSONA_FISCAL_YEAR}-10-05`,
+        furnizor: IDENTITY.denumire,
+        cui: IDENTITY.cui,
+        valoareFaraTva: foreign('RON', 5200),
+        tva: foreign('RON', 0),
+        status: 'inregistrata',
+        category: 'depreciation_business_asset',
+        // The person's own statement of which asset this sum covers. v23 opened the field and filled in
+        // nothing; art. 68 alin. (4) lit. d) gives no attribution rule for the app to invent one with.
+        assetId: 'p12-asset-aparat',
+      },
     ],
     clients: [PACIENTI, CLUB, CABINET, CONSUMABILE, ASIGURARE, COLEGIUL],
     fixedAssets: [

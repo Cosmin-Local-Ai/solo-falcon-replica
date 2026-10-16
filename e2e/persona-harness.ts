@@ -117,6 +117,54 @@ export async function loadPersonaWithProfile(
 }
 
 /**
+ * The same persona with one **expense row** patched, leaving every other row as the persona declared it.
+ *
+ * This is the shape B-108's two branches need: the fact under test is the link between one expense and one
+ * asset, so the negative branch must be the *same person with the link removed*, not a register restated in
+ * the spec. A patch is applied inside the page against the persona's own row; a `null` value means "remove
+ * this key", which is how an absent `assetId` is expressed — `undefined` does not survive the JSON the app
+ * reads back, and an empty string would be a different fact (a link to nothing, not no link).
+ */
+export async function loadPersonaWithExpensePatch(
+  page: Page,
+  personaId: PersonaId,
+  expenseId: string,
+  patch: Record<string, unknown>,
+  route = '/dashboard',
+): Promise<void> {
+  await page.goto('/');
+  await page.evaluate(
+    async ({ id, expense, changes, modules }: {
+      id: string;
+      expense: string;
+      changes: Record<string, unknown>;
+      modules: string[];
+    }) => {
+      const personas = await import(modules[0]);
+      const migration = await import(modules[1]);
+      const persona = personas.PERSONAS.find((p: { id: string }) => p.id === id);
+      if (!persona) throw new Error(`no persona with id ${id}`);
+      const expenses = persona.data.expenses.map((e: { id: string }) => {
+        if (e.id !== expense) return e;
+        const next = { ...e } as Record<string, unknown>;
+        for (const [key, value] of Object.entries(changes)) {
+          if (value === null) delete next[key];
+          else next[key] = value;
+        }
+        return next;
+      });
+      localStorage.setItem(
+        'pfa-app-data-v2',
+        JSON.stringify({ ...persona.data, expenses, version: migration.CURRENT_DATA_VERSION }),
+      );
+    },
+    { id: personaId, expense: expenseId, changes: patch, modules: [PERSONAS_MODULE, MIGRATION_MODULE] },
+  );
+  await page.clock.setFixedTime(fixedInstant());
+  await page.goto(route);
+}
+
+/**
  * Open the estimate breakdown on the cockpit.
  *
  * The arithmetic behind the hero number is collapsed behind a real `<details>` disclosure — keyboard
