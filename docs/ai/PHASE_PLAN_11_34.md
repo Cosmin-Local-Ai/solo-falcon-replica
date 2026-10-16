@@ -83,14 +83,14 @@ Four open defects the audit **missed** are carried in §4: **B-30** (input-VAT d
 <!-- ROLLUP:TABLE:BEGIN -->
 | Token | Rows | What it means |
 |---|---|---|
-| OPEN | 32 | open, nothing external in the way — free to brief now |
-| CLOSED 2026-MM-DD | 90 | closed on the date in the token, by the phase or brief named in the row |
+| OPEN | 31 | open, nothing external in the way — free to brief now |
+| CLOSED 2026-MM-DD | 91 | closed on the date in the token, by the phase or brief named in the row |
 | BLOCKED: research | 2 | the row says it waits on a primary source a Researcher must settle |
 | BLOCKED: decision | 3 | the row says the next move is a user decision, not code |
 | BLOCKED: chain | 2 | the row says it waits on a migration/chain step |
 | PARKED | 1 | parked by user decision, reason in the row |
 | REFUTED | 4 | the row's premise was withdrawn or refuted; the claim is kept, struck, as evidence |
-| **Total** | **134** | 32 + 90 + 2 + 3 + 2 + 1 + 4 |
+| **Total** | **134** | 31 + 91 + 2 + 3 + 2 + 1 + 4 |
 <!-- ROLLUP:TABLE:END -->
 
 <!-- ROLLUP:OPEN:BEGIN -->
@@ -99,12 +99,12 @@ Four open defects the audit **missed** are carried in §4: **B-30** (input-VAT d
 - **Needs a Researcher (2):** B-119, B-135.
 - **Needs a user decision (3):** B-96, B-87, B-80.
 - **Needs a chain step (2):** B-116, B-152.
-- **Free to brief now (32):** B-38, B-43, B-45, B-49, B-50, B-52, B-53, B-54, B-60, B-61, B-63, B-59, B-16, B-92, B-97, B-100, B-104, B-110, B-112, B-115, B-123, B-124, B-126, B-127, B-133, B-146, B-151, B-158, B-89, B-86, B-69, D1.
+- **Free to brief now (31):** B-43, B-45, B-49, B-50, B-52, B-53, B-54, B-60, B-61, B-63, B-59, B-16, B-92, B-97, B-100, B-104, B-110, B-112, B-115, B-123, B-124, B-126, B-127, B-133, B-146, B-151, B-158, B-89, B-86, B-69, D1.
 <!-- ROLLUP:OPEN:END -->
 <!-- ROLLUP:CLOSED:BEGIN -->
-**Closed, by the date in the token (2026-10-10 → 2026-10-16) — 90 closures; the register does not reach further back.**
+**Closed, by the date in the token (2026-10-10 → 2026-10-16) — 91 closures; the register does not reach further back.**
 
-- **2026-10-16 (8):** B-108, B-140, B-145, B-153, B-154, B-155, B-156, B-157.
+- **2026-10-16 (9):** B-38, B-108, B-140, B-145, B-153, B-154, B-155, B-156, B-157.
 - **2026-10-15 (39):** B-55, B-56, B-62, B-64, B-28, B-67, B-74, B-78, B-79, B-98, B-106, B-107, B-111, B-113, B-114, B-117, B-121, B-122, B-125, B-128, B-129, B-130, B-131, B-132, B-134, B-137, B-138, B-139, B-141, B-142, B-143, B-147, B-148, B-149, B-150, B-150, B-144, B-120, B-81.
 - **2026-10-14 (1):** B-118.
 - **2026-10-13 (5):** B-93, B-94, B-105, B-109, B-110.
@@ -119,7 +119,7 @@ Four open defects the audit **missed** are carried in §4: **B-30** (input-VAT d
 |---|---|---|
 | ~~**B-36**~~ | [CLOSED 2026-10-10] **CLOSED by Phase 10c (2026-10-10).** FX rate records could not enter the app through any interface — `recordFxRate` had no caller, Settings was read-only, so a user with an EUR/USD record could not resolve the missing-rate exclusion. `components/ui/FxRateEntryForm.tsx` is now mounted in Settings' fiscal tab and calls the **existing** validated upsert: currency, printed decimal, `rateKind`, date-or-year per kind, series, source URL, provisional/final; `problems[]` renders verbatim; the same `rateKey` replaces rather than adding; an annual average of an open year is forced provisional. **No fetch added** — the entry test stubs `globalThis.fetch` and asserts it is never called. Proven in a browser: `e2e/settings.spec.ts` types a rate, reloads, and finds `5.347,00 RON` in the summary. Original wording, for the record: ~~FX rate records cannot enter the app through any interface — `recordFxRate` has no caller, Settings is read-only~~ | **10c** |
 | ~~**B-37**~~ | [CLOSED 2026-10-10] **CLOSED by Phase 10c (2026-10-10).** The summary/graph and the estimate no longer use different currency handling. `domain/fx/ledger.ts normaliseStoredLedger` is now the **one** ledger boundary: summary, monthly series, projection, threshold rows, the snapshot, `selectFinancialDerived` and the estimate all read it, and `estimateBasis.ts`'s private duplicate provider builder is deleted. `DashboardData.ledger` carries `{conversions, unconverted}` and the disclosure is rendered on the summary card, under the graph and in `components/dashboard/CurrencySection.tsx` — the same record is now **5.347,00 lei in all three**, pinned by `data/dashboard.fx.test.ts`. Also closed the acute form the audit did not name: a ledger whose only record is foreign used to render the **onboarding empty state** (`hasData` read zero lei as “nothing recorded”). Original wording: ~~aggregation skips non-lei records, the estimate normalises them. One user, two revenue totals~~ | **10c** |
-| **B-38** | [OPEN] Payment and collection dates are modelled (`paid?`, `collected?`) but not enterable; a document in December paid in January can be attributed to the wrong fiscal year | **12C** |
+| ~~**B-38**~~ | [CLOSED 2026-10-16] ~~Payment and collection dates are modelled (`paid?`, `collected?`) but not enterable; a document in December paid in January can be attributed to the wrong fiscal year~~ — **PREMISE PARTLY STALE: the dates have been enterable since PG-2 (`700bd2a`)**, on both forms, persisting to `collected` / `paid` with the document date kept separately, and `e2e/payment-dates.spec.ts` already drove the December case through a reload. What was genuinely still open is the half the row never named: **the default was invisible at the point where it is chosen.** `moneyDate.revenueEmpty` / `expenseEmpty` tell the person that an empty money date is a legal state — no collection, no venit brut — while `revenueFiscalDate` / `expenseFiscalDate` resolve an empty field to the **document date** and count the record in the document's year. The fallback was disclosed on the row (`FiscalDateNote`) and on the estimate (B-67) but **not on the two fields where the decision is made**, so the form promised a consequence the engine does not produce. **CLOSED 2026-10-16 by brief 82 (12C).** One shared key, `moneyDate.fallbackDefault`, rendered under the money-date field in both forms: it names the fallback, labels it as **the app's own assumption** and denies in the same sentence that any provision presumes document date = money date (**research/37 §5**), then points at the field that overrules it. One key, not two, so the two forms cannot each grow their own paraphrase of art. 68. Pinned by `Revenues.dates.test.tsx` and `Expenses.dates.test.tsx` — the sentence sits in the same `.field` as the input it describes, it is present in the **edit** modal too where writing the date wins and the document date survives, both forms read the same key, and a wording guard keeps it out of research/37 §5's forbidden claims — plus the December case pinned as a **pair** in `aggregation.test.ts`: the same 20 Dec 2026 receipt read into FY2026 with no money date and into FY2027 with one, and the 30 Dec cost read into FY2026 and released from it. **No persisted field was needed, so no chain step: `CURRENT_DATA_VERSION` stays v26 and v27 is left free for DPI step 3 (B-116/B-152).** No calculator touched; no seed record carries a money date and no date-selection behaviour changed, so no figure moved — `seed.identityHygiene.test.ts:339` still reads **311.200 bani** | **12C** |
 | ~~**B-39**~~ | [CLOSED 2026-10-12] ~~Per-expense facts the classifier needs (vehicle exclusive/partly/not for the activity, supporting documentation present) are not persisted; unknown vehicle use defaults to non-exclusive, applying 50 % without a recorded fact~~ | **12D** | — **PREMISE SETTLED 2026-10-11, see D-VEH-1.** The 50 % default is the statutory answer for the unevidenced case (`research/21` §4.1, Normele pct. 7 alin. (7)); `unknown` computes at 50 % with a visible note, never `incomplete`. `unknown` and `mixed` stay distinct stored facts. The two-or-more-cars question under art. 68 alin. (5) lit. j) is still UNVERIFIED (`research/22` line 152) and must not be guessed **CLOSED 2026-10-12 by PG-6c.** A `Vehicle` entity with per-fiscal-year declared facts; `vehicleUse` and `vehicleExceptionCategory` removed from `ExpenseClassificationContext` so the fact belongs to the car, not to the run; the one-car limit as a selection expressed through the existing 50 % rule; `unknown` at the statutory default per **D-VEH-1**. Chain step `vehicle-facts`, **v14 → v15**, key left absent, no backfill
 | ~~**B-40**~~ | [REFUTED] **WITHDRAWN — this is B-29, already open since research 21.** The audit's Finding 3 is the hospitality / activity-family defect: TASK 2b built the channel (`activityFamily: 'cazare'` ⇒ `no_expense_engine` ⇒ `review_required` naming `EXPENSE_ENGINE_CAZARE_2026`), and **no caller supplies the fact**. Needs a CAEN→activity-family decision, not more plumbing | **12E** |
 | ~~**B-41**~~ | [CLOSED 2026-10-12] ~~Other-income flags are collected but the amounts those calculations depend on are not modelled; the estimate can look complete while a material input is absent~~ | **12F** | **CLOSED 2026-10-12 by PG-6d.** The amounts are modelled — six per fiscal year, one per ladder category, each by its own measurement rule — and an unanswered category makes the ladder refuse rather than compute. `calcCass` no longer reports art. 174 alin. (7) lit. b) as „nu a putut fi evaluat": it evaluates where the two readings converge and refuses naming both where they diverge
@@ -301,7 +301,7 @@ Phases in **bold** are new, inserted by the audit. The rest keep the user's numb
 | 12 | Run-rate projection over the **active period** | **DONE** (2026-10-10, `phases/31_pg4_active_period.md`) | B-44 closed; B-72 wording remainder to PG-5 |
 | 12A | Expense deductibility model | **DONE** (TASK 2a–2d) — gap-check only | — |
 | 12B | Pension fact for CASS | **DONE** (TASK 5) — gap-check only | — |
-| **12C** | **Payment / collection dates enterable, and date defaults** | not started | B-38, B-46 |
+| **12C** | **Payment / collection dates enterable, and date defaults** | **DONE** (2026-10-16, brief `82_phase12c_payment_dates.md`) | ~~B-38~~, ~~B-46~~ |
 | **12D** | **Per-expense facts the classifier needs** | **DONE** (2026-10-12, PG-6c, `phases/41_pg6c_vehicle_facts.md`) | ~~B-39~~ |
 | **12E** | **Activity family wired to the estimate, or explicit refusal** | **DONE** (2026-10-11/12, PG-6b + PG-6h, `phases/36`, `phases/37`–`40`) | ~~B-29~~ |
 | **PG-6h** | **art. 68^3 accommodation regime — supported, not refused (D-CAZ-1)** | **DONE** (2026-10-11/12, `phases/37`–`40`) | B-29 residue → B-80, B-88, B-89 |
@@ -543,7 +543,7 @@ The table above has no status column, which is why this had to be re-derived by 
 |---|---|---|
 | **PG-0** | **DONE** `def8a3c` | — |
 | **PG-1** | **DONE** `a871a68` | the silent-exclusion channel is live and reused by every later refusal |
-| **PG-2** | **DONE** `700bd2a` | **B-38 still open** — date *defaults*, carried as phase 12C, not a gate on PG-2's own scope |
+| **PG-2** | **DONE** `700bd2a` | ~~**B-38 still open** — date *defaults*, carried as phase 12C, not a gate on PG-2's own scope~~ **B-38 CLOSED 2026-10-16 by brief 82 (12C)** — the entry landed here, the visible default landed in 12C |
 | **PG-3** | **DONE** `05ab925` | D-DEMO-1's persona set is a later addition, not a reopening |
 | **PG-4** | **DONE** `c44efb0` | — |
 | **PG-5** | **DONE** `ab7461d` | B-34, B-35, B-72, B-73 closed |
