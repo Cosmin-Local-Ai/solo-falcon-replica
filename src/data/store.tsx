@@ -8,6 +8,7 @@ import type {
 import type { VehicleYearFacts } from '../domain/fiscal/deductibility';
 import type { PfaProfile } from '../domain/models';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
+import { isSameCalculation } from '../domain/snapshots/snapshot';
 import { epochMs, isoCalendarDateProblemText, toInstantISO, now } from '../domain/date';
 import { maxBani, type Bani } from '../domain/money';
 import { rateKey } from '../domain/fx/provider';
@@ -928,7 +929,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ...d,
       fixedAssets: d.fixedAssets.map(x => (x.id === id ? { ...x, ...patch } : x)),
     })),
-    addSnapshot: s => setData(d => ({ ...d, snapshots: [...d.snapshots, s] })),
+    // B-49 — the write path is now a live one: `data/derived.ts` hands every computed estimate here.
+    // The guard is what makes that safe. The estimate effect re-runs on every provider render, so an
+    // unguarded append would mint a record for every toast and every save retry, and "append-only" would
+    // turn into an unbounded log of one number. Still append-only: nothing here updates or deletes a
+    // stored snapshot, it declines to add a second copy of a calculation the register already holds.
+    addSnapshot: s => setData(d => (
+      d.snapshots.some(x => isSameCalculation(x, s)) ? d : { ...d, snapshots: [...d.snapshots, s] }
+    )),
     getSnapshot: id => data.snapshots.find(x => x.calculationId === id),
 
     // Phase 11: the first profile write ends the first-run state. Until now the store had nothing the

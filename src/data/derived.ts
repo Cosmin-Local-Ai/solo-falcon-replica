@@ -165,6 +165,19 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
             operands.provisionalIncomeRates,
           ),
         );
+        // B-49 — the calculation the person is shown is the calculation the app keeps.
+        //
+        // `computeTaxEstimate` already mints a `TaxCalculationSnapshot` with three content digests on
+        // every computed result, and since Phase 20 the whole rule-immutability and R1/R2 replay
+        // machinery reads that shape — but nothing in the running app ever wrote one, so the replay
+        // machinery was tested and dead and no calculation outlived the screen that produced it. This is
+        // the hand-off. It is guarded in the store (`addSnapshot` declines a calculation the register
+        // already holds, by digest) because this effect re-runs on every provider render: without the
+        // guard the register would mint a record per toast.
+        //
+        // Only a `computed` result is recorded. A refusal is not a calculation, and storing one as if it
+        // were is the mistake PG-1 made with the `taxEstimate` completeness check (`completeness.ts:448`).
+        if (result.status === 'computed') store.addSnapshot(result.snapshot);
         setLoading(false);
       }
     });

@@ -86,3 +86,26 @@ export async function createCalculationSnapshot(p: CreateSnapshotParams): Promis
     status: p.status ?? 'computed',
   };
 }
+
+/**
+ * B-49 — when two snapshots ARE the same calculation.
+ *
+ * Wiring the write path means the app now records a calculation every time it computes one, and the live
+ * estimate recomputes on every provider render (`data/derived.ts` depends on the whole store object, and
+ * `data/store.tsx` builds that object fresh each render). Without an identity test the register would
+ * mint a new record for every toast, and "append-only" would become an unbounded log of one number.
+ *
+ * The identity is the three digests plus the figure. `calculationId` cannot serve — it is a random UUID,
+ * so the same facts computed twice produce two ids and the duplicate would be kept. The digests are
+ * exactly the content-addressing Phase 20 built for replay, so this reuses the machinery rather than
+ * inventing a fourth key: same inputs, same rule set, same asset register, same total ⇒ same calculation.
+ * Anything that moves the number moves at least one of them.
+ */
+export function isSameCalculation(a: TaxCalculationSnapshot, b: TaxCalculationSnapshot): boolean {
+  return (
+    a.inputsHash === b.inputsHash &&
+    a.ruleSetHash === b.ruleSetHash &&
+    a.assetRegisterHash === b.assetRegisterHash &&
+    a.output.total === b.output.total
+  );
+}

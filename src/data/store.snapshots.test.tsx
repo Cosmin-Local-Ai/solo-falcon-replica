@@ -172,6 +172,35 @@ describe('snapshot persistence (Step 12)', () => {
     expect(snapA.calculationId).not.toBe(snapB.calculationId);
   });
 
+  it('B-49: appending the same calculation twice leaves ONE record, and append-only still holds', async () => {
+    // The guard that makes a live write path safe. `data/derived.ts` now hands every computed estimate to
+    // `addSnapshot`, and its effect re-runs on every provider render (it depends on the whole store object,
+    // which `store.tsx` builds fresh each render). Unguarded, that logs a record per toast.
+    // Identity is the three digests plus the figure — NOT `calculationId`, which is a random UUID, so the
+    // same facts computed twice produce two ids and the duplicate survives.
+    render(
+      <StoreProvider>
+        <Probe />
+      </StoreProvider>,
+    );
+    const store = storeRef!;
+
+    const first = await makeSnapshot({ revenues: lei(1000), expenses: lei(400) });
+    const sameFacts = await makeSnapshot({ revenues: lei(1000), expenses: lei(400) });
+    expect(first.calculationId).not.toBe(sameFacts.calculationId);
+
+    act(() => store.addSnapshot(first));
+    act(() => store.addSnapshot(sameFacts));
+    expect(storeRef!.snapshots.length).toBe(1);
+    // The record kept is the first one, byte for byte — nothing was updated.
+    expect(storeRef!.getSnapshot(first.calculationId)).toEqual(first);
+
+    // A different figure is a different calculation, and it appends.
+    const different = await makeSnapshot({ revenues: lei(1000), expenses: lei(401) });
+    act(() => store.addSnapshot(different));
+    expect(storeRef!.snapshots.length).toBe(2);
+  });
+
   it('exposes no update/delete path for snapshots (append-only by design)', () => {
     render(
       <StoreProvider>
