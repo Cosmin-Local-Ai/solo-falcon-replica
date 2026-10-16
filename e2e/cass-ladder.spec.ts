@@ -74,8 +74,11 @@ test.describe('PG-6d / D-DPI-2 — the ladder is asked, not assumed', () => {
       await expect(page.locator(`#set-ladder-answer-${id}`)).toHaveValue('');
     }
     // The amount box is not offered until the person says they have such an income. A box invites a blank,
-    // and a blank category is the one state the ladder cannot compute over.
-    await expect(page.locator('[data-ladder-amount]')).toHaveCount(0);
+    // and a blank category is the one state the ladder cannot compute over. Scoped to the six category ids:
+    // `neimpozabil` and `cassRetinutLaSursa` also carry `data-ladder-amount`, and they are not categories.
+    for (const id of LADDER_IDS) {
+      await expect(page.locator(`#set-ladder-${id}`)).toHaveCount(0);
+    }
     // The state is reported as unanswered, which is not the same report as "all six are zero".
     await expect(page.locator('[data-ladder-answered]')).toContainText('Niciuna dintre cele șase categorii');
   });

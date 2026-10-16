@@ -28,6 +28,7 @@ import {
 } from './models';
 import { pfaProfileSchema } from './schema';
 import { createDefaultProfile } from './profile';
+import { dpiRecordConflict } from './dpi';
 import { calculatorRegistry, type CalculatorResult, type CassLadderInput } from './fiscal/calculators';
 import { PFA_2026_SYSTEM_REAL_PACKAGE } from './fiscal/package2026';
 import { lei, type Bani } from './money';
@@ -243,6 +244,49 @@ describe('one unanswered category among five answered still refuses', () => {
 // without a default. zod strips undeclared keys, so an undeclared field would vanish on the next
 // save-and-load and the collapse would arrive as a passing test.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// §6.6 of brief 78 — the guard that makes the typed net safe to keep. Brief 78 did NOT retire
+// `CassLadderYear.proprietateIntelectuala`, so the double representation is still live, and the guard that
+// made it survivable must still be up. Removing it early is what would turn "two producers" into "whichever
+// one the code happens to read first".
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe('the DPI guards that make the typed net survivable are still up', () => {
+  it('a record whose declared kind contradicts its declared DPI contract still conflicts', () => {
+    // `dpiRecordConflict` is the record-level half: it does not compare amounts, it notices that one receipt
+    // claims two incompatible things. It gates the register tag AND the coverage row, and it is unchanged by
+    // the tri-state work.
+    const conflict = dpiRecordConflict({
+      id: 'r-1',
+      incomeCategory: 'activitate_independenta',
+      dpiContractType: 'cesiune_licenta',
+    } as unknown as Parameters<typeof dpiRecordConflict>[0]);
+    expect(conflict).not.toBeNull();
+    // A coherent record carries no conflict — the guard is a contradiction test, not a DPI test.
+    expect(
+      dpiRecordConflict({
+        id: 'r-2',
+        incomeCategory: 'drepturi_de_proprietate_intelectuala',
+        dpiContractType: 'cesiune_licenta',
+      } as unknown as Parameters<typeof dpiRecordConflict>[0]),
+    ).toBeNull();
+  });
+
+  it('the typed ladder net and a recorded DPI gross are two producers, and the resolver does not merge them', () => {
+    // The category-level half of the same fact. `cassLadderCategoryFacts` reads what the record says; it
+    // never folds a computed amount into a declared one, and `tax.ts` posts NEITHER when both producers
+    // exist for the year (pinned end-to-end in `dpi.path.test.ts`, `dpi_income_double_represented`).
+    const facts = cassLadderFactsForYear({
+      fiscalYear: 2026,
+      proprietateIntelectuala: lei(48_000),
+      ladderAnswers: { proprietate_intelectuala: 'amount' },
+    });
+    const dpi = facts.find((f) => f.category === 'proprietate_intelectuala')!;
+    expect(dpi.state).toBe('amount');
+    expect(dpi.amount).toBe(lei(48_000));
+    // Nothing here has consulted the recorded gross, and nothing here has averaged the two.
+  });
+});
+
 describe('the persisted gate declares ladderAnswers, and defaults nothing', () => {
   // Built from the app's own default profile rather than a hand-written literal: the gate is the thing
   // under test, and a hand-built profile that happens to satisfy half of it tests a shape nobody stores.
