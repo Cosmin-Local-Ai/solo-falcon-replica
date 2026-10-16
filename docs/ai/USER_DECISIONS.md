@@ -421,6 +421,20 @@ This **changes a default this project has followed.** Until now the rule has bee
 ### D-RUN-1 — RAM caps stay a documented rule, not a package.json change
 **User decision, 2026-10-15.** The capped commands (`--pool=threads --poolOptions.threads.maxThreads=2`, `--workers=2`) live in §12.17 as mandatory commands. **`package.json` is left alone** so the user's own `npm run test` keeps its default behaviour. Accepted trade-off: the uncapped form remains one command away, and the rule has already failed twice by being rediscovered instead of read.
 
+**Amended 2026-10-16 — the e2e half of this decision is reversed, and the original decision was overridden once before it was reversed.**
+
+**What actually happened:** on 2026-10-16 §12.20 encoded the caps into `package.json` anyway — `test:e2e` became `playwright test --workers=2` and an `test:e2e:uncapped` variant was added — **directly against D-RUN-1's "`package.json` is left alone."** Nobody noticed because the change was justified as good practice.
+
+**Then it cost a Worker.** An e2e gate ran past seven minutes and the user cancelled the run.
+
+**The premise was never measured and is false on this machine:** 30 GB total, **29 GB available, 32 CPUs.** Two browser workers on a 32-core box protects nothing.
+
+**Now in force:** `npm run test:e2e` is plain `playwright test`, and the redundant `test:e2e:uncapped` variant is gone. **What survives is the part that was actually load-bearing — run each gate once, at the end, backgrounded to a log, read the log once.** That is what prevented a Worker losing its connection mid-gate. **The parallelism cap was never what protected the run.**
+
+**The unit gate keeps `--poolOptions.threads.maxThreads=2` for now** — it was measured at ~57s and was not what hung — **but it rests on the same unmeasured premise and should be re-checked the same way.**
+
+**The lesson, recorded because it is the register's own lesson:** §12.20 was justified as *"the same move as the B-139 guard"* — copying the mechanism of a good fix without checking its premise. **A guard is a claim. When the claim is wrong, the guard makes the error automatic and nobody has to remember it.**
+
 ### D-ROUND-1 — B-113 is settled by evidence, not by judgement
 **Raised by brief 68's follow-up, which refused to fix it and reported instead.** The engine already applies `roundArt66` (CF art. 66, inclusive-50 boundary) in roughly twenty places — income tax, CAS, CASS — and applied to the ANAF București Sector 4 FY2024 example it reproduces **every** published figure: 2.488,50 → 2.488; six months → 14.928; forfetar 2.985,60 → 2.986; net → 11.942; impozit → 1.194. What it does **not** do is apply art. 66 to the **product of a currency conversion** — `fx/convert.ts:46` deliberately skips it, so the engine keeps 2.488,50 where ANAF writes 2.488.
 
