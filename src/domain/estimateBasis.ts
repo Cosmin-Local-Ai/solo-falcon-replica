@@ -1437,9 +1437,10 @@ export function depreciationCoverageGaps(leg: DepreciationLeg | null | undefined
   // conflict rows above use, and for the same reason: this is not a sum that left the estimate, it is a
   // sum that was never in it, so the weighted completeness denominator does not move.
   for (const d of leg.disposals) {
-    // Brief 76 — the row now carries BOTH ceilings when the proceeds are recorded, and names the one that
-    // bound. It still does not post the figure, and the reason is stated rather than hidden: B-153 leaves
-    // the schedule and the residual counting different month totals.
+    // Brief 76 — the row carries BOTH ceilings when the proceeds are recorded, and names the one that
+    // bound. It still does not post the figure, and the reason is stated rather than hidden: B-65's
+    // standing decision, not a month count — B-153 closed that, and the row now says the schedule and the
+    // residual count the same months.
     const whichBinds: Record<'pct-27' | 'proceeds' | 'none', string> = {
       proceeds: 'A doua limită este cea care scade cifra.',
       'pct-27': 'Plafonul pct. 27 este cel care scade cifra, pentru că prețul este mai mare.',
@@ -1465,10 +1466,10 @@ export function depreciationCoverageGaps(leg: DepreciationLeg | null | undefined
         `fost calculat: valoare neamortizată ${formatBani(d.unamortised)}, ${d.remainingMonths} luni rămase ` +
         `din durata declarată, plafon 1.500 lei × luni = ${formatBani(d.cap)}, deductibil sub plafon = ` +
         `${formatBani(d.deductible)}. Suma NU este adăugată în estimare. ${secondLimit} ` +
-        'Rămâne deschisă și o a doua neconcordanță: planul de amortizare continuă să amortizeze după luna ' +
-        'în care bunul a ieșit din gestiune, în timp ce figura de mai sus numără doar lunile efectiv ' +
-        'folosite — aceeași regulă, două numărători de luni. Cifra de mai sus este plafonul corect, nu ' +
-        'deductibilul final.',
+        'Planul de amortizare și figura de mai sus numără aceleași luni: planul se oprește în luna în '
+        + 'care bunul iese din evidență (D-DEPR-1, B-153). Este o citire, nu un text — nicio normă nu '
+        + 'conține o regulă de oprire a amortizării la vânzare sau la scoaterea din evidență — și rămâne '
+        + 'consemnată ca atare. Cifra de mai sus este plafonul corect, nu deductibilul final.',
     });
   }
   return out;

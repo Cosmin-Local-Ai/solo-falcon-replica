@@ -29,10 +29,12 @@ import { lei } from '../domain/money';
  * not zero either — it means the second limit exists and cannot be measured, which is a different statement
  * from „the asset sold for nothing".
  *
- * And what this step does NOT settle, pinned rather than implied: **B-153 stays open.** The schedule keeps
- * amortising past the month of the *scoatere din gestiune* while `disposalFigure` counts only the months
- * actually used, so the residual this field caps is measured off a month count the posted schedule does not
- * match. The reported figure is the correct ceiling; it is still not a deductible amount.
+ * And what this step did NOT settle, pinned here as history rather than as present state: when it shipped,
+ * **B-153 was open** — the schedule amortised past the month of the *scoatere din gestiune* while
+ * `disposalFigure` counted only the months actually used, so the residual this field caps was measured off a
+ * month count the posted schedule did not match. Brief 80 closed that under D-DEPR-1 (one month count, the
+ * schedule stopping in the exit month — a labelled reading, see `depreciation.ts`). The reported figure is
+ * the correct ceiling either way; it is still not a deductible amount, and that is B-65's standing decision.
  */
 
 /** A disposed M1, in the shape a **v23** payload stored it: no `disposalProceeds` key at all. */

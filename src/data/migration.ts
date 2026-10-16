@@ -467,12 +467,18 @@ export const DATA_VERSION_EXPENSE_ASSET_LINK = 23;
  * means the second limit exists and cannot be measured, and the app now says that instead of treating the
  * first limit as the answer.
  *
- * **What this step does NOT settle, stated plainly.** B-153 is still open. `depreciationSchedule` keeps
- * amortising an asset past the month it left the register, while `disposalFigure` counts only the months
- * actually used — two halves of one rule, two month counts. The residual this field caps is measured off the
- * shorter of the two, so with the proceeds recorded the reported figure is the correct **ceiling** and still
- * not a safe amount to post. Neither the truncation point nor the interaction with the last-year-takes-the-
- * remainder rule is settled by the corpus (`research/36` §12.5, §12.9), so it is not decided here either.
+ * **What this step did NOT settle, and what settled it later.** B-153 was open when this step shipped and
+ * was closed by brief 80 under **D-DEPR-1**: the schedule now stops in the month the asset leaves the
+ * register, so the schedule and `disposalFigure` use one month count. That part was never optional —
+ * `research/55` §4 shows pct. 7 lit. o) and art. 28 alin. (17) both derive the disposal figures from the
+ * depreciation actually taken, so two counts on one asset is indefensible under any reading. **Which month
+ * the schedule stops in is a reading, not a rule**: no stop rule exists in art. 28 alin. (12) lit. a)–n),
+ * in Titlul II norms pct. 25–31, or in OMFP 170/2015, and the rejected alternative — stopping the month
+ * after — argues from symmetry with the start rule at art. 28 alin. (12) lit. a). The truncation also does
+ * **not** trigger the last-year-takes-the-remainder convention: that convention exists so a schedule run to
+ * the end of the declared duration sums exactly to the fiscal value, and an asset that leaves early leaves a
+ * residual instead. With the proceeds recorded the reported figure is the correct **ceiling** and still not a
+ * safe amount to post — that is B-65's standing decision, not a month count.
  */
 export const DATA_VERSION_DISPOSAL_PROCEEDS = 24;
 /**
@@ -1302,7 +1308,7 @@ export function migrateExpenseAssetLinkV23(data: PersistedAppData): PersistedApp
 /**
  * v23 → v24 (`fixed-asset-disposal-proceeds`). Opens `FixedAsset.disposalProceeds` by writing nothing. See
  * `DATA_VERSION_DISPOSAL_PROCEEDS` for the second ceiling the field makes measurable, for the inference this
- * step refuses, and for the month-count disagreement (B-153) that still keeps the figure unposted.
+ * step refuses, and for why the figure stays unposted (B-65) even after B-153 closed the month count.
  *
  * The body is the version stamp and nothing else. A payload that already carries `disposalProceeds` keeps it
  * untouched, which is what makes re-running the step a no-op rather than a wipe.
@@ -1528,7 +1534,7 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     to: DATA_VERSION_DISPOSAL_PROCEEDS,
     name: 'fixed-asset-disposal-proceeds',
     summary:
-      'Un bun scos din gestiune poate înregistra acum suma realizată din înstrăinare. Normele Titlul II pct. 27 pun o primă limită valorii neamortizate — 1.500 lei × lunile rămase din durata declarată — iar normele Titlul IV pct. 7 alin. (5) lit. o) pun aceleiași valori a doua limită, „la nivelul venitului realizat din înstrăinare”. Aplicația cunoștea prima și nu avea unde să scrie a doua, de aceea cifra pct. 27 era arătată și nu era postată: fără preț, ea ar fi dedus mai mult decât permite norma ori de câte ori bunul s-a vândut sub valoarea neamortizată. Nimic nu a fost completat în acest pas: prețul este o faptă despre o tranzacție, și niciun câmp stocat nu o înregistrează; derivată din valoarea fiscală sau din residual, ea ar inventa chiar numărul față de care norma măsoară. Cifra este acum plafonul corect, nu deductibilul final: B-153 rămâne deschis — planul de amortizare continuă după luna ieșirii din gestiune, în timp ce figura calculată numără doar lunile folosite, iar cele două numărători nu se împacă.',
+      'Un bun scos din gestiune poate înregistra acum suma realizată din înstrăinare. Normele Titlul II pct. 27 pun o primă limită valorii neamortizate — 1.500 lei × lunile rămase din durata declarată — iar normele Titlul IV pct. 7 alin. (5) lit. o) pun aceleiași valori a doua limită, „la nivelul venitului realizat din înstrăinare”. Aplicația cunoștea prima și nu avea unde să scrie a doua, de aceea cifra pct. 27 era arătată și nu era postată: fără preț, ea ar fi dedus mai mult decât permite norma ori de câte ori bunul s-a vândut sub valoarea neamortizată. Nimic nu a fost completat în acest pas: prețul este o faptă despre o tranzacție, și niciun câmp stocat nu o înregistrează; derivată din valoarea fiscală sau din residual, ea ar inventa chiar numărul față de care norma măsoară. Cifra este plafonul corect, nu deductibilul final. La momentul acestui pas B-153 rămânea deschis — planul de amortizare continua după luna ieșirii din gestiune, în timp ce figura calculată număra doar lunile folosite; brief 80 a închis acea neconcordanță (D-DEPR-1): planul se oprește acum în luna ieșirii, iar cele două cifre numără aceleași luni.',
     apply: migrateDisposalProceedsV24,
   },
   {

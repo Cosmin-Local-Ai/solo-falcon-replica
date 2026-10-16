@@ -492,9 +492,9 @@ describe('B-65 acceptance 4 (brief 74) — the pct. 27 disposal figure is report
     expect(out.disposals).toHaveLength(1);
     const d = out.disposals[0]!;
     expect(d.assetId).toBe('asset-m1-disposed');
-    // 120.000 lei / 60 luni = 2.000 lei/lună. `disposalFigure` counts the months actually taken up to the
-    // disposal month — Martie–Octombrie = 8 — against the year's UNCAPPED row (20.000 lei over 10 months),
-    // so 16.000 lei is treated as amortised and 104.000 lei remains, with 60 − 8 = 52 months left.
+    // 120.000 lei / 60 luni = 2.000 lei/lună. B-153 closed: the schedule itself stops at the disposal month,
+    // so the 2026 row carries the eight months Martie–Octombrie (16.000 lei uncapped) and `disposalFigure`
+    // counts those same eight — 16.000 lei amortised, 104.000 lei left, 60 − 8 = 52 months remaining.
     expect(d.unamortised).toBe(lei(104000));
     expect(d.remainingMonths).toBe(52);
     // pct. 27: 1.500 lei × lunile rămase.
@@ -507,13 +507,13 @@ describe('B-65 acceptance 4 (brief 74) — the pct. 27 disposal figure is report
     const leg = selectAssetDepreciation(withAssets([DISPOSED_M1]), AS_OF, RULES);
     expect(leg.disposals).toHaveLength(1);
     // The amortisation rows for the year are posted; the disposal residual is not.
-    // 1.500 lei/lună × the 10 months the schedule runs for 2026. NOTE, reported not fixed: the schedule
-    // still amortises Noiembrie and Decembrie although the car left the register in Octombrie, while
-    // `disposalFigure` counts only 8 months used. The two halves of the same rule disagree about the last
-    // two months of the year. That is a real finding, it moves money, and it is not one of B-114 or B-65 —
-    // it is recorded in the handoff rather than quietly corrected here.
-    expect(leg.total).toBe(lei(15000));
-    expect(leg.total).not.toBe(lei(15000) + lei(78000));
+    // 1.500 lei/lună × the EIGHT months the schedule runs for 2026 — Ianuarie and Februarie were never
+    // chargeable (punerea în funcțiune is 15 Februarie, so amortizarea starts in Martie), and Noiembrie and
+    // Decembrie are not charged because the car left the register in Octombrie. Before B-153 this row posted
+    // 15.000 lei for ten months while the disposal figure counted eight; there is one count now, and the
+    // posted figure moved with it.
+    expect(leg.total).toBe(lei(12000));
+    expect(leg.total).not.toBe(lei(12000) + lei(78000));
   });
 
   it('the unposted figure is a coverage row the user can read, not a silent omission', () => {
@@ -527,6 +527,9 @@ describe('B-65 acceptance 4 (brief 74) — the pct. 27 disposal figure is report
     expect(row!.fixTarget).toBe('/assets');
     expect(row!.detail).toContain('pct. 27');
     expect(row!.detail).toContain('78.000,00');
+    // B-153: the row states the one month count, and states that stopping at the exit month is a reading.
+    expect(row!.detail).toContain('numără aceleași luni');
+    expect(row!.detail).toContain('Este o citire, nu un text');
     expect(row!.detail).toContain('înstrăinare');
     expect(row!.detail).toContain('NU este adăugată în estimare');
   });

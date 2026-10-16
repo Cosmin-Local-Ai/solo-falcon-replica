@@ -192,6 +192,19 @@ export const assets = {
       'înmulțit cu numărul de luni rămase de amortizat din durata normală de funcționare stabilită de ' +
       'contribuabil. Lunile rămase se calculează din durata pe care ai declarat-o aici, nu dintr-o ' +
       'clasă de catalog.',
+    // B-153 / D-DEPR-1 — the stop rule is a reading, and the card says so instead of presenting it as a
+    // rule. The rejected alternative is written down here, not left in a commit message.
+    stoppedAtDisposal:
+      'Planul de amortizare se oprește în luna în care bunul a fost scos din evidență: lunile de după '
+      + 'acea lună nu se amortizează, iar bunul rămâne cu o valoare neamortizată. Nicio regulă nu spune '
+      + 'acest lucru — art. 28 alin. (12) lit. a)–n) nu vorbesc despre vânzare sau scoatere din evidență, '
+      + 'normele Titlului II pct. 25–31 nu conțin nicio regulă de oprire, OMFP 170/2015 nici atât. '
+      + 'Sprijinul citirii: pct. 27 numără „lunile rămase de amortizat” „la momentul scăderii din '
+      + 'gestiune”, iar art. 28 alin. (17) și pct. 7 lit. o) calculează cifrele de la ieșire pe '
+      + 'amortizarea efectiv luată. Citirea alternativă, respinsă și consemnată: amortizarea se oprește '
+      + 'luna DUPĂ ieșire, prin simetrie cu regula expresă de începere din art. 28 alin. (12) lit. a) '
+      + '(„începând cu luna următoare celei în care … se pune în funcțiune”) — este un argument, nu un '
+      + 'text. Ce nu este o citire: planul și figura de la ieșire trebuie să numere aceleași luni.',
     notDeductibleYet:
       'Cifrele de mai jos intră în estimare ca cheltuială cu amortizarea, bun cu bun, pentru anul fiscal ' +
       'afisat. Nu sunt o înregistrare în registrul de cheltuieli: sunt calculate din faptele declarate ' +

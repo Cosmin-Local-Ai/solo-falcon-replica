@@ -249,11 +249,13 @@ export interface FixedAssetFacts {
    * duration would be inventing the number the norm measures against. Absence is not zero: it means the
    * second limit cannot be measured, and the app says so instead of treating the first limit as the answer.
    *
-   * **Adding this field does not make the figure postable.** B-153 is still open: the schedule keeps
-   * amortising past the month of the *scoatere din gestiune* while `disposalFigure` counts only the months
-   * actually used, so the residual is measured off a `monthsUsed` the posted schedule does not match. With
-   * both limits known the reported number is the correct ceiling; it is still not a deductible amount, and
-   * `complete` on the outcome is what carries that.
+   * **B-153 is closed (brief 80, D-DEPR-1): the schedule now stops in the month of the *scoatere din
+   * gestiune*, so the residual is measured off the same months the schedule charges.** One month count, not
+   * two — that part is not a reading, it is what pct. 7 lit. o) and art. 28 alin. (17) require.
+   *
+   * **The figure is still reported and not posted**, and that is B-65's standing decision rather than a
+   * month-count problem: with both limits known the reported number is the correct ceiling, it is still not
+   * a deductible amount, and `complete` on the outcome is what carries that.
    */
   disposalProceeds?: Bani;
 }
@@ -308,6 +310,12 @@ export type DepreciationOutcome =
       years: DepreciationYear[];
       /** The labelled readings and constructions this schedule rests on. */
       notes: string[];
+      /**
+       * B-153 (D-DEPR-1) — true when a disposal cut the schedule short of the declared duration, so the
+       * last row is the exit month and the asset leaves a residual behind. The surface labels the reading
+       * out of this flag rather than inferring it from a row count.
+       */
+      truncatedByDisposal?: boolean;
       /** The disposal figure under pct. 27, when the asset has left the register. */
       disposal?: {
         unamortised: Bani;
@@ -558,6 +566,9 @@ export function depreciationSchedule(rule: FiscalRule, asset: FixedAssetFacts): 
   // Decembrie year present but empty — an honest zero, not a shifted date.
   const firstMonth = monthOf(asset.putInFunctionDate) + 1;
   const groups: { fiscalYear: number; months: number; startMonthInYear: number }[] = [];
+  // B-153 — the FULL duration's group list, kept so the degresive straight-line switch still counts the
+  // years of the declared duration and not the years that survived a disposal.
+  let fullGroupCount = 0;
   let monthsLeft = asset.normalLifeMonths;
   let year = startYear;
   let capacity = firstMonth > 12 ? 0 : 12 - firstMonth + 1;
@@ -579,6 +590,61 @@ export function depreciationSchedule(rule: FiscalRule, asset: FixedAssetFacts): 
       startMonthInYear = 1;
     }
   }
+  fullGroupCount = groups.length;
+
+  // ── B-153 / D-DEPR-1 — the schedule stops in the month the asset leaves the register. ──────────
+  //
+  // THE READING, labelled because it is one. No stop rule exists anywhere: art. 28 alin. (12) lit. a)–n)
+  // never address *vânzare* or *scoatere din evidență*, Titlul II norms pct. 25–31 contain none, and OMFP
+  // 170/2015 contains none — `research/55` §4 records this as a gap in the law, not a gap in the search.
+  // We stop IN the exit month on two anchors: the only month-counting rule the norms do contain, Titlul II
+  // pct. 27, counts „numărul de luni rămase de amortizat" **la momentul scăderii din gestiune** — remaining
+  // months measured from the exit date, not to 31 Decembrie — and art. 28 alin. (17) with Titlul IV pct. 7
+  // lit. o) both key the disposal figures off the depreciation actually taken while the asset was held.
+  //
+  // THE REJECTED ALTERNATIVE, recorded rather than hidden: stopping the month AFTER the exit argues from
+  // symmetry with the explicit start rule at art. 28 alin. (12) lit. a) („începând cu luna următoare celei
+  // în care mijlocul fix amortizabil se pune în funcțiune"). That is an argument from symmetry, not a text:
+  // no norm states it, and the start rule speaks of *punerea în funcțiune*, not of the exit.
+  //
+  // WHAT IS NOT A READING: whichever month the schedule stops in, the schedule and the disposal figure must
+  // use ONE month count. pct. 7 lit. o) defines the residual by „amortizarea inclusă pe costuri în cursul
+  // exploatării" and art. 28 alin. (17) computes the disposal result on „amortizarea fiscală" actually
+  // taken, so two counts on the same asset is indefensible under either reading — including the one not
+  // chosen (D-DEPR-1). Truncating here is what makes the two counts one.
+  //
+  // Reachable only when `disposedOn` is set: an asset still in the register is untouched.
+  const exitDate = asset.disposedOn && isIsoDate(asset.disposedOn) ? asset.disposedOn : null;
+  // Absolute month index (year × 12 + month − 1). `firstMonth` is 13 when *punerea în funcțiune* falls in
+  // Decembrie, which indexes to Ianuarie of the following year — the same shift the group loop makes.
+  const firstChargeableMonth = startYear * 12 + (firstMonth - 1);
+  const chargeableMonths =
+    exitDate === null
+      ? asset.normalLifeMonths
+      : Math.max(
+          0,
+          Math.min(
+            asset.normalLifeMonths,
+            yearOf(exitDate) * 12 + (monthOf(exitDate) - 1) - firstChargeableMonth + 1,
+          ),
+        );
+  const truncatedByDisposal = chargeableMonths < asset.normalLifeMonths;
+  if (truncatedByDisposal) {
+    const kept: typeof groups = [];
+    let monthsToCharge = chargeableMonths;
+    for (const group of groups) {
+      if (monthsToCharge <= 0) break;
+      if (group.months <= monthsToCharge) {
+        kept.push(group);
+        monthsToCharge -= group.months;
+      } else {
+        kept.push({ ...group, months: monthsToCharge });
+        monthsToCharge = 0;
+      }
+    }
+    groups.length = 0;
+    groups.push(...kept);
+  }
 
   const linearRate = new Decimal(1).div(durationYears);
   const years: DepreciationYear[] = [];
@@ -587,7 +653,12 @@ export function depreciationSchedule(rule: FiscalRule, asset: FixedAssetFacts): 
 
   for (let i = 0; i < groups.length; i += 1) {
     const group = groups[i]!;
-    const isLast = i === groups.length - 1;
+    // B-153 — the remainder absorption is the END-OF-DURATION convention (it exists so the schedule sums
+    // exactly to the fiscal value and leaves no rounding residue). A disposal is not the end of the
+    // duration: an asset that leaves the register early leaves a residual, and `disposalFigure` measures
+    // that residual. So a truncation-induced final row is charged at the ordinary rate, not at the
+    // remainder. The convention itself stays unstated in law — see the label below.
+    const isLast = i === groups.length - 1 && !truncatedByDisposal;
     let annualDec: Decimal;
     let branch: DepreciationYear['branch'];
 
@@ -606,7 +677,7 @@ export function depreciationSchedule(rule: FiscalRule, asset: FixedAssetFacts): 
         // THE CONSTRUCTION, from pct. 25's „114.688/5 ani": from year 6 the method switches to
         // straight-line on the remainder over the years still left. §12.2 records that no norm states this
         // as a formula — it is read off the only worked example in Partea I.
-        const yearsLeft = groups.length - i;
+        const yearsLeft = fullGroupCount - i;
         annualDec = remaining.div(yearsLeft);
         branch = 'degresiv_linie_dreapta';
       }
@@ -659,11 +730,27 @@ export function depreciationSchedule(rule: FiscalRule, asset: FixedAssetFacts): 
     );
   }
 
+  if (truncatedByDisposal) {
+    notes.push(
+      'D-DEPR-1 (B-153): planul de amortizare se oprește în luna în care bunul este scos din evidență; '
+        + 'lunile de după acea lună nu se amortizează. Nicio regulă nu spune acest lucru — art. 28 alin. '
+        + '(12) lit. a)–n) nu vorbesc despre vânzare sau scoatere din evidență, normele Titlului II '
+        + 'pct. 25–31 nu conțin nicio regulă de oprire, iar OMFP 170/2015 nici atât (research/55 §4). '
+        + 'Sprijinul citirii este singura regulă de numărat luni din norme — pct. 27 numără „lunile rămase '
+        + 'de amortizat" „la momentul scăderii din gestiune" — și faptul că art. 28 alin. (17) și pct. 7 '
+        + 'lit. o) calculează cifrele de la ieșire pe amortizarea efectiv luată. Citirea alternativă, '
+        + 'respinsă și consemnată: amortizarea se oprește luna DUPĂ ieșire, prin simetrie cu regula '
+        + 'expresă de începere din art. 28 alin. (12) lit. a) („începând cu luna următoare celei în care … '
+        + 'se pune în funcțiune"). Este un argument, nu un text. Ce nu este o citire: planul și figura de '
+        + 'la ieșire trebuie să numere aceleași luni — aceasta este constrângerea, nu alegerea.',
+    );
+  }
+
   const disposal =
     asset.disposedOn && isIsoDate(asset.disposedOn)
       ? disposalFigure(rule, asset, years)
       : undefined;
-  return { status: 'computed', years, notes, disposal };
+  return { status: 'computed', years, notes, truncatedByDisposal, disposal };
 }
 
 /**
@@ -683,6 +770,12 @@ function disposalFigure(
   // Months amortised up to and including the month of the *scoatere din gestiune*, and the amount taken in
   // those months. pct. 27 counts the months **left** of the duration the taxpayer chose, so neither figure
   // may run past the disposal date.
+  //
+  // B-153 closed this: the schedule handed to this function is already truncated at the exit month, so the
+  // clamp below is a guard, not a second count — for a disposed asset it now takes every month of every row
+  // it is given, and `remainingMonths` is the same count the schedule charged. Before brief 80 the clamp
+  // WAS a second count: the 2026 row carried twelve months while this loop counted ten. The agreement is
+  // pinned in `depreciation.disposalCaps.test.ts`.
   const disposalYear = yearOf(asset.disposedOn ?? '');
   const disposalMonth = monthOf(asset.disposedOn ?? '');
   let monthsUsed = 0;

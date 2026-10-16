@@ -401,6 +401,11 @@ function AssetCard({ asset, leg }: { asset: FixedAsset; leg: DepreciationLeg }) 
               </tfoot>
             </table>
             <div className="text-sm muted" style={{ marginTop: 8 }}>{assetsCopy.schedule.notDeductibleYet}</div>
+            {outcome.truncatedByDisposal === true && (
+              <div className="text-sm" style={{ marginTop: 6 }} data-testid={`asset-truncated-${asset.id}`}>
+                {assetsCopy.schedule.stoppedAtDisposal}
+              </div>
+            )}
             {leg.conflicts.some(c => c.assetId === asset.id) && (
               <div className="card" style={{ padding: '12px 14px', marginTop: 8 }} data-testid={`asset-conflict-${asset.id}`}>
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>{assetsCopy.posting.conflictHeading}</div>

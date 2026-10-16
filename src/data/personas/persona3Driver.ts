@@ -35,17 +35,19 @@
  * value). Two provisions then bound the same unamortised residual:
  *
  * - **Titlul II norm pct. 27** — the residual is deductible „în limita a 1.500 lei înmulțit cu numărul de
- *   luni rămase de amortizat din durata normală de funcționare stabilită de contribuabil”. 37 months of the
- *   declared 48 were used by 20 Octombrie, so **11 luni rămase** and a ceiling of **16.500 lei**.
+ *   luni rămase de amortizat din durata normală de funcționare stabilită de contribuabil”. 36 of the declared
+ *   48 months were chargeable by 20 Octombrie (amortizarea starts in Noiembrie 2023, the month after
+ *   *punerea în funcțiune*), so **12 luni rămase** and a ceiling of **18.000 lei**.
  * - **Titlul IV norm pct. 7 alin. (5) lit. o)** — the same residual is capped „la nivelul venitului realizat
  *   din înstrăinare”. The price is 40.000 lei, above the pct. 27 figure, so **the pct. 27 ceiling is the one
  *   that cuts** — and the app can only *say* that because the price is recorded. Without it the second limit
  *   cannot be measured at all, and the figure on screen is a ceiling and nothing more.
  *
- * The residual itself is 17.875 lei (78.000 − 37 × 1.625), so 1.375 lei of it is lost at the exit. **None of
- * this enters the estimate**: B-153 is still open, the schedule keeps amortising past the disposal month
- * while `disposalFigure` counts only the months actually used, and the two month-counts are both on the
- * card. The figure is reported, not posted.
+ * The residual itself is 19.500 lei (78.000 − 36 × 1.625), so 1.500 lei of it is lost at the exit. **That
+ * residual is reported, never posted** — B-65's standing decision. What B-153 (D-DEPR-1) changed is the
+ * schedule: it stops in Octombrie 2026, so the 2026 row charges **10 months, not 12** — 15.000 lei
+ * deductible after the alin. (14) ceiling, where it used to post 18.000 — and that row *does* enter the
+ * estimate. One month count, on the card and in the leg.
  * - **art. 298** — the VAT status of the same car is a separate question with its own per-year facts
  *   (seats, MTMA, use, logbook), held in `vatYears` beside the income-tax facts and never merged with them.
  *
