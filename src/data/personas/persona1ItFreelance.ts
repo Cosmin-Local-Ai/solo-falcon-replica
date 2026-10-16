@@ -27,8 +27,10 @@
  * ## What it does NOT carry
  *
  * No `vatReturns` row — PG-6g's rule that a fixture must not mint a filed decont still holds, and the
- * cadence is now carried by the registration facts instead. No prior-year loss (B-121's operand is not
- * implemented). No lifecycle stage derived from `pfaStartDate` — B-127 is out of this step (D-DEMO-3).
+ * cadence is now carried by the registration facts instead. No prior-year loss — but that is a choice, not
+ * a missing operand: B-121 closed with chain step v25, which persists `profile.priorYearFiscalLosses`, and
+ * the persona set puts that fact on persona 8, whose cash-basis mechanism is what produces a fiscal loss.
+ * No lifecycle stage derived from `pfaStartDate` — B-127 is out of this step (D-DEMO-3).
  *
  * ## FX
  *

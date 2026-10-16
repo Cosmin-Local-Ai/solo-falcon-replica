@@ -37,6 +37,21 @@
  * the landlord owes no Declarația Unică for the income tax (art. 122 alin. (6) lit. a)) while still owing
  * one for the contributions. Persona 5 is the art. 84 half of the same pair.
  *
+ * ## Why this persona holds no carried-in loss (brief 77)
+ *
+ * Brief 77 suggested persona 6 for `profile.priorYearFiscalLosses`. Measured, it cannot carry one: with a
+ * 30.000-lei loss declared here — `activitate_independenta` **or** `drepturi_proprietate_intelectuala`, year
+ * 2022 — the estimate returns **no art. 118 row at all** and the 9.720,00 RON figure does not move. The
+ * composition that applies art. 118 alin. (2) lit. a) sits on the sistem-real path, and this register never
+ * reaches it: its only register income is art. 84¹ rent under a flat ratio, and its DPI net arrives on the
+ * art. 170 alin. (4) ladder. A loss declared here would be a fact the app is told about and then says
+ * nothing about — the exact shape brief 77 refuses. The fact lives on persona 8 instead, whose cash-basis
+ * mechanism is what produces a fiscal loss in the first place.
+ *
+ * **The silence is itself worth recording**: a declared loss on a flat-ratio register is neither applied nor
+ * refused. Nothing on screen says "this loss could not be used, and here is why". That is a finding for a
+ * later brief, not something a persona may paper over.
+ *
  * ## B-122 stays visible
  *
  * arendă and asocieri are withholding sources under art. 174¹ alin. (3) and the engine does not model them.
