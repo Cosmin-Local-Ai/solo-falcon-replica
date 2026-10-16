@@ -391,6 +391,17 @@ This **changes a default this project has followed.** Until now the rule has bee
 
 **Prerequisite built 2026-10-15 (brief 72 — B-147, B-148, B-150).** The condition the decision was conditioned on — *„but only once a gross → quota → net path actually computes”* — now holds. A recorded art. 70 document reaches `calcDpiFlatQuota`, produces a net, and that net moves a contribution figure: the ANAF CAS 24.300 lei fixture is reproduced **from a gross** instead of by typing a net. The art. 72 alin. (3) exception landed in the same commit, because wiring the quota without it would have deducted 40 % from receipts the law withholds it from. **Nothing was retired here, and that was the brief's boundary, not an oversight:** `CassLadderYear.proprietateIntelectuala` still exists, no precedence was built, and where both producers exist for one year the engine posts **neither**. **What brief 72 also found, and the retirement brief now has to settle before the typed net can go:** the computed path feeds the CAS cumul (art. 148 alin. (3)) and the art. 151 alin. (6) withholding source, but **not** the art. 170 alin. (4) CASS ladder — that calculator refuses a partial six-category answer set, and one computed DPI amount cannot answer the other five. Retiring the typed net without an answer for the ladder would strand exactly the taxpayers the brief warned about. The consolidated chain brief (v21 → v22, carrying B-145, B-108 and B-140) is where that call gets made.
 
+### D-DEPR-1 — Depreciation stops **in the month the asset leaves the register**
+**User decision, 2026-10-16, after `research/55` §4 established there is no stop rule in the law.**
+
+**The choice:** for an asset disposed of on 20 Octombrie 2026, the linear schedule charges **through Octombrie** and stops. Noiembrie and Decembrie are not charged.
+
+**Why this reading, and how far it goes.** It is anchored in the only month-counting rule the norms actually contain — Titlul II norm pct. 27 counts *„numărul de luni rămase de amortizat"* **at the moment of *scădere din gestiune***, i.e. remaining months measured from the exit date, not to 31 Decembrie — and in two provisions that key the disposal figures off depreciation actually taken while the asset was held: **art. 28 alin. (17)** (*valoarea fiscală … diminuată cu amortizarea fiscală*) and **Titlul IV norm pct. 7 lit. o)** (*„amortizarea inclusă pe costuri în cursul exploatării"*).
+
+**It is still a reading.** The rejected alternative — stopping the month *after* disposal — argues from symmetry with the explicit start rule at art. 28 alin. (12) lit. a) (*„începând cu luna următoare celei în care … se pune în funcțiune"*). **That is an argument, not a text, and the register must say so.** No norm states any stop rule: art. 28 alin. (12) lit. a)–n) never address *vânzare* or *scoatere din evidență*; Titlul II norms pct. 25–31 contain none; OMFP 170/2015 contains none.
+
+**The part that is not a choice, and is the actual defect:** pct. 7 lit. o) makes the disposal residual a function of the depreciation actually charged, so **the schedule and the disposal calculation must use one month count.** Two counts on the same asset is indefensible under any reading — including the one we did not pick.
+
 ### D-DPI-2 — The CASS ladder: **only ask when it matters**
 **User decision, 2026-10-16.** B-152 blocked D-DPI-1: the computed DPI path feeds the CAS cumul and the art. 151 alin. (6) withholding source but **not** the art. 170 alin. (4) CASS ladder, because `calcCassLadder` refuses a partial six-category answer set.
 
