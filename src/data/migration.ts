@@ -502,8 +502,32 @@ export const DATA_VERSION_DISPOSAL_PROCEEDS = 24;
  * precision the source form does not have.
  */
 export const DATA_VERSION_PRIOR_YEAR_LOSSES = 25;
+/**
+ * D-DPI-2 (B-152, unblocking B-116) — a ladder category may now record that the person was **asked** and
+ * answered **nu am avut**, as a stored fact distinct from nobody having asked.
+ *
+ * **Why this owes a rung at all.** The art. 170 alin. (4) ladder sums across all six litera of art. 155 alin.
+ * (1) lit. c)-h), so it has always refused a partial answer set: one category without an answer makes the sum
+ * unknown, not smaller. That refusal was the only thing standing between a silent profile and an undercharged
+ * health contribution, and D-DPI-2 keeps it — it narrows the trigger from „not all six are numbers” to „not
+ * all six are answered”. Narrowing a refusal that guards money is a change to what the persisted data has to
+ * be able to say, so it is a chain step, not a form change.
+ *
+ * **What this step opens.** `profile.cassLadderYears[].ladderAnswers`: per category, `amount`, `none` or
+ * `unknown`. `cassLadderCategoryFacts` in `domain/models.ts` is the single resolver of the three states, and
+ * it has no path that turns an absent fact into `none`.
+ *
+ * **What this step refuses to fill in, and this is the whole content of the step.** It writes the version and
+ * nothing else. **Every payload in the world has never seen these six questions**, so every payload must land
+ * in `unknown`. A step that backfilled `none` — the obvious-looking default, „they had the section for ten
+ * versions and left it empty, so they must have no such income” — would take a person who has never opened
+ * the screen and assert on the record that they have no other income, and would then compute a CASS base out
+ * of that assertion. That is the single most dangerous line available in this area, and it is why the body of
+ * this step is empty. Absence is not evidence of absence; it is the record of a question never asked.
+ */
+export const DATA_VERSION_LADDER_ANSWERS = 26;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_PRIOR_YEAR_LOSSES;
+export const CURRENT_DATA_VERSION = DATA_VERSION_LADDER_ANSWERS;
 
 export interface MigrationStep {
   readonly from: number;
@@ -1299,6 +1323,21 @@ export function migratePriorYearLossesV25(data: PersistedAppData): PersistedAppD
   return { ...data, version: DATA_VERSION_PRIOR_YEAR_LOSSES };
 }
 
+/**
+ * v25 → v26 (`cass-ladder-answers`). Opens `profile.cassLadderYears[].ladderAnswers` by writing nothing. See
+ * `DATA_VERSION_LADDER_ANSWERS` for the refusal this narrows, for why the step backfills nothing, and for the
+ * default it deliberately does not make.
+ *
+ * The body is deliberately the version stamp and nothing else. There is no stored fact from which a declared
+ * „nu am avut” could be derived: an empty amount box records that nothing was written, which is not a
+ * statement that nothing was earned, and reading it as one would undercharge CASS for every taxpayer who has
+ * not yet been asked. A payload that already carries `ladderAnswers` keeps it untouched, which is what makes
+ * re-running the step a no-op rather than a wipe.
+ */
+export function migrateCassLadderAnswersV26(data: PersistedAppData): PersistedAppData {
+  return { ...data, version: DATA_VERSION_LADDER_ANSWERS };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -1511,6 +1550,25 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
       + 'completat în acest pas: o pierdere reportată este o faptă despre o declarație deja depusă, iar '
       + 'inventată dintr-un rezultat negativ din acest registru ar fabrica o pierdere care nu a fost declarată.',
     apply: migratePriorYearLossesV25,
+  },
+  {
+    from: DATA_VERSION_PRIOR_YEAR_LOSSES,
+    to: DATA_VERSION_LADDER_ANSWERS,
+    name: 'cass-ladder-answers',
+    summary:
+      'O categorie din scara de la art. 170 alin. (4) poate înregistra acum că persoana a fost ÎNTREBATĂ și a '
+      + 'răspuns „nu am avut”, ca faptă deosebită de faptul că nimeni nu a întrebat-o. Scara a refuzat până '
+      + 'acum orice set parțial, pentru că art. 170 alin. (4) cumulează „veniturile prevăzute la art. 155 alin. '
+      + '(1) lit. c)-h)” — peste TOATE șase — și o categorie fără răspuns face suma necunoscută, nu mai mică. '
+      + 'Refuzul rămâne; ceea ce s-a îngustat este declanșatorul lui: de la „nu toate șase sunt numere” la „nu '
+      + 'toate șase au un răspuns”. Nimic nu a fost completat în acest pas, și acesta este tocmai conținutul '
+      + 'lui: fiecare registru existent este într-o stare în care cele șase întrebări nu au fost puse niciodată, '
+      + 'deci toate trebuie să rămână pe „nu se știe”. Un pas care ar fi completat „nu am avut” ar fi luat o '
+      + 'persoană care nu a văzut niciodată ecranul și ar fi afirmat în registru că nu are alte venituri, iar '
+      + 'apoi ar fi calculat baza CASS pe afirmația aceea — subevaluând contribuția la sănătate a cuiva care nu '
+      + 'a fost întrebat. O căsuță goală înregistrează că nu s-a scris nimic, nu că nu s-a câștigat nimic. Un '
+      + 'payload care are deja cheia `ladderAnswers` o păstrează neschimbată.',
+    apply: migrateCassLadderAnswersV26,
   },
 ];
 

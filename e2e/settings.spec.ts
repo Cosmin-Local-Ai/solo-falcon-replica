@@ -526,7 +526,18 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // value in a payload that never named one — v22 deletes a retired preference, v23 and v24 open optional
     // fields and fill in nothing, v25 opens an optional profile list — so every absence asserted below is
     // still asserted on bytes that carry no such fact.
-    expect(saved.version).toBe(25);
+    // Re-pinned 2026-10-16 (brief 78): 25 → 26, because `cass-ladder-answers` (25→26) follows it — the same
+    // discipline a sixteenth time, and the same kind of step as v12-v25: it stamps a version and touches no
+    // value. It is also the step with the most to lose from touching one: backfilling `none` into a payload
+    // that never saw the six ladder questions would assert in the taxpayer's name that they have no other
+    // income, and the CASS base would then be computed out of that assertion. What this test exists for is
+    // untouched: the notice is still one long, `original` is still the verbatim 674.504 and `converted` is
+    // still 67450 bani.
+    expect(saved.version).toBe(26);
+    // The v26 step's own half, on the same bytes: this profile never answered a single ladder category, so
+    // the step opened no answer for it. `ladderAnswers` here would have been the collapse in miniature — a
+    // `none` written by a migration, for a person who was never asked.
+    expect('ladderAnswers' in (saved.profile.cassLadderYears?.[0] ?? {})).toBe(false);
     // The v20 step's own half, on the same bytes: no tenant nature, no owner-cost uplift, no alin. (8)
     // trigger and no contract date was invented for a payload that never named a lease. Each of those facts
     // decides a legal outcome on its own — which of art. 84 and art. 84^1 measures the income, what the 20 %

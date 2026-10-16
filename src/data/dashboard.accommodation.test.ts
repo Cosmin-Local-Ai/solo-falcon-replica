@@ -161,7 +161,9 @@ describe('the room count decides which refusal a cazare register gets, from stor
     if (estimate.status !== 'review_required') throw new Error('expected the ladder to refuse');
     // It names the litera that are missing rather than defaulting them — the B-41 rule, now reached through
     // a figure the app computed rather than through a declared amount.
-    expect(estimate.reason).toContain('lipsesc 5');
+    // RE-PIN (brief 78 / D-DPI-2): the refusal counts categories with no ANSWER, not categories with no
+    // number. The refusal itself is exactly where it was.
+    expect(estimate.reason).toContain('5 nu au niciun răspuns');
     expect(estimate.reason).toContain('art. 170 alin. (4)');
   });
 

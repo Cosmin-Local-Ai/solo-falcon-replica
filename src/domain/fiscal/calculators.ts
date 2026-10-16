@@ -1,7 +1,7 @@
 import type { FiscalRule, FiscalParameter } from './rules';
 import { depreciationSchedule, type FixedAssetFacts } from './depreciation';
 import type { CassLadderCategory, FactState, PfaYesNo } from '../models';
-import { CASS_LADDER_CATEGORIES, CASS_LADDER_CATEGORY_NAMES } from '../models';
+import { CASS_LADDER_CATEGORIES, CASS_LADDER_CATEGORY_NAMES, cassLadderCategoryFacts, type CassLadderAnswer, type CassLadderCategoryFact } from '../models';
 import { applyRateDecimal, lei, leiText, roundArt66, subBani, sumBani, type Bani } from '../money';
 
 export type ReviewRequired = { reviewRequired: true; reason: string };
@@ -233,12 +233,23 @@ export type CalculatorInput = {
  * venit, după caz”, which survives only there. The caller assembles them from the declared per-year facts;
  * this calculator does not know what a profile is.
  *
- * **A missing key is not a zero.** art. 170 alin. (4) sums across **all** of lit. c)-h), so one missing
- * category makes the sum unknown and the ladder must refuse. A declared `lei(0)` is a different input and
- * is added as zero.
+ * **A missing key is not a zero.** art. 170 alin. (4) sums across **all** of lit. c)-h), so one category
+ * nobody answered makes the sum unknown and the ladder must refuse. A declared `lei(0)` is a different input
+ * and is added as zero.
+ *
+ * **D-DPI-2 narrowed what "missing" means.** `answers` carries the per-category declaration, so a category
+ * can now be answered without a figure: `none` is „nu am avut”, stated by the person, and it unblocks the
+ * ladder. `unknown` — nobody asked, or they declined — still blocks it. The refusal is not gone; its trigger
+ * went from „not all six are numbers” to „not all six are answered”. `cassLadderCategoryFacts` in
+ * `domain/models.ts` is the single resolver of the two halves, and this calculator does not re-decide them.
  */
 export type CassLadderInput = {
   amounts?: Partial<Record<CassLadderCategory, Bani>>;
+  /**
+   * D-DPI-2 — the declared state per category: `amount`, `none` (the person said **nu am avut**), or
+   * `unknown` (asked, and they would not say). Absent means the same as `unknown`, never `none`.
+   */
+  answers?: Partial<Record<CassLadderCategory, CassLadderAnswer>>;
   /** CF art. 170 alin. (5): art. 93 / art. 105 neimpozabile income — recorded, never cumulated. */
   neimpozabil?: Bani;
   /** CF art. 174¹ alin. (3)-(6): CASS already reținută la sursă — a credit, not a second charge. */
@@ -1057,23 +1068,56 @@ function calcCassLadder(rule: FiscalRule, input?: CalculatorInput): CalculatorRe
   const tier2 = paramBani(rule, 'ladder_tier2_base'); // 12 SM
   const tier3 = paramBani(rule, 'ladder_tier3_base'); // 24 SM
   const conditionPrecedent = paramValue(rule, 'ladder_condition_precedent');
-  const amounts = ladder?.amounts ?? {};
 
-  // ── The refusal that is the whole point of the phase: a partial answer set is an unknown sum ──
-  const missing = CASS_LADDER_CATEGORIES.filter((c) => amounts[c] === undefined);
-  if (missing.length > 0 && missing.length < CASS_LADDER_CATEGORIES.length) {
+  // ── D-DPI-2 — the six categories are read as ANSWERS, not as numbers ────────────────────────────
+  // This is the refusal that is the whole point of the phase, and it is NARROWED, not removed. It used to
+  // fire on „not all six are numbers”; it now fires on „not all six are answered”. A category the person
+  // answered with „nu am avut” answers the question art. 170 alin. (4) asks, so it no longer blocks the sum.
+  // A category nobody answered still blocks it, because the sum across all six litera is then unknown —
+  // not smaller. `cassLadderCategoryFacts` is the only place that decides which state a category is in, and
+  // it has no path that turns an absent fact into `none`: that collapse would read silence as „no other
+  // income” and undercharge CASS, which is the exact harm this refusal exists to prevent.
+  const facts = cassLadderCategoryFacts(ladder?.amounts, ladder?.answers);
+  const declaredNone = facts.filter((f) => f.state === 'none');
+  const unanswered = facts.filter((f) => f.state === 'unknown');
+  const conflicting = facts.filter((f) => f.state === 'conflict');
+
+  // The amounts the arithmetic runs on. A declared `nu am avut` becomes a measured zero — a fact the person
+  // asserted — while an unanswered category stays absent and can never reach this map, because the refusals
+  // below stop the calculation first.
+  const amounts: Partial<Record<CassLadderCategory, Bani>> = {};
+  for (const fact of facts) {
+    if (fact.state === 'amount') amounts[fact.category] = fact.amount as Bani;
+    else if (fact.state === 'none') amounts[fact.category] = lei(0);
+  }
+
+  if (conflicting.length > 0) {
+    return {
+      reviewRequired: true,
+      reason:
+        `Categorii din art. 155 alin. (1) lit. c)-h) au două răspunsuri care se contrazic: ` +
+        `${conflicting.map((f) => CASS_LADDER_CATEGORY_NAMES[f.category]).join(', ')}. ` +
+        'Inregistrarea declară o stare („nu am avut” sau „am sumă”) și în același timp ține sau nu ține o ' +
+        'sumă pentru aceeași categorie. Aplicația nu alege între ele: alegea înseamnă să decidă în locul ' +
+        'persoanei dacă a avut sau nu un venit, iar suma de la art. 170 alin. (4) se face peste veniturile ' +
+        'pe care persoana le-a declarat.',
+    };
+  }
+  if (unanswered.length > 0 && unanswered.length < CASS_LADDER_CATEGORIES.length) {
     return {
       reviewRequired: true,
       reason:
         `Baza de calcul CASS pentru veniturile din art. 155 alin. (1) lit. c)-h) nu poate fi stabilită: ` +
-        `din cele șase categorii prevăzute de art. 170 alin. (4) lipsesc ${missing.length} ` +
-        `(${missing.map((c) => CASS_LADDER_CATEGORY_NAMES[c]).join(', ')}). Cumularea se face peste TOATE șase, deci o categorie fără răspuns ` +
-        'face suma necunoscută — nu o sumă mai mică. Aplicația nu completează zero: un zero declarat este ' +
-        'o faptă înregistrată de persoana fizică, un zero inventat este o datorie sau o scutire care nu ' +
-        'există (art. 170 alin. (2)-(4) din Codul fiscal).',
+        `din cele șase categorii prevăzute de art. 170 alin. (4), ${unanswered.length} ` +
+        `nu au niciun răspuns (${unanswered.map((f) => CASS_LADDER_CATEGORY_NAMES[f.category]).join(', ')}). ` +
+        'Cumularea se face peste TOATE șase, deci o categorie fără răspuns face suma necunoscută — nu o ' +
+        'sumă mai mică. Aplicația nu completează zero: un zero declarat este o faptă înregistrată de ' +
+        'persoana fizică, un zero inventat este o datorie sau o scutire care nu există (art. 170 alin. ' +
+        '(2)-(4) din Codul fiscal). Dacă nu ai avut astfel de venituri, bifează „nu am avut” pe fiecare ' +
+        'categorie — aceea este o faptă a ta, nu a aplicației.',
     };
   }
-  if (missing.length === CASS_LADDER_CATEGORIES.length) {
+  if (unanswered.length === CASS_LADDER_CATEGORIES.length) {
     return {
       reviewRequired: true,
       reason:
@@ -1200,7 +1244,12 @@ function calcCassLadder(rule: FiscalRule, input?: CalculatorInput): CalculatorRe
 
   const breakdown = [
     `venit cumulat din art. 155 alin. (1) lit. c)-h), măsurat potrivit art. 170 alin. (4) — „Încadrarea în plafonul anual de cel puțin 6, 12 sau 24 de salarii minime brute pe țară, după caz, se efectuează prin cumularea veniturilor prevăzute la art. 155 alin. (1) lit. c)-h)”: ${leiText(cumulated)} lei`,
-    ...CASS_LADDER_CATEGORIES.map((c) => `${CASS_LADDER_CATEGORY_NAMES[c]}: ${leiText(amounts[c] as Bani)} lei`),
+    ...facts.map((f) =>
+      f.state === 'none'
+        ? `${CASS_LADDER_CATEGORY_NAMES[f.category]}: „nu am avut” — categorie declarată fără venit, ` +
+          'faptă consemnată de persoana fizică, nu o sumă inventată de aplicație'
+        : `${CASS_LADDER_CATEGORY_NAMES[f.category]}: ${leiText(f.amount as Bani)} lei`,
+    ),
     `treapta aleasă: ${rung} — art. 170 alin. (2)-(4); intervalele sunt inclusive la limita de jos`,
     base === lei(0)
       ? typeof conditionPrecedent === 'string'
@@ -1211,6 +1260,17 @@ function calcCassLadder(rule: FiscalRule, input?: CalculatorInput): CalculatorRe
     'plafonul de 72 SM din art. 170 alin. (1) NU se aplică acestui bazin: el mărginește venitul din art. 155 alin. (1) lit. b), nu cumularea de la lit. c)-h)',
     'venitul net al PFA nu intră în acest cumul, iar acest cumul nu intră în plafonul de 72 SM — cele două căi nu se întâlnesc nicăieri',
   ];
+  if (declaredNone.length > 0) {
+    breakdown.push(
+      `scara a fost calculată pentru că toate cele șase categorii au un RĂSPUNS, nu pentru că toate au o ` +
+        `sumă: ${declaredNone.length} ${declaredNone.length === 1 ? 'categorie este' : 'categorii sunt'} ` +
+        `declarate fără venit — ` +
+        `${declaredNone.map((f) => CASS_LADDER_CATEGORY_NAMES[f.category]).join(', ')}. ` +
+        'art. 170 alin. (4) cumulează „veniturile prevăzute la art. 155 alin. (1) lit. c)-h)”; o categorie ' +
+        'pentru care persoana a declarat „nu am avut” contribuie cu zero pentru că persoana a spus-o, nu ' +
+        'pentru că aplicația a tăcut în locul ei (research/41 §2).',
+    );
+  }
   if (dpiExcluded) {
     breakdown.push(
       `venitul din drepturi de proprietate intelectuală de ${leiText(dpiAmount as Bani)} lei este CONSEMNET, dar NU intră în cumularea de la art. 170 alin. (4): persoana realizează venituri din salarii și asimilate salariilor și/sau din pensii, iar art. 154 alin. (1) lit. h¹) — „persoanele fizice care realizează venituri din salarii și asimilate salariilor și/sau venituri din pensii, pentru veniturile din drepturi de proprietate intelectuală” — o exceptează de la CASS pentru veniturile din drepturi de proprietate intelectuală (textul citat: research/48 §5 și research/25; litera rămâne neverificată — research/48 §11.3; excepția a fost extinsă la pensionari prin Legea 141/2025 art. II pct. 17, în vigoare de la 1 aug 2025).`,

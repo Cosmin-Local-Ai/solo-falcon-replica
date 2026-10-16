@@ -186,7 +186,11 @@ describe('an unanswered category is not zero (B-41)', () => {
   });
 
   it('the refusal is the same whether the gap is one category or five', () => {
-    expect(refusal(run({ amounts: { investitii: lei(120_000) } }))).toMatch(/lipsesc 5/);
+    // RE-PIN (brief 78 / D-DPI-2). This used to read `/lipsesc 5/`, counting categories that held no
+    // NUMBER. Under D-DPI-2 the ladder no longer asks for numbers, it asks for answers, so the sentence
+    // counts categories with no answer at all — the narrowed trigger, in the refusal's own words. The
+    // count and the refusal are unchanged; what changed is what is being counted.
+    expect(refusal(run({ amounts: { investitii: lei(120_000) } }))).toMatch(/5 nu au niciun răspuns/);
   });
 
   it('six categories answered with declared zeros computes, and computes to no CASS', () => {

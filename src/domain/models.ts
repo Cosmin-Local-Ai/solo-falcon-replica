@@ -520,6 +520,30 @@ export type CassInvestBaza = (typeof CASS_INVEST_BAZA_VALUES)[number];
 export const CASS_CEDARE_SURSA_VALUES = ['activitate_proprie_a_pfa', 'patrimoniu_personal'] as const;
 export type CassCedareSursa = (typeof CASS_CEDARE_SURSA_VALUES)[number];
 
+/**
+ * D-DPI-2 (B-152, closing the blocker on B-116) — the three states ONE ladder category can be in.
+ *
+ * **This is the whole content of the decision, and the whole risk of it.** The art. 170 alin. (4) ladder
+ * used to refuse unless all six categories held a number, so the only way to unblock it was to make every
+ * category say something. D-DPI-2 chose to let it proceed on a partial set **only when every category the
+ * app has not computed has been explicitly declared absent**, and to keep refusing when a category is
+ * simply unknown. That is only safe while `declared none` and `not asked yet` stay different stored facts.
+ * If they ever collapse — through a default, an optional field, a `?? 0`, or a form that submits an
+ * untouched control as „nu am avut” — the app reads silence as „no other income” and **undercharges health
+ * contribution**, which is exactly the failure `calcCassLadder`'s refusal was built to prevent.
+ *
+ * - `amount` — the person stated a figure. The figure itself lives in the per-category amount field; this
+ *   token records that the category was answered with a number.
+ * - `none` — the person was asked and answered **nu am avut**. A fact they asserted, never a fallback.
+ * - `unknown` — nobody has asked, or they declined to say. **The only state that blocks the ladder**, and
+ *   the state every payload written before this step is in, because none of them has ever seen the question.
+ *
+ * Deliberately NOT `FactState` (`da`/`nu`/`unknown`): `nu` there means "checked negative", which for a
+ * category is ambiguous between "no income" and "no answer". The words here are the words the person hears.
+ */
+export const CASS_LADDER_ANSWER_VALUES = ['amount', 'none', 'unknown'] as const;
+export type CassLadderAnswer = (typeof CASS_LADDER_ANSWER_VALUES)[number];
+
 export interface CassLadderYear {
   /** The fiscal year these amounts were realised in — art. 170 alin. (2) speaks of „anul fiscal”. */
   fiscalYear: number;
@@ -575,6 +599,25 @@ export interface CassLadderYear {
    */
   neimpozabil?: Bani;
   /**
+   * D-DPI-2 — per category, the ANSWER this year holds: a stated amount, an explicit „nu am avut”, or an
+   * explicit refusal to say.
+   *
+   * This field exists so that "the person was asked and has no such income" is a stored fact rather than an
+   * empty box. Before it, absence carried both meanings and the ladder had no way to tell them apart, so it
+   * refused on all absence. Now it refuses only on `unknown`.
+   *
+   * **Optional, and it must stay optional — with no `.default()` and no backfill anywhere.** A payload
+   * written before chain step v26 has never seen these six questions, so its honest state is `unknown` for
+   * all six. Defaulting it to `none` would take a person who has never opened the screen and assert on the
+   * record that they have no other income, which undercharges CASS. The load gate declares the field so it
+   * survives a save-and-load (zod strips undeclared keys); the v26 step writes the version and nothing else.
+   *
+   * A category may also be answered by the amount field alone, with no entry here — that is how every
+   * payload since v16 stores `amount`, and it keeps working. `cassLadderCategoryFacts` is the single place
+   * the two halves are read together; nothing else may decide what a category means.
+   */
+  ladderAnswers?: Partial<Record<CassLadderCategory, CassLadderAnswer>>;
+  /**
    * CF art. 174¹ alin. (3)-(7): CASS already reținută la sursă on these same incomes. It is a **credit**
    * against the contribution due (DU 212 subsecțiunea 2.2 rd. 6), not a second charge.
    *
@@ -596,21 +639,85 @@ export function cassLadderForYear(
 }
 
 /**
- * Which of the six ladder categories this year has NOT answered.
+ * What one ladder category actually says, once the amount field and the declared answer are read together.
  *
- * The ladder sums across all six (art. 170 alin. (4)), so a partial answer set is not a smaller sum — it
- * is an unknown sum. This function is what lets the refusal name the missing litera instead of defaulting
- * them, and it is deliberately a list rather than a boolean: „three of six missing” and „one of six
- * missing” need different fixes.
+ * `state` is one of four values, and the fourth is not a fifth answer the person could give — it is the
+ * app noticing that its own two stored facts contradict each other:
  *
- * A category counts as answered only when an amount is stored. `lei(0)` answers it — a declared zero is a
- * fact; absence is not.
+ * - `amount` — a figure is stored (and, if the person also ticked a state, they said `amount`).
+ * - `none` — the person declared „nu am avut”, and no figure is stored.
+ * - `unknown` — nothing was answered: no figure, no declaration. Also the explicit `unknown` declaration,
+ *   i.e. the person was asked and declined to say. **This is the state that blocks the ladder.**
+ * - `conflict` — the stored answer and the stored figure disagree: `none` beside a number, or `amount`
+ *   beside no number. Two producers for one category, which this codebase refuses rather than resolves
+ *   (the same shape as `dpiDoubleRepresentation` and the cedarea double-producer refusal).
+ *
+ * **There is no path through this function that turns an absent fact into `none` or into `lei(0)`.** That
+ * is the collapse D-DPI-2 forbids, and it is why the resolver is one function rather than a rule each
+ * caller applies by hand.
+ */
+export interface CassLadderCategoryFact {
+  category: CassLadderCategory;
+  state: 'amount' | 'none' | 'unknown' | 'conflict';
+  /** The stated figure — present exactly when `state === 'amount'`. */
+  amount?: Bani;
+  /** The declared answer token, when one was stored. */
+  answer?: CassLadderAnswer;
+}
+
+/**
+ * Resolve the six categories from the two halves of the record: the amount fields and `ladderAnswers`.
+ *
+ * Exported so the engine, the form and the coverage surface all read the SAME three states. A second
+ * place that decided what an empty category means is how the app acquires its contradictions — the B-70
+ * defect class, and the exact way `declared none` would creep back into being `not asked yet`.
+ */
+export function cassLadderCategoryFacts(
+  amounts: Partial<Record<CassLadderCategory, Bani>> | undefined,
+  answers: Partial<Record<CassLadderCategory, CassLadderAnswer>> | undefined,
+): CassLadderCategoryFact[] {
+  return CASS_LADDER_CATEGORIES.map((category) => {
+    const amount = amounts?.[category];
+    const answer = answers?.[category];
+    if (answer === 'none' && amount !== undefined) {
+      return { category, state: 'conflict', amount, answer };
+    }
+    if (answer === 'amount' && amount === undefined) {
+      return { category, state: 'conflict', answer };
+    }
+    if (amount !== undefined) return { category, state: 'amount', amount, answer };
+    if (answer === 'none') return { category, state: 'none', answer };
+    // `answer === 'unknown'` and "no answer at all" are the same state, and neither is `none`.
+    return { category, state: 'unknown', answer };
+  });
+}
+
+/** The same six facts, read from one declared ladder year. An absent year has never been asked. */
+export function cassLadderFactsForYear(year: CassLadderYear | undefined): CassLadderCategoryFact[] {
+  if (!year) return cassLadderCategoryFacts(undefined, undefined);
+  const amounts: Partial<Record<CassLadderCategory, Bani>> = {};
+  for (const category of CASS_LADDER_CATEGORIES) {
+    const amount = ladderAmountFor(year, category);
+    if (amount !== undefined) amounts[category] = amount;
+  }
+  return cassLadderCategoryFacts(amounts, year.ladderAnswers);
+}
+
+/**
+ * Which of the six ladder categories this year has NOT answered — `unknown`, under D-DPI-2.
+ *
+ * The ladder sums across all six (art. 170 alin. (4)), so a category nobody answered is not a smaller sum
+ * — it is an unknown sum. This function is what lets the refusal name the missing litera instead of
+ * defaulting them, and it is deliberately a list rather than a boolean: „three of six missing” and „one of
+ * six missing” need different fixes.
+ *
+ * **A declared `nu am avut` is NOT missing** — that is the narrowing D-DPI-2 asked for. A declared zero is
+ * not missing either. Only silence is.
  */
 export function cassLadderMissingCategories(
   year: CassLadderYear | undefined,
 ): CassLadderCategory[] {
-  if (!year) return [...CASS_LADDER_CATEGORIES];
-  return CASS_LADDER_CATEGORIES.filter((c) => ladderAmountFor(year, c) === undefined);
+  return cassLadderFactsForYear(year).flatMap((f) => (f.state === 'unknown' ? [f.category] : []));
 }
 
 /** The declared amount for one ladder category, or `undefined` when that category was never answered. */

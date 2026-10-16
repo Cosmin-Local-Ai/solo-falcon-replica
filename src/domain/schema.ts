@@ -27,6 +27,10 @@ import {
   VAT_YES_NO_UNDECLARED_VALUES,
 } from './fiscal/vatPeriodicity';
 import { ISO_CALENDAR_DATE } from './date';
+// D-DPI-2 (B-152) — the persisted token space for the ladder's three answers and the domain vocabulary are
+// ONE spelling, the same rule the three imports above follow. Nothing here restates `amount`/`none`/
+// `unknown`, so a state the resolver cannot read can never reach storage.
+import { CASS_LADDER_ANSWER_VALUES } from './models';
 
 /**
  * One CAEN code + description. `cod` is required non-empty because an entry
@@ -154,6 +158,28 @@ export const pfaProfileSchema: z.ZodType<PfaProfile> = z.object({
           .optional(),
         alteSurse: z.number().min(0).finite().transform((n) => n as Bani).optional(),
         alteSurseArt114: z.enum(['da', 'nu']).optional(),
+        // D-DPI-2 (B-152) — the three answers per ladder category, declared HERE, in the load gate, before
+        // chain step v26 is the thing that reads them. **zod strips undeclared keys**, so an undeclared
+        // `ladderAnswers` would be erased by the next save-and-load and a person's „nu am avut” would
+        // silently become „nimeni nu a întrebat” — the collapse this field exists to prevent, arriving as a
+        // passing test rather than as a bug. The six keys are written out rather than generated, and
+        // `src/domain/ladderAnswers.test.ts` pins that this list equals `CASS_LADDER_CATEGORIES`, so the two
+        // cannot drift into the two vocabularies B-122 warned about.
+        //
+        // **Optional, and no `.default()` — on pain of the worst line this brief could write.** A payload
+        // from before v26 has never seen these questions; defaulting it to `none` would assert, on the
+        // record and in the person's name, that they have no other income, and would undercharge CASS.
+        // Absence stays absence, and absence resolves to `unknown`.
+        ladderAnswers: z
+          .object({
+            proprietate_intelectuala: z.enum(CASS_LADDER_ANSWER_VALUES).optional(),
+            asociere_persoana_juridica: z.enum(CASS_LADDER_ANSWER_VALUES).optional(),
+            cedarea_folosintei_bunurilor: z.enum(CASS_LADDER_ANSWER_VALUES).optional(),
+            activitati_agricole: z.enum(CASS_LADDER_ANSWER_VALUES).optional(),
+            investitii: z.enum(CASS_LADDER_ANSWER_VALUES).optional(),
+            alte_surse: z.enum(CASS_LADDER_ANSWER_VALUES).optional(),
+          })
+          .optional(),
         neimpozabil: z.number().min(0).finite().transform((n) => n as Bani).optional(),
         cassRetinutLaSursa: z.number().min(0).finite().transform((n) => n as Bani).optional(),
       }),

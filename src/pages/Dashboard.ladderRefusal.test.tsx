@@ -113,7 +113,10 @@ describe('a CASS ladder refusal on the hero', () => {
     // Verbatim from `calcCassLadder` — the app did not paraphrase the law, and it did not invent a reason.
     expect(reason).toContain('Baza de calcul CASS pentru veniturile din art. 155 alin. (1) lit. c)-h)');
     expect(reason).toContain('art. 170 alin. (4)');
-    expect(reason).toContain('lipsesc 5');
+    // RE-PIN (brief 78 / D-DPI-2): the sentence used to count categories without a NUMBER; it now counts
+    // categories without an ANSWER. Same refusal, same five categories named, narrowed trigger — which is
+    // exactly what D-DPI-2 asked for and what this hero test exists to keep visible on screen.
+    expect(reason).toContain('5 nu au niciun răspuns');
     // The hero no longer sends the reader somewhere else for the cause.
     expect(document.querySelector('p.estimate-state-note')?.textContent).not.toContain('graficul financiar');
 

@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   CURRENT_DATA_VERSION,
   DATA_VERSION_RECORD_CURRENCY,
-  // Brief 76 — the two edges this file pins: the second-to-last rung and the head this build writes.
-  DATA_VERSION_DISPOSAL_PROCEEDS,
+  // Brief 76 pinned the head at v25; brief 78 appended v26 on top of it. The two edges this file pins
+  // are still the last rung and the version this build writes.
   DATA_VERSION_PRIOR_YEAR_LOSSES,
+  DATA_VERSION_LADDER_ANSWERS,
   DATA_VERSION_RULE_SET_DIGEST,
   MIGRATION_CHAIN,
   migratePersistedData,
@@ -127,8 +128,8 @@ describe('record-currency is a no-op in value', () => {
     // v20, v21, v22 and now v23 follow it. Unchanged is that the step itself stamps exactly 10 and nothing
     // else. Brief 76 states both edges again, because "the head moved by exactly one" is a property worth a
     // test: v22 is now the second-to-last rung and v23 is what this build writes.
-    expect(MIGRATION_CHAIN[MIGRATION_CHAIN.length - 1]!.from).toBe(DATA_VERSION_DISPOSAL_PROCEEDS);
-    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_PRIOR_YEAR_LOSSES);
+    expect(MIGRATION_CHAIN[MIGRATION_CHAIN.length - 1]!.from).toBe(DATA_VERSION_PRIOR_YEAR_LOSSES);
+    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_LADDER_ANSWERS);
   });
 
   it('is idempotent: running it again on a v10 payload changes nothing', () => {
@@ -235,7 +236,7 @@ describe('the chain', () => {
     // Brief 76 re-pin (replaced, not deleted): the chain grew by one step again, so the offset from the end
     // moves by one. The property is unchanged — record-currency still sits at exactly this edge, and the
     // offset is written from the END on purpose so a later phase only has to move this one number.
-    expect(MIGRATION_CHAIN.indexOf(step)).toBe(MIGRATION_CHAIN.length - 16);
+    expect(MIGRATION_CHAIN.indexOf(step)).toBe(MIGRATION_CHAIN.length - 17);
   });
 
   it('a v9 payload needs one step per version above it', () => {
@@ -266,6 +267,9 @@ describe('the chain', () => {
     'fixed-asset-disposal-proceeds',
     // B-145 — and for `prior-year-fiscal-losses`: it opens a profile field by writing nothing.
     'prior-year-fiscal-losses',
+    // D-DPI-2 — and for `cass-ladder-answers`: same property again, and the same kind of step. It opens
+    // a profile field by writing nothing, which is the whole reason no money figure in this file moves.
+    'cass-ladder-answers',
     ]);
   });
 
@@ -286,7 +290,8 @@ describe('the chain', () => {
     expect(outcome.migrated).toBe(true);
     expect(outcome.stepsApplied).toEqual(['annual-filing', 'activity-family', 'accommodation-facts', 'occupancy-sheet', 'vehicle-facts', 'other-income-ladder', 'fixed-assets', 'input-vat-registration', 'vat-returns', 'lease-facts', // PG-11 — appended after v20; it fills nothing in.
       'document-blob-ref', // B-140 — appended after v21; it retires a preference and moves no amount.
-      'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
+      'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses',
+      'cass-ladder-answers']);
     expect(JSON.stringify(outcome.data.revenues.map(r => [r.valoareFaraTva, r.tva]))).toBe(amountsBefore);
     expect(outcome.data.version).toBe(CURRENT_DATA_VERSION);
   });

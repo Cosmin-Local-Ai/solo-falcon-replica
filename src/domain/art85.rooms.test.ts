@@ -485,7 +485,9 @@ describe('CASS — the letting net selects a rung; it is never itself the base',
     const res = await run({ gross: lei(100_000), ladderYears: [] });
     expect(res.status).toBe('review_required');
     if (res.status !== 'review_required') return;
-    expect(res.reason).toContain('lipsesc 5');
+    // RE-PIN (brief 78 / D-DPI-2): the refusal used to count categories without a NUMBER; it now counts
+    // categories without an ANSWER. Same refusal, same count, narrowed trigger.
+    expect(res.reason).toContain('5 nu au niciun răspuns');
     expect(res.reason).toContain('art. 170 alin. (4)');
     // The gross, the deemed expense and the net are on screen — they are settled. What is NOT on screen is
     // any contribution or tax computed on a guessed base.

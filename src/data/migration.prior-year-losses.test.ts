@@ -5,6 +5,8 @@ import {
   CURRENT_DATA_VERSION,
   DATA_VERSION_DISPOSAL_PROCEEDS,
   DATA_VERSION_PRIOR_YEAR_LOSSES,
+  // Brief 78 — v25 is no longer the head; `cass-ladder-answers` (v25→v26) follows it.
+  DATA_VERSION_LADDER_ANSWERS,
   migratePersistedData,
 } from './migration';
 import { seedData } from './seed';
@@ -65,8 +67,11 @@ describe('B-145 — the `prior-year-fiscal-losses` step (v24 → v25)', () => {
     const outcome = migratePersistedData(payloadAtV24());
     expect(outcome.fromVersion).toBe(DATA_VERSION_DISPOSAL_PROCEEDS);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
-    expect(outcome.stepsApplied).toEqual(['prior-year-fiscal-losses']);
-    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_PRIOR_YEAR_LOSSES);
+    // Brief 78 re-pin (replaced, not deleted): v25 used to be the head, so a v24 payload ran exactly one
+    // step. It now runs two. The guarded property is unchanged — v25 still sits at the v24→v25 edge and no
+    // rung was renumbered to put it there.
+    expect(outcome.stepsApplied).toEqual(['prior-year-fiscal-losses', 'cass-ladder-answers']);
+    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_LADDER_ANSWERS);
   });
 
   it('backfills nothing: a v24 profile still has no `priorYearFiscalLosses` after the whole chain ran', () => {

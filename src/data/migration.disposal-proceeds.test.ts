@@ -79,7 +79,7 @@ describe('B-65 — the `fixed-asset-disposal-proceeds` step (v23 → v24)', () =
     const outcome = migratePersistedData(payloadAtV23());
     expect(outcome.fromVersion).toBe(DATA_VERSION_EXPENSE_ASSET_LINK);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
-    expect(outcome.stepsApplied).toEqual(['fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
+    expect(outcome.stepsApplied).toEqual(['fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses', 'cass-ladder-answers']);
     // v24 is a rung, not the head: brief 76 appended a step after it.
     expect(DATA_VERSION_DISPOSAL_PROCEEDS).toBeLessThan(CURRENT_DATA_VERSION);
   });

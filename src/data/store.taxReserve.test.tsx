@@ -190,6 +190,7 @@ describe('a payload with no reserve field loads as null, not 0', () => {
     'expense-asset-link',
     'fixed-asset-disposal-proceeds',
     'prior-year-fiscal-losses',
+    'cass-ladder-answers',
     ]);
     expect(storeRef!.reservedAmount).toBeNull();
     // And the next write stamps the current version — the upgrade is one-way and additive.

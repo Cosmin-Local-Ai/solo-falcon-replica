@@ -47,6 +47,9 @@ import {
   DATA_VERSION_DISPOSAL_PROCEEDS,
   // B-145 — and after its fourth: a carried-in fiscal loss can be persisted.
   DATA_VERSION_PRIOR_YEAR_LOSSES,
+  // D-DPI-2 (B-152) — and after brief 78's: a ladder category can record „nu am avut” as a fact of the
+  // person, distinct from nobody having asked. This is the head.
+  DATA_VERSION_LADDER_ANSWERS,
   DATA_VERSION_IDENTITY,
   DATA_VERSION_PROFILE,
   MIGRATION_CHAIN,
@@ -59,11 +62,22 @@ import { computeInputsHashSync } from '../domain/snapshots/hashSync';
 import { SYNTHETIC_SHEET } from '../test/occupancyFixtures';
 import type { TaxCalculationSnapshot } from '../domain/snapshots/types';
 import type { PfaProfile } from '../domain/models';
+// D-DPI-2 — the resolver and the refusal the v26 step is judged against, read from the migrated payload.
+import {
+  CASS_LADDER_CATEGORY_NAMES,
+  cassLadderFactsForYear,
+  cassLadderMissingCategories,
+} from '../domain/models';
+import { calculatorRegistry } from '../domain/fiscal/calculators';
+import { PFA_2026_SYSTEM_REAL_PACKAGE } from '../domain/fiscal/package2026';
 import type { Client, LegacyAppData, LegacyExpense, LegacyRevenue } from './types';
 import type { LegacyMonthlyDeclaration } from './schema';
 import { lei, type Bani } from '../domain/money';
 
 let storeRef: ReturnType<typeof useStore> | null = null;
+// D-DPI-2 — the rule the ladder calculator runs on, so the migrated payload can be pushed through the real
+// calculator rather than through a paraphrase of it.
+const cassRule = PFA_2026_SYSTEM_REAL_PACKAGE.find((r) => r.ruleId === 'CASS_2026')!;
 function Probe() {
   storeRef = useStore();
   return null;
@@ -294,9 +308,16 @@ describe('migration chain (pure)', () => {
       // and that brief 70 could only take as an in-memory argument. Appended after v24, never renumbered.
       // The step backfills NOTHING — a carried-in loss is a fact about a filed return.
       [DATA_VERSION_DISPOSAL_PROCEEDS, DATA_VERSION_PRIOR_YEAR_LOSSES],
+      // D-DPI-2 (B-152, unblocking B-116): a ladder category may now record that the person was asked and
+      // answered „nu am avut”. Appended after v25, never renumbered. The step backfills NOTHING, and that
+      // is the entire content of it: every payload in existence has never seen these six questions, so every
+      // payload must land on `unknown`. A step that defaulted them to `none` would assert in the person's
+      // name that they have no other income and then compute a CASS base out of that assertion.
+      [DATA_VERSION_PRIOR_YEAR_LOSSES, DATA_VERSION_LADDER_ANSWERS],
     ]);
     // Brief 76: the head moved by exactly one per step, and no rung was inserted, renumbered or skipped.
-    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_PRIOR_YEAR_LOSSES);
+    // Brief 78 appended v26 on top of that head; v22-v25 were not touched.
+    expect(CURRENT_DATA_VERSION).toBe(DATA_VERSION_LADDER_ANSWERS);
   });
 
   // Phase 9 acceptance criterion 4: a payload written by a newer build is refused loudly rather
@@ -318,7 +339,7 @@ describe('migration chain (pure)', () => {
     expect(outcome.stepsApplied).toEqual(['payment-dates', 'vat-exceedance-date', 'money-bani', 'expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family', 'accommodation-facts', 'occupancy-sheet', 'vehicle-facts', 'other-income-ladder', 'fixed-assets', 'input-vat-registration', 'vat-returns', // B-105 — the lease-facts step, appended after v19.
       'lease-facts',
       // PG-11 — appended after v20; it opens no collection and fills nothing in.
-      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
+      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses', 'cass-ladder-answers']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     for (const r of outcome.data.revenues) {
       expect('collected' in r).toBe(false);
@@ -340,7 +361,7 @@ describe('migration chain (pure)', () => {
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_DATES);
     expect(outcome.stepsApplied).toEqual(['vat-exceedance-date', 'money-bani', 'expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family', 'accommodation-facts', 'occupancy-sheet', 'vehicle-facts', 'other-income-ladder', 'fixed-assets', 'input-vat-registration', 'vat-returns', 'lease-facts', // PG-11 — appended after v20; the step fills nothing in.
-      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
+      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses', 'cass-ladder-answers']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     expect('vatExceedanceDate' in outcome.data.profile!).toBe(false);
     // And nothing else about the profile moved.
@@ -363,7 +384,7 @@ describe('migration chain (pure)', () => {
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_ANNUAL_FILING);
     expect(outcome.stepsApplied).toEqual(['activity-family', 'accommodation-facts', 'occupancy-sheet', 'vehicle-facts', 'other-income-ladder', 'fixed-assets', 'input-vat-registration', 'vat-returns', 'lease-facts', // PG-11 — appended after v20; the step fills nothing in.
-      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
+      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses', 'cass-ladder-answers']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     // Absence survives. This is the whole content of the step, and the half that a `?? 'other'` would
     // have destroyed silently: the payload would have come out looking like one that answered.
@@ -386,7 +407,7 @@ describe('migration chain (pure)', () => {
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_ACTIVITY_FAMILY);
     expect(outcome.stepsApplied).toEqual(['accommodation-facts', 'occupancy-sheet', 'vehicle-facts', 'other-income-ladder', 'fixed-assets', 'input-vat-registration', 'vat-returns', 'lease-facts', // PG-11 — appended after v20; the step fills nothing in.
-      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
+      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses', 'cass-ladder-answers']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     const profile = outcome.data.profile!;
     // Absence, asserted three ways — each of these would be a legal fact the person never stated.
@@ -423,7 +444,7 @@ describe('migration chain (pure)', () => {
     const payload = prePhase7Payload({ version: DATA_VERSION_VAT_RETURNS });
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_VAT_RETURNS);
-    expect(outcome.stepsApplied).toEqual(['lease-facts', 'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
+    expect(outcome.stepsApplied).toEqual(['lease-facts', 'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses', 'cass-ladder-answers']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     const profile = outcome.data.profile!;
     // Absence, asserted for each fact family the key would hold. An empty array would be the same lie in a
@@ -467,7 +488,7 @@ describe('migration chain (pure)', () => {
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_ACCOMMODATION_FACTS);
     expect(outcome.stepsApplied).toEqual(['occupancy-sheet', 'vehicle-facts', 'other-income-ladder', 'fixed-assets', 'input-vat-registration', 'vat-returns', 'lease-facts', // PG-11 — appended after v20; the step fills nothing in.
-      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
+      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses', 'cass-ladder-answers']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     // The whole contract, in one line: the step writes a version and nothing else.
     expect('occupancySheets' in outcome.data).toBe(false);
@@ -509,7 +530,7 @@ describe('migration chain (pure)', () => {
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_OCCUPANCY_SHEET);
     expect(outcome.stepsApplied).toEqual(['vehicle-facts', 'other-income-ladder', 'fixed-assets', 'input-vat-registration', 'vat-returns', 'lease-facts', // PG-11 — appended after v20; the step fills nothing in.
-      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
+      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses', 'cass-ladder-answers']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     // Absent, not empty — see the comment above: `[]` would silently reclassify every vehicle expense.
     expect('vehicles' in outcome.data).toBe(false);
@@ -553,7 +574,7 @@ describe('migration chain (pure)', () => {
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_OTHER_INCOME_LADDER);
     expect(outcome.stepsApplied).toEqual(['fixed-assets', 'input-vat-registration', 'vat-returns', 'lease-facts', // PG-11 — appended after v20; the step fills nothing in.
-      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
+      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses', 'cass-ladder-answers']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     // Absent, not empty — see the comment above: `[]` would read as a completed register.
     expect('fixedAssets' in outcome.data).toBe(false);
@@ -607,7 +628,7 @@ describe('migration chain (pure)', () => {
     const profile = outcome.data.profile!;
     expect(outcome.fromVersion).toBe(DATA_VERSION_FIXED_ASSETS);
     expect(outcome.stepsApplied).toEqual(['input-vat-registration', 'vat-returns', 'lease-facts', // PG-11 — appended after v20; the step fills nothing in.
-      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
+      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses', 'cass-ladder-answers']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     // The deletion: the key does not survive, not as a value and not as a default.
     expect('vatExempt' in profile).toBe(false);
@@ -635,6 +656,137 @@ describe('migration chain (pure)', () => {
     const again = migratePersistedData(outcome.data);
     expect(again.stepsApplied).toEqual([]);
     expect(again.data).toEqual(outcome.data);
+  });
+
+  // D-DPI-2 (B-152) — the v25→v26 step, and the single property that decides whether this brief is safe or
+  // silently undercharges somebody's health contribution. Asserted against a payload at v25, the version
+  // every real install is on today — not against the current schema, which could pass by construction.
+  it('the cass-ladder-answers step leaves a real v25 payload UNANSWERED: unknown, never „nu am avut”', () => {
+    // A ladder year exactly as a v25 build stores it: five amounts typed, one category left blank. The
+    // blank one is the whole test. It could mean "this person has no such income" or "nobody asked them",
+    // and v25 has no way to tell — which is precisely why the ladder refused.
+    const v25Profile = {
+      ...seedData.profile,
+      cassLadderYears: [
+        {
+          fiscalYear: 2026,
+          proprietateIntelectuala: lei(30_000),
+          asocierePersoanaJuridica: lei(0),
+          cedareaFolosinteiBunurilor: lei(0),
+          cedareaSursa: 'patrimoniu_personal',
+          activitatiAgricole: lei(0),
+          investitii: lei(0),
+          // `alteSurse` deliberately absent: unanswered, not zero.
+        },
+      ],
+    };
+    const payload = prePhase7Payload({
+      version: DATA_VERSION_PRIOR_YEAR_LOSSES,
+      profile: v25Profile,
+    });
+    const outcome = migratePersistedData(payload as never);
+    expect(outcome.toVersion).toBe(DATA_VERSION_LADDER_ANSWERS);
+    expect(outcome.stepsApplied).toEqual(['cass-ladder-answers']);
+
+    const year = outcome.data.profile!.cassLadderYears![0];
+    // Every amount the person typed survives untouched — the step retires nothing and rewrites nothing.
+    expect(year.proprietateIntelectuala).toBe(lei(30_000));
+    expect(year.investitii).toBe(lei(0));
+
+    // THE LINE THIS BRIEF IS JUDGED ON. The new field is absent, and absence resolves to `unknown`. A step
+    // that wrote `none` here — the obvious-looking "they had the section and left it blank" default — would
+    // put a sentence in the taxpayer's mouth they never said, and would then compute a CASS base out of it.
+    expect('ladderAnswers' in year).toBe(false);
+    const facts = cassLadderFactsForYear(year);
+    expect(facts.filter((f) => f.state === 'none')).toHaveLength(0);
+    expect(cassLadderMissingCategories(year)).toEqual(['alte_surse']);
+
+    // And the engine still refuses, naming the category — the refusal narrowed, it did not leave.
+    const ladderRes = calculatorRegistry['calc-cass-ladder'](cassRule, {
+      cassLadder: {
+        amounts: {
+          proprietate_intelectuala: year.proprietateIntelectuala,
+          asociere_persoana_juridica: year.asocierePersoanaJuridica,
+          cedarea_folosintei_bunurilor: year.cedareaFolosinteiBunurilor,
+          activitati_agricole: year.activitatiAgricole,
+          investitii: year.investitii,
+          alte_surse: year.alteSurse,
+        },
+        answers: year.ladderAnswers,
+        cedareaSursa: year.cedareaSursa,
+      },
+    });
+    if (!('reviewRequired' in ladderRes)) {
+      throw new Error(
+        `a v25 payload that has never seen the six questions computed CASS ${ladderRes.value} lei`,
+      );
+    }
+    expect(ladderRes.reason).toContain(CASS_LADDER_CATEGORY_NAMES.alte_surse);
+  });
+
+  it('the cass-ladder-answers step is idempotent and leaves a payload that already answers untouched', () => {
+    const answered = {
+      ...seedData.profile,
+      cassLadderYears: [
+        {
+          fiscalYear: 2026,
+          investitii: lei(10_000),
+          ladderAnswers: { alte_surse: 'none', investitii: 'amount' },
+        },
+      ],
+    };
+    const once = migratePersistedData(
+      prePhase7Payload({ version: DATA_VERSION_PRIOR_YEAR_LOSSES, profile: answered }) as never,
+    );
+    expect(once.data.profile!.cassLadderYears![0].ladderAnswers).toEqual({
+      alte_surse: 'none',
+      investitii: 'amount',
+    });
+    const again = migratePersistedData(once.data as never);
+    expect(again.stepsApplied).toEqual([]);
+    expect(again.data.profile!.cassLadderYears![0].ladderAnswers).toEqual({
+      alte_surse: 'none',
+      investitii: 'amount',
+    });
+  });
+
+  // Brief 76 named the trap and brief 78 has to answer it: **zod strips undeclared keys**. A tri-state the
+  // load gate does not declare would be erased by the next save-and-load, and the erasure would read as a
+  // passing test — the person's „nu am avut” quietly becoming „nimeni nu a întrebat”. The gate is widened
+  // BEFORE the step that reads the field, and this is the pin that says so.
+  it('a declared „nu am avut” survives a real save-and-load instead of being stripped by the gate', () => {
+    const payload = prePhase7Payload({
+      version: CURRENT_DATA_VERSION,
+      profile: {
+        ...seedData.profile,
+        cassLadderYears: [
+          {
+            fiscalYear: 2026,
+            ladderAnswers: {
+              proprietate_intelectuala: 'none',
+              asociere_persoana_juridica: 'none',
+              cedarea_folosintei_bunurilor: 'none',
+              activitati_agricole: 'none',
+              investitii: 'none',
+              alte_surse: 'none',
+            },
+          },
+        ],
+      },
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    load();
+    const year = storeRef!.profile!.cassLadderYears![0];
+    expect(year.ladderAnswers).toEqual({
+      proprietate_intelectuala: 'none',
+      asociere_persoana_juridica: 'none',
+      cedarea_folosintei_bunurilor: 'none',
+      activitati_agricole: 'none',
+      investitii: 'none',
+      alte_surse: 'none',
+    });
+    // Six declared absences, zero unanswered — the state the ladder proceeds on.
+    expect(cassLadderMissingCategories(year)).toEqual([]);
   });
 
   it('treats a payload with no version key as the base of the chain', () => {
@@ -673,6 +825,8 @@ describe('migration chain (pure)', () => {
     'fixed-asset-disposal-proceeds',
     // B-145 — appended after v24; it opens a profile field and fills nothing in.
     'prior-year-fiscal-losses',
+    // D-DPI-2 (B-152) — appended after v25; it opens a profile field and fills nothing in.
+    'cass-ladder-answers',
     ]);
     expect(outcome.data.version).toBe(CURRENT_DATA_VERSION);
   });
@@ -686,7 +840,7 @@ describe('migration chain (pure)', () => {
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_MONEY_BANI);
     expect(outcome.stepsApplied).toEqual(['expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family', 'accommodation-facts', 'occupancy-sheet', 'vehicle-facts', 'other-income-ladder', 'fixed-assets', 'input-vat-registration', 'vat-returns', 'lease-facts', // PG-11 — appended after v20; the step fills nothing in.
-      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
+      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses', 'cass-ladder-answers']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     const migrated = outcome.data.expenses ?? [];
     expect(migrated.map((e) => e.id)).toEqual(['e-legacy-1']);
@@ -704,7 +858,7 @@ describe('migration chain (pure)', () => {
     });
     const outcome = migratePersistedData(payload as never);
     expect(outcome.stepsApplied).toEqual(['expense-category', 'tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family', 'accommodation-facts', 'occupancy-sheet', 'vehicle-facts', 'other-income-ladder', 'fixed-assets', 'input-vat-registration', 'vat-returns', 'lease-facts', // PG-11 — appended after v20; the step fills nothing in.
-      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
+      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses', 'cass-ladder-answers']);
     expect(outcome.data.expenses?.[0].category).toBe('rent_business_space');
   });
 
@@ -719,7 +873,7 @@ describe('migration chain (pure)', () => {
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_EXPENSE_CATEGORY);
     expect(outcome.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family', 'accommodation-facts', 'occupancy-sheet', 'vehicle-facts', 'other-income-ladder', 'fixed-assets', 'input-vat-registration', 'vat-returns', 'lease-facts', // PG-11 — appended after v20; the step fills nothing in.
-      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
+      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses', 'cass-ladder-answers']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     // Absence carried forward verbatim — not `null`, not `0`, not an empty string.
     expect('reservedAmount' in outcome.data).toBe(false);
@@ -737,7 +891,7 @@ describe('migration chain (pure)', () => {
       prePhase7Payload({ version: DATA_VERSION_EXPENSE_CATEGORY, reservedAmount: lei(25000) }) as never,
     );
     expect(withAmount.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family', 'accommodation-facts', 'occupancy-sheet', 'vehicle-facts', 'other-income-ladder', 'fixed-assets', 'input-vat-registration', 'vat-returns', 'lease-facts', // PG-11 — appended after v20; the step fills nothing in.
-      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
+      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses', 'cass-ladder-answers']);
     expect(withAmount.data.reservedAmount).toBe(lei(25000));
 
     const explicitZero = migratePersistedData(
@@ -757,7 +911,7 @@ describe('migration chain (pure)', () => {
     const outcome = migratePersistedData(payload as never);
     expect(outcome.fromVersion).toBe(DATA_VERSION_TAX_RESERVE);
     expect(outcome.stepsApplied).toEqual(['pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family', 'accommodation-facts', 'occupancy-sheet', 'vehicle-facts', 'other-income-ladder', 'fixed-assets', 'input-vat-registration', 'vat-returns', 'lease-facts', // PG-11 — appended after v20; the step fills nothing in.
-      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
+      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses', 'cass-ladder-answers']);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
     // The status fact travels, under the name that says what it is.
     expect(outcome.data.profile!.pensionerStatus).toBe('da');
@@ -912,7 +1066,7 @@ describe('stored snapshots survive the migration (F-1, acceptance criterion 3)',
     delete payload.reservedAmount;
     const outcome = migratePersistedData(payload as never);
     expect(outcome.stepsApplied).toEqual(['tax-reserve', 'pension-facts', 'rule-set-digest', 'record-currency', 'annual-filing', 'activity-family', 'accommodation-facts', 'occupancy-sheet', 'vehicle-facts', 'other-income-ladder', 'fixed-assets', 'input-vat-registration', 'vat-returns', 'lease-facts', // PG-11 — appended after v20; the step fills nothing in.
-      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
+      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses', 'cass-ladder-answers']);
     const [after] = outcome.data.snapshots!;
     expect(after.inputSnapshot).toEqual(stored.inputSnapshot);
     expect(after.inputsHash).toBe(stored.inputsHash);
@@ -939,7 +1093,7 @@ describe('stored snapshots survive the migration (F-1, acceptance criterion 3)',
     });
     const outcome = migratePersistedData(payload as never);
     expect(outcome.stepsApplied).toEqual(['rule-set-digest', 'record-currency', 'annual-filing', 'activity-family', 'accommodation-facts', 'occupancy-sheet', 'vehicle-facts', 'other-income-ladder', 'fixed-assets', 'input-vat-registration', 'vat-returns', 'lease-facts', // PG-11 — appended after v20; the step fills nothing in.
-      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
+      'document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses', 'cass-ladder-answers']);
     const [after] = outcome.data.snapshots!;
     // The record now says out loud that its rules cannot be reconstructed…
     expect(after.ruleSetHash).toBeNull();
@@ -1102,6 +1256,8 @@ describe('load path runs the chain (acceptance criteria 2 and 3)', () => {
       'expense-asset-link',
       'fixed-asset-disposal-proceeds',
       'prior-year-fiscal-losses',
+      // D-DPI-2 (B-152) — appended after v25; it opens a profile field and fills nothing in.
+      'cass-ladder-answers',
       ],
     });
     // Not the seed: the seed's ids are different.

@@ -1132,6 +1132,11 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
           // amount recorded is an unestablished fact, not a negative one — the exemption is withheld and the
           // ladder says so, rather than the app guessing in either direction.
           dpiExemptArt154: dpiCassExemption,
+          // D-DPI-2 — the declared state of each category travels beside the amount, so the calculator can
+          // tell „nu am avut” from „nimeni nu a întrebat”. Both halves come from the same stored year; the
+          // resolver that reads them together is `cassLadderCategoryFacts`, and neither this call site nor
+          // the calculator re-decides what an empty category means.
+          answers: ladderYear?.ladderAnswers,
           amounts: {
             proprietate_intelectuala: ladderYear?.proprietateIntelectuala,
             asociere_persoana_juridica: ladderYear?.asocierePersoanaJuridica,
