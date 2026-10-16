@@ -72,6 +72,40 @@ Four open defects the audit **missed** are carried in §4: **B-30** (input-VAT d
 
 ## 4. New defect ids
 
+### 4a. Register roll-up — read this before the rows
+
+**Written 2026-10-16 by brief 79.** Status is now structural: every row opens its `Defect` cell with a bracketed token from the fixed vocabulary below, and **every id that is not open is struck** (`~~**B-36**~~`). The token is the state; the prose under it is evidence. Re-count without reading the rows: `grep -c` each bracketed token in the table, and the counts sum to the row count.
+
+| Token | Rows | What it means |
+|---|---|---|
+| OPEN | 34 | open, nothing external in the way — free to brief now |
+| CLOSED 2026-MM-DD | 85 | closed on the date in the token, by the phase or brief named in the row |
+| BLOCKED: research | 2 | the row says it waits on a primary source a Researcher must settle |
+| BLOCKED: decision | 4 | the row says the next move is a user decision, not code |
+| BLOCKED: chain | 1 | the row says it waits on a migration/chain step |
+| PARKED | 1 | parked by user decision, reason in the row |
+| REFUTED | 4 | the row's premise was withdrawn or refuted; the claim is kept, struck, as evidence |
+| **Total** | **131** | 34 + 85 + 2 + 4 + 1 + 1 + 4 |
+
+**Open, grouped by what unblocks it**
+
+- **Needs a Researcher (2):** B-119 (the 10 % → 16 % dividend rate is confirmed only through secondary sources), B-135 (the 3-employee cap is not pinned to an article).
+- **Needs a user decision (4):** B-80 (art. 68^3 commission — encode both branches and ask, never default), B-87 (non-deductible VAT in the 50 % base: research closed, the choice is open), B-96 (which persona the demo is), B-116 (D-DPI-1: which DPI representation survives — D-DPI-2 narrowed it, the fork is still the user's).
+- **Needs a chain step (1):** B-152 (the ladder's six explicit category answers are persisted facts; D-DPI-2 names v26).
+- **Free to brief now (34):** B-16, B-38, B-43, B-45, B-49, B-50, B-52, B-53, B-54, B-59, B-60, B-61, B-63, B-69, B-86, B-89, B-92, B-97, B-100, B-104, B-110, B-112, B-115, B-123, B-124, B-126, B-127, B-133, B-146, B-151, B-153, B-154, B-155, D1.
+
+**Closed in the last two weeks (2026-10-02 → 2026-10-16) — all 85 closures fall in this window; the register does not reach further back.**
+
+- **2026-10-16 (3):** B-108, B-140, B-145 — brief 76, chain steps v22→v23 and v25.
+- **2026-10-15 (39):** B-28, B-55, B-56, B-62, B-64, B-67, B-74, B-78, B-79, B-81, B-98, B-106, B-107, B-111, B-113, B-114, B-117, B-120, B-121, B-122, B-125, B-128, B-129, B-130, B-131, B-132, B-134, B-137, B-138, B-139, B-141, B-142, B-143, B-144, B-147, B-148, B-149, B-150 (both rows) — briefs 65–75.
+- **2026-10-14 (1):** B-118 — `research/49` plus a user decision.
+- **2026-10-13 (5):** B-93, B-94, B-105, B-109, B-110 — PG-6e/6g and the seed-identity pass.
+- **2026-10-12 (15):** B-29, B-30, B-31, B-35, B-39, B-41, B-51, B-88, B-90, B-91, B-95, B-99, B-101, B-102, B-103 — PG-6c/6d/6f/6h, PG-10.
+- **2026-10-11 (6):** 6h-1, B-76, B-82, B-83, B-84, B-85 — PG-5C, 6h-2, 6h-2b.
+- **2026-10-10 (16):** B-34, B-36, B-37, B-44, B-46, B-47, B-48, B-58, B-66, B-68, B-70, B-71, B-72, B-73, B-75, B-77 — Phase 10c, Phase 11, PG-2 … PG-5b.
+
+**Two rows the roll-up will not tidy.** **B-110 appears twice:** one row carries a CLOSED 2026-10-13 marker, the other carries none and is left open. Both are kept — deleting either is not this pass's call. **B-16 (remainder)** still asserts that the loss record is not persisted and prior-year losses are never read back, which B-121 (2026-10-15) and B-145 (2026-10-16) appear to answer; the row was never marked closed, so it stays open and is reported rather than tidied.
+
 | Id | Defect | Closed by |
 |---|---|---|
 | ~~**B-36**~~ | [CLOSED 2026-10-10] **CLOSED by Phase 10c (2026-10-10).** FX rate records could not enter the app through any interface — `recordFxRate` had no caller, Settings was read-only, so a user with an EUR/USD record could not resolve the missing-rate exclusion. `components/ui/FxRateEntryForm.tsx` is now mounted in Settings' fiscal tab and calls the **existing** validated upsert: currency, printed decimal, `rateKind`, date-or-year per kind, series, source URL, provisional/final; `problems[]` renders verbatim; the same `rateKey` replaces rather than adding; an annual average of an open year is forced provisional. **No fetch added** — the entry test stubs `globalThis.fetch` and asserts it is never called. Proven in a browser: `e2e/settings.spec.ts` types a rate, reloads, and finds `5.347,00 RON` in the summary. Original wording, for the record: ~~FX rate records cannot enter the app through any interface — `recordFxRate` has no caller, Settings is read-only~~ | **10c** |
