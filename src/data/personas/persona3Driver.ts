@@ -26,6 +26,26 @@
  * - **art. 28 alin. (14)** — the car is a category M1 passenger vehicle, so its amortisation is capped at
  *   1.500 lei/lună. At 78.000 lei over a declared *durata normală* of 48 months the raw charge is 1.625
  *   lei/lună, so **the cap bites and 125 lei a month is lost definitively** — not carried, not recoverable.
+ *
+ * ## The car leaves the register on 20 Octombrie 2026 — and that puts two ceilings on one number
+ *
+ * A driver rotates cars, so the same M1 that shows the monthly cap is also the car this person sells. The
+ * disposal is declared with the two facts the register needs: `disposedOn` and the **price actually
+ * realised**, `disposalProceeds` (40.000 lei — a transaction price, not a figure derivable from the fiscal
+ * value). Two provisions then bound the same unamortised residual:
+ *
+ * - **Titlul II norm pct. 27** — the residual is deductible „în limita a 1.500 lei înmulțit cu numărul de
+ *   luni rămase de amortizat din durata normală de funcționare stabilită de contribuabil”. 37 months of the
+ *   declared 48 were used by 20 Octombrie, so **11 luni rămase** and a ceiling of **16.500 lei**.
+ * - **Titlul IV norm pct. 7 alin. (5) lit. o)** — the same residual is capped „la nivelul venitului realizat
+ *   din înstrăinare”. The price is 40.000 lei, above the pct. 27 figure, so **the pct. 27 ceiling is the one
+ *   that cuts** — and the app can only *say* that because the price is recorded. Without it the second limit
+ *   cannot be measured at all, and the figure on screen is a ceiling and nothing more.
+ *
+ * The residual itself is 17.875 lei (78.000 − 37 × 1.625), so 1.375 lei of it is lost at the exit. **None of
+ * this enters the estimate**: B-153 is still open, the schedule keeps amortising past the disposal month
+ * while `disposalFigure` counts only the months actually used, and the two month-counts are both on the
+ * card. The figure is reported, not posted.
  * - **art. 298** — the VAT status of the same car is a separate question with its own per-year facts
  *   (seats, MTMA, use, logbook), held in `vatYears` beside the income-tax facts and never merged with them.
  *
@@ -135,13 +155,15 @@ export const rideHailingDriverPersona: PersonaDefinition = {
   label: 'Șofer de transport persoane și curierat',
   summary:
     'Șofer pe două platforme: transport de persoane (CAEN 4933) și curierat. 168.000 lei în 2026, două '
-    + 'autoturisme, amortizare plafonată și cheltuieli auto la 50 %.',
+    + 'autoturisme, amortizare plafonată, cheltuieli auto la 50 % și un autoturism scos din gestiune în '
+    + 'octombrie, cu cele două plafoane ale scăderii din gestiune.',
   teaches: [
     'Platforma ca plătitor de venit: statament, reținere și raportare — nu client corporate cu factură',
     'art. 68 alin. (7) lit. k): cheltuielile auto se deduc 50 % când utilizarea exclusivă nu este justificată',
     'art. 68 alin. (5) lit. j): „cel mult un singur autoturism” — a doua mașină rămâne de verificat',
     'art. 28 alin. (14): plafonul de 1.500 lei/lună la un autoturism M1, cu pierderea definitivă a excesului',
     'art. 298: starea TVA a aceluiași autoturism, ținută separat de faptele de la art. 68',
+    'pct. 27 și pct. 7 alin. (5) lit. o): două plafoane peste aceeași valoare neamortizată; al doilea se poate măsura doar dacă prețul înstrăinării este înregistrat',
   ],
   identity: IDENTITY,
   caen: { principal: '4933', secondary: ['4932', '5320', '4941', '7711'] },
@@ -232,6 +254,15 @@ export const rideHailingDriverPersona: PersonaDefinition = {
         paymentState: 'achitat',
         paidOn: '2023-09-15',
         isM1Vehicle: true,
+        // Brief 77 — the car is sold. The date is inside the recorded period and after the last fuel,
+        // service and tyre row for this car (12, 14 and 18 Octombrie), so the register does not claim fuel
+        // for a car the person no longer holds.
+        disposedOn: '2026-10-20',
+        disposalKind: 'vanzare',
+        // The transaction price, declared. Nothing in the register derives it: it is not the fiscal value,
+        // not the residual and not a residual ratio, and Titlul IV pct. 7 alin. (5) lit. o) measures the
+        // second ceiling against exactly this number.
+        disposalProceeds: lei(40000),
       },
     ],
   }),

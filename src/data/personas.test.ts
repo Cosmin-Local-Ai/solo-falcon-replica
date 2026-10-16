@@ -34,6 +34,7 @@ import { getMonthlyFinancialSeries } from './dashboard';
 import { fixedInstant } from '../test/fixedInstant';
 import { pinClock, unpinClock } from '../test/clock';
 import { CAEN_MAX_ACTIVITY_CLASSES } from '../domain/models';
+import { lei } from '../domain/money';
 import { afterEach } from 'vitest';
 
 const FISCAL_YEAR = 2026;
@@ -282,6 +283,24 @@ describe('step 11 — the facts each persona exists to carry are actually presen
     } else {
       expect(car.normalLifeMonths, 'the M1 asset must state its durata normală').toBeDefined();
     }
+  });
+
+  // Brief 77 — chain steps v22/v24 persisted `disposedOn` and `disposalProceeds`, and no seed or persona
+  // carried either, so those steps had no browser proof. Persona 3's M1 car now carries both, and this test
+  // holds the data honest: a disposal the register contradicts — fuel recorded after the car left — is a
+  // worse persona than an unexercised migration.
+  it('persona 3 sells the M1 car, and the register does not keep paying for it afterwards', () => {
+    const p = PERSONAS.find((x) => x.id === 'ride-hailing-driver')!;
+    const car = p.data.fixedAssets.find((a) => a.id === 'p3-asset-car-a')!;
+    expect(car.disposedOn).toBe('2026-10-20');
+    expect(car.disposalKind).toBe('vanzare');
+    // A transaction price, not a figure the register could derive from the fiscal value.
+    expect(car.disposalProceeds).toBe(lei(40000));
+    // Every recorded cost for this car predates the disposal.
+    const after = p.data.expenses.filter((e) => e.vehicleId === car.id && e.date > (car.disposedOn ?? ''));
+    expect(after.map((e) => e.id), 'costs recorded for a car the person no longer holds').toEqual([]);
+    // The disposal is one car, not the household: the second car and its costs stay.
+    expect(p.data.vehicles.length).toBe(2);
   });
 
   it('persona 4 sits at the top of the art. 85 band, not past it', () => {
