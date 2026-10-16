@@ -516,7 +516,17 @@ test.describe('Phase 10 — a sum that could not be converted exactly is named o
     // relocation is a pass that runs after the chain, and a document that cannot be moved keeps its bytes
     // inline. What this test exists for is untouched: the notice is still one long, `original` is still the
     // verbatim 674.504 and `converted` is still 67450 bani.
-    expect(saved.version).toBe(21);
+    // Re-pinned 2026-10-16 (brief 77): 21 → 25, and NOT by this brief's data. The head moved four steps in
+    // brief 76 — `efactura-deadline` (21→22), `expense-asset-link` (22→23), `fixed-asset-disposal-proceeds`
+    // (23→24), `prior-year-fiscal-losses` (24→25) — and this line was never carried with them. Measured red
+    // at c437d15, before brief 77 touched a file: a pin brief 76 left behind, not a regression brief 77
+    // introduced. Same discipline as the fourteen above — four more steps, so the bytes written back carry
+    // four more versions. What this test exists for is untouched: the notice is still one long, `original`
+    // is still the verbatim 674.504 and `converted` is still 67450 bani. And none of the four steps mints a
+    // value in a payload that never named one — v22 deletes a retired preference, v23 and v24 open optional
+    // fields and fill in nothing, v25 opens an optional profile list — so every absence asserted below is
+    // still asserted on bytes that carry no such fact.
+    expect(saved.version).toBe(25);
     // The v20 step's own half, on the same bytes: no tenant nature, no owner-cost uplift, no alin. (8)
     // trigger and no contract date was invented for a payload that never named a lease. Each of those facts
     // decides a legal outcome on its own — which of art. 84 and art. 84^1 measures the income, what the 20 %
