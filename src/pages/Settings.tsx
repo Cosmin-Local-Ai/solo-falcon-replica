@@ -96,11 +96,18 @@ import {
   CASS_AGRI_BAZA_VALUES,
   CASS_CEDARE_SURSA_VALUES,
   CASS_INVEST_BAZA_VALUES,
+  // D-DPI-2 (B-152) — the three answers one ladder category can hold, and the citation list the engine's own
+  // refusal prints. The form reads both from `domain/models` rather than restating them: the same six
+  // categories appear in the calculator, in the persisted gate and here, and B-122 is what happens when a
+  // codebase grows a second vocabulary for one legal list.
+  CASS_LADDER_CATEGORY_NAMES,
   cassLadderForYear,
   withCassLadderYear,
   type CassAgriBaza,
   type CassCedareSursa,
   type CassInvestBaza,
+  type CassLadderAnswer,
+  type CassLadderCategory,
   type CassLadderYear,
 } from '../domain/models';
 
@@ -120,6 +127,46 @@ const LADDER_AMOUNT_FIELDS = [
   'alteSurse',
 ] as const;
 type LadderAmountField = (typeof LADDER_AMOUNT_FIELDS)[number];
+
+/**
+ * D-DPI-2 — which legal category each form field answers. The form's field names are the persisted
+ * `CassLadderYear` keys; the engine's are the art. 155 alin. (1) litera. This map is the ONLY place that
+ * connects them, so the two lists cannot drift into two vocabularies the way B-122 warns about, and
+ * `src/pages/Settings.ladderAnswers.test.tsx` pins that it covers all six.
+ */
+const LADDER_FIELD_CATEGORY: Record<LadderAmountField, CassLadderCategory> = {
+  proprietateIntelectuala: 'proprietate_intelectuala',
+  asocierePersoanaJuridica: 'asociere_persoana_juridica',
+  cedareaFolosinteiBunurilor: 'cedarea_folosintei_bunurilor',
+  activitatiAgricole: 'activitati_agricole',
+  investitii: 'investitii',
+  alteSurse: 'alte_surse',
+};
+
+/**
+ * The answer control's value. `''` is NOT a fourth answer — it is the state of not having chosen, and the
+ * save path writes nothing at all for it. That is the one property the whole of D-DPI-2 rests on: an
+ * untouched control must never become „nu am avut”.
+ */
+type LadderAnswerChoice = CassLadderAnswer | '';
+
+/**
+ * The answer each category currently holds, read back for the form.
+ *
+ * A stored amount with no answer token beside it — every payload written between v16 and v25 — reads back as
+ * `amount`, because the figure IS the answer the person already gave. A category with neither reads back as
+ * untouched, never as `none`.
+ */
+function ladderAnswerInputs(profile: PfaProfile): Record<LadderAmountField, LadderAnswerChoice> {
+  const year = cassLadderForYear(profile.cassLadderYears, profile.fiscalYear);
+  const out = {} as Record<LadderAmountField, LadderAnswerChoice>;
+  for (const key of LADDER_AMOUNT_FIELDS) {
+    const category = LADDER_FIELD_CATEGORY[key];
+    out[key] =
+      year?.ladderAnswers?.[category] ?? (typeof year?.[key] === 'number' ? 'amount' : '');
+  }
+  return out;
+}
 
 /**
  * The stored amount for one ladder category, rendered back into an input.
@@ -698,6 +745,10 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       investitii: ladderAmountInput(profile, 'investitii'),
       alteSurse: ladderAmountInput(profile, 'alteSurse'),
     } as Record<LadderAmountField, string>,
+    // D-DPI-2 (B-152) — the answer each category holds, beside its amount. Three states a person can pick
+    // and a fourth state the form starts in: nothing chosen. The starting state is not an answer, and the
+    // save path writes nothing for it — which is the difference between „nu am avut” and silence.
+    ladderAnswersForm: ladderAnswerInputs(profile),
     // Which of the two measurements the law offers for that category the typed figure actually is.
     ladderAgricoleBaza: (cassLadderForYear(profile.cassLadderYears, profile.fiscalYear)
       ?.activitatiAgricoleBaza ?? '') as CassAgriBaza | '',
@@ -888,7 +939,11 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
   // sum at art. 170 alin. (4) runs over ALL six, so a hole is not a small gap: it is the reason no base
   // exists at all. Naming the missing categories is what turns "no estimate" into something the person can
   // close, and it is the same six the engine sums — one list, used by both.
-  const ladderMissing = LADDER_AMOUNT_FIELDS.filter((k) => fiscal.ladderAmounts[k].trim() === '');
+  //
+  // D-DPI-2 narrowed what counts as answered: a category the person declared „nu am avut” is ANSWERED, even
+  // though it carries no figure. This is the same count the engine's refusal uses, so the note on the form
+  // and the refusal on the dashboard cannot disagree about whether the set is complete.
+  const ladderMissing = LADDER_AMOUNT_FIELDS.filter((k) => fiscal.ladderAnswersForm[k] === '');
   const ladderAnsweredCount = LADDER_AMOUNT_FIELDS.length - ladderMissing.length;
   const accommodationRoomsParsed =
     accommodationRoomsTyped === '' ? Number.NaN : Number(accommodationRoomsTyped);
@@ -1011,13 +1066,25 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     }
     // PG-6d (D-OTH-1, B-41) — the six amounts, each three-state: an empty box writes absence, a typed `0`
     // writes a declared zero, and anything unparseable is an error rather than a silently dropped input.
-    // The form does NOT demand all six: a partial answer set is a state the person may genuinely be in,
-    // and it is the engine that refuses to sum it — on the calculation screen, with the missing
+    // The form does NOT demand all six: a partial answer set is a state the person may genuinely be in, and
+    // it is the engine that refuses to sum it — on the calculation screen, with the missing
     // categories named — not a form that blocks a save.
+    //
+    // D-DPI-2 (B-152) — the answer control is what decides, and the amount box only matters once the person
+    // has said „am avut”. **An untouched control writes nothing at all**: not `none`, not 0, not an empty
+    // record. That single line is the difference between a fact the person asserted and a fact the app
+    // invented about them, and it is what `src/pages/Settings.ladderAnswers.test.tsx` exists to prove.
     const ladderAmounts: Partial<Record<LadderAmountField, Bani>> = {};
+    const ladderAnswers: Partial<Record<CassLadderCategory, CassLadderAnswer>> = {};
     for (const key of LADDER_AMOUNT_FIELDS) {
+      const choice = fiscal.ladderAnswersForm[key];
+      if (choice !== '') ladderAnswers[LADDER_FIELD_CATEGORY[key]] = choice;
+      if (choice !== 'amount') continue;
       const typed = fiscal.ladderAmounts[key].trim();
-      if (typed === '') continue;
+      if (typed === '') {
+        e[`ladder.${key}`] = settingsCopy.fiscal.ladderAmountRequired;
+        continue;
+      }
       const parsed = parseLeiInput(typed);
       if (parsed === null || parsed < 0) e[`ladder.${key}`] = validation.leiInvalid;
       else ladderAmounts[key] = parsed;
@@ -1070,6 +1137,7 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     const ladderOthers = (profile.cassLadderYears ?? []).filter((y) => y.fiscalYear !== fy);
     const ladderDeclared =
       Object.keys(ladderAmounts).length > 0 ||
+      Object.keys(ladderAnswers).length > 0 ||
       fiscal.ladderAgricoleBaza !== '' ||
       fiscal.ladderInvestitiiBaza !== '' ||
       fiscal.ladderCedareSursa !== '' ||
@@ -1080,6 +1148,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       ? {
           fiscalYear: fy,
           ...ladderAmounts,
+          // D-DPI-2 — written only when the person actually chose something. An empty map here would be a
+          // year of answers nobody gave.
+          ...(Object.keys(ladderAnswers).length > 0 ? { ladderAnswers } : {}),
           ...(fiscal.ladderAgricoleBaza ? { activitatiAgricoleBaza: fiscal.ladderAgricoleBaza } : {}),
           ...(fiscal.ladderInvestitiiBaza ? { investitiiBaza: fiscal.ladderInvestitiiBaza } : {}),
           ...(fiscal.ladderCedareSursa ? { cedareaSursa: fiscal.ladderCedareSursa } : {}),
@@ -2033,14 +2104,21 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                   that declares no car at all. */}
               <VehicleSection />
 
-              {/* PG-6d (D-OTH-1, D-OTH-2, B-41) — the six CF art. 155 alin. (1) lit. c)-h) amounts.
+              {/* PG-6d (D-OTH-1, D-OTH-2, B-41) — the six CF art. 155 alin. (1) lit. c)-h) categories.
 
                   Shown unconditionally and never pre-filled. Whether a person has any of these six kinds of
                   income is not something the app may infer from a CAEN code, from the register, or from a
                   default, and the ladder below them is a cliff: the difference between an unanswered
                   category and a declared `0` is the difference between "no base can be computed" and "no
-                  CASS is owed". So every box starts empty, an empty box writes absence, and the note counts
-                  the six out loud instead of hiding the gap. */}
+                  CASS is owed". So every question starts untouched, an untouched question writes nothing at
+                  all, and the note counts the six out loud instead of hiding the gap.
+
+                  D-DPI-2 (B-152) changed the shape of the ask, not its honesty. Six boxes could only ever
+                  record a figure or a blank, so "I have no such income" and "nobody asked me" were the same
+                  stored fact and the ladder had to refuse both. Six QUESTIONS with three answers each can
+                  hold the difference: `am avut` + a figure, `nu am avut`, or `nu vreau să declar`. The
+                  first untouched control still writes nothing — that is the line the whole decision rests
+                  on, and it is pinned in `src/pages/Settings.ladderAnswers.test.tsx`. */}
               <div className="field" data-cass-ladder>
                 <label>{settingsCopy.fiscal.ladderSection}</label>
                 <span className="hint">{settingsCopy.fiscal.ladderIntro}</span>
@@ -2053,26 +2131,77 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                       )}
                 </span>
 
-                {LADDER_AMOUNT_FIELDS.map(key => (
-                  <div className="field" key={key} data-ladder-field={key}>
-                    <label htmlFor={`set-ladder-${key}`}>{settingsCopy.fiscal.ladderAmounts[key]}</label>
-                    <input
-                      className="input"
-                      id={`set-ladder-${key}`}
-                      inputMode="decimal"
-                      data-ladder-amount={key}
-                      value={fiscal.ladderAmounts[key]}
-                      onChange={ev =>
-                        setFiscal({
-                          ...fiscal,
-                          ladderAmounts: { ...fiscal.ladderAmounts, [key]: ev.target.value },
-                        })
-                      }
-                    />
-                    <span className="hint">{settingsCopy.fiscal.ladderAmountHints[key]}</span>
-                    {errors[`ladder.${key}`] && <span className="error">{errors[`ladder.${key}`]}</span>}
-                  </div>
-                ))}
+                {LADDER_AMOUNT_FIELDS.map(key => {
+                  const choice = fiscal.ladderAnswersForm[key];
+                  return (
+                    <div className="field" key={key} data-ladder-field={key}>
+                      {/* D-DPI-2 (B-152) — the QUESTION comes first, and the amount box only appears once the
+                          person has said they have such an income. A box alone invites a blank, and a blank
+                          category is the one state the ladder cannot compute over; a question invites an
+                          answer, and „nu am avut” is an answer that unblocks it. The citation under the
+                          select is the article plus the statutory words verbatim, from the same list the
+                          engine's refusal prints — plain Romanian to answer, the law's own text to check. */}
+                      <label htmlFor={`set-ladder-answer-${key}`}>
+                        {settingsCopy.fiscal.ladderQuestions[key]}
+                      </label>
+                      <select
+                        className="input"
+                        id={`set-ladder-answer-${key}`}
+                        data-ladder-answer={key}
+                        value={choice}
+                        onChange={ev => {
+                          const next = ev.target.value as LadderAnswerChoice;
+                          setFiscal({
+                            ...fiscal,
+                            ladderAnswersForm: { ...fiscal.ladderAnswersForm, [key]: next },
+                            // Leaving „am avut” clears the box. A figure with no answer beside it and an
+                            // answer with a figure beside it are the two halves of one contradiction, and the
+                            // engine refuses on it — the form does not leave that state reachable.
+                            ladderAmounts:
+                              next === 'amount'
+                                ? fiscal.ladderAmounts
+                                : { ...fiscal.ladderAmounts, [key]: '' },
+                          });
+                        }}
+                      >
+                        <option value="">{copy.ui.answerUnrecorded}</option>
+                        <option value="amount">{settingsCopy.fiscal.ladderAnswerOptions.amount}</option>
+                        <option value="none">{settingsCopy.fiscal.ladderAnswerOptions.none}</option>
+                        <option value="unknown">{settingsCopy.fiscal.ladderAnswerOptions.unknown}</option>
+                      </select>
+                      <span className="hint" data-ladder-citation={key}>
+                        {settingsCopy.fiscal.ladderAnswerCitation}{' '}
+                        {CASS_LADDER_CATEGORY_NAMES[LADDER_FIELD_CATEGORY[key]]}
+                      </span>
+                      {choice === 'amount' ? (
+                        <>
+                          <label htmlFor={`set-ladder-${key}`}>
+                            {settingsCopy.fiscal.ladderAmounts[key]}
+                          </label>
+                          <input
+                            className="input"
+                            id={`set-ladder-${key}`}
+                            inputMode="decimal"
+                            data-ladder-amount={key}
+                            value={fiscal.ladderAmounts[key]}
+                            onChange={ev =>
+                              setFiscal({
+                                ...fiscal,
+                                ladderAmounts: { ...fiscal.ladderAmounts, [key]: ev.target.value },
+                              })
+                            }
+                          />
+                          <span className="hint">{settingsCopy.fiscal.ladderAmountHints[key]}</span>
+                        </>
+                      ) : (
+                        <span className="hint" data-ladder-no-amount={key}>
+                          {settingsCopy.fiscal.ladderNoAmountHint}
+                        </span>
+                      )}
+                      {errors[`ladder.${key}`] && <span className="error">{errors[`ladder.${key}`]}</span>}
+                    </div>
+                  );
+                })}
 
                 {/* The measurement, per category — because art. 170 alin. (4) does not measure one thing.
                     Net for four of the six, BRUT for „alte surse”, and „venitul net SAU norma de venit” for

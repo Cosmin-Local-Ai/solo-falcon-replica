@@ -378,6 +378,61 @@ export const settings = {
       alteSurse:
         'Singularitatea acestei categorii: art. 170 alin. (4) lit. f) măsoară aici VENITUL BRUT, nu netul. Și numai aici. Mai important: „alte surse” înseamnă art. 114, adică veniturile care nu se încadrează în art. 61 lit. a)-h). Premiile și jocurile de noroc (art. 61 lit. g)) și transferul proprietăților imobiliare (art. 61 lit. h)) nu apar în art. 155 alin. (1) și nu atrag niciodată CASS — o categorie „alte” nesemnalată ar fabrica o datorie.',
     },
+    /**
+     * D-DPI-2 (B-152) — the six categories asked as SIX QUESTIONS, in the person's words.
+     *
+     * **Why the wording is not the statute's.** art. 155 alin. (1) lit. c)-h) is not something a person
+     * recognises about their own year: nobody thinks „am avut venituri din asocierea cu o persoană juridică,
+     * contribuabil potrivit titlului II sau titlului III”. A question the taxpayer cannot recognise gets left
+     * blank, and a blank category is exactly the state the ladder must refuse on — so an unreadable question
+     * does not merely annoy, it silently keeps the whole base uncomputable. Brief 75 settled the pattern:
+     * **plain Romanian for the question, article plus quoted text for the citation.** The citation is not
+     * restated here — it is `CASS_LADDER_CATEGORY_NAMES` in `domain/models.ts`, the same list the engine's
+     * own refusal prints, so the screen and the refusal cannot become two vocabularies (B-122's warning).
+     *
+     * Each question is the plain-language shape of one litera of research/41 §1, and the measurement each
+     * one wants stays in `ladderAmountHints` above — the question asks whether the income exists at all;
+     * the hint says which figure to write when it does.
+     */
+    ladderQuestions: {
+      proprietateIntelectuala:
+        'Ai încasat bani din drepturi de proprietate intelectuală — drepturi de autor pentru o carte, o muzică, ' +
+        'o fotografie, un program, sau o invenție?',
+      asocierePersoanaJuridica:
+        'Ai încheiat un contract de asociere cu o firmă — ai dat un bun sau o sumă de bani și ai primit o parte ' +
+        'din profitul ei?',
+      cedareaFolosinteiBunurilor:
+        'Ai dat în chirie ceva ce deții personal — un apartament, o casă, un teren, o mașină — și ai primit ' +
+        'chirie?',
+      activitatiAgricole:
+        'Ai avut venituri din agricultură, silvicultură sau piscicultură — din producția pământului tău, din ' +
+        'pădure sau din crescătoria de pești?',
+      investitii:
+        'Ai încasat dividende sau dobânzi, ori ai câștigat din vânzarea de acțiuni și din alte investiții?',
+      alteSurse:
+        'Ai avut alte venituri care nu se potrivesc cu cele cinci de mai sus?',
+    },
+    /**
+     * The three answers a person can give. There is no fourth, and the empty option is not one of them: it
+     * is the state of not having chosen, and it writes nothing at all.
+     *
+     * **`none` is the whole point of this section and the most dangerous word in it.** It is a fact the
+     * person asserts — „nu am avut” — and it is what lets the ladder compute at all. It must never be what
+     * the form writes when nobody chose, and the select's first option is deliberately the unrecorded one so
+     * an untouched control cannot reach it.
+     */
+    ladderAnswerOptions: {
+      amount: 'Am avut — completez suma',
+      none: 'Nu am avut astfel de venituri',
+      unknown: 'Nu vreau să declar acum',
+    },
+    ladderAnswerCitation: 'Ce spune legea, cu cuvintele ei:',
+    ladderNoAmountHint:
+      'Nu se cere nicio sumă. Dacă ai avut un astfel de venit, alege „Am avut — completez suma” și scrie-o; ' +
+      'dacă ai ales „Nu am avut”, aceea este deja o faptă a ta, iar aplicația o tratează ca atare.',
+    ladderAmountRequired:
+      'Ai spus că ai avut un astfel de venit, dar nu ai scris suma. Aplicația nu completează nimic în locul ' +
+      'tău: nici zero, nici o medie, nici o presupunere.',
     ladderAgricoleBaza: 'Suma de la activități agricole este…',
     ladderAgricoleBazaOptions: {
       venit_net: '…venit net (art. 104-106)',
@@ -419,8 +474,8 @@ export const settings = {
     ladderAnswered: (answered: number, missing: string) =>
       `Ai răspuns la ${answered} din cele șase categorii. ${
         answered === 6
-          ? 'Cumularea de la art. 170 alin. (4) se poate face.'
-          : `Lipsesc: ${missing}. Cumularea se face peste TOATE șase, deci câtă vreme una lipsește, baza nu se calculează — aplicația nu completează zero.`
+          ? 'Cumularea de la art. 170 alin. (4) se poate face — inclusiv pentru categoriile în care ai spus „nu am avut”, pentru că și acela este un răspuns.'
+          : `Fără răspuns: ${missing}. Cumularea se face peste TOATE șase, deci câtă vreme una nu are răspuns, baza nu se calculează — aplicația nu completează zero.`
       }`,
     ladderUnasked:
       'Niciuna dintre cele șase categorii nu este completată pentru acest an. Aplicația nu calculează nicio bază și nu susține că nu ai avut astfel de venituri: întrebarea pur și simplu nu a primit răspuns.',
