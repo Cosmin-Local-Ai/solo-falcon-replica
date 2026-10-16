@@ -1,0 +1,1237 @@
+import { test, expect, type Page } from '@playwright/test';
+import { fixedInstant } from '../src/test/fixedInstant';
+import { seedBrowser, seedBrowserOnce, STORAGE_KEY } from './fixtures';
+
+/**
+ * Dashboard e2e coverage (Step 34, Worker 2).
+ *
+ * The dashboard renders from the app's built-in seed dataset on a fresh
+ * browser context (no localStorage). All expected values below are
+ * deterministic: they are derived from the seed data with asOf = today
+ * (fiscal year 2026) and formatted by formatBaniRON in src/domain/money.ts
+ * (Intl.NumberFormat('ro-RO', 2 decimals) + ' RON').
+ *
+ * Cockpit cards rendered by src/pages/Dashboard.tsx (5 StatCards):
+ *   - "Venituri PFA (an)"        → formatBaniRON(snapshot.pfaRevenue)
+ *   - "Impozit estimat"          → '—' when tax status is not 'computed'
+ *   - "Rezervă lunară"           → formatBaniRON(reserve.recommendedMonthlyReserve)
+ *   - "Rămâne de pus deoparte"   → formatBaniRON(reserve.remainingTarget)
+ *   - "Date complete"            → `${satisfiedCount}/${totalCount}`
+ */
+
+// Phase 11: `STORAGE_KEY` and the seeding helpers now come from `e2e/fixtures.ts`, which is also where
+// the payload shape (fixture + version stamp) is decided once instead of per spec.
+
+/** Shared settings payload for localStorage-seeded datasets (valid per settingsSchema). */
+// TASK 9 re-pin (replaced, not deleted): the legacy `company` block followed the seed's identity fix —
+// the SRL-shaped trading name and the 'SRL' forma juridică became the PFA trading name and
+// 'Persoană fizică autorizată', and the CUI
+// that sat in the `cnp` field became the person's CNP. A PFA has no legal personality separate from the
+// person, and every rule, deadline and estimate in the app already resolves this profile as a PFA.
+const SEED_SETTINGS = {
+  cotaTva: 9,
+  company: {
+    denumire: 'Dobre Radu PFA',
+    cui: 'RO4455667788990',
+    numarRegComert: 'J40/1234/2020',
+    adresa: 'Str. Meșteșugului 12, Cluj-Napoca',
+    cnp: '1234567890123',
+    formaJuridica: 'Persoană fizică autorizată',
+    codFiscal: 'RO4455667788990',
+    codCAEN: '6201',
+    'regComerț': 'J40/1234/2020',
+    telefon: '0750 123 456',
+    email: 'contact@dobrestudio.example',
+    contBancar: 'RO44 CARP 0000 0000 1234 5678 9000',
+    banca: 'Banca Carpatică',
+    caen: [{ cod: '6201', descriere: 'Activități de programare computerizate' }],
+  },
+  personal: {
+    nume: 'Dobre Radu',
+    cnp: '1234567890123',
+    adresa: 'Str. Meșteșugului 12, Cluj-Napoca',
+    telefon: '0750 123 456',
+    email: 'radu@dobrestudio.example',
+  },
+  bankAccounts: [{ id: 'ba-1', banca: 'Banca Carpatică', moneda: 'RON' }],
+  eFactura: { trimitere: 'manual', dateContact: '2026-09-01' },
+};
+
+/** Locator for a cockpit StatCard by its exact label text. */
+function statCard(page: Page, label: string) {
+  return page.locator('.stat-card').filter({ has: page.getByText(label, { exact: true }) });
+}
+
+/**
+ * Task 1 (pre-Phase-11): the annual tax estimate is a run-rate projection, so it legitimately
+ * depends on the date the dashboard is read. Pinning the browser clock is what keeps the figures
+ * below deterministic — a literal pinned against the real "today" would be wrong the day after it
+ * was written, which is the failure class B-23 records.
+ *
+ * 2026-10-31 is chosen because the projection model's own denominator is a whole number there
+ * (9 full months + 31/31 days = 10 elapsed months), so every expected figure is hand-checkable as
+ * YTD × 12/10 = YTD × 1,2. It also leaves `monthsRemaining` at 3, exactly as the real seed date
+ * PG-0: the instant itself now comes from `src/test/fixedInstant.ts` — one value shared with
+ * `e2e/settings.spec.ts` (which carried a second copy) and with the unit suite, so a figure asserted
+ * in a browser and a figure asserted in vitest are pinned to the same day. Why 2026-10-31 is
+ * reasoned out below.
+ */
+const FIXED_AS_OF = fixedInstant();
+
+async function fixClock(page: Page): Promise<void> {
+  await page.clock.setFixedTime(FIXED_AS_OF);
+}
+
+test.describe('Dashboard — cockpit cards (seed data)', () => {
+  // Phase 11: a fresh browser context no longer receives the fixture — empty storage opens on onboarding —
+  // so every test in this file that renders the fixture loads it as a persisted payload.
+  test.beforeEach(async ({ page }) => {
+    await seedBrowser(page);
+  });
+
+  test('renders all cockpit cards with correct labels and seed-derived values', async ({ page }) => {
+    await fixClock(page);
+    await page.goto('/dashboard');
+
+    await expect(page.getByRole('heading', { name: 'Tablou de bord' })).toBeVisible();
+
+    // YTD revenue from seed: 9.317,00 lei (fiscal year 2026).
+    const venituri = statCard(page, 'Venituri PFA (an)');
+    await expect(venituri).toBeVisible();
+    await expect(venituri.locator('.value')).toHaveText('9.317,00 RON');
+
+    // Tax estimate is COMPUTED for the seed data (B-14): the seed profile is on impozit_pe_venit, the
+    // only regime a PFA can have in 2026, so the default user gets a number instead of an em dash.
+    //
+    // PG-5C changed WHAT enters the engine: the recorded amounts themselves. The projection model still
+    // runs — over the PFA's active period, 9 13/31 elapsed of 11 13/31 months at this clock, because the
+    // seed PFA started on 2026-01-19 (PG-4, B-44) — but it now feeds the chart's forecast series and the
+    // forecast card, not the assessment. CF art. 118 alin. (3) makes the amount realized in a fraction of
+    // a year the annual amount, so no grossing-up stands between the register and the engine. The pair
+    // the engine selects for a VAT-registered profile is still the VAT-exclusive one.
+    //
+    // TASK 2b changed WHICH expenses reach that operand: only the confirmed-deductible subset. Of the
+    // two 'inregistrata' seed expenses, e1 (Conectica, 120,00 lei, `postal_and_telecom`) is deductibilă
+    // and e2 (Coșul Zilnic SRL bon fiscal, 85,50 lei, `personal_or_family_use`) is nedeductibilă expres prin
+    // CF art. 68 alin. (7) lit. a) — so the expense operand is 120,00 lei, not 205,50 lei:
+    //   venit brut (excl-VAT)    7.700,00 lei înregistrat
+    //   cheltuieli deductibile     120,00 lei înregistrat
+    //   VNA                                    =  7.580,00 lei
+    // still inside 0 < VNA < 6 SM, so B-13 still applies: CASS owed = 2.430 lei (art. 174 alin. (6)
+    // difference to the 6 SM floor), but only 10% × VNA = 758,00 lei (art. 174 alin. (1)) is deductible;
+    // the 1.672,00 lei difference is excluded by art. 118 alin. (2) lit. b). CAS: VNA is below 12 SM
+    // (48.600,00 lei), so art. 148 alin. (1) is not met and none is owed. CF art. 66 rounds
+    // each sum DUE to a whole leu, fracțiuni de până la 50 de bani inclusiv neglijate:
+    //   deductibilă 758,00 (already whole)
+    //   bază        7.580,00 − 758,00 = 6.822,00 lei (the base is never itself rounded)
+    //   impozit     10% × 6.822,00 = 682,20 → 20 bani ≤ 50 → 682,00 lei
+    //   total       2.430 + 682 = 3.112,00 lei
+    // Before PG-5C this assertion read 3.257,00 lei, derived from a VNA of 9.189,45 lei — the seed's own
+    // net income multiplied by 354/292. The 145,00 lei difference was the run rate's contribution to a
+    // tax assessment, and it is the reason this phase exists.
+    const impozit = statCard(page, 'Impozit estimat');
+    await expect(impozit).toBeVisible();
+    await expect(impozit.locator('.value')).toHaveText('3.112,00 RON');
+    await expect(impozit.locator('.hint')).toHaveText('de pus deoparte');
+
+    // A computed tax → a recommended monthly reserve (total / 3 months) and a remaining amount.
+    const rezerva = statCard(page, 'Rezervă lunară');
+    await expect(rezerva).toBeVisible();
+    // 3.112,00 lei ÷ 3 months remaining (Oct–Dec) = 1.037,33 lei/month.
+    await expect(rezerva.locator('.value')).toHaveText('1.037,33 RON');
+
+    const ramane = statCard(page, 'Rămâne de pus deoparte');
+    await expect(ramane).toBeVisible();
+    await expect(ramane.locator('.value')).toHaveText('3.112,00 RON');
+
+    // Completeness: 7 of 9.
+    // TASK 9 re-pin (replaced, not deleted): 8/9 → 7/9. The 'Declarații' check asked whether the app holds
+    // any declaration record, and the seed no longer holds one — the three it carried recorded monthly
+    // filings that do not exist for this profile (see the note in src/data/seed.ts).
+    // PG-5 re-pin (replaced, not deleted): the denominator moves 8 → 9 because `declarations` split into
+    // `annualFiling` and `vatFilingPeriod`. The numerator stays at 7: the annual filing is SATISFIED at
+    // the fixed clock (the FY2026 return is not owed until 25.05.2027, and "not owed yet" is not missing
+    // data), and the two gaps are now the empty tax-statement register — the seed's D300 row went with
+    // the monthly cadence it asserted — and the VAT filing period B-35 refuses to guess.
+    const dateComplete = statCard(page, 'Date complete');
+    await expect(dateComplete).toBeVisible();
+    await expect(dateComplete.locator('.value')).toHaveText('7/9');
+    await expect(dateComplete.locator('.hint')).toHaveText('verificări');
+  });
+
+  test('renders all dashboard sections with Romanian titles', async ({ page }) => {
+    await fixClock(page);
+    await page.goto('/dashboard');
+
+    // Page-level sections (h2.card-title).
+    const h2Titles = [
+      'Estimare impozit',
+      'Grafic financiar',
+      'Rezumat',
+      'Observații',
+      'Rezervă fiscală',
+    ];
+    for (const title of h2Titles) {
+      await expect(page.locator('h2.card-title', { hasText: title })).toBeVisible();
+    }
+
+    // TASK 9 re-pin (replaced, not deleted): these five sections used to render a bare <h3> from the
+    // second card system. There is one card system now, and its title is `h2.card-title` — the same
+    // element the five page-level sections above use. The titles asserted are unchanged.
+    const cardTitleSections = [
+      'Praguri',
+      'Termene limită',
+      'Completitudine date',
+      'Ce trebuie să faci',
+      'Legislație',
+    ];
+    for (const title of cardTitleSections) {
+      await expect(page.locator('h2.card-title', { hasText: title })).toBeVisible();
+    }
+
+    // Tax hero mirrors the cockpit: the seed estimate is computed, so the hero shows the number.
+    // There are two .tax-hero-value nodes once the reserve section renders its own hero (tax estimate
+    // and monthly reserve), so the assertion is scoped to the 'Estimare impozit' card.
+    const heroCard = page
+      .locator('section.card')
+      .filter({ has: page.locator('h2.card-title', { hasText: 'Estimare impozit' }) })
+      .first();
+    await expect(heroCard.locator('.tax-hero-value')).toHaveText('3.112,00 RON');
+  });
+});
+
+test.describe('Dashboard — section content (seed data)', () => {
+  test.beforeEach(async ({ page }) => {
+    await seedBrowser(page);
+  });
+  /**
+   * Every section renders from the app's built-in seed dataset (fresh
+   * browser context, no localStorage) with asOf = today (fiscal year 2026).
+   * All values below are deterministic for that dataset. Date-relative
+   * fields (e.g. "zile rămase" counts) are asserted by their stable date
+   * part only, so the tests do not depend on the day they run.
+   */
+
+  /** Scope to the dashboard card (section.card) containing the given title. */
+  // TASK 9: the default level flips from 'h3' to 'h2' — the two card systems became one, and every
+  // section title is now `h2.card-title`. Call sites are unchanged; the sections they scope are the same.
+  const sectionWith = (page: Page, title: string, level: 'h2' | 'h3' = 'h2') =>
+    page.locator('section.card').filter({ has: page.locator(level, { hasText: title }) });
+
+  test('Rezervă fiscală: shows the recommended reserve built from the computed seed estimate', async ({ page }) => {
+    await fixClock(page);
+    await page.goto('/dashboard');
+
+    const reserve = sectionWith(page, 'Rezervă fiscală', 'h2');
+    await expect(reserve).toBeVisible();
+    // 3.112,00 lei — the tax computed from the DEDUCTIBLE subset of the recorded register (TASK 2b removed
+    // e2's 85,50 lei from the base; PG-5C removed the × 354/292 that used to sit in front of it) — over
+    // the 3 remaining months of the fiscal year → 1.037,33 lei/month.
+    await expect(reserve.getByText('1.037,33 RON').first()).toBeVisible();
+    await expect(
+      reserve.getByText('Rămâne de pus deoparte 3.112,00 RON în următoarele 3 luni.'),
+    ).toBeVisible();
+    // The no-estimate empty state is gone: the default regime computes (B-14).
+    await expect(
+      reserve.getByText('Nu există o estimare fiscală disponibilă — rezerva recomandată nu poate fi calculată.'),
+    ).toHaveCount(0);
+  });
+
+  test('Praguri: renders all 5 thresholds with current value, threshold and status', async ({ page }) => {
+    await fixClock(page);
+    await page.goto('/dashboard');
+
+    const thresholds = sectionWith(page, 'Praguri');
+    await expect(thresholds.locator('.item-row')).toHaveCount(5);
+
+    // CAS: below the tier-1 floor of 12 SM. There is no 'Prag maxim CAS' row:
+    // CF art. 148 alin. (2) sets FLOORS ("nu poate fi mai mic decât"), never a ceiling, so a
+    // CAS maximum-base row asserted a cap that does not exist (docs/ai/phases/03_cas.md).
+    // (exact: true — 'Prag minim CAS' is a substring of 'Prag minim CASS').
+    await expect(thresholds.getByText('Prag minim CAS', { exact: true })).toBeVisible();
+    await expect(thresholds.getByText('Prag: 48.600,00 lei')).toBeVisible();
+    await expect(thresholds.getByText('Prag maxim CAS', { exact: true })).toHaveCount(0);
+
+    // The 24 SM step of the same ladder (art. 148 alin. (2) lit. b)) is labelled as a step, not as
+    // a maximum: crossing it raises the MINIMUM CAS base from 12 SM to 24 SM.
+    await expect(thresholds.getByText('Treaptă de calcul CAS', { exact: true })).toBeVisible();
+    await expect(thresholds.getByText('Prag: 97.200,00 lei')).toBeVisible();
+
+    // CASS: below the minimum base, within the maximum base.
+    await expect(thresholds.getByText('Prag minim CASS', { exact: true })).toBeVisible();
+    await expect(thresholds.getByText('Prag maxim CASS', { exact: true })).toBeVisible();
+    await expect(thresholds.getByText('Prag: 24.300,00 lei')).toBeVisible();
+    await expect(thresholds.getByText('Prag: 291.600,00 lei')).toBeVisible();
+
+    // VAT registration threshold.
+    await expect(thresholds.getByText('Prag de înregistrare Vat')).toBeVisible();
+    await expect(thresholds.getByText('Prag: 395.000,00 lei')).toBeVisible();
+
+    // Phase 8: the rows do not share one number. The four contribution rows are
+    // measured on the engine's venitul net din activitate (7.700,00 - 120,00 = 7.580,00 lei —
+    // TASK 2b: the deductible subset, not every recorded expense),
+    // per CF art. 148 alin. (1)-(2) / art. 170 alin. (1) / art. 174 alin. (6); the VAT row is
+    // measured on VAT-exclusive turnover (4.500 + 3.200 = 7.700,00 lei), per art. 310 alin. (1).
+    // PG-5C re-pin (replaced, not deleted): the four contribution rows used to read 9.189,45 lei — the
+    // ANNUAL PROJECTED VNA, i.e. the same 7.580,00 lei multiplied by 354/292 — while the VAT row read
+    // the realised 7.700,00 lei. A CAS floor of 48.600,00 lei was therefore compared against money the
+    // taxpayer had not received. Both families now read realised amounts; they remain different
+    // quantities, and the rows still say which. See docs/ai/phases/12_projection_annual_estimate.md §6
+    // as amended by PG-5C.
+    await expect(thresholds.getByText(/Curent: 7\.580,00 lei/)).toHaveCount(4);
+    await expect(thresholds.getByText(/Curent: 7\.700,00 lei/)).toHaveCount(1);
+    // The VAT-inclusive figure all the rows used to share is gone from this section. (It is
+    // still correct — and still shown — as the "Venituri PFA (an)" cockpit card.)
+    await expect(thresholds.getByText(/Curent: 9\.317,00 lei/)).toHaveCount(0);
+    // …and so is the projected one it was compared against.
+    await expect(thresholds.getByText(/Curent: 9\.189,45 lei/)).toHaveCount(0);
+
+    // Status badges — TASK 4 re-pinned. Before: 2 × 'Depășit' (the two contribution FLOORS) and
+    // 3 × 'În limite'. Nothing in the Cod fiscal attaches an adverse consequence to a net income
+    // below 12 SM (docs/ai/research/24_cas_floor_consequence_2026.md), so a floor row can no longer
+    // render as a breach: now 0 × 'Depășit', 2 × 'Atenție' (the two floors, whose level IS in play)
+    // and 3 × 'În limite' (the 24 SM step, the 72 SM cap and the VAT plafon, all far from their level).
+    await expect(thresholds.getByText('Depășit', { exact: true })).toHaveCount(0);
+    await expect(thresholds.getByText('Atenție', { exact: true })).toHaveCount(2);
+    await expect(thresholds.getByText('În limite', { exact: true })).toHaveCount(3);
+
+    // TASK 4: the below-floor CAS row states the consequence the law does provide, with its citation,
+    // instead of the deleted 'Sub baza minimă — dezcalificare din regim'.
+    await expect(
+      thresholds.getByText(/nu se datorează contribuția de asigurări sociale pentru acest an/),
+    ).toBeVisible();
+    await expect(thresholds.getByText(/art\. 148 alin\. \(1\) și \(4\) din Codul fiscal/)).toBeVisible();
+    // The two deleted sentences, and the words they were built from, must not come back.
+    await expect(thresholds.getByText(/dezcalificare/)).toHaveCount(0);
+    await expect(thresholds.getByText(/schimbare de regim/)).toHaveCount(0);
+    // The 'La depășire:' prefix presumed a breach; the consequence is now its own sentence.
+    await expect(thresholds.getByText(/La depășire:/)).toHaveCount(0);
+
+    // TASK 4: a lei amount the law states as an SM multiple is labelled as computed, citing the SM
+    // value and the act that set it. CF art. 148 never writes 48.600 lei.
+    await expect(
+      thresholds.getByText('Sumă calculată de aplicație: 12 × salariul minim de'),
+    ).toBeVisible();
+    // Four SM-multiple rows (12 SM, 24 SM, 6 SM, 72 SM) each carry the same anchor: 4.050 lei,
+    // HG 1506/2024. The 395.000-lei VAT row does not — that figure is the statute's own.
+    await expect(thresholds.getByText('4.050,00 lei')).toHaveCount(4);
+    await expect(thresholds.getByText(/HG 1506\/2024/)).toHaveCount(4);
+    await expect(thresholds.getByText(/HG 146\/2026/)).toHaveCount(4);
+
+    // TASK 4: each row says which quantity it measured — the realised annual net income for the four
+    // contribution rows, year-to-date turnover for the VAT plafon. The asymmetry is deliberate.
+    // PG-5C re-pin: the annual label used to read "venit net anual estimat pentru întreg anul", and that
+    // was not true — it was a projection. `'annual-projected'` no longer exists in `MeasuredBasis`, so
+    // the old wording cannot be rendered at all.
+    await expect(
+      thresholds.getByText(/Bază măsurată: venit net anual realizat — încasări încasate și plăți plătite, fără annualizare/),
+    ).toHaveCount(4);
+    await expect(thresholds.getByText(/Bază măsurată: cifra de afaceri înregistrată de la începutul anului/)).toHaveCount(1);
+    await expect(thresholds.getByText(/Bază măsurată: venit net anual estimat pentru întreg anul/)).toHaveCount(0);
+
+    // PG-5C (D-PROJ-1): the section names the date the measured values were measured at, so a mid-year
+    // reader is not left to infer that the year is already settled.
+    await expect(thresholds.getByText('Valoare măsurată la data de 31.10.2026.')).toBeVisible();
+
+    // TASK 4: the seed profile declares a VAT registration, so the art. 310 alin. (1)
+    // registration test has been decided — the row renders as not applicable, not as a breach.
+    await expect(thresholds.getByText(/Nu se aplică:/)).toHaveCount(1);
+  });
+
+  // Phase 9b: exactly ONE upcoming deadline. The four quarterly/estimated event types were deleted
+  // because the obligations do not exist in fiscal year 2026 — a PFA în sistem real has NO quarterly
+  // plată: income tax, CAS and CASS are each declared AND paid by 25 May of the following year
+  // (CF art. 68 alin. (10), art. 151 alin. (1) and art. 174 alin. (15), all routing to art. 122
+  // alin. (3)). The advance-payment article (art. 120/120^1) is `Abrogat.` from 01-01-2025 and CAS
+  // art. 160 has been `Abrogat.` since 01-01-2018. The VAT registration deadline is rule-driven but
+  // dateless here: no profile records a TVA exceedance date, and with offset_days = 0 its deadline IS
+  // the exceedance date, so it can never classify as upcoming anyway.
+  test('Termene limită: renders the single upcoming filing deadline (D212)', async ({ page }) => {
+    // PG-0: this test had no clock pin, and three of its assertions drift with the real date —
+    // the "upcoming" filter is wall-clock driven, so `25.05.2027` disappears from the list once the
+    // real day passes it, and the `.item-row` and `Activ` counts move with it. Pinning is what the
+    // other tests in this file already do; this one had simply escaped it.
+    await fixClock(page);
+    await page.goto('/dashboard');
+
+    const deadlines = sectionWith(page, 'Termene limită');
+    await expect(deadlines.locator('.item-row')).toHaveCount(1);
+
+    await expect(deadlines.getByText('Depunere D212')).toBeVisible();
+    await expect(deadlines.getByText('25.05.2027')).toBeVisible();
+    await expect(deadlines.getByText('PFA', { exact: true })).toBeVisible();
+
+    // All listed deadlines are active.
+    await expect(deadlines.getByText('Activ', { exact: true })).toHaveCount(1);
+
+    // The deleted obligations must not reappear under any label…
+    for (const label of [
+      'CAS trimestrial',
+      'CASS trimestrial',
+      'Avans impozit pe venit',
+      'Declarație estimativă PFA',
+      'Înregistrare TVA',
+    ]) {
+      await expect(deadlines.getByText(label)).toHaveCount(0);
+    }
+    // …or under any of the dates they used to render, including the quarterly instalment dates and
+    // the 15 April 2026 date that belongs to a 3% bonificație for the 2025 year, not to a deadline.
+    for (const date of [
+      '15.04.2026',
+      '15.07.2026',
+      '15.10.2026',
+      '15.01.2027',
+      '25.03.2026',
+      '25.06.2026',
+      '25.09.2026',
+      '25.12.2026',
+    ]) {
+      await expect(deadlines.getByText(date)).toHaveCount(0);
+    }
+  });
+
+  test('Completitudine date: renders 9 checks, 7 satisfied, and the weighted share of the recorded money', async ({ page }) => {
+    // PG-1 re-pin (replaced, not deleted): nine checks became eight. The removed one was `taxEstimate`,
+    // which asked whether a calculation snapshot with status `computed` existed and counted that as a
+    // completeness fact — so it was satisfied by exactly the failure it claimed to catch: a profile that
+    // dropped a real expense out of the estimate still had a computed snapshot. The clock is pinned here
+    // because the weighted figure is period-scoped, and an unpinned date would move it.
+    // PG-5 re-pin (replaced, not deleted): eight became nine. `declarations` — "any declaration record
+    // exists" — became `annualFiling` (the return this fiscal year owes) plus `vatFilingPeriod` (B-35,
+    // the period the recorded facts cannot fix). The satisfied count holds at 7: the annual filing is
+    // satisfied because the FY2026 return is not owed yet, and the two gaps are the statement register
+    // and the VAT period.
+    await fixClock(page);
+    await page.goto('/dashboard');
+
+    const completeness = sectionWith(page, 'Completitudine date');
+    await expect(completeness.getByText('7 din 9 verificări îndeplinite')).toBeVisible();
+    // CompletenessSection renders one .check-row per check (not .item-row).
+    await expect(completeness.locator('.check-row')).toHaveCount(9);
+
+    for (const label of [
+      'Profil',
+      'Venituri înregistrate',
+      'Cheltuieli înregistrate',
+      'Clienți',
+      'Documente',
+      'Documente de firmă',
+      'Declarația unică (D212)',
+      'Perioada de depunere TVA',
+      'Declarații fiscale',
+    ]) {
+      await expect(completeness.getByText(label, { exact: true })).toBeVisible();
+    }
+
+    // The two unsatisfied checks. PG-5 re-pin: the old single gap was „nu există declarații”, which the
+    // seed satisfied-by-absence for the wrong reason — there is no monthly return to hold records for.
+    // The rows below state the two absences that are real: no tax statements, and a VAT period the
+    // recorded facts cannot establish (B-35 — the app asks for the fact instead of naming a cadence).
+    await expect(completeness.getByText('nu există situații de taxe')).toBeVisible();
+    // PG-6g re-pin (replaced, not deleted): B-35's admission is still there, and it is no longer a dead
+    // end. The row now names the two facts that would decide which alineat of art. 322 applies, says where
+    // to give them, and states the statutory default of art. 322 alin. (1) as the LAW's answer in the
+    // meantime — which is what removes „nu poate fi stabilită” with nowhere to go without the app guessing
+    // a cadence (D-VAT-1).
+    await expect(completeness.getByText(/nu poate fi stabilit încă/)).toBeVisible();
+    await expect(completeness.getByText(/De la ce dată produce efecte înregistrarea/)).toBeVisible();
+    await expect(completeness.getByText(/rămâne regula/)).toBeVisible();
+    // No cadence the app concluded (acceptance 4). The monthly wording present is the art. 322 alin. (1)
+    // default, attributed to the article.
+    await expect(completeness.getByText(/trimestrial|D300/)).toHaveCount(0);
+    // The annual filing is NOT a gap at this clock: the term has not arrived.
+    await expect(completeness.getByText(/nu se datorează încă/)).toBeVisible();
+    // PG-1: the circular row is gone, and so is its label — a label with no check behind it is how a
+    // dead row comes back.
+    await expect(completeness.getByText('Estimare impozit', { exact: true })).toHaveCount(0);
+    await expect(completeness.getByText('nu există instantanee de taxe')).toHaveCount(0);
+    // PG-5: the label the deleted `declarations` check carried is gone with it.
+    await expect(completeness.getByText('Declarații', { exact: true })).toHaveCount(0);
+    // The company documents the seed does hold, stated per section — the D212 for the 2025 year sits in
+    // `im`, and `cs` is empty because D212 is one form covering income and contributions alike.
+    // Phase 11 re-pin (replaced, not deleted): `im: 1` is gone. The D212 for the 2025 year that sat in
+    // `im` is an impossible document for a PFA that started on 2026-01-19 — there is no 2025 income year
+    // to declare — so the fixture no longer holds it (see the note in src/data/seed.ts). The section list
+    // states what is actually there; `cs` stays absent because it is empty.
+    // PG-5 re-pin (replaced, not deleted): `tva: 1` is gone with it. That document was a D300 VAT
+    // statement, and a VAT statement in the fixture is a second way of asserting the periodic cadence
+    // B-35 says the recorded facts cannot establish. Sections with no entries are omitted from the
+    // detail, so what remains is the three invoices and nothing else.
+    await expect(completeness.getByText(/facturi: 3/)).toBeVisible();
+    await expect(completeness.getByText(/tva:/)).toHaveCount(0);
+    await expect(completeness.getByText('Complet', { exact: true })).toHaveCount(7);
+    await expect(completeness.getByText('Lipsă', { exact: true })).toHaveCount(2);
+
+    // PG-1: the weighted line. The seed records everything it holds in the estimate, so the honest
+    // figure is 100 — and it is now a figure that would DROP if a record were excluded, which the old
+    // counts could not do.
+    await expect(completeness.locator('[data-amount-coverage]')).toBeVisible();
+    await expect(completeness.getByText('Din sumele înregistrate, intră în estimare')).toBeVisible();
+    await expect(completeness.locator('[data-amount-percent]')).toHaveAttribute('data-amount-percent', '100');
+  });
+
+  test('Ce trebuie să faci: renders the 6 pending action items', async ({ page }) => {
+    await page.goto('/dashboard');
+
+    const actions = sectionWith(page, 'Ce trebuie să faci');
+    // TASK 7 re-pin (replaced, not deleted): the count used to read `3 item de rezolvat` — an English
+    // plural dropped into Romanian, the calque class the grammar sweep targets.
+    // TASK 8 re-pin (replaced, not deleted): 3 → 6. Old three = 1 deadline + 1 completeness + 1 tax
+    // review. The tax-review action is gone (the seed estimate computes, so there is nothing to
+    // review), and the four records the seed genuinely holds unresolved (r2, r3, e3, d2) now surface.
+    // New six = 4 records + 1 completeness + 1 deadline.
+    // TASK 9 re-pin (replaced, not deleted): still six, but one of them changed identity. The `d2`
+    // declaration row is gone — the record it came from described a monthly filing that was never due,
+    // and the seed no longer holds it. What takes its place is the honest one: the app holds no
+    // declaration record at all, so the 'Declarații' completeness check is unsatisfied and says so.
+    // Six now = 3 records + 2 completeness + 1 deadline.
+    // PG-1 re-pin (replaced, not deleted): 6 → 5. The row that left is the completeness row for the
+    // removed `taxEstimate` check — the one that reported whether an estimate had been calculated. The
+    // seed does have one, so it was never actionable, and it disappeared with the check.
+    // PG-5 re-pin (replaced, not deleted): 5 → 6. The `declarations` completeness row is gone with the
+    // predicate behind it ("any declaration record exists"), and two honest rows take its place: the
+    // empty tax-statement register — the seed's D300 row went with the monthly cadence it asserted —
+    // and the VAT filing period B-35 refuses to guess. The annual filing is NOT a row: at the pinned
+    // clock the FY2026 return is not owed yet. Six now = 3 records + 2 completeness + 1 deadline.
+    await expect(actions.getByText('6 elemente de rezolvat')).toBeVisible();
+    // ActionSection renders one .action-label per item (not .item-row).
+    await expect(actions.locator('.action-label')).toHaveCount(6);
+
+    // Each record carries the reason its own row holds — `statusDetail` verbatim, nothing invented.
+    await expect(actions.getByText('Document de venit respins: NF-2026-003')).toBeVisible();
+    await expect(actions.getByText(/CUI nevalid/)).toBeVisible();
+    await expect(actions.getByText('Transmitere în așteptare: FCT-2026-002')).toBeVisible();
+    await expect(actions.getByText(/„În așteptare”/)).toBeVisible();
+    await expect(actions.getByText('Document de cheltuială respins: FCT-PRO-121')).toBeVisible();
+    await expect(actions.getByText(/Document neconform/)).toBeVisible();
+    // PG-5 re-pin (replaced, not deleted): the old pair of rows here was the `d2` declaration row
+    // („Declarație fără depunere înregistrată: 2026-06”) and then, from TASK 9, the completeness row
+    // „Date lipsă: Declarații”. Both asserted an obligation this profile does not have: a PFA în sistem
+    // real files one Declarația Unică per fiscal year, so a monthly row cannot be "missing a submission"
+    // and "no declaration records" is not a gap in the data. The rows below state the two absences that
+    // are real.
+    await expect(actions.getByText('Date lipsă: Perioada de depunere TVA')).toBeVisible();
+    await expect(actions.getByText(/nu este îndeplinită: Perioada de depunere TVA/)).toBeVisible();
+    await expect(actions.getByText('Date lipsă: Declarații fiscale')).toBeVisible();
+    await expect(actions.getByText(/nu este îndeplinită: Declarații fiscale/)).toBeVisible();
+    await expect(actions.getByText('Declarație fără depunere înregistrată: 2026-06')).toHaveCount(0);
+    await expect(actions.getByText('Date lipsă: Declarații', { exact: true })).toHaveCount(0);
+    // The annual filing is not an action item at this clock — the term has not arrived.
+    await expect(actions.getByText(/Date lipsă: Declarația unică/)).toHaveCount(0);
+    // PG-1: the completeness row that asked whether an estimate existed is gone with the check.
+    await expect(actions.getByText('Date lipsă: Estimare impozit')).toHaveCount(0);
+
+    // Source badges — one per attention source. Old: deadline / completeness / tax only.
+    await expect(actions.getByText('Termen limită', { exact: true })).toHaveCount(1);
+    await expect(actions.getByText('Completitudine', { exact: true })).toHaveCount(2);
+    await expect(actions.getByText('Venit', { exact: true })).toHaveCount(2);
+    await expect(actions.getByText('Cheltuială', { exact: true })).toHaveCount(1);
+    await expect(actions.getByText('Declarație', { exact: true })).toHaveCount(0);
+    await expect(actions.getByText('Revizuire estimări fiscale')).toHaveCount(0);
+
+    // Severity is the domain's decision, and the row is styled from it alone. PG-5 re-pin: the second
+    // completeness row is `medium` like the first, so the medium band goes 3 → 4.
+    await expect(actions.getByText('prioritate ridicată', { exact: true })).toHaveCount(1);
+    await expect(actions.getByText('prioritate medie', { exact: true })).toHaveCount(4);
+    await expect(actions.getByText('prioritate scăzută', { exact: true })).toHaveCount(1);
+  });
+
+  test('Legislație: says the monitor is unavailable, and reports the rule package changes with their effect', async ({ page }) => {
+    await page.goto('/dashboard');
+
+    const legislation = sectionWith(page, 'Legislație');
+    // TASK 8 re-pin (replaced, not deleted). Old: `Nicio modificare viitoare verificată.`
+    // `getLegislationState` sits on a placeholder boundary — no ingestion, no monitor — and "no
+    // verified change" is not the same statement as "nothing to know". The honest one is about the
+    // monitor.
+    await expect(
+      legislation.getByText(
+        'Monitorul de modificări legislative nu este activ: aplicația nu verifică nicio sursă, deci nu poate spune nici că există o modificare, nici că nu există.',
+      ),
+    ).toBeVisible();
+    await expect(legislation.getByText('Nicio modificare viitoare verificată.')).toHaveCount(0);
+
+    // The change the rule package already carries, with the half that matters: HG 146/2026 raised the
+    // minimum wage to 4.325,00 lei on 1 iulie 2026 and does NOT re-anchor FY2026, because CF art. 135¹
+    // alin. (3) takes the value in force on 1 January of the year the income is earned.
+    const sm = page.locator('section.card').filter({ has: page.locator('h4', { hasText: 'HG 146/2026' }) });
+    await expect(
+      sm.getByText('Salariul minim brut pe țară este 4.325,00 lei de la 2026-07-01 (HG 146/2026).'),
+    ).toBeVisible();
+    await expect(sm.getByText('Nu te afectează în acest an fiscal')).toBeVisible();
+    await expect(sm.getByText(/art\. 135¹ alin\. \(3\)/)).toBeVisible();
+    // The 1 January vintage is the anchor the thresholds are measured on, and it says so. Scoped to the
+    // card's own summary line: the Praguri card cites the same act, so a bare text filter would match
+    // two cards.
+    const anchor = page.locator('section.card').filter({ has: page.locator('h4', { hasText: 'HG 1506/2024' }) });
+    await expect(anchor.getByText('4.050,00 lei')).toBeVisible();
+    await expect(anchor.getByText('Te afectează')).toBeVisible();
+  });
+
+  test('Observații: renders the 2 observations with severity badges', async ({ page }) => {
+    await page.goto('/dashboard');
+
+    const insights = sectionWith(page, 'Observații', 'h2');
+
+    // Phase 9b: no deadline insights at all. The snapshot carries two deadline rows — D212 at
+    // 25.05.2027, which is more than 30 days out and therefore produces no alert, and the VAT
+    // registration row, which is dateless and is skipped. The 7 danger + 2 warning deadline alerts
+    // this test used to assert were all fabricated quarterly instalments.
+    await expect(insights.getByText('Termen depășit: PFA')).toHaveCount(0);
+    await expect(insights.getByText('Termen apropiat: PFA')).toHaveCount(0);
+
+    // Completeness + tax insights. TASK 8 re-pin (replaced, not deleted): this test asserted FOUR
+    // insights — `Date incomplete`, `Lipsă: Estimare impozit.`, `Estimarea totală a impozitului:` and
+    // `Rezervă fiscală sub țintă`. Two of those were the same problem the action list already showed
+    // (a missing tax snapshot, a tax estimate), which is the duplicate card + action the task removes.
+    // The completeness checks are now one action per check in *Ce trebuie să faci*, and a computed
+    // estimate is not an attention item at all. Two observations remain: the CASS/CAS level and the
+    // reserve shortfall.
+    await expect(insights.getByText('Date incomplete')).toHaveCount(0);
+    await expect(insights.getByText('Lipsă: Estimare impozit.')).toHaveCount(0);
+    await expect(insights.getByText('Estimarea totală a impozitului:')).toHaveCount(0);
+    await expect(insights.getByText('Estimarea impozitului necesită verificare')).toHaveCount(0);
+    // A recommended reserve with nothing reserved yet is its own observation — it only exists because
+    // the estimate is computed.
+    await expect(insights.getByText('Rezervă fiscală sub țintă')).toBeVisible();
+    // And the missing check appears exactly once, on the action surface.
+    const actionSection = sectionWith(page, 'Ce trebuie să faci');
+    // PG-1 re-pin (replaced, not deleted): the row asserted here was the completeness action for the
+    // `taxEstimate` check — "an estimate has been calculated", offered as something to fix. The check is
+    // gone, so the row is gone from BOTH surfaces, and the coverage of the estimate is now stated on the
+    // hero instead.
+    await expect(actionSection.getByText('Date lipsă: Estimare impozit')).toHaveCount(0);
+    await expect(insights.getByText('Date lipsă: Estimare impozit')).toHaveCount(0);
+
+    // TASK 4 re-pinned: the two contribution FLOORS (CAS_MIN_BASE, CASS_MIN_BASE) no longer reach
+    // Observații as `Prag depășit:` / `Urgent`. Being below a contribution floor is not a breach —
+    // CF art. 148 alin. (1) makes 12 SM the condition for the obligation to exist, and below it the
+    // consequence is `nu datorează contribuția` (docs/ai/research/24_cas_floor_consequence_2026.md).
+    // They still surface, as ONE canonical CASS/CAS alert (canonicalCassCas collapses them) worded as
+    // a changed calculation base, and the description is the row's own cited consequence.
+    await expect(insights.getByText('Prag depășit:')).toHaveCount(0);
+    await expect(insights.getByText('Nivel de calcul modificat:')).toHaveCount(1);
+    await expect(insights.getByText(/art\. 174 alin\. \(6\) coroborat cu art\. 170 alin\. \(1\)/)).toBeVisible();
+    await expect(insights.getByText(/limita fiscală/)).toHaveCount(0);
+    await expect(insights.getByText(/dezcalificare|schimbare de regim/)).toHaveCount(0);
+
+    // Severity badges — TASK 8 re-pin. Before TASK 4: 1 Urgent + 2 Atenție + 1 Info. After TASK 4:
+    // 0 Urgent + 3 Atenție + 1 Info. The words themselves were the collapse: three badges for the
+    // four-level scale TASK 7 shipped in `copy.severity`, with `high→danger / medium→warning / low→info`
+    // translated in `insights.ts`. That translation is deleted, so the badges now read the domain's own
+    // words: the collapsed CASS/CAS level change and the reserve shortfall are both `medium`.
+    await expect(insights.getByText('Urgent', { exact: true })).toHaveCount(0);
+    await expect(insights.getByText('Atenție', { exact: true })).toHaveCount(0);
+    await expect(insights.getByText('Info', { exact: true })).toHaveCount(0);
+    await expect(insights.getByText('prioritate ridicată', { exact: true })).toHaveCount(0);
+    await expect(insights.getByText('prioritate medie', { exact: true })).toHaveCount(2);
+    await expect(insights.getByText('prioritate scăzută', { exact: true })).toHaveCount(0);
+  });
+});
+
+test.describe('Dashboard — mobile viewport (390x844)', () => {
+  test.beforeEach(async ({ page }) => {
+    await seedBrowser(page);
+  });
+
+  test('renders without horizontal overflow', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/dashboard');
+
+    await expect(page.getByRole('heading', { name: 'Tablou de bord' })).toBeVisible();
+    await expect(statCard(page, 'Venituri PFA (an)')).toBeVisible();
+    await expect(page.locator('h2.card-title', { hasText: 'Grafic financiar' })).toBeVisible();
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow, 'page must not scroll horizontally at 390px').toBeLessThanOrEqual(0);
+  });
+});
+
+test.describe('Dashboard — navigation', () => {
+  test.beforeEach(async ({ page }) => {
+    await seedBrowser(page);
+  });
+
+  test('normalizes / to /dashboard and shows the dashboard title', async ({ page }) => {
+    await page.goto('/');
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.locator('.page-title')).toHaveText('Panou de control');
+    await expect(page.getByRole('heading', { name: 'Tablou de bord' })).toBeVisible();
+  });
+
+  test('navigates to /revenues via the sidebar link', async ({ page }) => {
+    await page.goto('/dashboard');
+
+    await page.locator('a.nav-item', { hasText: 'Venituri' }).click();
+    await expect(page).toHaveURL(/\/revenues$/);
+    await expect(page.locator('.page-title')).toHaveText('Venituri');
+  });
+
+  test('navigates to /revenues via direct URL', async ({ page }) => {
+    await page.goto('/revenues');
+    await expect(page).toHaveURL(/\/revenues$/);
+    await expect(page.locator('.page-title')).toHaveText('Venituri');
+  });
+});
+
+test.describe('Dashboard — zero records (acceptance 6)', () => {
+  test('shows the zero-record card AND the deadline / completeness / next-steps sections', async ({ page }) => {
+    // A valid-but-empty dataset is NOT a first run: the profile exists, the registers do not. Phase 11
+    // rewrote this test rather than re-pinning it — the old version asserted that nothing but the card
+    // renders, which is exactly the B-68 shape: a deadline does not stop existing because the ledger is
+    // empty, and acceptance 6 requires the next deadline, the profile completeness and the next steps.
+    const emptyDataset = {
+      revenues: [],
+      settings: SEED_SETTINGS,
+    };
+
+    await page.addInitScript(
+      ([key, dataset]: [string, unknown]) => {
+        localStorage.setItem(key, JSON.stringify(dataset));
+      },
+      [STORAGE_KEY, emptyDataset],
+    );
+
+    await fixClock(page);
+    await page.goto('/dashboard');
+
+    await expect(page.getByRole('heading', { name: 'Nicio înregistrare de venit sau cheltuială' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Adaugă un venit' })).toHaveAttribute('href', '/revenues');
+    await expect(page.getByRole('link', { name: 'Adaugă o cheltuială' })).toHaveAttribute('href', '/expenses');
+
+    // The card reports the absence; it no longer replaces the page. The cockpit and every lower section
+    // still mount.
+    await expect(page.locator('.stat-card')).not.toHaveCount(0);
+    await expect(page.locator('h2.card-title')).not.toHaveCount(0);
+    // Acceptance 6, one assertion per thing it names.
+    const deadlines = page
+      .locator('section.card')
+      .filter({ has: page.locator('h2.card-title', { hasText: 'Termene limită' }) });
+    await expect(deadlines.getByText('Depunere D212')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Completitudine date' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Ce trebuie să faci' })).toBeVisible();
+  });
+});
+
+// --- Phase 9b: a PFA start date resolves NO deadline at all ------------------------------------
+// Phase 9 wired the profile's PFA start date into the deadline engine to render a "declarație
+// estimativă" 15 days after the start date. That obligation does not exist: its basis (CF art. 120)
+// is `Abrogat.` from 01-01-2025 (OUG 128/2024 pct. 11 Art. I, MO 1125/11.11.2024), and the CPF
+// art. 82 alin. (6) lit. c) 30-day `declarație de înregistrare fiscală` excludes precisely the
+// persons who register at registrul comerțului — which OUG 44/2008 art. 7 alin. (1) makes mandatory
+// for a PFA, while art. 13 alin. (3) of that act makes the ONRC certificate itself the act of fiscal
+// taking-into-evidence. A PFA opened at any point in 2026 files its first Declarația Unică by
+// 25 May 2027 (CF art. 122 alin. (3), which extends the term to the alin. (2) case verbatim).
+// So the start date must be inert end to end: the card shows the D212 deadline and nothing else.
+test.describe('Dashboard — a PFA start date resolves no deadline', () => {
+  test('renders only the D212 deadline, with no start-date-derived and no invented VAT deadline', async ({ page }) => {
+    // The start date is deliberately a *future* one (today + 5 days), which is the case that used to
+    // produce a start-date-derived deadline. It must now change nothing, whatever the clock says.
+    await page.addInitScript(
+      ([key]: [string]) => {
+        const iso = (d: Date) => d.toISOString().slice(0, 10);
+        const start = new Date(Date.now() + 5 * 86_400_000);
+        const dataset = {
+          version: 3,
+          profile: {
+            id: 'profile-dates-1',
+            pfaStartYear: 2026,
+            pfaStartDate: iso(start),
+            fiscalYear: 2026,
+            regime: 'impozit_pe_venit',
+            caen: '6201',
+            salaryStatus: 'nu',
+            pensionerStatus: 'nu',
+            socialInsuranceStatus: 'obligatoriu',
+            vatRegistration: { status: 'inregistrat_art316' },
+            cashFloorLei: 0,
+            identity: {
+              nume: 'Dobre Radu',
+              cnp: '1234567890123',
+              adresa: 'Str. Meșteșugului 12, Cluj-Napoca',
+              telefon: '0750 123 456',
+              email: 'radu@dobrestudio.example',
+              denumire: 'Dobre Radu SRL',
+              cui: 'RO4455667788990',
+              formaJuridica: 'SRL',
+              numarRegComert: 'J40/1234/2020',
+              adresaSocietate: 'Str. Meșteșugului 12, Cluj-Napoca',
+              telefonSocietate: '0750 123 456',
+              emailSocietate: 'contact@dobrestudio.example',
+              contBancar: 'RO44 CARP 0000 0000 1234 5678 9000',
+              banca: 'Banca Carpatică',
+            },
+            updatedAt: '2026-06-01T10:00:00.000Z',
+          },
+          revenues: [
+            {
+              id: 'rev-dates-1',
+              tip: 'factura',
+              nr: 'F2026-001',
+              date: '2026-06-15',
+              collected: '2026-06-20',
+              client: 'Client Test SRL',
+              cui: 'RO12345678',
+              valoareFaraTva: 1000,
+              tva: 0,
+              status: 'inregistrata',
+            },
+          ],
+          settings: {
+            cotaTva: 9,
+            company: { denumire: 'Dobre Radu SRL', cui: 'RO4455667788990', numarRegComert: 'J40/1234/2020', adresa: 'Str. Meșteșugului 12, Cluj-Napoca', caen: [] },
+            personal: { nume: 'Dobre Radu', cnp: '1234567890123', adresa: 'Str. Meșteșugului 12, Cluj-Napoca', telefon: '0750 123 456', email: 'radu@dobrestudio.example' },
+            bankAccounts: [],
+            eFactura: { trimitere: 'manual', dateContact: '2026-06-01' },
+          },
+        };
+        localStorage.setItem(key, JSON.stringify(dataset));
+      },
+      [STORAGE_KEY],
+    );
+
+    await page.goto('/dashboard');
+
+    // Same section locator as the seed-data suite (`sectionWith` is scoped to that describe block).
+    const deadlines = page
+      .locator('section.card')
+      .filter({ has: page.locator('h2.card-title', { hasText: 'Termene limită' }) });
+    // The start date (today + 5 days) resolves nothing: exactly one row, the rule-driven D212.
+    await expect(deadlines.locator('.item-row')).toHaveCount(1);
+    await expect(deadlines.getByText('Depunere D212')).toBeVisible();
+    await expect(deadlines.getByText('Declarație estimativă PFA')).toHaveCount(0);
+    // The PFA start date must not resolve the VAT registration deadline: that event never happened.
+    await expect(deadlines.getByText('Înregistrare TVA')).toHaveCount(0);
+  });
+});
+
+test.describe('Dashboard — Grafic financiar & KPI table (seeded FY2025)', () => {
+  const FISCAL_YEAR = 2025;
+  const MONTHLY_TOTAL = 202_000;
+
+  /**
+   * A *completed* fiscal year (2025 — fully in the past relative to
+   * asOf = today) with one registered revenue of exactly MONTHLY_TOTAL
+   * per month. Every month is therefore "Realizat" with the seeded total
+   * (no run-rate projection involved), so all expectations are fully
+   * deterministic. The profile is required so the app's fiscal year is
+   * 2025 (the default profile would use the current year).
+   */
+  const seededDataset = () => ({
+    profile: {
+      id: 'profile-1',
+      pfaStartYear: 2020,
+      fiscalYear: FISCAL_YEAR,
+      regime: 'impozit_pe_venit',
+      caen: '6201',
+      salaryStatus: 'nu',
+      pensionerStatus: 'nu',
+      socialInsuranceStatus: 'obligatoriu',
+      vatRegistration: { status: 'inregistrat_art316' },
+      cashFloorLei: 0,
+      identity: {
+        nume: 'Dobre Radu',
+        cnp: '1234567890123',
+        adresa: 'Str. Meșteșugului 12, Cluj-Napoca',
+        telefon: '0750 123 456',
+        email: 'radu@dobrestudio.example',
+        denumire: 'Dobre Radu SRL',
+        cui: 'RO4455667788990',
+        formaJuridica: 'SRL',
+        numarRegComert: 'J40/1234/2020',
+        adresaSocietate: 'Str. Meșteșugului 12, Cluj-Napoca',
+        telefonSocietate: '0750 123 456',
+        emailSocietate: 'contact@dobrestudio.example',
+        contBancar: 'RO44 CARP 0000 0000 1234 5678 9000',
+        banca: 'Banca Carpatică',
+      },
+      // PG-4 (D-YEAR-1): this fixture deliberately views a CLOSED year (2025) while the app runs in 2026.
+      // The automatic year advance moves a profile that was last maintained BEFORE the boundary — which
+      // is exactly what a stale year looks like — so an intentional old-year view has to be stamped after
+      // it. Without this the fixture would be advanced to 2026 on load and the chart would be empty for
+      // a reason that has nothing to do with what these tests assert.
+      updatedAt: '2026-01-05T10:00:00.000Z',
+    },
+    revenues: Array.from({ length: 12 }, (_, i) => {
+      const m = String(i + 1).padStart(2, '0');
+      return {
+        id: `rev-${FISCAL_YEAR}-${m}`,
+        tip: 'factura',
+        nr: `F${FISCAL_YEAR}-${m}`,
+        date: `${FISCAL_YEAR}-${m}-15`,
+        client: 'Client Test SRL',
+        cui: 'RO12345678',
+        valoareFaraTva: MONTHLY_TOTAL,
+        tva: 0,
+        status: 'inregistrata',
+      };
+    }),
+    settings: SEED_SETTINGS,
+  });
+
+  const seedPage = async (page: Page) => {
+    await page.addInitScript(
+      ([key, dataset]: [string, unknown]) => {
+        localStorage.setItem(key, JSON.stringify(dataset));
+      },
+      [STORAGE_KEY, seededDataset()],
+    );
+  };
+
+  /**
+   * Mirror of the app's month labels (FinancialChart MONTH_LABELS). In the
+   * "An" range the label carries no year. Do NOT use toLocaleDateString —
+   * ICU ro-RO short labels are lowercased with periods ("ian."), which the
+   * app does not render.
+   */
+  const MONTH_LABELS = ['Ian', 'Feb', 'Mar', 'Apr', 'Mai', 'Iun', 'Iul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+  const monthLabel = (m: number) => MONTH_LABELS[m - 1];
+
+  const chartSection = (page: Page) => page.locator('section[aria-label="Grafic financiar"]');
+
+  test('Grafic financiar: 12 monthly rows in "An" range, first/last match seeded total', async ({ page }) => {
+    await seedPage(page);
+    await page.goto('/dashboard');
+
+    const chart = chartSection(page);
+    // Default range is "Lunar" (single month) — switch to the full fiscal year.
+    await chart.getByRole('button', { name: 'An' }).click();
+
+    const rows = chart.locator('table tbody tr');
+    await expect(rows).toHaveCount(12);
+
+    const expected = '202.000,00 RON — Realizat';
+    await expect(rows.first().locator('td').first()).toHaveText(expected);
+    await expect(rows.last().locator('td').first()).toHaveText(expected);
+  });
+
+  test('KPI table: 12 rows with seeded revenue, zero expenses, net = revenue', async ({ page }) => {
+    await seedPage(page);
+    await page.goto('/dashboard');
+
+    const chart = chartSection(page);
+    await chart.getByRole('button', { name: 'An' }).click();
+
+    const rows = chart.locator('table tbody tr');
+    await expect(rows).toHaveCount(12);
+
+    const revenueCell = '202.000,00 RON — Realizat';
+    const expenseCell = '0,00 RON — Realizat';
+    for (let i = 0; i < 12; i++) {
+      const row = rows.nth(i);
+      await expect(row.locator('th')).toHaveText(monthLabel(i + 1));
+      const tds = row.locator('td');
+      await expect(tds.nth(0)).toHaveText(revenueCell); // Venituri
+      await expect(tds.nth(1)).toHaveText(expenseCell); // Cheltuieli
+      await expect(tds.nth(2)).toHaveText(revenueCell); // Net
+    }
+  });
+
+  test('Grafic financiar: "Lunar" range (default) is empty for FY2025 data; month select shows a seeded month', async ({ page }) => {
+    // PG-0: the comment below admits the default month is "the current one" — an assertion about the
+    // real date. Pinned, so "current" means 2026-10, which is outside the FY2025 series for good.
+    await fixClock(page);
+    await seedPage(page);
+    await page.goto('/dashboard');
+
+    const chart = chartSection(page);
+    const rows = chart.locator('table tbody tr');
+    // Default month is the current one (2026) — outside the FY2025 series → no rows.
+    await expect(rows).toHaveCount(0);
+
+    // Pick a seeded month from the dropdown.
+    await chart.locator('select[aria-label="Lună selectată"]').selectOption('2025-03');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first().locator('th')).toHaveText('Mar 2025');
+    await expect(rows.first().locator('td').first()).toHaveText('202.000,00 RON — Realizat');
+  });
+
+  test('Grafic financiar: "YTD" range shows the full fiscal year for completed FY2025 data', async ({ page }) => {
+    await seedPage(page);
+    await page.goto('/dashboard');
+
+    const chart = chartSection(page);
+    await chart.getByRole('button', { name: 'YTD' }).click();
+
+    const rows = chart.locator('table tbody tr');
+    await expect(rows).toHaveCount(12);
+
+    const expected = '202.000,00 RON — Realizat';
+    await expect(rows.first().locator('th')).toHaveText('Ian');
+    await expect(rows.first().locator('td').first()).toHaveText(expected);
+    await expect(rows.last().locator('th')).toHaveText('Dec');
+    await expect(rows.last().locator('td').first()).toHaveText(expected);
+  });
+
+  test('Grafic financiar: "Lunar" is the default pressed range; "An" range ends with Dec 2025', async ({ page }) => {
+    await seedPage(page);
+    await page.goto('/dashboard');
+
+    const chart = chartSection(page);
+    // Default range button is pressed.
+    await expect(chart.getByRole('button', { name: 'Lunar' })).toHaveAttribute('aria-pressed', 'true');
+
+    await chart.getByRole('button', { name: 'An' }).click();
+    const rows = chart.locator('table tbody tr');
+    await expect(rows).toHaveCount(12);
+    await expect(rows.last().locator('th')).toHaveText('Dec');
+    await expect(rows.last().locator('td').first()).toHaveText('202.000,00 RON — Realizat');
+  });
+
+  test('mobile (390x844): seeded FY2025 data renders without horizontal overflow', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedPage(page);
+    await page.goto('/dashboard');
+
+    // Load the full 12-row "An" range — the data-heavy chart table.
+    const chart = chartSection(page);
+    await chart.getByRole('button', { name: 'An' }).click();
+    await expect(chart.locator('table tbody tr')).toHaveCount(12);
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow, 'page must not scroll horizontally at 390px with seeded data').toBeLessThanOrEqual(0);
+
+    // TASK 9: the chart must fit the box it is given, not be cut off by its own scroll container.
+    // `.chart-scroll > *` used to force `min-width: 640px` (480px under the 640px breakpoint), so at a
+    // 390px viewport — where the card body is ~358px — the chart rendered ~657px. The page did NOT
+    // overflow, so the assertion above passed the whole time; the chart was simply clipped. Measured here
+    // rather than inferred from the stylesheet: the child may not exceed the container, and the
+    // container may not have anything left to scroll to.
+    const fit = await chart.locator('.chart-scroll').evaluate((el) => {
+      const child = el.firstElementChild as HTMLElement | null;
+      return {
+        container: el.clientWidth,
+        child: child ? child.scrollWidth : 0,
+        scrollable: el.scrollWidth - el.clientWidth,
+      };
+    });
+    expect(fit.child, `chart child ${fit.child}px in a ${fit.container}px box`).toBeLessThanOrEqual(fit.container);
+    expect(fit.scrollable, 'the chart box has content it cannot show').toBeLessThanOrEqual(0);
+  });
+});
+
+/**
+ * A PFA profile on CF art. 123 alin. (1) / art. 118 sistem real (the only regime a PFA can have in
+ * 2026 — see the regime gate in src/domain/tax.ts) with two registered revenues in Q1 2026. The tax
+ * engine returns a *computed* estimate, so the cockpit, the tax hero and the Rezervă fiscală section
+ * show real values instead of the review_required em dash.
+ *
+ * Task 1 moved the OPERAND, not the arithmetic. The fixture's 130.000 lei are September-and-earlier
+ * actuals; at the pinned clock the projection model annualises them to 156.000 lei (x 12/10), and the
+ * engine runs on that: CAS 24.300 = 24 SM x 25%, CASS 15.600 = 10% x 156.000,
+ * tax 11.610 = 10% x (156.000 - 39.900) -> 51.510 lei. On the raw YTD operand the same fixture gave
+ * 46.570 lei (24.300 + 13.000 + 9.270) — the figure this file pinned before Task 1.
+ *
+ * Before Phase 5 this fixture used regime `impozit_pe_cit` — a regime a persoană fizică cannot have
+ * (CF art. 13 alin. (1), art. 14, art. 15; the art. 120 option is Abrogat from 01.01.2025). The
+ * computed figure is unchanged by that correction: the Titlul IV arithmetic is identical, only the
+ * gate moved.
+ */
+const computedDataset = () => ({
+  profile: {
+    id: 'profile-1',
+    pfaStartYear: 2026,
+    fiscalYear: 2026,
+    regime: 'impozit_pe_venit',
+    caen: '6201',
+    salaryStatus: 'nu',
+    pensionerStatus: 'nu',
+    socialInsuranceStatus: 'obligatoriu',
+    vatRegistration: { status: 'inregistrat_art316' },
+    cashFloorLei: 0,
+    identity: {
+      nume: 'Dobre Radu',
+      cnp: '1234567890123',
+      adresa: 'Str. Meșteșugului 12, Cluj-Napoca',
+      telefon: '0750 123 456',
+      email: 'radu@dobrestudio.example',
+      denumire: 'Dobre Radu PFA',
+      cui: 'RO4455667788990',
+      formaJuridica: 'PFA',
+      numarRegComert: 'J40/1234/2020',
+      adresaSocietate: 'Str. Meșteșugului 12, Cluj-Napoca',
+      telefonSocietate: '0750 123 456',
+      emailSocietate: 'contact@dobrestudio.example',
+      contBancar: 'RO44 CARP 0000 0000 1234 5678 9000',
+      banca: 'Banca Carpatică',
+    },
+    updatedAt: '2026-01-01T10:00:00.000Z',
+  },
+  revenues: [
+    { id: 'cit-r1', tip: 'factura', nr: 'FCT-2026-001', date: '2026-02-10', client: 'Client A SRL', cui: 'RO12345678', valoareFaraTva: 50_000, tva: 9_500, status: 'inregistrata' },
+    { id: 'cit-r2', tip: 'factura', nr: 'FCT-2026-002', date: '2026-03-15', client: 'Client B SRL', cui: 'RO12345678', valoareFaraTva: 80_000, tva: 15_200, status: 'inregistrata' },
+  ],
+  expenses: [],
+  settings: SEED_SETTINGS,
+});
+
+test.describe('Dashboard — computed tax state (PFA sistem real seed)', () => {
+  /** Local copies — the helpers in the first describe are block-scoped there. */
+  const sectionWith = (page: Page, title: string) =>
+    page.locator('section').filter({ has: page.getByRole('heading', { name: title, exact: true }) }).first();
+
+  test.beforeEach(async ({ page }) => {
+    // Task 1: this fixture's figure is an annual run-rate projection, so the clock is pinned exactly as
+    // in the seed describes above. At 2026-10-31 the model's denominator is 10 elapsed months, so the
+    // fixture's 130.000 lei of registered revenue enters the engine as 156.000 lei.
+    await fixClock(page);
+    // addInitScript so the store loads the dataset on first load (a
+    // post-load evaluate + navigation is racy under parallel execution).
+    await page.addInitScript(
+      ([key, dataset]: [string, unknown]) => {
+        localStorage.setItem(key, JSON.stringify(dataset));
+      },
+      [STORAGE_KEY, computedDataset()],
+    );
+  });
+
+  test('tax hero shows the computed estimate (46.570 lei)', async ({ page }) => {
+    await page.goto('/dashboard');
+
+    const hero = sectionWith(page, 'Estimare impozit');
+    // The computed value is rendered in the hero (not the em-dash empty state).
+    // TASK 7 re-pin (replaced, not deleted): the section now also carries the breakdown disclosure
+    // („Cum am ajuns la această sumă”), which repeats the same figure in a table row, so the bare
+    // getByText became ambiguous. Scoped to the hero element.
+    // PG-5C re-pin (replaced, not deleted): 51.510 lei → 46.570 lei. The dataset records 130.000 lei of
+    // revenue; the old figure annualised it to 157.602,74 lei and assessed the year on that. The figure
+    // below is the same engine on the recorded amount — CAS 24.300 + CASS 13.000 + impozit 9.270.
+    await expect(hero.locator('.tax-hero-value')).toHaveText(/46\.570/);
+  });
+
+  test('Rezervă fiscală section shows the computed estimate and monthly reserve', async ({ page }) => {
+    await page.goto('/dashboard');
+
+    const section = sectionWith(page, 'Rezervă fiscală');
+    // The section renders the computed estimate (not the no-estimate empty state).
+    // PG-5C re-pin: 51.510 → 46.570 lei, and the monthly reserve with it (46.570 ÷ 3 = 15.523,33).
+    await expect(section.getByText(/46\.570/).first()).toBeVisible();
+  });
+
+  test('cockpit tax cell shows the computed estimate', async ({ page }) => {
+    await page.goto('/dashboard');
+
+    const cell = page.locator('.stat-card').filter({ hasText: 'Impozit estimat' });
+    // PG-5C re-pin: 51.510 → 46.570 lei.
+    await expect(cell.getByText(/46\.570/)).toBeVisible();
+  });
+});
+
+test.describe('Dashboard — impozit_pe_cit on a PFA is a data-integrity failure (B-14)', () => {
+  test('refuses to compute and names the provisions that make the regime impossible', async ({ page }) => {
+    await page.addInitScript(
+      ([key, dataset]: [string, unknown]) => {
+        localStorage.setItem(key, JSON.stringify({ ...dataset, profile: { ...dataset.profile, regime: 'impozit_pe_cit' } }));
+      },
+      [STORAGE_KEY, computedDataset()],
+    );
+    await page.goto('/dashboard');
+
+    // No number is shown for a regime the taxpayer cannot have — the engine refuses rather than
+    // computing Titlul IV amounts under a Titlul II label.
+    // B-28 re-pin: the cell used to print `—`, the same glyph a pending estimate prints. A refusal now
+    // prints its own word.
+    const cell = page.locator('.stat-card').filter({ hasText: 'Impozit estimat' });
+    await expect(cell.locator('.value')).toHaveText('Calcul refuzat');
+
+    // PG-6a moved where this sentence is rendered; it did not move whether it is rendered. The reason is
+    // now the refusal block in the estimate section, beside the control that fixes it, instead of the
+    // chart note — because a refusal and a withheld conclusion are different states and the chart had
+    // been labelling both `review_required`. The citations are still asserted verbatim, so the user can
+    // still see WHICH record is wrong instead of being told a rule is missing.
+    const reason = page.locator('[data-scenario-refusal="regime-not-computable"]');
+    await expect(reason).toContainText('nu poate aparține unui PFA');
+    await expect(reason).toContainText('art. 13 alin. (1)');
+    await expect(reason).toContainText('art. 120');
+    await expect(reason).toContainText('abrogată');
+    // The chart no longer quotes the same paragraph a second time; it points here.
+    await expect(page.locator('.chart-tax-note[data-estimate-state="refused"]')).toBeVisible();
+  });
+
+  test('when the engine refuses, the contribution thresholds turn review_required instead of vanishing', async ({ page }) => {
+    // The B-14 describe has no beforeEach — the regime override must be applied per test.
+    await page.addInitScript(
+      ([key, dataset]: [string, unknown]) => {
+        localStorage.setItem(key, JSON.stringify({ ...dataset, profile: { ...dataset.profile, regime: 'impozit_pe_cit' } }));
+      },
+      [STORAGE_KEY, computedDataset()],
+    );
+    await page.goto('/dashboard');
+
+    const thresholds = page
+      .locator('section.card')
+      .filter({ has: page.locator('h2.card-title', { hasText: 'Praguri' }) });
+
+    // The silent-skip trap: a base the caller cannot supply used to delete the card. All five
+    // rows must still be here — four of them loud, not missing (the 24 SM CAS step is measured on
+    // the same net-income base as the other contribution rows).
+    await expect(thresholds.locator('.item-row')).toHaveCount(5);
+    await expect(thresholds.getByText('De verificat', { exact: true })).toHaveCount(4);
+    await expect(thresholds.getByText(/nu a fost furnizată/)).toHaveCount(4);
+    // No invented amount is shown for a base that could not be measured.
+    await expect(thresholds.getByText(/Curent: 0\.000,00 lei/)).toHaveCount(0);
+
+    // The VAT row needs no engine: cifră de afaceri 50.000 + 80.000 = 130.000,00 lei stays
+    // measured even while the contribution rows are unmeasurable.
+    await expect(thresholds.getByText(/Curent: 130\.000,00 lei/)).toHaveCount(1);
+    await expect(thresholds.getByText('Prag: 395.000,00 lei')).toBeVisible();
+  });
+});
+
+test.describe('Dashboard — a recorded reserve survives a reload (TASK 9)', () => {
+  test('the reserve the user records is read back from the store after a reload', async ({ page }) => {
+    // Phase 11: the app no longer loads a fixture on its own, so the payload has to be seeded — but
+    // seeded ONCE. `addInitScript` re-runs on every document including the reload, and an unconditional
+    // seed would overwrite the value the UI just saved, which is the same trap the note below describes.
+    await seedBrowserOnce(page);
+    // Deliberately NOT seeded with a plain addInitScript: that script re-runs on every document, including
+    // reload, and would overwrite the value the UI just saved — the assertion would then prove nothing
+    // (the same reason e2e/settings.spec.ts:125 avoids it). The app loads the seeded payload, the user
+    // records a reserve, and the reload reads back what the store actually persisted.
+    //
+    // This is the round trip the reserve had no coverage for: TASK 3 fixed two read sites that ignored
+    // the recorded value, and nothing in the suite proved the value survived the page at all.
+    await page.goto('/dashboard');
+
+    const reserveCard = () =>
+      page
+        .locator('section.card')
+        .filter({ has: page.locator('h2.card-title', { hasText: 'Rezervă fiscală' }) });
+
+    // The seed records no reserve, and says so — `null` is not rendered as 0,00 lei.
+    await expect(reserveCard().getByText('Nicio sumă înregistrată.')).toBeVisible();
+
+    await page.locator('#reserve-input').fill('1500');
+    await reserveCard().getByRole('button', { name: 'Salvează' }).click();
+    await expect(reserveCard().getByText('1.500,00 RON').first()).toBeVisible();
+
+    await page.reload();
+
+    // The point of the test: the amount comes back. A card that renders it only from component state
+    // would show „Nicio sumă înregistrată.” again here.
+    await expect(reserveCard().getByText('1.500,00 RON').first()).toBeVisible();
+    await expect(reserveCard().getByText('Nicio sumă înregistrată.')).toHaveCount(0);
+
+    // And it is the store that holds it: `reservedAmount` is persisted in bani, 1 leu = 100 bani —
+    // the unit the whole money layer uses, not the lei the box was typed in.
+    const stored = await page.evaluate(
+      (key) => JSON.parse(localStorage.getItem(key) ?? '{}') as { reservedAmount?: number | null },
+      STORAGE_KEY,
+    );
+    expect(stored.reservedAmount).toBe(150000);
+
+    // Clearing is the same round trip in the other direction: the card returns to the no-record state,
+    // and the payload goes back to `null` rather than to 0 — the two empty states are different facts.
+    await reserveCard().getByRole('button', { name: 'Șterge înregistrarea' }).click();
+    await expect(reserveCard().getByText('Nicio sumă înregistrată.')).toBeVisible();
+    const cleared = await page.evaluate(
+      (key) => JSON.parse(localStorage.getItem(key) ?? '{}') as { reservedAmount?: number | null },
+      STORAGE_KEY,
+    );
+    expect(cleared.reservedAmount).toBeNull();
+  });
+});

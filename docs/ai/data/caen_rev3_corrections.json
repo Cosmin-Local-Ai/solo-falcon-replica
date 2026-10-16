@@ -1,0 +1,32 @@
+{
+  "_comment": "Corrections applied to the CAEN Rev.3 denominations extracted from Ordinul INS 377/2024, MO I 385/25.04.2024. The raw, uncorrected text is preserved in caen_rev3_mo385_raw.txt. Every entry states what was wrong. Decided by the user 2026-10-14: ship corrected text, single denumire field, comma-below diacritics.",
+  "_diacritics": "All ş/ţ (comma-above, U+015F/U+0163) normalised to ș/ț (comma-below, U+0219/U+021B) at ingest. The source PDF mixes both, sometimes inside one entry (0163).",
+  "corrections": [
+    {"cod": "1073", "find": "produse făinoase similar", "replace": "produse făinoase similare", "why": "word truncated in the PDF"},
+    {"cod": "1085", "find": "mâncărururi", "replace": "mâncăruri", "why": "doubled suffix"},
+    {"cod": "233", "nivel": "grupa", "find": "materialelelor", "replace": "materialelor", "why": "doubled suffix"},
+    {"cod": "2366", "find": "altor articolelor din beton", "replace": "altor articole din beton", "why": "double genitive plural; matches CAEN Rev.2 and NACE 23.66"},
+    {"cod": "2599", "find": "altor articolelor din metal", "replace": "altor articole din metal", "why": "double genitive plural; matches CAEN Rev.2"},
+    {"cod": "2521", "find": "încălzire central;", "replace": "încălzire centrală;", "why": "apocope"},
+    {"cod": "283", "nivel": "grupa", "find": "masinilor", "replace": "mașinilor", "why": "missing diacritics"},
+    {"cod": "2830", "find": "masinilor", "replace": "mașinilor", "why": "missing diacritics"},
+    {"cod": "3092", "find": "și de de vehicule", "replace": "și de vehicule", "why": "duplicated preposition"},
+    {"cod": "3823", "find": "de tartare a deșeurilor", "replace": "de tratare a deșeurilor", "why": "letter transposition"},
+    {"cod": "60", "nivel": "diviziune", "find": "alte activitoți de distribuție", "replace": "alte activități de distribuție", "why": "garbled word"},
+    {"cod": "6392", "find": "informaționale n.c. a", "replace": "informaționale n.c.a.", "why": "broken abbreviation"},
+    {"cod": "8130", "find": "înteținere", "replace": "întreținere", "why": "vowel error; pattern is comma-below because diacritics are normalised before corrections are applied"},
+    {"cod": "8720", "find": "recuperare pshică", "replace": "recuperare fizică", "why": "garbled word"},
+    {"cod": "93", "nivel": "diviziune", "find": "Activități spotive", "replace": "Activități sportive", "why": "garbled word"},
+    {"cod": "9623", "find": "și bailor de abur", "replace": "și băilor de abur", "why": "missing diacritic"},
+    {"cod": "473", "nivel": "grupa", "find": "autovehicule î", "replace": "autovehicule", "why": "stray trailing character"},
+    {"cod": "477", "nivel": "grupa", "find": "și motociclete", "replace": "și motocicletei", "why": "truncated genitive"},
+    {"cod": "4212", "find": "subterane.", "replace": "subterane", "why": "stray trailing period"},
+    {"cod": "2811", "find": "motociclete.)", "replace": "motociclete)", "why": "stray period inside parenthesis"}
+  ],
+  "deliberately_not_changed": [
+    {"cod": "0113", "text": "tuberculiferelor", "why": "correct as published and matches CAEN Rev.2; caen3.ro shows tuberculilor, which is the error"},
+    {"cod": "3092", "text": "invalizi", "why": "the term used in the official text; not our call to modernise"},
+    {"cod": "2521", "text": "producția de generatoare de abur și boilere", "why": "odd but plausible as published; no independent evidence it is wrong"},
+    {"cod": "G", "text": "SECȚIUNEA G - COMERȚ CU RIDICATA ȘI CU AMĂNUNTUL;", "why": "the title ends in a semicolon, so the PDF line looks truncated. The Rev.2 title continued with the repair of motor vehicles. Rev.3 moved that activity to 467/478 and 953, so a shortened title is defensible. NOT completed by inference — flagged as unresolved."}
+  ]
+}

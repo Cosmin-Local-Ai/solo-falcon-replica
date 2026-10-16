@@ -6,8 +6,15 @@
   --border-strong: #d0d5dd;
   --text: #1d2939;
   --text-2: #475467;
-  --text-3: #667085;
-  --text-4: #98a2b3;
+  /* PG-0 a11y minimum-compliance fix. These two tokens failed axe `color-contrast` (serious) on
+     6 nodes of /dashboard: --text-4 measured 2.57:1 on #ffffff, --text-3 measured 4.43:1 on
+     --bg. Both are now dark enough to clear 4.5:1 on every surface they are used on
+     (#ffffff, #f0f2f5, #f8fafc and the three soft tints). This is a contrast floor, NOT a
+     palette decision — it compresses the text ladder, and the proper contrast and
+     colour-coding pass belongs to Phase 28 / PG-12 (defect B-69). See
+     docs/ai/phases/27_pg0_groundwork.md §6. */
+  --text-3: #5b6472;
+  --text-4: #646d7a;
   --primary: #1d4ed8;
   --primary-hover: #1e40af;
   --primary-soft: #eff6ff;
@@ -90,20 +97,36 @@ a:hover { text-decoration: underline; }
 }
 
 /* ---------- Cards ---------- */
+/* TASK 9 — one card system. There were three shells with two paddings and two title sizes: a
+   `.card-header` (14px 18px, bordered) beside a `.card-body` (18px), and a `.card-head` (no padding,
+   `margin-bottom: 12px`) inside one, with titles at 14px or 15px depending on which file wrote them.
+   Every card now emits `.card-header` + `.card-body`, and every card title carries `.card-title`. */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
 .card-header {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 14px 18px; border-bottom: 1px solid var(--border);
 }
-.card-header h3 { font-size: 14px; font-weight: 600; }
-.card-body { padding: 18px; }
+.card-title { margin: 0; font-size: 15px; font-weight: 600; }
+.card-body { padding: 18px; overflow-wrap: break-word; display: grid; gap: 12px; }
 .card-body.flush { padding: 0; }
+
+/* TASK 9 — rule provenance. One component renders it everywhere, so it has one style. The state is
+   exposed on `data-provenance-state` for tests and for a reader inspecting the DOM; it is deliberately
+   not colour-coded, because the severity/state decision belongs to the domain, not to CSS. */
+.rule-provenance {
+  display: grid; gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+.rule-provenance .mono { word-break: break-all; font-size: 12px; }
+.provenance-citations { display: grid; gap: 4px; }
+.provenance-citations ul { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--text-2); }
 
 /* ---------- Stat cards ---------- */
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 20px; }
 .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-sm); }
 .stat-card .label { font-size: 12px; color: var(--text-3); margin-bottom: 6px; }
-.stat-card .value { font-size: 22px; font-weight: 700; }
+.stat-card .value { font-size: 22px; font-weight: 700; overflow-wrap: break-word; }
 .stat-card .hint { font-size: 12px; color: var(--text-4); margin-top: 6px; }
 .stat-card .value.pos { color: var(--success-text); }
 .stat-card .value.neg { color: var(--danger-text); }
@@ -132,3 +155,178 @@ a:hover { text-decoration: underline; }
 .page-header h1 { font-size: 20px; }
 .page-header .sub { color: var(--text-3); font-size: 13px; margin-top: 4px; }
 .page-header .actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+/* Dashboard (Step 19) */
+.dashboard { display: grid; gap: 16px; }
+.grid { display: grid; gap: 16px; }
+.grid > * { min-width: 0; }
+.grid-5 { grid-template-columns: repeat(5, 1fr); }
+@media (max-width: 1024px) { .grid-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .grid-5 { grid-template-columns: repeat(2, 1fr); } }
+.grid-2 { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+/* Step 32 — mobile nav (hamburger + drawer sidebar) */
+.nav-toggle {
+  display: none; border: 0; background: transparent; color: var(--text-2);
+  font-size: 20px; line-height: 1; cursor: pointer; padding: 6px 8px;
+  border-radius: var(--radius-sm); flex-shrink: 0;
+}
+.nav-toggle:hover { background: #f2f4f7; color: var(--text); }
+.nav-overlay { position: fixed; inset: 0; background: rgba(16, 24, 40, 0.4); z-index: 40; }
+
+/* Tablet (≤768px) — sidebar becomes an off-canvas drawer */
+@media (max-width: 768px) {
+  .nav-toggle { display: inline-flex; }
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 50; width: 260px;
+    transform: translateX(-100%); transition: transform 0.18s ease;
+    box-shadow: var(--shadow-md);
+  }
+  .sidebar.open { transform: translateX(0); }
+  .main-content { padding: 20px; }
+}
+
+@media (max-width: 640px) {
+  .main-content { padding: 16px; }
+  .grid-5 { grid-template-columns: 1fr; }
+  .stat-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+}
+
+.row { display: flex; align-items: center; gap: 8px; }
+.between { justify-content: space-between; align-items: center; }
+.hint { font-size: 12px; color: var(--text-4); margin: 0; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.empty-state { padding: 48px 16px; text-align: center; }
+
+/* Phase 7 — identity in the shell, and the D-3 recovery banner. */
+.sidebar-identity {
+  padding: 10px 18px; font-size: 12px; color: var(--text-2);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.banner { margin: 0 0 16px; padding: 12px 14px; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; }
+.banner-warn { background: #fff7ed; border-color: #fdba74; color: #7c2d12; }
+.banner-details { margin-top: 8px; font-size: 12px; }
+.banner-details summary { cursor: pointer; color: var(--text-2); }
+.greeting { margin: 0 0 16px; font-size: 14px; color: var(--text-2); }
+.tax-hero-value { font-size: 28px; font-weight: 700; }
+/* B-28 — a refusal is not a figure still arriving. The word that replaces the number is styled from the
+   state, not from the amount: it is smaller than a figure on purpose, so it cannot be read as one, and it
+   carries the same red the refusal badge already uses. */
+.tax-hero-value.tax-hero-refused { font-size: 20px; color: var(--danger-text); }
+.num { text-align: right; }
+
+/* Financial chart (Step 20).
+   TASK 9: `.chart-scroll > *` used to force `min-width: 640px` (480px under the 640px breakpoint).
+   Inside a 390px viewport the card body is ~358px wide, so the chart rendered ~657px and was clipped by
+   its own scroll container — the page did not overflow, the chart was simply cut off. The chart now
+   sizes to its container: `ResponsiveContainer width="100%"` gets the real width and nothing forces a
+   wider one. Verified in a real browser at 390px, not by reading this rule. */
+.chart-scroll { overflow-x: auto; scrollbar-width: thin; }
+.chart-scroll::-webkit-scrollbar { height: 8px; }
+.chart-scroll > * { min-width: 0; width: 100%; }
+.chart-range-group { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.chart-range-btn { border: 0; background: transparent; padding: 4px 10px; font-size: 12px; color: var(--text-2); cursor: pointer; }
+.chart-range-btn[aria-pressed='true'] { background: var(--primary); color: #fff; }
+.chart-month-select { font-size: 12px; padding: 4px 6px; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-2); background: var(--surface); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; font-size: 12px; color: var(--text-2); }
+.chart-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.chart-legend-swatch { width: 20px; border-top: 2px solid; display: inline-block; }
+.chart-legend-swatch.dashed { border-top-style: dashed; }
+.chart-legend-swatch.projection { border-top-color: var(--text-3); }
+.chart-tax-note { font-size: 13px; color: var(--text-2); margin: 0; }
+.chart-tooltip { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); padding: 8px 12px; font-size: 12px; color: var(--text); }
+.chart-tooltip-period { font-weight: 600; margin-bottom: 4px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Step 24 — Dashboard polish (missing utility classes) */
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1.4; border: 1px solid transparent; white-space: nowrap; }
+.badge-success { color: var(--success-text); background: var(--success-soft); border-color: rgba(2,122,72,.25); }
+.badge-warning { color: var(--warning-text); background: var(--warning-soft); border-color: rgba(181,71,8,.25); }
+.badge-danger { color: var(--danger-text); background: var(--danger-soft); border-color: rgba(180,35,24,.25); }
+.badge-info { color: var(--primary); background: var(--primary-soft); border-color: var(--primary-soft-border); }
+.badge-neutral { color: var(--text-3); background: var(--bg); border-color: var(--border); }
+.muted { color: var(--text-3); }
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.kv { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 10px; column-gap: 16px; align-items: baseline; }
+.kv dt { font-size: 13px; color: var(--text-3); }
+.kv dd { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--text); text-align: right; }
+.label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.value { font-size: 24px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* Step 32 — dashboard item rows (inline styles → classes) */
+.item-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.item-title { font-size: 13px; font-weight: 600; }
+.item-meta { font-size: 13px; }
+.kv-row { display: flex; gap: 16px; font-size: 13px; flex-wrap: wrap; }
+.bar-track { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.bar-fill { height: 100%; transition: width 0.2s ease; }
+.bar-fill.ok { background: var(--success-text); }
+.bar-fill.warning { background: var(--warning-text); }
+.bar-fill.breached { background: var(--danger-text); }
+.check-row { padding: 8px 10px; border-radius: 6px; }
+.check-row.missing { background: var(--danger-soft); }
+.check-title { font-size: 13px; font-weight: 600; }
+.action-label { font-size: 13.5px; font-weight: 500; }
+
+/* Visible focus state (Step 24 — accessibility) */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* ---------- Step 11 / Part D (B-132, B-134): the persona surface and the demo marker ---------- */
+/* The demo marker is chrome, not a banner: `.main-content` scrolls and a banner inside it scrolls away,
+   while `.topbar` is a fixed row above it. That is the whole reason this is a topbar element. */
+.demo-badge {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 6px 4px 12px; border-radius: 999px;
+  background: #fff7ed; border: 1px solid #fdba74; color: #7c2d12; font-size: 12.5px;
+}
+.demo-badge-title { font-weight: 700; }
+.demo-badge-note { color: #9a3412; }
+.demo-badge .btn { background: #fff; border-color: #fdba74; color: #7c2d12; }
+
+.personas-page { display: grid; gap: 16px; }
+.persona-route {
+  border: 1px solid var(--border); border-left: 4px solid var(--border-strong);
+  border-radius: 8px; padding: 12px 14px; display: grid; gap: 8px;
+}
+/* The weight follows the level: an exact clasă route carries a solid rule, a secțiune route a dashed one.
+   The difference is also in the sentence (`personas.levelSentence`), because a rule alone is a colour
+   difference and a colour difference is not something a test or a screen reader can check. */
+.persona-route--clasa { border-left-style: solid; border-left-color: var(--primary); }
+.persona-route--grupa { border-left-style: solid; border-left-color: var(--blue); }
+.persona-route--diviziune { border-left-style: dashed; border-left-color: var(--blue); }
+.persona-route--sectiune { border-left-style: dashed; border-left-color: var(--text-4); }
+.persona-route--none { border-left-style: dotted; border-left-color: var(--danger-text); }
+.persona-route-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.persona-route-cod { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.persona-level {
+  font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 999px; background: var(--primary-soft); color: var(--primary);
+}
+.persona-level--sectiune, .persona-level--none { background: #f1f5f9; color: var(--text-3); }
+.persona-route-tie { font-size: 12px; color: var(--text-2); }
+.persona-route-den, .persona-route-matched { font-size: 12.5px; color: var(--text-3); margin: 0; }
+.persona-route-strength { font-size: 13.5px; font-weight: 600; margin: 0; }
+.persona-route--sectiune .persona-route-strength,
+.persona-route--none .persona-route-strength { font-weight: 500; color: var(--text-2); }
+.persona-route-reason { font-size: 12.5px; color: var(--text-2); margin: 0; }
+.persona-candidates { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.persona-candidate {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+}
+.persona-candidate-label { font-size: 13.5px; font-weight: 600; }
+.persona-candidate-role { font-size: 12px; color: var(--text-3); }
+.persona-candidate .btn { margin-left: auto; }
+.persona-sample {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; border: 1px dashed var(--border-strong); border-radius: 8px; background: #f8fafc;
+}
+.persona-sample strong { font-size: 12px; }
+.persona-sample-label { font-size: 13.5px; font-weight: 600; }
+.persona-sample .btn { margin-left: auto; }
+.persona-check { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }

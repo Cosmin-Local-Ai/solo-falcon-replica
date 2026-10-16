@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useStore } from '../data/store';
 import type { Client } from '../data/types';
 import { Card, Badge, Modal, Empty } from '../components/ui';
+import { clients as clientsCopy, copy, empty, fields, validation } from '../ui/copy';
 
 function ClientForm({ initial, onSave, onClose }: {
   initial?: Client;
@@ -20,8 +21,8 @@ function ClientForm({ initial, onSave, onClose }: {
 
   const submit = () => {
     const e: Record<string, string> = {};
-    if (!f.denumire.trim()) e.denumire = 'Denumirea este obligatorie';
-    if (!f.cui.trim()) e.cui = 'CUI/CNP este obligatoriu';
+    if (!f.denumire.trim()) e.denumire = validation.nameRequired;
+    if (!f.cui.trim()) e.cui = validation.cuiRequired;
     setErrors(e);
     if (Object.keys(e).length) return;
     onSave({
@@ -33,35 +34,35 @@ function ClientForm({ initial, onSave, onClose }: {
 
   return (
     <Modal
-      title={initial ? `Editează ${initial.denumire}` : 'Adaugă client'}
+      title={initial ? clientsCopy.editTitle(initial.denumire) : clientsCopy.addTitle}
       onClose={onClose}
       footer={<>
-        <button className="btn btn-ghost" onClick={onClose}>Anulează</button>
-        <button className="btn btn-primary" onClick={submit}>{initial ? 'Salvează' : 'Adaugă'}</button>
+        <button className="btn btn-ghost" onClick={onClose}>{copy.ui.cancel}</button>
+        <button className="btn btn-primary" onClick={submit}>{initial ? copy.ui.save : copy.ui.add}</button>
       </>}
     >
       <div className="form-grid">
         <div className="field full">
-          <label>Denumire <span className="req">*</span></label>
-          <input className={errors.denumire ? 'invalid' : ''} value={f.denumire} onChange={e => set('denumire', e.target.value)} placeholder="SC EXEMPLU SRL / Nume (PFA)" />
+          <label>{clientsCopy.denumire} <span className="req">*</span></label>
+          <input className={errors.denumire ? 'invalid' : ''} value={f.denumire} onChange={e => set('denumire', e.target.value)} placeholder={clientsCopy.denumirePlaceholder} />
           {errors.denumire && <span className="error">{errors.denumire}</span>}
         </div>
         <div className="field">
-          <label>CUI / CNP <span className="req">*</span></label>
-          <input className={errors.cui ? 'invalid' : ''} value={f.cui} onChange={e => set('cui', e.target.value)} placeholder="RO…" />
+          <label>{clientsCopy.cuiCnp} <span className="req">*</span></label>
+          <input className={errors.cui ? 'invalid' : ''} value={f.cui} onChange={e => set('cui', e.target.value)} placeholder={fields.cuiPlaceholder} />
           {errors.cui && <span className="error">{errors.cui}</span>}
         </div>
         <div className="field">
-          <label>Telefon</label>
+          <label>{fields.phone}</label>
           <input value={f.telefon} onChange={e => set('telefon', e.target.value)} placeholder="07xx xxx xxx" />
         </div>
         <div className="field">
-          <label>Email</label>
+          <label>{fields.email}</label>
           <input type="email" value={f.email} onChange={e => set('email', e.target.value)} placeholder="email@exemplu.ro" />
         </div>
         <div className="field">
-          <label>Oraș</label>
-          <input value={f.oras} onChange={e => set('oras', e.target.value)} placeholder="Oraș" />
+          <label>{fields.city}</label>
+          <input value={f.oras} onChange={e => set('oras', e.target.value)} placeholder={clientsCopy.cityPlaceholder} />
         </div>
       </div>
     </Modal>
@@ -69,7 +70,7 @@ function ClientForm({ initial, onSave, onClose }: {
 }
 
 export default function Clients() {
-  const { clients, addClient, toast } = useStore();
+  const { clients, addClient, updateClient, toast } = useStore();
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Client | 'new' | null>(null);
 
@@ -83,32 +84,32 @@ export default function Clients() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Clienți</h1>
-          <div className="sub">{clients.length} clienți înregistrați în evidența dvs.</div>
+          <h1>{clientsCopy.title}</h1>
+          <div className="sub">{clientsCopy.count(clients.length)}</div>
         </div>
         <div className="actions">
           <input
-            placeholder="Caută client…"
+            placeholder={clientsCopy.searchPlaceholder}
             style={{ border: '1px solid var(--border-strong)', borderRadius: 6, padding: '7px 10px', fontSize: 13, width: 220 }}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
-          <button className="btn btn-primary" onClick={() => setEditing('new')}>+ Adaugă client</button>
+          <button className="btn btn-primary" onClick={() => setEditing('new')}>+ {clientsCopy.add}</button>
         </div>
       </div>
 
       <Card>
         {rows.length === 0 ? (
           <Empty
-            title="Niciun client"
-            text={search ? 'Niciun rezultat pentru căutare.' : 'Adăugați primul client pentru a-l selecta la emiterea facturilor.'}
-            action={<button className="btn btn-primary" onClick={() => setEditing('new')}>+ Adaugă client</button>}
+            title={clientsCopy.emptyTitle}
+            text={search ? empty.noSearchResults : clientsCopy.emptyBody}
+            action={<button className="btn btn-primary" onClick={() => setEditing('new')}>+ {clientsCopy.add}</button>}
           />
         ) : (
           <table className="table">
             <thead>
               <tr>
-                <th>Denumire</th><th>CUI / CNP</th><th>Email</th><th>Telefon</th><th>Oraș</th><th>Tip</th><th />
+                <th>{clientsCopy.columns.denumire}</th><th>{clientsCopy.columns.cuiCnp}</th><th>{clientsCopy.columns.email}</th><th>{clientsCopy.columns.phone}</th><th>{clientsCopy.columns.city}</th><th>{clientsCopy.columns.type}</th><th />
               </tr>
             </thead>
             <tbody>
@@ -121,7 +122,7 @@ export default function Clients() {
                   <td>{c.oras ?? '—'}</td>
                   <td>
                     <Badge kind={c.denumire.includes('PFA') ? 'badge-neutral' : 'badge-info'}>
-                      {c.denumire.includes('PFA') ? 'Persoană' : 'Firmă'}
+                      {c.denumire.includes('PFA') ? clientsCopy.typePerson : clientsCopy.typeCompany}
                     </Badge>
                   </td>
                   <td />
@@ -137,8 +138,13 @@ export default function Clients() {
           initial={editing === 'new' ? undefined : editing}
           onClose={() => setEditing(null)}
           onSave={c => {
-            addClient(c);
-            toast('success', `Clientul ${c.denumire} a fost adăugat`);
+            if (editing === 'new') {
+              addClient(c);
+              toast('success', clientsCopy.added(c.denumire));
+            } else {
+              updateClient({ ...editing, ...c });
+              toast('success', clientsCopy.updated(c.denumire));
+            }
             setEditing(null);
           }}
         />

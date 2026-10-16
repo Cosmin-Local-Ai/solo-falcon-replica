@@ -1,133 +1,260 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type HTMLAttributes } from 'react';
 import { StoreProvider, useStore } from './data/store';
+import { quarantineSummary } from './data/quarantine';
+import { MoneyPrecisionNoticeBanner } from './components/MoneyPrecisionNotice';
+import { useDashboardData } from './data/dashboardAdapter';
 import Dashboard from './pages/Dashboard';
 import Revenues from './pages/Revenues';
 import Expenses from './pages/Expenses';
 import EFactura from './pages/EFactura';
 import Declarations from './pages/Declarations';
 import Documents from './pages/Documents';
+import Assets from './pages/Assets';
 import Clients from './pages/Clients';
+import Personas from './pages/Personas';
 import Settings from './pages/Settings';
+import OnboardingPage from './pages/Onboarding';
 import { Toasts } from './components/ui';
+import { FiscalYearAdvance } from './components/dashboard/YearLifecycleBanner';
+import { disclosure, nav, onboarding as onboardingCopy, personas as personasCopy, shell } from './ui/copy';
 
 export type Page =
   | 'dashboard'
   | 'revenues'
   | 'expenses'
-  | 'efactura'
+  | 'e-factura'
   | 'declarations'
   | 'documents'
+  // PG-6e (B-31, D-FA-1): the fixed-asset register. Its own page, not a tab under `expenses` — see the
+  // header comment in `pages/Assets.tsx` for why a register placed among expenses invites the reading
+  // art. 68 alin. (7) lit. h) forbids.
+  | 'assets'
   | 'clients'
+  // Step 11 / Part D (B-132): the persona surface. Its own page rather than a card on Settings, because the
+  // only CAEN control that existed was the person's own fiscal field — and a demo marker beside a real
+  // declared activity reads as a recommendation about that activity.
+  | 'personas'
   | 'settings';
 
 const PAGES: Page[] = [
   'dashboard',
   'revenues',
   'expenses',
-  'efactura',
+  'e-factura',
   'declarations',
   'documents',
+  'assets',
   'clients',
+  'personas',
   'settings',
 ];
 
 const NAV: { page: Page; label: string; icon: string }[] = [
-  { page: 'dashboard', label: 'Panou de control', icon: '▦' },
-  { page: 'revenues', label: 'Venituri', icon: '↑' },
-  { page: 'expenses', label: 'Cheltuieli', icon: '↓' },
-  { page: 'efactura', label: 'e-Factura', icon: '⚡' },
-  { page: 'declarations', label: 'Declarații', icon: '📋' },
-  { page: 'documents', label: 'Documente', icon: '📁' },
-  { page: 'clients', label: 'Clienți', icon: '👥' },
-  { page: 'settings', label: 'Setări', icon: '⚙' },
+  { page: 'dashboard', label: nav.dashboard, icon: '▦' },
+  { page: 'revenues', label: nav.revenues, icon: '↑' },
+  { page: 'expenses', label: nav.expenses, icon: '↓' },
+  { page: 'e-factura', label: nav['e-factura'], icon: '⚡' },
+  { page: 'declarations', label: nav.declarations, icon: '📋' },
+  { page: 'documents', label: nav.documents, icon: '📁' },
+  { page: 'assets', label: nav.assets, icon: '🏷' },
+  { page: 'clients', label: nav.clients, icon: '👥' },
+  { page: 'personas', label: nav.personas, icon: '🧭' },
+  { page: 'settings', label: nav.settings, icon: '⚙' },
 ];
 
-const TITLES: Record<Page, string> = {
-  dashboard: 'Panou de control',
-  revenues: 'Venituri',
-  expenses: 'Cheltuieli',
-  efactura: 'e-Factura',
-  declarations: 'Declarații',
-  documents: 'Documente',
-  clients: 'Clienți',
-  settings: 'Setări',
-};
+// The page title is the nav label — one key, spelled once.
+const TITLES: Record<Page, string> = nav;
 
-// --- URL routing: /<page> with optional #!<tab> ---
+// --- URL routing: /<page> with optional #!<tab> and optional ?f=<record id> ---
 
 interface Route {
   page: Page;
   tab: string | null;
+  /**
+   * TASK 8 — the record an attention item pointed at. The hash form is `#!/<tab>?f=<id>`: the tab
+   * already says which slice of the register holds the record (it is keyed off the record's own
+   * status), and `f` lands the table on that one row and highlights it. Without it a dashboard link
+   * could only say "go to the rejected invoices" and leave the user to find the one that was named.
+   */
+  focus: string | null;
 }
 
 // Canonical tab keys per page (must match the tab state inside each page).
+// Exact URL forms required:
+//   /revenues#!/registered  /revenues#!/pending  /revenues#!/rejected
+//   /expenses#!/registered  /expenses#!/rejected
+//   /documents#!/company    /settings#!/company
+// Pages may also generate their own extra tabs (e.g. /documents#!/toate).
+// PG-5: `/declarations` has no tab family any more. The monthly status tabs it used to expose
+// (`inregistrata` / `in-asteptare` / `transmisa` / `respinsa`) were tabs over a monthly register, and
+// the register is annual now; an attention row for a filing points at the page, not at a status tab.
 const VALID_TABS: Partial<Record<Page, string[]>> = {
-  revenues: ['inregistrata', 'in-asteptare', 'respinsa'],
-  expenses: ['inregistrata', 'respinsa'],
-  documents: ['Venituri', 'Cheltuieli', 'Raport'],
-};
-
-// English aliases accepted in the URL (e.g. /revenues#!/registered).
-const HASH_ALIASES: Partial<Record<Page, Record<string, string>>> = {
-  revenues: { registered: 'inregistrata', pending: 'in-asteptare', rejected: 'respinsa' },
-  expenses: { registered: 'inregistrata', rejected: 'respinsa' },
+  revenues: ['registered', 'pending', 'rejected'],
+  expenses: ['registered', 'rejected'],
+  // PG-6h-3 adds `occupancy`: the occupancy sheet (OPANAF 381/2026). It has to be listed here or the tab
+  // is unreachable by URL — `parseRoute` drops an unlisted hash, so the Settings entry point would land
+  // on the default tab instead of the sheet, and a deep link to a document would silently open something
+  // else. This is the router's whitelist, not a navigation surface: the sidebar still offers four pages.
+  documents: ['company', 'statements', 'reports', 'occupancy', 'fixed-assets'],
+  // Mirrors the live SOLO settings tabs (docs/reference/settings.md);
+  // the real app's "Abonament" (subscription) tab is not replicated.
+  // `fiscal` is an addition of this replica: the PfaProfile write path (Phase 6).
+  settings: ['company', 'fiscal', 'einvoice', 'bankaccounts', 'account', 'data'],
 };
 
 export function parseRoute(): Route {
   const seg = window.location.pathname.split('/').filter(Boolean).pop() ?? '';
   const page: Page = (PAGES as string[]).includes(seg) ? (seg as Page) : 'dashboard';
-  const raw = window.location.hash.replace(/^#!?/, '');
-  const normalized = raw ? (HASH_ALIASES[page]?.[raw] ?? raw) : '';
+  const raw = window.location.hash.replace(/^#!\/?/, '');
+  const [tabPart, queryPart] = raw.split('?');
   const valid = VALID_TABS[page];
-  const tab = valid && normalized && valid.includes(normalized) ? normalized : null;
-  return { page, tab };
+  const tab = valid && tabPart && valid.includes(tabPart) ? tabPart : null;
+  const focus = queryPart ? new URLSearchParams(queryPart).get('f') : null;
+  return { page, tab, focus };
 }
 
-function routeToUrl(page: Page, tab: string | null): string {
-  return `/${page}${tab ? `#!/${tab}` : ''}`;
+function routeToUrl(page: Page, tab: string | null, focus: string | null = null): string {
+  return `/${page}${tab ? `#!/${tab}` : ''}${focus ? `?f=${encodeURIComponent(focus)}` : ''}`;
+}
+
+const initials = (name: string) =>
+  name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(w => w[0] ?? '')
+    .join('')
+    .toUpperCase();
+
+/**
+ * True when the viewport is at/below the mobile breakpoint (≤768px), where
+ * the sidebar is an off-canvas drawer. Above that it is a static column that
+ * must stay interactive (never `inert` / `aria-hidden`).
+ */
+function useIsMobile() {
+  // Degrades to `false` (desktop) in environments without matchMedia (jsdom).
+  return useSyncExternalStore(
+    (onChange) => {
+      if (typeof window.matchMedia !== 'function') return () => {};
+      const mq = window.matchMedia('(max-width: 768px)');
+      mq.addEventListener('change', onChange);
+      return () => mq.removeEventListener('change', onChange);
+    },
+    () =>
+      typeof window.matchMedia === 'function'
+        ? window.matchMedia('(max-width: 768px)').matches
+        : false,
+    () => false,
+  );
 }
 
 function Shell() {
   const [route, setRoute] = useState<Route>(parseRoute);
-  const { revenues, expenses, declarations } = useStore();
+  const [navOpen, setNavOpen] = useState(false);
+  const isMobile = useIsMobile();
+  const { profile, dataOrigin, migration, quarantine, moneyNotices, toast, sandboxActive, unloadSandbox, saveFailure, retrySave, demoActive, demoPersonaId, demoPersonaLabel, unloadDemoPersona } = useStore();
+
+  // Phase 11 (D1, D-RUN-1): empty storage is a first run, not a demo. `dataOrigin === 'empty'` is the
+  // only state that means "nothing this person entered exists yet" — and because the save effect in
+  // `store.tsx` refuses to write while the origin is 'empty', reloading during onboarding lands here
+  // again instead of on a 'persisted' empty shell.
+  const firstRun = dataOrigin === 'empty';
+
+  // D-3: a rejected payload must be VISIBLE, not silent (B-11 was the silent
+  // reset). The banner below covers the recoverable case; a migration is worth
+  // one sentence too, because the user's stored data was rewritten on load.
+  // It is keyed on `migration`, not on `dataOrigin` — per D-3b a migrated
+  // payload is still 'persisted', and `migration` is the separate signal.
+  const migrationAnnounced = useRef(false);
+  useEffect(() => {
+    if (!migration || migrationAnnounced.current) return;
+    migrationAnnounced.current = true;
+    toast(
+      'info',
+      shell.migrationToast(migration.stepsApplied.join(', ') || shell.migrationStepsFallback),
+    );
+  }, [migration, toast]);
+  const { pendingCounts } = useDashboardData();
   const pendingCount =
-    revenues.filter(r => r.status === 'in-asteptare').length +
-    expenses.filter(e => e.status === 'respinsa').length +
-    declarations.filter(d => d.status === 'in-asteptare').length;
+    pendingCounts.revenuesInAsteptare +
+    pendingCounts.expensesRespinsa +
+    pendingCounts.filingsInAsteptare;
 
   const navigate = useCallback((page: Page, tab: string | null = null) => {
     const url = routeToUrl(page, tab);
     if (window.location.pathname + window.location.hash !== url) {
       window.history.pushState({ page, tab }, '', url);
     }
-    setRoute({ page, tab });
+    setRoute({ page, tab, focus: null });
   }, []);
 
-  // Back/forward navigation.
+  // Back/forward navigation, plus direct hash edits in the URL bar.
   useEffect(() => {
-    const onPop = () => setRoute(parseRoute());
+    const onPop = () => {
+      setRoute(parseRoute());
+      setNavOpen(false); // close the mobile drawer on navigation
+    };
     window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
+    window.addEventListener('hashchange', onPop);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      window.removeEventListener('hashchange', onPop);
+    };
   }, []);
+
+  // Close the mobile drawer with Escape.
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNavOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [navOpen]);
 
   // Normalize the initial URL (e.g. "/" → "/dashboard", aliases → canonical keys)
   // without adding a history entry.
   useEffect(() => {
     const r = parseRoute();
-    const expected = routeToUrl(r.page, r.tab);
+    const expected = routeToUrl(r.page, r.tab, r.focus);
     if (window.location.pathname + window.location.hash !== expected) {
       window.history.replaceState(null, '', expected);
     }
   }, []);
 
+  // SAFETY: `inert` is a real HTML attribute that the installed React `HTMLAttributes` typing predates, so
+  // the object literal needs one assertion to be spread onto the element. The value is always the empty
+  // string the DOM expects, and the object is EMPTY unless the mobile drawer is closed, so the asserted
+  // shape can never reach a visible, interactive element. Hoisted out of the JSX so the invariant sits next
+  // to the assertion instead of being buried between attributes.
+  const inertAttrs = (isMobile && !navOpen ? { inert: '' } : {}) as HTMLAttributes<HTMLElement>;
+
   return (
     <div className="app">
-      <aside className="sidebar">
+      {/* PG-5 (B-73): the fiscal-year advance is mounted here, not on the dashboard, so it does not
+          depend on which page a person opens first on 2 January. It renders nothing. */}
+      <FiscalYearAdvance />
+      <aside
+        className={`sidebar${navOpen ? ' open' : ''}`}
+        aria-hidden={isMobile && !navOpen}
+        {...inertAttrs}
+      >
         <div className="sidebar-logo">
-          <span className="mark">S</span> SOLO
+          <span className="mark">S</span> {shell.brand}
         </div>
+        {/* Phase 7: the sidebar shows WHOSE data this is, read from the one
+            identity store. It deliberately shows the trade name, not the person
+            name/initials the topbar already renders.
+            Phase 11: on a first run there is no name to show, so the block is absent rather than
+            rendering an empty box or the fixture's name. */}
+        {(profile.identity.denumire || profile.identity.nume) && (
+          <div className="sidebar-identity" title={profile.identity.denumire || profile.identity.nume}>
+            {profile.identity.denumire || profile.identity.nume}
+          </div>
+        )}
         <nav>
-          {NAV.map(n => (
+          {!firstRun &&
+            NAV.map(n => (
             <a
               key={n.page}
               className={`nav-item ${route.page === n.page ? 'active' : ''}`}
@@ -135,6 +262,7 @@ function Shell() {
               onClick={e => {
                 e.preventDefault();
                 navigate(n.page);
+                setNavOpen(false); // close the drawer after choosing a page
               }}
             >
               <span className="icon">{n.icon}</span>
@@ -143,42 +271,147 @@ function Shell() {
                 <span className="badge-count">{pendingCount}</span>
               )}
             </a>
-          ))}
+            ))}
         </nav>
       </aside>
+      {navOpen && (
+        <div
+          className="nav-overlay"
+          role="button"
+          tabIndex={-1}
+          aria-label={shell.closeMenu}
+          onClick={() => setNavOpen(false)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' || e.key === ' ') setNavOpen(false);
+          }}
+        />
+      )}
       <div className="main">
         <header className="topbar">
-          <span className="page-title">{TITLES[route.page]}</span>
+          {!firstRun && (
+            <button
+              type="button"
+              className="nav-toggle"
+              aria-label={shell.menu}
+              aria-expanded={navOpen}
+              onClick={() => setNavOpen(v => !v)}
+            >
+              ☰
+            </button>
+          )}
+          <span className="page-title">{firstRun ? onboardingCopy.title : TITLES[route.page]}</span>
           <span className="spacer" />
-          <div className="topbar-user">
-            <span>Popescu Ion</span>
-            <span className="avatar">PI</span>
-          </div>
+          {/* B-134 — the demo marker is chrome, not a banner. The banners live in `.main-content`, which is
+              the scroll container, so a long register scrolls them away; the topbar does not scroll, which is
+              what makes this "impossible to miss" rather than "present at the top of the page". It names
+              WHOSE data the screen shows and carries the control that switches back, so the toggle is
+              persistent in both directions and never only a URL or a localStorage flag. */}
+          {demoActive && (
+            <div className="demo-badge" role="status" data-demo-badge data-demo-persona={demoPersonaId ?? 'seed'}>
+              <span className="demo-badge-title" data-demo-badge-title>
+                {demoPersonaLabel ?? personasCopy.badgeSeed}
+              </span>
+              <span className="demo-badge-note" data-demo-badge-note>{personasCopy.badgeTitle}</span>
+              <button
+                type="button"
+                className="btn btn-sm"
+                data-demo-badge-exit
+                onClick={() => {
+                  unloadDemoPersona();
+                  toast('success', personasCopy.toasts.unloaded);
+                }}
+              >
+                {personasCopy.exitDemo}
+              </button>
+            </div>
+          )}
+          {/* Phase 11: the topbar used to print `identity.nume` unconditionally, which on a fresh profile
+              meant the fixture's name sat in the chrome of an app that holds no data. No name, no block. */}
+          {profile.identity.nume && (
+            <div className="topbar-user">
+              <span>{profile.identity.nume}</span>
+              <span className="avatar">{initials(profile.identity.nume)}</span>
+            </div>
+          )}
         </header>
         <div className="main-content">
-          {route.page === 'dashboard' && <Dashboard onNavigate={navigate} />}
+          {firstRun && <OnboardingPage />}
+          {!firstRun && (
+            <>
+          {dataOrigin === 'quarantined' && quarantine && (
+            <div className="banner banner-warn" role="alert">
+              <strong>{shell.quarantineTitle}</strong> {quarantineSummary(quarantine)}
+              <details className="banner-details">
+                <summary>{disclosure.technicalDetails}</summary>
+                <p>{quarantine.reason} — {quarantine.detail}</p>
+                <p>{shell.savedCopy(quarantine.quarantinedAt)}</p>
+              </details>
+            </div>
+          )}
+          {/* PG-11 (phase 29) — a write that did not happen is now a fact on screen, not a line in a console.
+              `role="alert"`: the person's most recent work is unwritten, and the next reload is where they
+              would otherwise find out. It clears itself on the next write that succeeds. */}
+          {saveFailure && (
+            <div className="banner banner-warn" role="alert" data-save-failure>
+              <strong>{shell.saveFailedTitle}</strong> {shell.saveFailedBody}
+              <button type="button" className="btn" onClick={retrySave} data-save-retry>
+                {shell.saveFailedRetry}
+              </button>
+              <details className="banner-details">
+                <summary>{disclosure.technicalDetails}</summary>
+                <p>{shell.saveFailedAttempts(saveFailure.attempts)} — {saveFailure.message}</p>
+              </details>
+            </div>
+          )}
+          {/* Phase 11 — the sandbox is marked where it is seen, not only where it was switched on. */}
+          {sandboxActive && (
+            <div className="banner banner-warn" role="status" data-sandbox-banner>
+              <strong>{shell.sandboxTitle}</strong> {shell.sandboxBody}
+              <button type="button" className="btn" onClick={unloadSandbox}>
+                {shell.sandboxRemove}
+              </button>
+            </div>
+          )}
+          {/* B-26: the money-conversion report has to be visible, not just persisted. `role="status"`, not
+              `alert`: this is informational and stays until the data is re-entered, while the quarantine
+              banner above is the urgent one. */}
+          <MoneyPrecisionNoticeBanner notices={moneyNotices ?? []} />
+          {route.page === 'dashboard' && <Dashboard />}
           {route.page === 'revenues' && (
             <Revenues
-              initialTab={route.tab as 'inregistrata' | 'in-asteptare' | 'respinsa' | undefined}
+              initialTab={route.tab as 'registered' | 'pending' | 'rejected' | undefined}
               onTabChange={t => navigate('revenues', t)}
+              focusRecord={route.focus ?? undefined}
             />
           )}
           {route.page === 'expenses' && (
             <Expenses
-              initialTab={route.tab as 'inregistrata' | 'respinsa' | undefined}
+              initialTab={route.tab as 'registered' | 'rejected' | undefined}
               onTabChange={t => navigate('expenses', t)}
+              focusRecord={route.focus ?? undefined}
             />
           )}
-          {route.page === 'efactura' && <EFactura />}
-          {route.page === 'declarations' && <Declarations />}
+          {route.page === 'e-factura' && <EFactura />}
+          {route.page === 'declarations' && (
+            <Declarations focusRecord={route.focus ?? undefined} />
+          )}
           {route.page === 'documents' && (
             <Documents
-              initialCategory={route.tab ?? undefined}
-              onCategoryChange={c => navigate('documents', c === 'Toate' ? null : c)}
+              initialTab={route.tab ?? undefined}
+              onTabChange={t => navigate('documents', t)}
             />
           )}
           {route.page === 'clients' && <Clients />}
-          {route.page === 'settings' && <Settings />}
+          {route.page === 'personas' && <Personas />}
+          {route.page === 'assets' && <Assets />}
+          {route.page === 'settings' && (
+            <Settings
+              initialTab={route.tab ?? undefined}
+              onTabChange={t => navigate('settings', t)}
+            />
+          )}
+            </>
+          )}
         </div>
       </div>
       <Toasts />

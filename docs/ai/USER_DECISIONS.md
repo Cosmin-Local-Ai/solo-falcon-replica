@@ -1,0 +1,462 @@
+# User decisions — record
+
+Running log of decisions the **user** made, what was asked, what they chose, and how it was implemented. Distinct from `docs/ai/decisions/07_*` and `09_*`, which are step-era spec documents. Where a decision is not yet implemented, that is stated rather than implied.
+
+Evidence is a commit or a file path. `—` means not yet built.
+
+---
+
+## 2026-10-10 — FX and currency (TASK 10), four questions asked by the Orchestrator
+
+### D-FX-1 — Where do FX rates come from?
+**Asked:** local-first app with no network layer; the art. 68 caps need the BNR annual average (`CURSA_EURM`), which is **obtainable, not computable**; daily rates moved to `curs.bnr.ro` on 6 Aug 2026; no FY2026 annual average exists yet.
+**Options offered:** verified seed + manual entry / manual entry only / **fetcher behind a boundary**.
+**User chose: fetcher behind a boundary.**
+
+**Implemented** (`8732e3f`): `src/domain/fx/provider.ts` — `FxRateProvider` with `dailyRate` and `annualAverage`, both synchronous. Loading is `loadDailyRates`; manual entry is `manualAnnualAverage` and remains the fallback. BNR XML client in `src/domain/fx/bnrXml.ts`. **No test performs a network call** — tests use `fixtureRateProvider`.
+**Honest limitation, recorded not hidden:** „XSD-validated" is a **structural validator**, not XSD conformance — there is no XSD processor in the dependency set. Stated in code and in `phases/24_currency_fx_store.md`, **not claimed on screen**.
+
+### D-FX-2 — How is a foreign-currency amount stored?
+**Asked:** defect B-32 — `Revenue`/`Expense` carry no currency field and money is integer RON `Bani` end to end. Options: bolt a currency field onto the RON number, or a **multi-currency money type**.
+**User chose: multi-currency money type.**
+
+**Implemented** (`84dda5b`): `src/domain/money.ts` — `interface Money<C extends CurrencyCode = CurrencyCode> { amount: Bani; currency: C }`, `CURRENCY_CODES = ['RON','EUR','USD','GBP','HUF']`, integer minor units, `RonMoney = Money<'RON'>`. Arithmetic is per currency (`addMoney` / `subMoney` / `sumMoney` / `maxMoney`) and **mixing currencies is a `tsc` error** through `addMoney<A, B extends A>`; `requireRon` is the explicit boundary. Persistence: data version **10**, chain step **`record-currency`**, which stamps `RON` on existing records — a **value-preserving no-op**, because those records were always treated as RON.
+**The digest question, answered with evidence rather than assumption:** `canonicalize` emits every own key, but it is handed `inputSnapshot`, and `CalculationInput` is `{ profile, revenues: Bani, expenses: Bani }` — **aggregate lei totals, not record arrays**. A currency on a record is unreachable from the digest bytes, so **no stored `inputsHash` moved and no `preMigrationInputsHash` was written**. The two ways it *could* have moved (a `PfaProfile` field, an `inputSnapshot` key) were deliberately not done.
+
+### D-FX-3 — A payment or collection falls on a day BNR publishes no rate
+**Asked:** research 23 Q3 is UNVERIFIED as a general rule — BNR publishes only on banking days, CF art. 9 alin. (4) requires a rate „valabil pentru datele respective" but never defines *valabil*, and „ultima zi bancară anterioară încasării" occurs **exactly twice in the whole Codul fiscal** (art. 68^3 alin. (4), art. 85 alin. (4)). Options: refuse / carry forward labelled as policy / ask the user for the rate.
+**User chose: carry forward, labelled as app policy.**
+
+**Implemented** (`8732e3f`, `b54d756`): `src/domain/fx/carryForward.ts`; the rate record carries `carriedFrom?`, and `convertToRon(...)` returns `carriedForward`. Surfaced through the existing `InterpretationNote` component as **application policy by analogy from art. 68^3 alin. (4) / art. 85 alin. (4)** — never as a statute sentence.
+
+### D-FX-4 — Do the euro caps compute, or only become representable?
+**Asked:** the seven art. 68 alin. (5) euro caps are excluded as unmeasurable; for FY2026 the required annual average does not exist, so any 2026 cap is provisional (B-33). Options: compute only when a rate exists / **also compute provisional 2026 caps**.
+**User chose: also compute provisional 2026 caps.**
+
+**Partly implemented.** 10a built the representation: `provisional` on the rate record, and `RateStore.replace` keyed by `rateKey` as the provisional → final mechanism. **The caps themselves are TASK 10b** — `docs/ai/briefs/27_task10b_euro_caps_provisional_rates.md`.
+
+### D-FX-5 — USD must work end to end, not merely parse
+**Raised by TASK 10b**, which asked what 'USD to be available' meant, because CF art. 68 alin. (5) states its caps **only in euro** (the package holds exactly seven `capEur` rules) and no rule carries a USD cap.
+**User decision, 2026-10-10:** the multi-currency money type chosen in D-FX-2 was meant to make USD **usable**, not just representable. **Brief 27 under-specified this; the gap was the Orchestrator's, not the Worker's.**
+**Chosen: (b)** — a currency-generic cap converter, **plus** USD rates recordable end to end through a store writer upserting on `rateKey`.
+
+**Constraints placed on it:**
+- **No USD cap may be invented.** The statute states the caps in euro; the generic path exists for a future *verified* non-euro ceiling, not as a licence to manufacture one.
+- **Verified versus pattern-derived stays visible.** BNR's XML carries USD **daily** reference rates, so that path is real. The USD **annual-average** series code is pattern-derived and keeps the `-PATTERN` suffix and unverified label — a code that looks official will be trusted.
+- **Where USD bites is the record, not the cap:** a USD expense or receipt converts at the BNR daily reference rate on the payment / collection date under CF art. 9 alin. (3) lit. b) + alin. (4), which is not EUR-specific.
+- A store writer is **not** a new network path; the deliberate widening is to be stated in the phase doc rather than left to look like creep.
+
+---
+
+## Decisions from the same round that are not FX
+
+### D-SEED-1 — How far does TASK 9 go on declaration-shaped seed facts?
+**Asked by the Worker.** The seed asserted quarterly D100/D220 filings that are not obligations for this profile (research 06: D212 replaced 232 and 220; research 12: art. 120/120¹ abrogated from 01-01-2025, one operative 25 May annual deadline). Options: minimal / **seed-only, quarterly removed** / model change.
+**Orchestrator chose B**, with three conditions the user's brief did not contain: **no invented nil returns** (there is no monthly obligation either, so a nil return would replace one fictional obligation with another); the annual D212 must not manufacture a second deadline; gross 205,50 lei and deductible 120,00 lei stay visibly distinct.
+**Implemented** (`76b50ca`): `declarations: []`; the quarterly artefacts became the one return this profile files, **D212 for 2025, filed 20.05.2026**; no nil return minted. Two model defects **recorded, not fixed** — **B-34** (`Declaration` is monthly `{an, luna}` and cannot hold an annual filing) and **B-35** (D300 periodicity is undetermined by the seed's own facts). The plan's CUI-collision claim **does not reproduce** and is recorded as stale.
+
+### D-TEST-1 — Browser-level reserve reload test
+**User decision, 2026-10-09.** TASK 3 proved the round trip in jsdom against real `localStorage`; a Playwright test exercises a real browser's storage lifecycle.
+**Implemented** (`dd7f812`): new spec, deliberately **no `addInitScript`** — it re-runs on reload and would make the round trip vacuous. **e2e 36 → 37**, and every document pinning 36 was updated.
+
+### D-SCOUT-1 — Scout concurrency
+**Asked:** the updated roadmap permits parallel Scouts. **User chose: keep sequential** — „scout concurrency remains the same as we are doing right now. its better."
+**Implemented:** every brief since carries rule 4 as an explicit override with the reason (one engine slot, ~390 MiB headroom, two Workers SIGKILLed mid-run), so no future Worker re-litigates it.
+
+### D-LANG-1 — Three Romanian rulings against the Orchestrator's audit
+The Orchestrator's language audit was **wrong three times**; the user corrected it. Recorded because the wording was deliberately left alone:
+- **„fapta"** is attested Romanian, the legal/judicial register (*fapta prevăzută de legea penală*) — finding withdrawn.
+- **„Codul CAEN"** is the articulated form of *cod CAEN*, standard business usage — finding withdrawn.
+- **„nici o parte"** with *nici* as intensifier plus the article *o* means „not even one part" — finding withdrawn.
+**Implemented:** the Worker left all three unchanged and parked **nine wording calls** for the user's native judgement in `phases/21_language_layer.md` §13, rather than changing them on the Orchestrator's authority.
+
+### D-SCOPE-1 — Where this round stops
+**User:** „We stop after task 10." Updated **Phases 11–34** were supplied and mapped in `docs/ai/roadmap_11_34_mapping.md`, but are **not started**.
+
+---
+
+## 2026-10-10 — the seven decisions from `PHASE_PLAN_11_34.md` §9
+
+Asked after the independent audit. Six settled here; the seventh (wording) is pending the user's numbers.
+
+### D-SEED-2 — Seed scenario: both, and seed data is **test-only**
+**Chosen:** option 3 — a 2026-start PFA as the product scenario, the 2020 PFA surviving as a test fixture. The user's framing: *“the way I understand it is that Seed data is only for tests.”*
+**Consequence, recorded before implementation:** combined with D-RUN-1 below, `seedData` should not be what a production install receives at all. `store.tsx:166-167` returns `seedData` for a first run; that changes to an empty dataset, and `data/seed.ts` becomes fixtures for tests and for the persona demo. **This is a bigger change than a seed edit** — anything that reads seed figures as live app state (the pinned deductible 120,00 / 144,00 lei, VNA 9.096,00, hero 51.510 lei, e2e clock 3.249,00) is pinned through the **test** path, so the figures survive; what dies is the shipped demo bundle. Phase 11 must prove that, not assume it.
+
+### D-RUN-1 — First run: **start empty**
+**Chosen:** option 1. No preloaded data, no banner-on-demo compromise. Closes **D1** at its root rather than papering over it.
+**Deferred by the user, to be specced separately:** a **“Get started” flow or demo showing how the app looks for different kinds of personas**. That is a deliberate, user-entered experience — not silently preloaded records — and belongs to Phase 26, not Phase 11. It is the reason the 2026-start scenario and the 2020 PFA both stay useful.
+
+### D-SCOPE-2 — Supported scope: **broad, with rigour**
+**Chosen:** option 3 — attempt every profile, refuse only where a fact is missing, *“with rigorous planning and execution to remove the risks.”*
+**What that obliges, and it is not optional:** every unsupported case needs an explicit refusal state that is **built and tested**, not assumed. That makes regression scenarios 4 (activity-specific rules), 6 (additional income) and 8 (VAT periodicity) in `PHASE_PLAN_11_34.md` §8 **acceptance criteria**, and it is why 12E, 12F and 13's completion gate cannot be deferred. A broad scope with untested refusals is exactly the confident-wrong-number failure this project has spent the round eliminating.
+**Still true:** Q-VAT-PERIOD is a missing *input*, not a missing source, so 18B is closed by collecting the facts or refusing — not by more research.
+
+### D-SEV-1 — Severity vocabulary: **map back onto `info | warning | danger`**
+**Chosen:** option 2, reversing the roadmap conflict C1 in the roadmap's favour.
+**Implementation constraint the Worker must honour:** TASK 8 deleted the `high→danger / medium→warning / low→info` translation because a single three-value field fused **legal status** with **urgency** and could not express “legally load-bearing, not urgent”. That distinction is a correctness property, not a style choice. So: the **domain keeps its dimensions**, and the three-word vocabulary is applied at the **display boundary**. Mapping at the boundary satisfies the roadmap text without re-fusing the two ideas inside the engine. If a case cannot be expressed in three words, the row shows the word **and** the reason — the word never carries the legal meaning alone.
+
+### D-VER-1 — Rule edition numbers: **bump going forward, never back-fill**
+Asked a second time in non-technical terms (fingerprint vs a typed edition number) at the user's request; they chose **“start edition numbers from now on.”**
+**Meaning:** all 48 rules stay at `version: 1` — the Phase 3/4/5 corrections happened before content addressing existed and minting superseded editions for them would fabricate history. **From the next content change onward**, a rule change issues a superseded release and bumps `version`. The content digest remains the identity that makes an old snapshot replayable; the edition number is a human-readable trail that is only ever written truthfully and only at the moment of change. Closes roadmap conflict C2 without the back-fill the roadmap's wording invited.
+
+### D-DOCS-1 — Phase documents stay in `docs/ai/phases/`
+**Chosen:** option 1. `docs/ai/steps/` is a 33-file frozen archive whose numbering already means something else (`steps/15_tax_engine.md`); writing `steps/15_calculation_snapshots.md` there would overwrite an unrelated frozen record. The roadmap's `steps/NN_<name>.md` filenames are treated as **labels**, not paths. Closes C3.
+
+---
+
+### D-LANG-2 — The nine parked wording calls: **all eight remaining approved**, with the user's variants
+
+The user reviewed each sentence in full (not the abbreviated table — that was my first mistake) and ruled. Recorded here as the authority for Phase 28 / PG-12.
+
+| # | Ruling | Final wording |
+|---|---|---|
+| 1 | Change | `nedeasă` → **`nedecisă`** |
+| 2 | Change | `… art. 123 alin. (1). **I**mpozitul pe profit nu este oferit: …` |
+| 3 | Change | `Art. 174 alin. (8) **se întemeiază pe** o faptă din anul precedent, …` |
+| 4 | Change — **variant B** | `… banda de 10 % este o politică de afișare a aplicației și **nu este o regulă legală**.` The user took my counter-recommendation over my own first proposal: `nu are nicio bază legală` can read as “unlawful” |
+| 5 | Change | `cassFlagUnverified`: `lasă linia de verificat` → **`marchează linia ca fiind de verificat`**, matching the three notes already using it |
+| 6 | Change, **with a qualification** | **`amprentă de conținut`** in user-facing labels and explanations; `digest` / `contentHash` stay in code identifiers; **the term is explained once in plain Romanian** where it first appears. This settles the objection TASK 9 recorded (half-renaming the family) — it does not, because the whole user-facing family moves together |
+| 7 | Change — **variant B** | `Praguri fiscale **comparate cu valorile înregistrate**` |
+| 8 | Change — both, plus the optional improvement | `Dacă nu se completează, profilul rămâne fără dată de înființare.` / `Dacă nu se completează, aplicația nu cunoaște data și nu afișează niciun termen de înregistrare — nu inventează unul.` And `baza nu se proratează` → **`baza nu se ajustează proporțional cu perioada de activitate`**. **The nuance the user attached:** the shorter wording replaces the *missing-value* explanation only — the substantive legal explanation and why the date matters stay |
+| 9 | Change | `«înregistrată»` → **`„înregistrată”`** in both `sources.capReadingChoice` and `records.capAppliedReading` |
+
+**The principle the user stated, which governs the rest of the language work:** consistency is not correctness. A wording change must not alter fiscal meaning. Their example is the right one — moving a CASS sentence from `calitatea de pensionar` to `sume primite ca pensii` changes **which fact is being evaluated**, and the code deliberately separates pensioner status from pension income received in the fiscal year. That distinction survives in both the calculation and the explanation.
+
+**One reviewer claim that does not reproduce.** The report says the fallback for an unrecognised completeness key is “the English word *date*”. There is no such fallback in `domain/completeness.ts` (grep for a `'date'` literal or a label fallback returns nothing), and the string the report is almost certainly reading is `copy.dashboard.completenessTitle` = **`Completitudine date`** — where **`date` is Romanian for “data”**. Same class of false positive as the CUI collision and the three withdrawn language findings, and recorded for the same reason: a plausible finding still has to be checked.
+
+**The broader language findings from the same review** — `Estimare impozit` naming a figure that includes CAS and CASS, the generic `Venit PFA` threshold label where CAS/CASS and VAT measure different bases, `Prag de înregistrare depășit` stating an arithmetic comparison instead of the obligation, `Nivel de calcul modificat` stating an abstraction instead of the consequence, `Aproape de prag` firing when the user is already above a floor, the completeness messages reading as internal software terminology, and the Settings explanations being one dense legal paragraph — are **Phase 28 / PG-12 work**, listed in `briefs/28_pg_production_gate.md` §2 PG-12 and in the reviewer's own §2 A–E. They are terminology and information-architecture changes, and each must be checked against the rule it describes before it moves.
+
+---
+
+## 2026-10-10 — the PG owner decisions (brief 28 §4)
+
+### D-DATE-1 — Missing payment / collection date: assume the document date, but say so
+**Chosen:** option 1 — the document date stands in for the money date — **plus two things the user added**: the money date must be enterable, and the field carries an informational note explaining *when it matters*. Their suggested wording: something like „completează acest câmp dacă ai încasat plata într-un an fiscal diferit de cel al facturii”.
+**Why this is the right shape:** it keeps entry cheap for the common case (paper and money move together) while making the one case that changes the tax year explicit to the user. It does **not** make the assumption invisible.
+**Still owed:** scout **L-7** confirms the cash-basis rule itself (art. 68 alin. (2) lit. a) / alin. (4) lit. b)) and what the law says about an invoice with no payment date at all. The product decision is made; the legal basis still has to be cited.
+
+### D-RES-1 — Reserve horizon: **spread to 25 May of the following year**
+Because that is the single real deadline for income tax, CAS and CASS together (CF art. 122 alin. (3); art. 68 alin. (9)-(10), art. 151 alin. (1), art. 174 alin. (15)). The monthly figure becomes smaller and matches when cash is actually needed.
+**Consequence, and it is a model change, not a copy change:** the reserve target now **crosses the fiscal-year boundary**. A 2026 obligation with a 2027 due date has to exist as an object — see D-YEAR-1 and the cross-year obligations timeline.
+
+### D-NORMA-1 — Normă de venit: **support it before launch**
+**Chosen:** option 2 — real support, not a refusal screen. This reverses the boundary Phase 6 recorded deliberately (`norma_venit` as a refused boundary with no invented values).
+**Recorded honestly, before any code:** this is the largest scope addition of the round. It needs a second calculation method driven by published norm tables that vary by activity and by region and are reissued annually by ministerial order. **No 2026 norm table has ever been verified in this project** — that is precisely why the boundary was refused in the first place. If the tables cannot be verified from primary sources, the calculation cannot ship and the refusal returns, having cost the time regardless.
+**Therefore:** scout **L-9** (new) answers the eligibility, the source of the tables, and whether a PFA may elect the method for FY2026 **before** any implementation is scheduled. The answer decides the schedule.
+
+### D-YEAR-1 — Fiscal-year rollover: **automatic switch, with a toggle back and a banner**
+**Chosen:** a variant of option 1. On 1 January the app **switches to the new fiscal year automatically**, a **toggle somewhere in the UI** lets the user return to a previous fiscal year to review it, and a **banner on New Year** states what the app did and how to review the closed year.
+**The consequence the user must see, recorded here:** there is **no verified 2027 rule package**, and the 2027 minimum wage is not yet published. So the default screen on 1 January 2027 is a **refusal** — any 2027 figure would be an invented one. The toggle and the banner are what make that survivable. It also creates a **standing task, not a phase**: stage the 2027 package as soon as the 2027 acts are published, or the app is a refusal screen for weeks after New Year.
+
+**Chart continuity — the design rule that came out of the user's own question.** The reviewer asked whether the chart needs changing across years. It does not, and the reason matters:
+1. The **fiscal series belongs to one fiscal year**. No continuous 24-month line: 2026 is *final from actuals*, 2027 is *projected*, and drawing them as one line blends two different kinds of number — the same error the projection already makes. A cross-year view is a **year-over-year comparison**, not one long line.
+2. **Tax paid in May 2027 is not a 2027 expense.** It settles a 2026 obligation. Putting it in the 2027 fiscal series double-counts the burden.
+3. It **is** a real 2027 cash event, and D-RES-1 makes that explicit. So the model needs a **cross-year obligations timeline** — a 2026 obligation with a 2027 due date — in its own series, separate from the fiscal chart.
+**Rule: the chart stays per-year; what crosses the boundary is the obligation, not the chart.**
+
+---
+
+### D-YEAR-2 — New fiscal year: **carry forward, update when the datum arrives**
+**Chosen:** carry forward. The user supplied the minimum-wage history themselves (HG 1091/2014 through HG 146/2026) to make the point that the wage **always** changes, so the app cannot simply stop and wait: it carries the last known value forward and updates the moment the new one is published.
+**What I recorded alongside it, because the direction of the error is not uniform:** carrying an older, lower wage into a new year moves the two contribution lines in **opposite** directions. A lower 12-SM floor makes CAS look **due** when it may not be — overstating, the safe direction. A lower 6-SM CASS floor makes the art. 174 alin. (6) top-up look **smaller** than it will be — understating, the unsafe direction. So "carry forward" is acceptable only with the value visibly stamped as not yet updated for the year, and it is not acceptable as an invisible default.
+**Standing task, not a phase:** stage the 2027 rule package the moment the 2027 acts are published. Until then the app is honest that it is running 2026's rules.
+
+**Addendum 2026-10-10, after `research/32` — the decision stands; two things about it changed.**
+
+1. **The value being carried is not what I assumed.** The FY2027 anchor is **4.325 lei** (HG 146/2026, MO 196/13.03.2026), **not** 4.050. CF art. 135¹ alin. (3) takes the wage „în vigoare la data de 1 ianuarie a anului”, and on 1 ianuarie 2027 that is HG 146/2026's value, in force since 1 iulie 2026. **Carrying 4.050 would be two steps stale and wrong even if the wage is frozen.** FY2027 bases if nothing is published: 6 SM **25.950**, 12 SM **51.900**, 24 SM **103.800**, 72 SM **311.400** lei — and in that case they are not estimates, they are the law.
+2. **My "opposite directions" note understated it.** R-C's worked example shows **four** directions from the same stale wage: CAS **overstated** for income between the carried and true 12 SM; CASS **overstated** through the 24 SM tier boundary at some incomes (at income 110.000 lei, carried base 103.800 against a true tier-1 base of 55.200) and **understated** at others; the art. 174 alin. (6) top-up **understated**; CASS **understated** at high incomes through the 72 SM cap. **There is no single conservative direction**, so a padded carry-forward is not a safe design — the provisional, visibly-flagged value with a recompute trigger is the only honest one. That was already the shape of this decision; it is now the reason for it.
+
+**And the mechanism does not exist yet.** Carrying forward is not a labelling problem: `selectRuleSet` returns nothing for an unregistered year, so on 1 ianuarie 2027 the app would switch year and go to `review_required` everywhere. Recorded as **B-58**, with **B-59** for the fact that the thresholds are stored as lei literals whose SM agreement is enforced only by a test.
+
+### D-LANG-3 — Second Romanian proof-check: accepted, with three items held for research
+Full report and my in-tree verification of every claim: `docs/ai/notes/romanian_proofcheck_2026-10-10.md`. **All eight concrete claims reproduce.**
+**Accepted now:** the six definite errors; the `Detaliu status` placeholder that asks for a rejection reason on a pending record; informal address throughout; the plain-language rewrites of the research-note phrasings; the terminology standardisation; the 2025 hard-coded default; the file-size message.
+**Held for the researcher, because they carry legal content and are not copy:** the D100 / D220 form categories still taught in the documents copy (the same error TASK 9 removed from the seed); the intra-community VAT-code hint, which claims any EU collaboration needs the code; the official Romanian name of the RJIP register.
+**Held until PG-7 makes it true:** the proposed foreign-currency wording. It says the record is absent from the lei totals — correct as a description of what *should* be visible, wrong as a description of today, where the sentence and the aggregation disagree (B-37).
+**Two findings that are not language problems at all**, and outrank the grammar: **B-55** an internal English identifier printed inside a Romanian sentence, which the copy guard cannot see because it only scans components and pages; and **B-56** `Declarația … a fost transmisă` and `Contul este conectat la platforma e-Factura` sitting on actions that only mutate local state — `sendDeclaration` is a `setData` call and there is no e-Factura integration. In a financial app, a user who believes a declaration was filed may not file it.
+
+---
+
+### D-PROJ-1 — The tax estimate is calculated on **actuals**; a forecast may be shown but never feeds it
+**Chosen:** option 1, and the user checked the scope first — they asked whether this was about the chart or the tax estimate box, and confirmed it is the **tax estimate box**. That distinction is now part of the rule:
+- **The hero figure is computed only from records that actually exist** — receipts actually collected, expenses actually paid — and is labelled with the date it is measured as of. No multiplying by 12, no dividing by months elapsed.
+- **A forecast may exist beside it**, visually distinct, and must never be what the engine or the contribution thresholds are measured on.
+- **The chart's projected series is unaffected as a visual aid** — it stays, and Phase 22 still owes it a non-colour cue so actual and projected are distinguishable without colour. A picture of a forecast is fine; a tax number that is one is not.
+**Why this is now a legal requirement and not a preference:** `research/26_midyear_start_partial_year_2026.md` established that CF art. 118 alin. (3) deems fraction-of-year income to *be* the annual income, that art. 68 alin. (2) lit. a) and alin. (4) lit. b) measure actual receipts and payments with no annualisation, and that the statutory proration for mid-year starters was deleted by OUG 115/2023 art. I pct. 101 from 1 January 2024. The October example: the app's ~40.000 lei annual figure makes CAS look due; on the law's 10.000 lei, none is due.
+**What it does not resolve:** mid-year, whether a threshold will be crossed by December is still unknowable. The app must say **which basis each threshold was tested on** rather than imply the answer is settled. That stays part of PG-1 and PG-4.
+
+**RESOLVED 2026-10-11 (PG-5C, `docs/ai/phases/34_pg5c_actuals_basis.md`).** Both halves now hold, and the second one is enforced by the type system rather than by wording:
+- The hero is computed from recorded amounts only. `EstimateAmounts` — the engine's operand type — carries the `asOfDate` it was measured as of; `ForecastAmounts` deliberately does not, because a grossing-up was never measured as of anything. A forecast is therefore **not assignable** to an engine operand, and no call site can feed one to `computeTaxEstimate` or to a threshold base without a cast. Two tests hold the door with `@ts-expect-error`, so the guard failing is itself a test failure.
+- Every threshold row names its basis, and the only annual basis the row type can carry is a realised one — the projected member was deleted from `MeasuredBasis`, and `measuredBasisLabels` is a `Record` over that union, so restoring it is a compile error until someone also writes the sentence that would put it on screen. The card additionally states the date the values were measured at.
+The October case is pinned end to end in `src/data/partialYear2026.test.ts` and `e2e/partial-year-2026.spec.ts`. The unresolved question the decision recorded — whether a threshold will be crossed by December — is still unresolved, and is now answered honestly rather than implied: the app names the basis and the date instead of predicting the outcome.
+
+---
+
+## Still open — to be put to the user
+
+**D-6** who owns the disclaimer and terms wording. **D-7** calculation-sheet export format: print stylesheet, PDF, or JSON.
+
+### D-NORMA-2 — Normă de venit: the cost is now known, and it was not known when D-NORMA-1 was decided
+**D-NORMA-1** chose "support it before launch, not a refusal screen" on 2026-10-10. At that moment nobody had verified that the numbers existed anywhere citable, and **D-NORMA-1's own text says the tables are "reissued annually by ministerial order" — which `research/30` proved false.** The research is now done and the cost is attached, so the decision should be re-taken with the number in front of it rather than inherited.
+
+**What building it actually means** (`research/31`): a **42-table county dataset**, not one national table — 128 nomenclator positions × 42 județe × 1-18 locality columns, **not published in Monitorul Oficial**, cited per county decision, with **only 13 of 42 counties carrying a machine-readable act number**. Plus a manual tail: **8 counties unreadable** (7 scans + 1 corrupt text layer) ≈ **1,000-1,300 figures** to OCR or transcribe; **12 counties with deficient correction coefficients** ≈ **~300 coefficient rules** to hand-encode, each county with its own criteria vocabulary and stacking rule; and a **hand-built locality taxonomy** with no official source to derive it from. Re-annual maintenance: 42 county decisions reissued every Q4, and the ANAF index itself has **7 dead links** today.
+
+**The three options, with the consequence of each stated:**
+1. **Build it fully.** 12H becomes a data-engineering phase with a manual tail and a yearly maintenance obligation. It is the only option that is legally complete for a norm-payer.
+2. **Build a partial, honest version:** the 34 readable counties, the statutory floor (12 × SM = 48.600 lei, which is the dominant 2026 value and is citable to art. 69 alin. (3)), and an explicit "this county's norm is not in the app — see the ANAF decision" state for the rest. Legally incomplete by county, but every figure it does show is cited.
+3. **Reverse D-NORMA-1 and refuse the regime explicitly.** `research/30` §7 already drafts what the refusal must say, including everything the user still owes. This is the option the project originally chose deliberately in Phase 6.
+
+**What is not in question:** whichever option is chosen, the app must not compute sistem real for a profile the law puts on normă de venit. That is a silent wrong number, not a refusal — and it is currently what the app does.
+
+### D-USER-1 — There are **no active users**: migrations need not preserve data nobody has — **user decision, 2026-10-10**
+Stated while reviewing PG-5's migration. PG-5 moved every monthly `declaration` row into a new `legacyDeclarations` bucket byte-for-byte purely to protect stored data. **There is no stored data to protect.** So the legacy bucket goes rather than becoming a permanent second vocabulary, and **B-75 exists only because it was kept**. This does not relax the migration chain itself — steps are still never renumbered and dev/test payloads still migrate — it removes the obligation to *preserve* shapes the product no longer supports.
+
+### D-VAT-1 — Form 300 setup: **ask the facts, derive when possible, confirm when not** — **user decision, 2026-10-10**
+Chosen for PG-6, after the user asked how someone who has just started a PFA would set this up. The answer drove the decision: **there is no field anywhere for a VAT registration date**, and a brand-new PFA has no previous year to measure, so nothing can be derived from history.
+1. Ask the two things the user actually knows: **are you VAT-registered, and since when?**
+2. Where the cadence follows from those facts plus recorded income, **derive it and show the reasoning.**
+3. Where it does not — a new PFA — **state the rule in plain words and ask the user to confirm monthly or quarterly**, labelled as *their* answer, never as the app's conclusion.
+**Never** a guessed cadence, and never the current dead end of "cannot be established" with no way forward.
+
+### D-CAZ-1 — art. 68^3 accommodation income: **support it properly, do not refuse it** — **user decision, 2026-10-11**
+Brief 28 §PG-6b told the app to **refuse** accommodation income. The user overruled that: *"If we can implement it PROPERLY now, we do it now."* Asked which taxpayers to cover, they declined the legal question and told me to decide from the law in front of me.
+**Decision: implement all three paths**, because they are not three features — they are one arithmetic reaching three categories, and the most common real user is the one the narrowest option refuses:
+- **(a)** tourism operators providing accommodation measured in days — art. 68^3 alin. (1).
+- **(b)** a private person renting **more than 7** short-term rooms: from the fiscal year they cross 7, the income becomes an independent activity under art. 68^3 — **alin. (12)** with **art. 83 alin. (4)** (mod. Legea 239/2025 pct. 7).
+- **(c)** a private person renting **1–7** rooms: stays in **cedarea folosinței**, a different income category, but from 2026 it is **also** on the 30 % flat-expense basis — **art. 85 alin. (1)–(2)** (mod. pct. 10). This replaces the old tourist normă for 2026.
+**Refusing (c) would refuse the likeliest user of all** — someone with two or three apartments on a booking platform.
+**What is already answered:** the 30 % is a flat **expense** ratio (alin. 2), tax is 10 % of that net and **„impozitul fiind final"** (alin. 6) → effective 7 % of gross; the net **is cumulated for the CAS 12/24-SM band** — `research/07` §2 records that the 01.01.2026 amendment to art. 148 alin. (3) inserts art. 68^3 into the cumulation list, a cross-reference change only.
+**Now answered (`research/38`, 2026-10-11):** the 68^3 net **is** the CASS base — Legea 239/2025 art. XII pct. 19 amended art. 170 alin. (1) to name art. 68^3, two puncte after pct. 18 did the same for CAS — floored at 6 SM, capped at 72 SM, rate 10 %; and the occupancy-sheet order **was** published, as **OPANAF 381/2026, MO I 250/31.03.2026**, nine days late. „Impozitul fiind final" has **no** CASS effect.
+**Genuinely undetermined, and it must stay `review_required`:** the **alin. (3) platform-commission scope** — the words limit the exclusion to rooms in personal dwellings while the article's subject is a tourism operator's let space, and the choice moves gross, therefore tax, the CASS base and the CAS threshold; and the **alin. (1) eligibility gate**, a tourism-law classification outside the fiscal code. **The app asks; it does not decide.**
+
+### D-COM-1 — art. 68^3 platform commission: **ask, show both readings — and let a CAEN code trigger the question** — **user decision, 2026-10-11**
+The alin. (3) exclusion is limited by its words to rooms „situate în locuințe proprietate personală", while the article's subject is a tourism operator's let space. No primary source resolves it, and the choice moves gross, therefore tax, the CASS base and the CAS threshold.
+**Chosen:** the app **asks** which situation the user is in and applies the exclusion accordingly, **showing which reading it used and why**, with the alternative reading visible. It does not silently pick one, and it does not refuse to produce a figure.
+**And:** when Settings sees a **tourism CAEN code** on the profile, it **prompts that question**.
+**The boundary this must not cross.** 6b established that the activity family is **never inferred from a CAEN code**. That rule stands. A CAEN code may **trigger a question**; it may never **supply an answer**. The trigger is a convenience, the answer is the user's, and an unanswered question stays unanswered.
+
+### D-OCC-1 — the occupancy sheet: **reproduce the full OPANAF 381/2026 form, including guest names and CNPs** — **user decision, 2026-10-11**
+The orchestrator recommended recording occupancy counts only, because the obligation is retention rather than filing and the app would be holding personal data about people who are not its users. **The user chose to reproduce the form in full.**
+**Consequences accepted, and they are implementation requirements rather than commentary:**
+1. The app becomes a store of **third-party personal data** — guest name, CNP or ID series and number, stay dates, per room, per year.
+2. There is **no ANAF filing that requires the app to hold it**: OPANAF 381/2026 says „să completeze și să păstreze", one copy, kept by the taxpayer. So every byte of it is held for the user's convenience alone.
+3. Therefore: **local storage only, no network path for it** — nothing in the occupancy data may reach a fetcher, an export default, a log, or an analytics surface. If an export exists it must be an explicit user action producing the taxpayer's own sheet.
+4. **Deletion must be real** — deleting the data removes it, and the app must say plainly that it is the taxpayer's copy of a document they are legally required to keep.
+5. **No guest data in any fixture that leaves the machine**, and no real CNP in any test fixture.
+
+### D-COM-2 — the accommodation trigger is **the declared activity family plus the room count**, not CAEN — **user decision, 2026-10-11**, amending D-COM-1
+`research/39` established that the CAEN trigger D-COM-1 assumed **cannot reach the likeliest affected user**: a natural person letting **1–7 rooms** is taxed under *cedarea folosinței bunurilor* (art. 83 alin. (2)), not as business income, has no registered business activity, and therefore **has no CAEN code at all**. art. 83 alin. (4) moves them to art. 68^3 only above 7 rooms.
+**Chosen:** trigger on the **declared `activityFamily`** PG-6b already stores, **plus one question — how many rooms, 1–7 or more than 7**. That boundary is what the law itself turns on, it applies to people with no CAEN as well, and it is answerable.
+**CAEN's role is reduced and bounded.** It may remain an **additional** trigger for the minority who do hold a code. It may **never** be the only trigger, and it may **never** supply an answer — the D-COM-1 boundary stands, and `research/39` §3 strengthens it: **HG 656/1997 art. 4 alin. (1)** says CAEN classification „nu presupune crearea de drepturi sau obligații", and **alin. (2)** puts any administrative use of CAEN on the institution doing it. **Any CAEN list this app encodes is our own normative choice and must be documented as such**, because **no official CAEN ↔ tourism-structure-type mapping exists in any source retrieved.**
+
+### D-VEH-1 — the contested 6c premise is settled **against our own research**: the 50 % default is the law, so `unknown` is not `incomplete` — **orchestrator ruling, 2026-10-11**
+Brief 28 told 6c that a vehicle expense with no usage fact must be **`incomplete`**, not silently deducted at 50 %. `fiscal/deductibility.ts` says the opposite: *„absent that record the law defaults to 50 %, so `unknown` deliberately behaves like `mixed`."* **The code is right and the brief was wrong.**
+**The evidence, already in our corpus and already marked Verified — `research/21` §4.1.** Art. 68 alin. (7) lit. k) limits to 50 % „cheltuielile aferente vehiculelor … **care nu sunt utilizate exclusiv** în scopul desfășurării activității". Normele HG 1/2016 pct. 7 alin. (7) put the burden on the taxpayer in one direction only: „**În vederea acordării deductibilității integrale** … justificarea utilizării vehiculelor se efectuează pe baza documentelor justificative **și prin întocmirea foii de parcurs**" — category, purpose and place of trip, kilometres, own fuel norm. **Full deductibility is the thing that must be evidenced; the 50 % cut is the default that applies when it isn't.** `research/21` states the consequence plainly: „Absent that record → 50 %."
+**Why brief 28's reading was wrong in kind, not just in outcome.** Marking `unknown` as `incomplete` would have the app treating *its own* missing fact as if the law were unresolved. The law is not unresolved; it supplies a default precisely for the unevidenced case. That is the same error class PG-5C removed — the app substituting its uncertainty for a statutory answer, only here it would have **understated** a liability rather than inflated one.
+**What survives from brief 28's concern, and it is a copy requirement rather than a computation rule.** `unknown` and `mixed` must remain **distinct stored facts**, because a user who keeps a *foaie de parcurs* can change the answer. So: compute at 50 %, and say so visibly — *the law defaults to 50 % because exclusive use is not evidenced; if you keep a logbook, this changes*. Never a refusal, never a silent merge of the two facts.
+**Still unverified, and 6c must not guess it:** `research/22` line 152 records **UNVERIFIED** for the treatment of **two or more cars** — art. 68 alin. (5) lit. j) limits deduction to „cel mult un singur autoturism aferent fiecărei persoane", but no primary source in the corpus settles *which* car carries the costs when a person owns several.
+
+### D-VEH-2 — two or more taxpayer-used cars: **the user designates one; the others stay `review_required`** — **user decision, 2026-10-12**
+`research/40` established that art. 68 alin. (5) lit. j) — „cel mult un singur autoturism aferent fiecărei persoane" — **supplies no selection criterion**, and that what happens to a second taxpayer-used car is **genuinely undetermined**: fully non-deductible (alin. (7) lit. a) *uzul personal* points that way) or still deductible at 50 % under alin. (4) (Normele pct. 7 alin. (7) applies the cap to costs made „conform art. 68 alin. (4) **și (5)**").
+**Chosen:** the app **asks the user which car they treat as theirs**, records it as **their** choice with the article cited, applies the allowance to it, and **still marks the other car's running costs `review_required` with both readings stated**.
+**Why this and not a default.** The designation is the user's, so the app is not inventing a rule; the *consequence* for the other car is left open, because that is the part no source answers. The orchestrator's preferred option was to compute one and flag the other without asking; the user chose to ask as well. **The flag is not optional** — a designated car must never make the other car's costs look settled.
+
+### D-VEH-3 — 6c adds a **vehicle entity with per-car facts** — **user decision, 2026-10-12**
+The orchestrator offered a cheap per-year count following the room-count pattern. **The user chose the real entity**, because it is the only shape that can express the one distinction the texts *do* support: **a car used by the taxpayer or an associate member is inside the cap; a car used only for the activity, only by employees, or only within an exception category is outside it** (lit. j) is limited by its own words to „autoturismele **folosite de contribuabil** sau membru asociat").
+**Minimum per-car facts, per fiscal year:** an identity the user recognises; whether the taxpayer or an associate member personally uses it; the use fact (`exclusive` / `mixed` / `not_used` / `unknown`); and, if claimed, which of the five exception categories at alin. (7) lit. k) points 1–5.
+**No inference anywhere.** A CAEN code, an expense `category` token, a supplier name or a seed value may prompt a question but may never answer one.
+
+### D-OTH-1 — the CASS ladder is modelled in full: all six art. 155 alin. (1) lit. c)–h) categories, each measured by its own rule
+**Decided 2026-10-12.** Asked how far PG-6d should take the ladder, the user chose the **full** option over "honest partial" and over "refuse everything". So the app collects, **per fiscal year**, an amount for **each** of the six ladder categories — **lit. c)** proprietate intelectuală, **lit. d)** asocierea cu o persoană juridică, **lit. e)** cedarea folosinței bunurilor, **lit. f)** agricole/silvicultură/piscicultură, **g)** investiții, **h)** alte surse — and each figure is the one art. 170 alin. (4) actually measures, not gross receipts: net for c), d), e), g); **brut** for h); dividends = „dividendele plătite, diminuate cu impozitul reținut"; agricultural may be „venitul net **sau** norma de venit, după caz" (the normă survives **only** there). **No default on any of it.**
+
+**Consequence the user accepted with this choice:** it pulls the determination rules of art. 72/72¹ (IP forfetar), art. 125 alin. (8)–(9) (venit distribuit) and art. 104–106 (agricultural) into 6d. That is the cost of the full option and it was taken deliberately, not discovered later.
+
+**Unchanged by this decision:** the ladder is **one cliff per person**, not per category — art. 170 alin. (2) cumulates „din una sau mai multe surse și/sau categorii de venituri", alin. (3) fixes „baza anuală de calcul" for „persoanele", art. 174¹ alin. (1) applies the rate to that single base. **Below 6 SM cumulated there is no CASS at all** (alin. (2) is a condition precedent, not a rate). **lit. b) never joins the ladder.** And art. 170 alin. (5) excludes art. 93/105 neimpozabile income from the cumulation.
+
+### D-OTH-2 — `concesiune` and `alte` are retired as flags and replaced by the question that decides the letter
+**Decided 2026-10-12.** `concesiune` has **no referent at all** in the Cod fiscal — a whole-code search returns zero matches for „venituri din concesiune". `alte` as a free-form catch-all is **wider** than art. 155 lit. h): art. 61 lit. g) *premii și jocuri de noroc* and lit. h) *transferul proprietăților imobiliare* are income-tax categories that **never appear in art. 155 alin. (1)** and never attract CASS, so a free-form "other" flag can **manufacture a liability**.
+
+So: **no `concesiune` category.** What is asked instead is the fact that decides the letter — whether the receipts come from the PFA's **own activity** (art. 67 alin. (1) → lit. b)) or from **letting a good from personal patrimony** (art. 83 alin. (1), contract-type-neutral → lit. e)). And `alte` is **constrained to art. 114**, refusing anything else.
+
+### D-LEG-1 — there are no users yet: do not preserve legacy data, clean it
+**Decided 2026-10-12, standing.** The user's words: *„we do not need legacy data. we have no users yet. We should generally clean legacy stuff."*
+
+This **changes a default this project has followed.** Until now the rule has been: append a migration step, **backfill nothing**, and leave old values present but untrusted. From now on, when a fact is retired or a shape is wrong, **delete it** — remove the field, the type member, the copy key, the test fixture and the migration's tolerance for it, rather than carrying a compatibility shim for data that does not exist in the wild.
+
+**What still stands and is not relaxed:** the migration **chain** itself stays (dev and test profiles hold versioned data, and `data/migration.ts` is tested), and **no backfilling of facts the user has not declared**. D-LEG-1 removes the obligation to *preserve* retired values; it does not license inventing them.
+
+**Immediate consequence for 6d:** `PfaOtherIncomeFlag` and its five members are **removed**, not deprecated. `domain/schema.ts:120` (`otherIncome: z.array(z.enum([...]))`), `domain/models.ts:341-344`, `pages/Onboarding.tsx:56` (`OTHER_INCOME_KEYS`), `ui/copy/onboarding.ts:127-128` and every fixture carrying `otherIncome` go with it.
+
+### D-FA-1 — 6e builds the full depreciation engine; the unresolved points refuse rather than guess
+**Decided 2026-10-12.** Asked between the full engine, register-only, and linear-only, the user chose the **full engine**: linear **and** degresiv, first-year pro-rating, the art. 28 alin. (14) **M1 cap of 1.500 lei/lună**, and the pct. 27 **disposal cap of 1.500 × remaining months** — with a fixed-asset register carrying per-asset facts (entry into the patrimony, *punerea în funcțiune*, depreciable value **including non-recoverable VAT** per Titlul II norm pct. 28 lit. b), the declared *durata normală de funcționare*, and the art. 28 alin. (21) sub-threshold election).
+
+**The qualifier is the part that matters:** where the law is silent, the engine **refuses and names the gap** rather than picking a side. The three known silences are (i) **payment vs *punerea în funcțiune*** — `research/36` §4.3 is a documented negative, no ANAF primary exists; (ii) the **aport route vs art. 68 alin. (7) lit. k^1)** — `research/36` §10 is contested, the better-supported side being non-deductible, with art. 7 pct. 44 lit. c) as live counter-text; (iii) ***punerea în funcțiune* itself**, undefined in fiscal law (§12.3), the *proces-verbal de dare în folosință* resting on practitioner doctrine alone.
+
+**Chosen with its cost visible:** the degresiv branch rests on our reading of pct. 25's worked example, including the switch to straight-line on the remainder from year 6, and the first-year 1/12 pro-rating is **our construction, not a quoted formula** (§12.2). Both are encoded, and both must be labelled as constructions in the UI and in the handoff.
+
+### D-FA-2 — the asset register and the fișa are generated as retained documents
+**Decided 2026-10-12.** 6e produces the **Registru-inventar (14-1-2/b)** listing and the **fișa mijlocului fix (14-2-2)** from the asset facts, treated throughout as **retention, not filing** — `research/36` §6: every one of these records is kept, none is filed.
+
+**Retention is the current rule, not the remembered one.** The 10-year rule was **abrogated** by OMF 1.447/2023 (MO 453/24.05.2023, art. II pct. 2). What applies now, per consolidated OMFP 170/2015 cap. IV pct. 1¹: **5 ani from 1 July of the year following the exercise in which they were made**, and — pct. 1¹ alin. (2) — documents attesting the provenance of goods with a useful life over 5 ani are kept **for that whole useful life**. The fișa's own retention is **inferred** (§14.3 item iii), so the conservative choice is the asset's useful life.
+
+**Same placement as the occupancy sheet (PG-6h-3):** on **`AppData`, not the profile**, because `inputSnapshot.profile` canonicalises the whole profile into `inputsHash` and snapshots are stored — register data on the profile would enter calculation digests and survive its own deletion.
+
+### D-VAT-2 — where a half-count rule meets VAT the taxpayer could not claim back, the app shows both and says the law does not settle it
+**Decided 2026-10-12.** The concrete case: a 1.000-lei expense with 190 lei of non-recoverable VAT, under a rule that allows only half. **Half of 1.000 is 500; half of 1.190 is 595.** For companies the answer is explicit — Titlul II norm pct. 16 alin. (3) applies the cap **after** the VAT limitation and **over** the non-deductible VAT, with a worked example (2.000 + 240 = 2.240 → 1.120). **For a PFA there is no such rule.** `research/35` §1.5 swept the Titlul IV Norme; `research/42` §11 searched 463.145 characters of Titlul VII law and found `nedeductibil` **0** and `cheltuial` **0**. The only affirmative rule found anywhere for a PFA reaches the **depreciable base** (Titlul II norm pct. 28 lit. b)), not ordinary expenses.
+
+**The user chose neither side.** Where the choice **changes the figure**, the app computes **neither**: it reports `review_required`, shows both numbers, quotes the Titlul II rule as the only text that exists, and says plainly that it is a rule for corporate tax and not for Titlul IV. Where the choice **cannot** change the figure — no non-recoverable VAT on the line — it simply computes. **This is the same treatment already given to the payment-timing and aport silences in PG-6e.**
+
+### D-VAT-3 — the app does compute a claimable-VAT total now, even though Form 300 does not exist yet
+**Decided 2026-10-12.** Asked whether PG-6f should fix only the income-tax base or also produce the deductible-VAT figure, the user chose **also produce it**. So 6f computes a **per-period claimable-VAT total**, labelled throughout as **not filed anywhere**, with **6g** owning the form it lands on (D300 **rd. 30** „TOTAL TAXĂ DEDUCTIBILĂ", with the 50 % vehicle cut and the pro rata landing partly inside rd. 20–28 and partly on **rd. 33/34** — `research/42` §7).
+
+**The risk the user was shown and accepted:** this puts a VAT figure on screen that nothing yet files, which a taxpayer could act on before it can be checked against the form. **Mitigations that are part of the decision, not optional:** the figure is labelled as unfiled and unverified against a return; it is derived only from facts the user declared; and where a line's deductibility is unresolved — the e-Factura question, the 100–400 euro simplified invoice, the Titlul IV ordering — the line is **excluded from the total and listed separately**, never silently added.
+
+### D-DEMO-1 — five demo personas: IT, content creator, Uber driver, Airbnb host, and a plain small PFA
+**Decided 2026-10-12.** Asked how many demo profiles the platform should ship, the user chose **the four they named plus the existing plain one**. The set is chosen by **which fiscal switches each persona exercises**, not by trade label:
+
+| Persona | The switch only it teaches |
+|---|---|
+| **IT / programmer** | turnover **crossing the 395.000-lei plafon**, so VAT registration is **forced by law** rather than chosen; TVA la încasare; euro invoicing; equipment as a fixed asset |
+| **Content creator** | foreign-platform payouts (USD), the cap and provisional-rate path, camera-class fixed assets, mid-band CASS |
+| **Uber driver** | the vehicle 50 % cap, the one-car rule and the logbook question; **ocazional vs autorizat**; low-band CASS |
+| **Airbnb host** | **art. 68³ cedarea folosinței, 1–7 rooms**, the occupancy sheet, and the **tourism-CAEN commission prompt** under D-COM-1 |
+| **Plain small PFA** (today's seed) | the app working when there is nothing in it — exempt, low turnover, no vehicle, no FX |
+
+**Why not three.** Vehicle and accommodation are the two most fact-hungry regimes in the app — a car carries per-year use facts and a logbook question, a cazare property carries an occupancy sheet and a commission question. Merging them yields one bloated profile instead of two clean ones. **Why not a sixth.** The only remaining candidates are *normă de venit* (refused today, D-NORMA-2 pending) and *microîntreprindere* (outside PFA scope). **A persona whose purpose is to show a refusal belongs on a card, not as a profile** — `domain/scenarios.ts` already carries six refusal scenarios for exactly that.
+
+**The boundary that survives the whole feature.** D-COM-1 stands: a CAEN code may **prompt** a question and must never **answer** one. A persona seeds **declared** facts that happen to be plausible for a trade; the app still asks, and nothing is inferred from the code.
+
+**This is the agreed resolution of B-96.** The current demo's implausibility — 9.700 lei of turnover next to a 395.000-lei threshold the app itself displays — is fixed by giving the **IT persona turnover above the plafon**, where registration is mandatory. The 9.700-lei profile survives, but as the persona it is honest for: the plain exempt PFA. **B-96 stays open until the set exists.**
+
+### D-AIC-1 — the intra-community-goods facts go on **Settings → Fiscal**, and **B-91 is fixed first**
+**Decided 2026-10-12.** B-97 needs two inputs for facts that are already modelled and computed (`aicGoodsWhileQuarterly`, `aicGoodsExigibilityMonth`). The placement fork was real: every other declared fact lives on **Settings → Fiscal**, but that route is the app's known accessibility blind spot — **B-91** records critical axe `label` violations there and the scan for it is **deliberately commented out** in `e2e/a11y.spec.ts`, while the periodicity panel PG-6g built sits on **Declarații** and *is* scanned.
+
+**The user chose consistency over the workaround, and removed the blind spot rather than working around it: fix B-91 first, then put the facts on Settings → Fiscal.** Two consequences that are part of the decision:
+- **B-91 moves from step 10 of the queue to a prerequisite of step 1.** It is no longer discretionary a11y polish.
+- **Re-enabling that scan is the point, not a side effect.** Until it is on, "axe green" on that route means nothing, and every future control added there inherits the blindness.
+
+### D-AIC-2 — answering „da" to the intra-community-goods question **requires a confirmation that names what changed**
+**Decided 2026-10-12.** The answer is not a neutral fact. One taxable intra-community acquisition of goods while quarterly **dissolves the quarter**: the fiscal period becomes the month, the year splits into **two distinct fiscal periods each needing its own decont**, and a **separate declarație de mențiuni** becomes due **within 5 working days of month end** (art. 322 alin. (7)–(8)).
+
+**The app must state that before it saves the answer** — monthly from which month, two returns instead of one, and the 5-working-day duty — and ask the user to confirm. **The answer is then recorded as theirs**, the same discipline D-VAT-1 applies to cadence: never a guessed answer, and a consequential one attributed to the person who gave it. **Rejected:** saving on a single click, which would apply a legal change with one press and no moment of understanding.
+
+
+### D-DEMO-2 — demo personas are **named invented people**, but the active profile takes **the user's own name**
+**Decided 2026-10-14.** The fork was between invented people (warmer, legible in a showcase, and it forces B-110 hygiene because a name invites a real one) and „the persona is the user" (cleaner for a real account, blander for a demo).
+
+**The user chose both, split by surface:** the persona gallery and demo data use invented people; when a persona is applied to a real account, the identity fields become that person's own. **Consequence that is part of the decision:** persona identity data and account identity data are different things and must not be conflated in the model. **B-110 still binds** — every CNP, CUI and reg-com value in persona data is invented and visibly fake, and the demo stays labelled as demo.
+
+### D-DEMO-3 — **B-127 is out of step 11.** The lifecycle stage gets its own step
+**Decided 2026-10-14.** The app cannot currently tell a new PFA from an existing one that just registered with us: `pfaStartDate` is required at onboarding and read in exactly one place, `completeness.ts:136`, which only asks whether it is filled in.
+
+**The user kept step 11 to personas.** The reason is that the lifecycle stage is a **domain** change — a derived stage, possibly persisted, with chain-step consequences — not demo dressing. **Recorded so nobody quietly folds it into the persona work.** The raw material already exists and is not in question: `pfaStartDate` is the ONRC start date rather than the signup date, so it already separates a 2019 PFA that just installed the app from one registered last month, and the first-year law is already researched (`research/11`) and partly implemented (`deadlines.ts`, art. 122 alin. (3)).
+
+### D-DEMO-4 — a quality demo needs **counterparties**, and **full data density**
+**Decided 2026-10-14.** *„make sure the personas have proper data loaded so charts, thresholds, everything is showcased at full power. not a one month 9000 lei income type shit"* and *„make sure they have clients that make sense … clients from abroad where it makes sense."*
+
+**Rules adopted:** 12 months minimum per persona with real seasonality and **≥ 12 points on every chart**; each persona **crosses** at least two thresholds rather than approaching them; realistic annual scale per activity; multi-year where the feature is multi-year; integer bani throughout. Named invented clients and suppliers, foreign ones **only where the activity genuinely has them**, and **counterparty type kept visible** because a platform that withholds is a different fiscal shape from a corporate client. **Acceptance: a persona that loads without changing a rung is not finished.**
+
+### D-FX-6 — Which rate converts a euro-denominated deductibility ceiling, and what does the open year show?
+**Raised by the Worker's B-131 pass**, which carried the 400-euro private-pension ceiling (art. 68 alin. (5) lit. g) in persona 11 and refused to strike it. Two rules in force name different rates and **no primary text reconciles them**: HG 1/2016 Titlul IV Cap. II Secț. a 2-a **pct. 7 alin. (6)** asks for the BNR **average for the year of payment**; **CF art. 9 alin. (3) lit. b) + alin. (4)** point at the BNR rate **on the payment date**. The complication that makes it urgent rather than academic: BNR publishes the annual average (`CURSA_EURM`) only after the year closes, so for FY2026 the applied basis does not exist yet.
+
+**User decision, 2026-10-15: (d)** — **the annual average stays the single primary basis**, and for a year whose average is not yet published the app uses the **existing provisional → final lifecycle** rather than refusing or presenting two rival readings.
+
+**Why (d) over the others, as put to the user:** (a) status quo leaves every FY2026 euro ceiling unanswered in the one year people plan in; (b) switching to the payment-date daily is the reading the corpus treats as the rival and would move the base of every cap already pinned; (c) showing both and letting the user pick is honest but asks a non-accountant to make a legal call. (d) keeps one rule as *the* rule and still produces a number.
+
+**Constraints placed on it:**
+- **The app must never compute the annual average from daily rates.** BNR's stated method is the arithmetic mean of the twelve **monthly** averages; a mean of dailies yields a different number. A provisional annual average is **entered by a person** (or obtained as BNR's own figure), never derived. `provider.ts` already treats a human copying the printed figure as the normal route for `annual_average`.
+- **`provisional` must be loud on screen, with provenance.** A subtle badge turns a stand-in into something a user reads as law — the failure mode this corpus has been burned by twice.
+- **The mitigating fact belongs next to the badge:** the FY2026 return is filed in 2027, after BNR publishes the 2026 average. A provisional figure is a **planning aid during the year**, not what reaches ANAF.
+- **A visible information note is required wherever a provisional ceiling figure appears** — the user asked for it explicitly, and it is part of this decision, not a later polish item. It has to answer, in plain Romanian and without requiring the user to know any of this exists:
+  1. the ceiling is stated in **euro**, and the app had to turn it into lei;
+  2. the rule used is the **BNR average for the year of payment** (HG 1/2016 pct. 7 alin. (6)), and **BNR only publishes that figure after the year closes**, so for an open year the number is **provizoriu**;
+  3. **a second rule in force points at a different rate** — the daily rate on the payment date, CF art. 9 alin. (3) lit. b) + alin. (4) — and the two are not reconciled by any primary text; the app applies one and says so rather than hiding the other;
+  4. the figure **will be replaced automatically** once BNR publishes, and the return for that year is filed **after** publication, so the provisional number never reaches ANAF;
+  5. **where the number came from** — who entered it and when — because the app is forbidden from deriving an annual average out of daily rates.
+  The note is not a tooltip for a lawyer. It is the difference between a stand-in and a guess the user trusts.
+
+- **The refusal stays legible.** Persona 11's `cap_unresolved` rows are kept as evidence that the app will not invent a rate; when they become strikable, they should say *why* they became strikable.
+
+**Tracked as defect B-137**, cross-linked to `research/22` §1 and `research/23`. Not a second copy of the legal analysis.
+
+### D-EFACT-1 — The e-Factura sending deadline is 5 working days
+**Raised by B-140:** `src/ui/copy/settings.ts:78` offers *„În decurs de 2 zile de la emitere"* while `notes.ts eFacturaDeadline` cites **5 working days** (OUG 120/2021 art. 10 alin. (7) as amended by OUG 89/2025). The app contradicts itself on screen about a legal deadline.
+**User decision, 2026-10-15: it is 5 working days, and no Researcher pass is needed.** The corpus already holds the correct citation; the contradiction is a stale option, not an open legal question.
+**Constraint:** the option is backed by a **stored enum value** (`'2-zile'`). Correcting it moves persisted data, so it is a migration decision — retire or remap the value with a recorded reason, do not silently re-point the label.
+
+### D-DPI-1 — B-116 is investigated, not implemented
+**User decision, 2026-10-15.** The app holds DPI income two ways and only one can survive. **That is an architectural fork and the user keeps the call.** A Worker reads both representations and reports the two options — what each costs in migration and tests, and which is closer to the statute — **without implementing either.** B-117 (an art. 67 record with a DPI contract type producing no coverage row) is fixed inside whichever representation currently serves it, so the fork does not block the smaller defect.
+**Report delivered 2026-10-15 (brief 71): `docs/ai/notes/brief71_b116_two_representations.md`. The decision is still the user's — nothing was implemented, no precedence rule was built, and the B-112 stage-1 refusal is unchanged and pinned unchanged.** Two facts the decision turns on that the register did not previously state: the recorded representation currently reaches **no calculator at all** and the 40 % quota is **never applied** (`calcDpiFlatQuota` exists, is tested, and has no production caller), so the typed net is the only DPI figure that reaches CAS, CASS or either withholding — including in the ANAF fixture that minted B-112; and **either retirement owes a chain step**, with head at v21 and B-145 already queued, so this fork's step is v23 or must be ordered after B-145. **B-117 is closed** (brief 71): the contradiction now produces a coverage row, with a live producer named and pinned.
+
+**Prerequisite built 2026-10-15 (brief 72 — B-147, B-148, B-150).** The condition the decision was conditioned on — *„but only once a gross → quota → net path actually computes”* — now holds. A recorded art. 70 document reaches `calcDpiFlatQuota`, produces a net, and that net moves a contribution figure: the ANAF CAS 24.300 lei fixture is reproduced **from a gross** instead of by typing a net. The art. 72 alin. (3) exception landed in the same commit, because wiring the quota without it would have deducted 40 % from receipts the law withholds it from. **Nothing was retired here, and that was the brief's boundary, not an oversight:** `CassLadderYear.proprietateIntelectuala` still exists, no precedence was built, and where both producers exist for one year the engine posts **neither**. **What brief 72 also found, and the retirement brief now has to settle before the typed net can go:** the computed path feeds the CAS cumul (art. 148 alin. (3)) and the art. 151 alin. (6) withholding source, but **not** the art. 170 alin. (4) CASS ladder — that calculator refuses a partial six-category answer set, and one computed DPI amount cannot answer the other five. Retiring the typed net without an answer for the ladder would strand exactly the taxpayers the brief warned about. The consolidated chain brief (v21 → v22, carrying B-145, B-108 and B-140) is where that call gets made.
+
+### D-DEPR-1 — Depreciation stops **in the month the asset leaves the register**
+**User decision, 2026-10-16, after `research/55` §4 established there is no stop rule in the law.**
+
+**The choice:** for an asset disposed of on 20 Octombrie 2026, the linear schedule charges **through Octombrie** and stops. Noiembrie and Decembrie are not charged.
+
+**Why this reading, and how far it goes.** It is anchored in the only month-counting rule the norms actually contain — Titlul II norm pct. 27 counts *„numărul de luni rămase de amortizat"* **at the moment of *scădere din gestiune***, i.e. remaining months measured from the exit date, not to 31 Decembrie — and in two provisions that key the disposal figures off depreciation actually taken while the asset was held: **art. 28 alin. (17)** (*valoarea fiscală … diminuată cu amortizarea fiscală*) and **Titlul IV norm pct. 7 lit. o)** (*„amortizarea inclusă pe costuri în cursul exploatării"*).
+
+**It is still a reading.** The rejected alternative — stopping the month *after* disposal — argues from symmetry with the explicit start rule at art. 28 alin. (12) lit. a) (*„începând cu luna următoare celei în care … se pune în funcțiune"*). **That is an argument, not a text, and the register must say so.** No norm states any stop rule: art. 28 alin. (12) lit. a)–n) never address *vânzare* or *scoatere din evidență*; Titlul II norms pct. 25–31 contain none; OMFP 170/2015 contains none.
+
+**The part that is not a choice, and is the actual defect:** pct. 7 lit. o) makes the disposal residual a function of the depreciation actually charged, so **the schedule and the disposal calculation must use one month count.** Two counts on the same asset is indefensible under any reading — including the one we did not pick.
+
+### D-DPI-2 — The CASS ladder: **only ask when it matters**
+**User decision, 2026-10-16.** B-152 blocked D-DPI-1: the computed DPI path feeds the CAS cumul and the art. 151 alin. (6) withholding source but **not** the art. 170 alin. (4) CASS ladder, because `calcCassLadder` refuses a partial six-category answer set.
+
+**Chosen: the ladder may proceed on a partial set, but only when every category the app has not computed has been explicitly declared absent.** It still refuses when a category is simply unknown.
+
+**The whole risk is in one sentence: `declared none` and `not asked yet` must be different stored facts, forever.** If they collapse, the app silently treats silence as „no other income" and **undercharges health contribution** — the exact failure `calcCassLadder`'s refusal was built to prevent. The refusal is not being removed; **its trigger is being narrowed from „not all six are numbers" to „not all six are answered".**
+
+**Consequences the user accepted:** six explicit questions, each with „nu am avut" as a first-class answer distinct from not answering; and a persisted tri-state per category, which is a chain step (**v26**) — B-116's row already notes it owes v26, not v23.
+
+**What this unlocks:** once DPI is a computed amount and the other five are explicit yes/no facts, the set is complete and **the hand-typed `CassLadderYear.proprietateIntelectuala` net can finally be retired, closing D-DPI-1 honestly.** That is the point of the choice, not a side effect.
+
+### D-CITE-1 — Cite by article and quoted text, not by letter
+**User decision, 2026-10-15, settling B-120.** Article-letter instability across consolidations is now inside the rule package: the same provision can appear as one letter in one consolidation and another in the next, and B-112 and B-126 show letters and superscripts moving under us.
+**Chosen: prefer the article number plus the quoted statutory text over the letter.** A shifted letter must not break a citation. Where a sub-letter is genuinely load-bearing (the art. 68 alin. (5) lit. g) ceilings, for example), the quoted text carries the meaning and the letter becomes a locator, not the identity.
+**Consequence:** this is a rule-package-wide change, not a copy fix, and it is the reason B-120 gets its own Worker rather than riding along with the form work.
+
+### D-RUN-1 — RAM caps stay a documented rule, not a package.json change
+**User decision, 2026-10-15.** The capped commands (`--pool=threads --poolOptions.threads.maxThreads=2`, `--workers=2`) live in §12.17 as mandatory commands. **`package.json` is left alone** so the user's own `npm run test` keeps its default behaviour. Accepted trade-off: the uncapped form remains one command away, and the rule has already failed twice by being rediscovered instead of read.
+
+**Amended 2026-10-16 — the e2e half of this decision is reversed, and the original decision was overridden once before it was reversed.**
+
+**What actually happened:** on 2026-10-16 §12.20 encoded the caps into `package.json` anyway — `test:e2e` became `playwright test --workers=2` and an `test:e2e:uncapped` variant was added — **directly against D-RUN-1's "`package.json` is left alone."** Nobody noticed because the change was justified as good practice.
+
+**Then it cost a Worker.** An e2e gate ran past seven minutes and the user cancelled the run.
+
+**The premise was never measured and is false on this machine:** 30 GB total, **29 GB available, 32 CPUs.** Two browser workers on a 32-core box protects nothing.
+
+**Now in force:** `npm run test:e2e` is plain `playwright test`, and the redundant `test:e2e:uncapped` variant is gone. **What survives is the part that was actually load-bearing — run each gate once, at the end, backgrounded to a log, read the log once.** That is what prevented a Worker losing its connection mid-gate. **The parallelism cap was never what protected the run.**
+
+**The unit gate keeps `--poolOptions.threads.maxThreads=2` for now** — it was measured at ~57s and was not what hung — **but it rests on the same unmeasured premise and should be re-checked the same way.**
+
+**The lesson, recorded because it is the register's own lesson:** §12.20 was justified as *"the same move as the B-139 guard"* — copying the mechanism of a good fix without checking its premise. **A guard is a claim. When the claim is wrong, the guard makes the error automatic and nobody has to remember it.**
+
+### D-ROUND-1 — B-113 is settled by evidence, not by judgement
+**Raised by brief 68's follow-up, which refused to fix it and reported instead.** The engine already applies `roundArt66` (CF art. 66, inclusive-50 boundary) in roughly twenty places — income tax, CAS, CASS — and applied to the ANAF București Sector 4 FY2024 example it reproduces **every** published figure: 2.488,50 → 2.488; six months → 14.928; forfetar 2.985,60 → 2.986; net → 11.942; impozit → 1.194. What it does **not** do is apply art. 66 to the **product of a currency conversion** — `fx/convert.ts:46` deliberately skips it, so the engine keeps 2.488,50 where ANAF writes 2.488.
+
+**The finding that reframes the defect: the corpus cannot distinguish art. 66 from a plain floor.** ANAF's two published examples are `2.488,50 → 2.488` and `3.726,45 → 3.726`. Both are consistent with art. 66 (fraction ≤ 50 bani → drop) **and** with truncation. **Neither has a fraction exceeding 50 bani — the only case that separates the two rules.** `research/23` grades the scope question UNVERIFIED, twice, in the same file that cites art. 66 for this app's conversion rules.
+
+**User decision, 2026-10-15: send the Researcher to find the separating example first.** Not "apply it because it matches", and not "leave it and disclose" — the choice is deferred until the evidence exists.
+
+**What would settle it:** an ANAF example whose converted fraction **exceeds** 50 bani, or a `decizie de soluționare` / normă metodologică / court decision applying art. 66 to a conversion product.
+
+**Cost recorded so nobody underestimates the fix later:** applying it moves up to 0,50 lei per converted amount, 3 lei across the six-month example, and every converted figure in the app. **This is why B-113 is resolved before the CASS and expense Workers run** — otherwise their pins move twice.
+
+### D-ROUND-2 — B-113: the conversion product IS rounded, with art. 66
+**Supersedes the open question in D-ROUND-1. User decision, 2026-10-15, taken on the evidence research/53 returned.**
+
+**What the research settled.** No separating official example exists — bounded negative. But the ANAF București Sector 4 document that generated our two examples **contains two complete chains** (payment-date rate 4,977 and BNR annual average 4,974), and across them it produces **three cases where art. 66 and a plain floor disagree**: `2.985,60 → 2.986` and `11.937,60 → 11.938` follow art. 66, while `1.193,80 → 1.193` follows a floor. **The document contradicts itself.** It cannot be used as an oracle for a rounding convention, and `research/47` §3B's note calling it „a rounding convention our engine must match" is **refuted**.
+
+**What it does establish, and this is what the decision rests on:** ANAF converts, then publishes a **whole-leu** figure, and it is that whole-leu figure — **2.488, not 2.488,50** — that is multiplied by 6 to give the gross. The conversion product is rounded before it is used. Only the *rule* is undetermined.
+
+**Chosen: apply `roundArt66` to the product of a currency conversion.** Reasons, in order: it matches ANAF's published presentation and the arithmetic that follows from it; it matches the user's reading; and HG 1/2016 Norme metodologice, Titlul IV, Cap. I, Secț. 1, pct. 4 applies that same rule to **bazele de calcul**, which defeats the "only final sums owed" reading the app has been relying on.
+
+**Recorded as a reasoned choice, not settled law.** The contrary argument is real and stays on the record: where the legislator *does* round a conversion product it writes a **different** rule into the converting provision (art. 310 alin. (1) to the next thousand; HG 1/2016 Titlul VII to thousands), and OUG 59/2005 art. 7 expressly declines to round intermediate conversion elements for local taxes. Neither reaches Title IV. **No primary text decides this.**
+
+**Cost, stated so it is not discovered later:** up to 0,50 lei per converted amount; 3 lei across the six-month example; every converted figure in the app. **This is why it lands before the CASS and expense Workers.**
+
+**Second decision, same pass:** the ANAF Sector 4 chain **stays in the golden suite** but is relabelled as a **known-inconsistent document**. Its header currently asserts „ANAF applies art. 66 to each step", which research/53 refutes, and its three `it.fails` findings are written as though the published chain were a correct answer the engine misses. It is a **FACT about what ANAF published**, not a specification.

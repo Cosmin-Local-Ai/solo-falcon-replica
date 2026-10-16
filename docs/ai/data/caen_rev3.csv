@@ -1,0 +1,1026 @@
+cod,nivel,parinte,sectiune,denumire
+01,diviziune,,A,"Agricultură, vânătoare și servicii anexe"
+011,grupa,01,A,Cultivarea plantelor nepermanente
+0111,clasa,01,A,"Cultivarea cerealelor (excluzând orezul), plantelor leguminoase și a plantelor oleaginoase"
+0112,clasa,01,A,Cultivarea orezului
+0113,clasa,01,A,"Cultivarea legumelor și a pepenilor, a rădăcinoaselor și tuberculiferelor"
+0114,clasa,01,A,Cultivarea trestiei de zahăr
+0115,clasa,01,A,Cultivarea tutunului
+0116,clasa,01,A,Cultivarea plantelor pentru fibre textile
+0119,clasa,01,A,Cultivarea altor plante din culturi nepermanente
+012,grupa,01,A,Cultivarea plantelor din culturi permanente
+0121,clasa,01,A,Cultivarea strugurilor
+0122,clasa,01,A,Cultivarea fructelor tropicale și subtropicale
+0123,clasa,01,A,Cultivarea fructelor citrice
+0124,clasa,01,A,Cultivarea fructelor semințoase și sâmburoase
+0125,clasa,01,A,"Cultivarea altor pomi fructiferi, a arbuștilor fructiferi, căpșunilor și a nuciferelor"
+0126,clasa,01,A,Cultivarea fructelor oleaginoase
+0127,clasa,01,A,Cultivarea plantelor pentru prepararea băuturilor
+0128,clasa,01,A,"Cultivarea condimentelor, plantelor aromatice, medicinale și a plantelor de uz farmaceutic"
+0129,clasa,01,A,Cultivarea altor plante permanente
+013,grupa,01,A,Cultivarea plantelor pentru înmulțire
+0130,clasa,01,A,Cultivarea plantelor pentru înmulțire
+014,grupa,01,A,Creșterea animalelor
+0141,clasa,01,A,Creșterea bovinelor de lapte
+0142,clasa,01,A,Creșterea altor bovine
+0143,clasa,01,A,Creșterea cailor și a altor cabaline
+0144,clasa,01,A,Creșterea cămilelor și a camelidelor
+0145,clasa,01,A,Creșterea ovinelor și caprinelor
+0146,clasa,01,A,Creșterea porcinelor
+0147,clasa,01,A,Creșterea păsărilor
+0148,clasa,01,A,Creșterea altor animale
+015,grupa,01,A,Activități în ferme mixte (cultura vegetală combinată cu creșterea animalelor)
+0150,clasa,01,A,Activități în ferme mixte (cultura vegetală combinată cu creșterea animalelor)
+016,grupa,01,A,Activități auxiliare agriculturii și activități după recoltare
+0161,clasa,01,A,Activități auxiliare pentru producția vegetală
+0162,clasa,01,A,Activități auxiliare pentru creșterea animalelor
+0163,clasa,01,A,Activități după recoltare și pregătirea semințelor
+017,grupa,01,A,"Vânătoare, capturarea cu capcane a vânatului și activități de servicii anexe vânătorii"
+0170,clasa,01,A,"Vânătoare, capturarea cu capcane a vânatului și activități de servicii anexe vânătorii"
+02,diviziune,,A,Silvicultură și exploatare forestieră
+021,grupa,02,A,Silvicultură și alte activități forestiere
+0210,clasa,02,A,Silvicultură și alte activități forestiere
+022,grupa,02,A,Exploatarea forestieră
+0220,clasa,02,A,Exploatarea forestieră
+023,grupa,02,A,Colectarea produselor forestiere nelemnoase din flora spontană
+0230,clasa,02,A,Colectarea produselor forestiere nelemnoase din flora spontană
+024,grupa,02,A,Activități de servicii anexe silviculturii
+0240,clasa,02,A,Activități de servicii anexe silviculturii
+03,diviziune,,A,Pescuitul și acvacultura
+031,grupa,03,A,Pescuitul
+0311,clasa,03,A,Pescuitul maritim
+0312,clasa,03,A,Pescuitul în ape dulci
+032,grupa,03,A,Acvacultura
+0321,clasa,03,A,Acvacultura maritimă
+0322,clasa,03,A,Acvacultura în ape dulci
+033,grupa,03,A,Activități anexe pescuitului și acvaculturii
+0330,clasa,03,A,Activități anexe pescuitului și acvaculturii
+05,diviziune,,B,Extracția cărbunelui superior și inferior
+051,grupa,05,B,Extracția cărbunelui superior (PCS=>23865 kJ/kg)
+0510,clasa,05,B,Extracția cărbunelui superior (PCS=>23865 kJ/kg)
+052,grupa,05,B,Extracția cărbunelui inferior (PCS<23865 kJ/kg)
+0520,clasa,05,B,Extracția cărbunelui inferior (PCS<23865 kJ/kg)
+06,diviziune,,B,Extracția petrolului brut și a gazelor naturale
+061,grupa,06,B,Extracția petrolului brut
+0610,clasa,06,B,Extracția petrolului brut
+062,grupa,06,B,Extracția gazelor naturale
+0620,clasa,06,B,Extracția gazelor naturale
+07,diviziune,,B,Extracția minereurilor metalifere
+071,grupa,07,B,Extracția minereurilor feroase
+0710,clasa,07,B,Extracția minereurilor feroase
+072,grupa,07,B,Extracția minereurilor metalifere neferoase
+0721,clasa,07,B,Extracția minereurilor de uraniu și toriu
+0729,clasa,07,B,Extracția altor minereuri metalifere neferoase
+08,diviziune,,B,Alte activități extractive
+081,grupa,08,B,"Extracția pietrei, nisipului și argilei"
+0811,clasa,08,B,"Extracția pietrei ornamentale și a pietrei pentru construcții, extracția pietrei calcaroase, ghipsului, cretei și a ardeziei"
+0812,clasa,08,B,Extracția pietrișului și nisipului; extracția argilei și caolinului
+089,grupa,08,B,Alte activități extractive n.c.a.
+0891,clasa,08,B,Extracția mineralelor pentru industria chimică și a îngrășămintelor naturale
+0892,clasa,08,B,Extracția turbei
+0893,clasa,08,B,Extracția sării
+0899,clasa,08,B,Alte activități extractive n.c.a.
+09,diviziune,,B,Activități de servicii anexe extracției
+091,grupa,09,B,Activități de servicii anexe extracției petrolului brut și gazelor naturale
+0910,clasa,09,B,Activități de servicii anexe extracției petrolului brut și gazelor naturale
+099,grupa,09,B,Activități de servicii anexe pentru extracția mineralelor
+0990,clasa,09,B,Activități de servicii anexe pentru extracția mineralelor
+10,diviziune,,C,Industria alimentară
+101,grupa,10,C,"Producția, prelucrarea și conservarea cărnii și a produselor din carne"
+1011,clasa,10,C,Prelucrarea și conservarea cărnii
+1012,clasa,10,C,Prelucrarea și conservarea cărnii de pasăre
+1013,clasa,10,C,Fabricarea produselor din carne (inclusiv din carne de pasăre)
+102,grupa,10,C,"Prelucrarea și conservarea peștelui, crustaceelor și moluștelor"
+1020,clasa,10,C,"Prelucrarea și conservarea peștelui, crustaceelor și moluștelor"
+103,grupa,10,C,Prelucrarea și conservarea fructelor și legumelor
+1031,clasa,10,C,Prelucrarea și conservarea cartofilor
+1032,clasa,10,C,Fabricarea sucurilor de fructe și legume
+1039,clasa,10,C,Prelucrarea și conservarea fructelor și legumelor n.c.a.
+104,grupa,10,C,Fabricarea uleiurilor și a grăsimilor vegetale și animale
+1041,clasa,10,C,Fabricarea uleiurilor și grăsimilor
+1042,clasa,10,C,Fabricarea margarinei și a altor produse comestibile similare
+105,grupa,10,C,Fabricarea produselor lactate
+1051,clasa,10,C,Fabricarea produselor lactate și a brânzeturilor
+1052,clasa,10,C,Fabricarea înghețatei
+106,grupa,10,C,"Fabricarea produselor de morărit, a amidonului și produselor din amidon"
+1061,clasa,10,C,Fabricarea produselor de morărit
+1062,clasa,10,C,Fabricarea amidonului și a produselor din amidon
+107,grupa,10,C,Fabricarea produselor de brutărie și a produselor făinoase
+1071,clasa,10,C,Fabricarea pâinii; fabricarea prăjiturilor și a produselor proaspete de patiserie
+1072,clasa,10,C,Fabricarea biscuiților și pișcoturilor; fabricarea prăjiturilor și a produselor conservate de patiserie
+1073,clasa,10,C,"Fabricarea macaroanelor, tăițeilor, cuș-cuș-ului și a altor produse făinoase similare"
+108,grupa,10,C,Fabricarea altor produse alimentare
+1081,clasa,10,C,Fabricarea zahărului
+1082,clasa,10,C,"Fabricarea produselor din cacao, a ciocolatei și a produselor zaharoase"
+1083,clasa,10,C,Prelucrarea ceaiului și cafelei
+1084,clasa,10,C,Fabricarea condimentelor și ingredientelor
+1085,clasa,10,C,Fabricarea de mâncăruri preparate
+1086,clasa,10,C,Fabricarea preparatelor alimentare omogenizate și alimentelor dietetice
+1089,clasa,10,C,Fabricarea altor produse alimentare n.c.a.
+109,grupa,10,C,Fabricarea preparatelor pentru hrana animalelor
+1091,clasa,10,C,Fabricarea preparatelor pentru hrana animalelor de fermă
+1092,clasa,10,C,Fabricarea preparatelor pentru hrana animalelor de companie
+11,diviziune,,C,Fabricarea băuturilor
+110,grupa,11,C,Fabricarea băuturilor
+1101,clasa,11,C,"Distilarea, rafinarea și mixarea băuturilor alcoolice"
+1102,clasa,11,C,Fabricarea vinurilor din struguri
+1103,clasa,11,C,Fabricarea cidrului și a altor vinuri din fructe
+1104,clasa,11,C,"Fabricarea altor băuturi nedistilate, obținute prin fermentare"
+1105,clasa,11,C,Fabricarea berii
+1106,clasa,11,C,Fabricarea malțului
+1107,clasa,11,C,Producția de băuturi răcoritoare nealcoolice; producția de ape minerale și alte ape îmbuteliate
+12,diviziune,,C,Fabricarea produselor din tutun
+120,grupa,12,C,Fabricarea produselor din tutun
+1200,clasa,12,C,Fabricarea produselor din tutun
+13,diviziune,,C,Fabricarea produselor textile
+131,grupa,13,C,Pregătirea fibrelor și filarea fibrelor textile
+1310,clasa,13,C,Pregătirea fibrelor și filarea fibrelor textile
+132,grupa,13,C,Producția de țesături
+1320,clasa,13,C,Producția de țesături
+133,grupa,13,C,Finisarea materialelor textile
+1330,clasa,13,C,Finisarea materialelor textile
+139,grupa,13,C,Fabricarea altor articole textile
+1391,clasa,13,C,Fabricarea de metraje prin tricotare sau croșetare
+1392,clasa,13,C,Fabricarea de articole confecționate din textile (excluzând îmbrăcămintea și lenjeria de corp)
+1393,clasa,13,C,Fabricarea de covoare și mochete
+1394,clasa,13,C,"Fabricarea de odgoane, frânghii, sfori și plase"
+1395,clasa,13,C,"Fabricarea de textile nețesute și articole din acestea, cu excepția confecțiilor de îmbrăcăminte"
+1396,clasa,13,C,Fabricarea de articole tehnice și industriale din textile
+1399,clasa,13,C,Fabricarea altor articole textile n.c.a.
+14,diviziune,,C,Fabricarea articolelor de îmbrăcăminte
+141,grupa,14,C,Fabricarea articolelor de îmbrăcăminte prin tricotare sau croșetare
+1410,clasa,14,C,Fabricarea articolelor de îmbrăcăminte prin tricotare sau croșetare
+142,grupa,14,C,Fabricarea altor articole de îmbrăcăminte și accesorii
+1421,clasa,14,C,Fabricarea articolelor de îmbrăcăminte
+1422,clasa,14,C,Fabricarea de articole de lenjerie de corp
+1423,clasa,14,C,Fabricarea de articole de îmbrăcăminte pentru lucru
+1424,clasa,14,C,Fabricarea articolelor de îmbrăcăminte din piele și blană
+1429,clasa,14,C,Fabricarea altor articole de îmbrăcăminte și accesorii n.c.a.
+15,diviziune,,C,"Tăbăcirea și finisarea pieilor; fabricarea articolelor de voiaj și marochinărie, harnașamentelor și încălțămintei; prepararea și vopsirea blănurilor"
+151,grupa,15,C,Tăbăcirea și finisarea pieilor; fabricarea articolelor de voiaj și marochinărie și a articolelor de harnașament; prepararea și vopsirea blănurilor
+1511,clasa,15,C,Tăbăcirea și finisarea pieilor; prepararea și vopsirea blănurilor
+1512,clasa,15,C,Fabricarea articolelor de voiaj și marochinărie și a articolelor de harnașament
+152,grupa,15,C,Fabricarea încălțămintei
+1520,clasa,15,C,Fabricarea încălțămintei
+16,diviziune,,C,"Prelucrarea lemnului, fabricarea produselor din lemn și plută, cu excepția mobilei; fabricarea articolelor din paie și din alte materiale vegetale împletite"
+161,grupa,16,C,Tăierea și rindeluirea lemnului
+1611,clasa,16,C,Tăierea și rindeluirea lemnului
+1612,clasa,16,C,Prelucrarea și finisarea lemnului
+162,grupa,16,C,"Fabricarea produselor din lemn, plută, paie și din alte materiale vegetale"
+1621,clasa,16,C,Fabricarea de furnire și a panourilor din lemn
+1622,clasa,16,C,Fabricarea parchetului asamblat în panouri
+1623,clasa,16,C,"Fabricarea altor elemente de dulgherie și tâmplărie, pentru construcții"
+1624,clasa,16,C,Fabricarea ambalajelor din lemn
+1625,clasa,16,C,Fabricarea de uși și ferestre din lemn
+1626,clasa,16,C,Fabricarea de combustibili solizi din biomasă vegetală
+1627,clasa,16,C,Finisarea articolelor din lemn
+1628,clasa,16,C,"Fabricarea altor produse din lemn; fabricarea articolelor din plută, paie și din alte materiale vegetale împletite"
+17,diviziune,,C,Fabricarea hârtiei și a produselor din hârtie
+171,grupa,17,C,"Fabricarea celulozei, hârtiei și cartonului"
+1711,clasa,17,C,Fabricarea celulozei
+1712,clasa,17,C,Fabricarea hârtiei și cartonului
+172,grupa,17,C,Fabricarea articolelor din hârtie și carton
+1721,clasa,17,C,Fabricarea hârtiei și cartonului ondulat și a ambalajelor din hârtie și carton
+1722,clasa,17,C,"Fabricarea produselor de uz gospodăresc și sanitar, din hârtie sau carton"
+1723,clasa,17,C,Fabricarea articolelor de papetărie
+1724,clasa,17,C,Fabricarea tapetului
+1725,clasa,17,C,Fabricarea altor articole din hârtie și carton n.c.a.
+18,diviziune,,C,Tipărire și reproducerea pe suporți a înregistrărilor
+181,grupa,18,C,Tipărire și activități de servicii conexe tipăririi
+1811,clasa,18,C,Tipărirea ziarelor
+1812,clasa,18,C,Alte activități de tipărire n.c.a.
+1813,clasa,18,C,Servicii pregătitoare pentru pretipărire
+1814,clasa,18,C,Legătorie și servicii conexe
+182,grupa,18,C,Reproducerea înregistrărilor
+1820,clasa,18,C,Reproducerea înregistrărilor
+19,diviziune,,C,Fabricarea produselor de cocserie și a produselor obținute din prelucrarea țițeiului
+191,grupa,19,C,Fabricarea produselor de cocserie
+1910,clasa,19,C,Fabricarea produselor de cocserie
+192,grupa,19,C,Fabricarea produselor obținute din prelucrarea țițeiului
+1920,clasa,19,C,Fabricarea produselor obținute din prelucrarea țițeiului
+20,diviziune,,C,Fabricarea substanțelor și a produselor chimice
+201,grupa,20,C,"Fabricarea produselor chimice de bază, a îngrășămintelor și produselor azotoase; fabricarea materialelor plastice și a cauciucului sintetic, în forme primare"
+2011,clasa,20,C,Fabricarea gazelor industriale
+2012,clasa,20,C,Fabricarea coloranților și a pigmenților
+2013,clasa,20,C,"Fabricarea altor produse chimice anorganice, de bază"
+2014,clasa,20,C,"Fabricarea altor produse chimice organice, de bază"
+2015,clasa,20,C,Fabricarea îngrășămintelor și produselor azotoase
+2016,clasa,20,C,Fabricarea materialelor plastice în forme primare
+2017,clasa,20,C,Fabricarea cauciucului sintetic în forme primare
+202,grupa,20,C,Fabricarea pesticidelor și a altor produse agrochimice
+2020,clasa,20,C,Fabricarea pesticidelor și a altor produse agrochimice
+203,grupa,20,C,"Fabricarea vopselelor, lacurilor, cernelii tipografice și masticurilor"
+2030,clasa,20,C,"Fabricarea vopselelor, lacurilor, cernelii tipografice și masticurilor"
+204,grupa,20,C,"Fabricarea săpunurilor, detergenților și a produselor de întreținere, cosmetice și de parfumerie"
+2041,clasa,20,C,"Fabricarea săpunurilor, detergenților și a produselor de întreținere"
+2042,clasa,20,C,Fabricarea parfumurilor și a produselor cosmetice (de toaletă)
+205,grupa,20,C,Fabricarea altor produse chimice
+2051,clasa,20,C,Fabricarea biocombustibililor lichizi
+2059,clasa,20,C,Fabricarea altor produse chimice n.c.a.
+206,grupa,20,C,Fabricarea fibrelor sintetice și artificiale
+2060,clasa,20,C,Fabricarea fibrelor sintetice și artificiale
+21,diviziune,,C,Fabricarea produselor farmaceutice de bază și a preparatelor farmaceutice
+211,grupa,21,C,Fabricarea produselor farmaceutice de bază
+2110,clasa,21,C,Fabricarea produselor farmaceutice de bază
+212,grupa,21,C,Fabricarea preparatelor farmaceutice
+2120,clasa,21,C,Fabricarea preparatelor farmaceutice
+22,diviziune,,C,Fabricarea produselor din cauciuc și mase plastice
+221,grupa,22,C,Fabricarea articolelor din cauciuc
+2211,clasa,22,C,Fabricarea anvelopelor și a camerelor de aer; reșaparea și refacerea anvelopelor
+2212,clasa,22,C,Fabricarea altor produse din cauciuc
+222,grupa,22,C,Fabricarea articolelor din material plastic
+2221,clasa,22,C,"Fabricarea plăcilor, foliilor, tuburilor și profilelor din material plastic"
+2222,clasa,22,C,Fabricarea articolelor de ambalaj din material plastic
+2223,clasa,22,C,Fabricarea de uși și ferestre din material plastic
+2224,clasa,22,C,Fabricarea articolelor din material plastic pentru construcții
+2225,clasa,22,C,Prelucrarea și finisarea articolelor din material plastic
+2226,clasa,22,C,Fabricarea altor produse din material plastic
+23,diviziune,,C,Fabricarea altor produse din minerale nemetalice
+231,grupa,23,C,Fabricarea sticlei și a articolelor din sticlă
+2311,clasa,23,C,Fabricarea sticlei plate
+2312,clasa,23,C,Prelucrarea și fasonarea sticlei plate
+2313,clasa,23,C,Fabricarea articolelor din sticlă
+2314,clasa,23,C,Fabricarea fibrelor din sticlă
+2315,clasa,23,C,Fabricarea de sticlărie tehnică
+232,grupa,23,C,Fabricarea de produse refractare
+2320,clasa,23,C,Fabricarea de produse refractare
+233,grupa,23,C,Fabricarea materialelor de construcții din argilă
+2331,clasa,23,C,Fabricarea plăcilor și dalelor din ceramică
+2332,clasa,23,C,"Fabricarea cărămizilor, țiglelor și altor produse pentru construcții, din argilă arsă"
+234,grupa,23,C,Fabricarea altor articole din ceramică și porțelan
+2341,clasa,23,C,Fabricarea articolelor ceramice pentru uz gospodăresc și ornamental
+2342,clasa,23,C,Fabricarea de obiecte sanitare din ceramică
+2343,clasa,23,C,Fabricarea izolatorilor și pieselor izolante din ceramică
+2344,clasa,23,C,Fabricarea altor produse tehnice din ceramică
+2345,clasa,23,C,Fabricarea altor produse ceramice n.c.a.
+235,grupa,23,C,"Fabricarea cimentului, varului și ipsosului"
+2351,clasa,23,C,Fabricarea cimentului
+2352,clasa,23,C,Fabricarea varului și ipsosului
+236,grupa,23,C,"Fabricarea articolelor din beton, ciment și ipsos"
+2361,clasa,23,C,Fabricarea produselor din beton pentru construcții
+2362,clasa,23,C,Fabricarea produselor din ipsos pentru construcții
+2363,clasa,23,C,Fabricarea betonului
+2364,clasa,23,C,Fabricarea mortarului
+2365,clasa,23,C,Fabricarea produselor din azbociment
+2366,clasa,23,C,"Fabricarea altor articole din beton, ciment și ipsos"
+237,grupa,23,C,"Tăierea, fasonarea și finisarea pietrei"
+2370,clasa,23,C,"Tăierea, fasonarea și finisarea pietrei"
+239,grupa,23,C,Fabricarea produselor abrazive și a altor produse din minerale nemetalice n.c.a.
+2391,clasa,23,C,Fabricarea de produse abrazive
+2399,clasa,23,C,"Fabricarea altor produse din minerale nemetalice, n.c.a."
+24,diviziune,,C,Industria metalurgică
+241,grupa,24,C,Producția de metale feroase sub forme primare și de feroaliaje
+2410,clasa,24,C,Producția de metale feroase sub forme primare și de feroaliaje
+242,grupa,24,C,"Producția de tuburi, țevi, profile tubulare și accesorii pentru acestea, din oțel"
+2420,clasa,24,C,"Producția de tuburi, țevi, profile tubulare și accesorii pentru acestea, din oțel"
+243,grupa,24,C,Fabricarea altor produse prin prelucrarea primară a oțelului
+2431,clasa,24,C,Tragere la rece a barelor
+2432,clasa,24,C,Laminare la rece a benzilor înguste
+2433,clasa,24,C,Producția de profile obținute la rece
+2434,clasa,24,C,Trefilarea firelor la rece
+244,grupa,24,C,Producția metalelor prețioase și a altor metale neferoase
+2441,clasa,24,C,Producția metalelor prețioase
+2442,clasa,24,C,Metalurgia aluminiului
+2443,clasa,24,C,"Producția plumbului, zincului și cositorului"
+2444,clasa,24,C,Metalurgia cuprului
+2445,clasa,24,C,Producția altor metale neferoase
+2446,clasa,24,C,Prelucrarea combustibililor nucleari
+245,grupa,24,C,Turnarea metalelor
+2451,clasa,24,C,Turnarea fontei
+2452,clasa,24,C,Turnarea oțelului
+2453,clasa,24,C,Turnarea metalelor neferoase ușoare
+2454,clasa,24,C,Turnarea altor metale neferoase
+25,diviziune,,C,"Industria construcțiilor metalice și a produselor din metal, exclusiv mașini, utilaje și instalații"
+251,grupa,25,C,Fabricarea de construcții metalice
+2511,clasa,25,C,Fabricarea de construcții metalice și părți componente ale structurilor metalice
+2512,clasa,25,C,Fabricarea de uși și ferestre din metal
+252,grupa,25,C,"Producția de rezervoare, cisterne și containere metalice; producția de radiatoare și cazane pentru încălzire centrală"
+2521,clasa,25,C,Producția de radiatoare și cazane pentru încălzire centrală; producția de generatoare de abur și boilere
+2522,clasa,25,C,"Producția de rezervoare, cisterne și containere metalice"
+253,grupa,25,C,Fabricarea armamentului și muniției
+2530,clasa,25,C,Fabricarea armamentului și muniției
+254,grupa,25,C,Fabricarea produselor metalice obținute prin deformare plastică; metalurgia pulberilor
+2540,clasa,25,C,Fabricarea produselor metalice obținute prin deformare plastică; metalurgia pulberilor
+255,grupa,25,C,Tratarea și acoperirea metalelor; operațiuni de mecanică generală pe bază de plată sau contract
+2551,clasa,25,C,Acoperirea metalelor
+2552,clasa,25,C,Tratamente termice ale metalelor
+2553,clasa,25,C,Operațiuni de mecanică generală
+256,grupa,25,C,Producția de unelte și articole de fierărie
+2561,clasa,25,C,Fabricarea produselor de tăiat
+2562,clasa,25,C,Fabricarea articolelor de feronerie
+2563,clasa,25,C,Fabricarea uneltelor
+259,grupa,25,C,Fabricarea altor produse prelucrate din metal
+2591,clasa,25,C,"Fabricarea de recipienți, containere și alte produse similare din oțel"
+2592,clasa,25,C,Fabricarea ambalajelor metalice ușoare
+2593,clasa,25,C,Fabricarea articolelor din fire metalice; fabricarea de lanțuri și arcuri
+2594,clasa,25,C,"Fabricarea de șuruburi, buloane și alte articole filetate; fabricarea de nituri și șaibe"
+2599,clasa,25,C,Fabricarea altor articole din metal n.c.a.
+26,diviziune,,C,Fabricarea calculatoarelor și a produselor electronice și optice
+261,grupa,26,C,Fabricarea componentelor electronice
+2611,clasa,26,C,Fabricarea componentelor electronice
+2612,clasa,26,C,Fabricarea subansamblurilor electronice (module)
+262,grupa,26,C,Fabricarea calculatoarelor și a echipamentelor periferice
+2620,clasa,26,C,Fabricarea calculatoarelor și a echipamentelor periferice
+263,grupa,26,C,Fabricarea echipamentelor de comunicații
+2630,clasa,26,C,Fabricarea echipamentelor de comunicații
+264,grupa,26,C,Fabricarea produselor electronice de larg consum
+2640,clasa,26,C,Fabricarea produselor electronice de larg consum
+265,grupa,26,C,"Fabricarea de echipamente de măsură, verificare, control și navigație; producția de ceasuri"
+2651,clasa,26,C,"Fabricarea de instrumente și dispozitive pentru măsură, verificare, control, navigație"
+2652,clasa,26,C,Producția de ceasuri
+266,grupa,26,C,"Fabricarea de echipamente pentru radiologie, electrodiagnostic și electroterapie"
+2660,clasa,26,C,"Fabricarea de echipamente pentru radiologie, electrodiagnostic și electroterapie"
+267,grupa,26,C,"Fabricarea de instrumente optice, suporți magnetici și optici; fabricarea de echipamente fotografice"
+2670,clasa,26,C,"Fabricarea de instrumente optice, suporți magnetici și optici; fabricarea de echipamente fotografice"
+27,diviziune,,C,Fabricarea echipamentelor electrice
+271,grupa,27,C,"Fabricarea motoarelor electrice, generatoarelor și transformatoarelor electrice și a aparatelor de distribuție și control a electricității"
+2711,clasa,27,C,"Fabricarea motoarelor, generatoarelor și transformatoarelor electrice"
+2712,clasa,27,C,Fabricarea aparatelor de distribuție și control a electricității
+272,grupa,27,C,Fabricarea de acumulatori și baterii
+2720,clasa,27,C,Fabricarea de acumulatori și baterii
+273,grupa,27,C,Fabricarea de fire și cabluri; fabricarea dispozitivelor de conexiune pentru acestea
+2731,clasa,27,C,Fabricarea de cabluri cu fibră optică
+2732,clasa,27,C,Fabricarea altor fire și cabluri electrice și electronice
+2733,clasa,27,C,Fabricarea dispozitivelor de conexiune pentru fire și cabluri electrice și electronice
+274,grupa,27,C,Fabricarea de echipamente electrice de iluminat
+2740,clasa,27,C,Fabricarea de echipamente electrice de iluminat
+275,grupa,27,C,Fabricarea de echipamente casnice
+2751,clasa,27,C,Fabricarea de aparate electrocasnice
+2752,clasa,27,C,Fabricarea de echipamente casnice neelectrice
+279,grupa,27,C,Fabricarea altor echipamente electrice
+2790,clasa,27,C,Fabricarea altor echipamente electrice
+28,diviziune,,C,"Fabricarea de mașini, utilaje și echipamente n.c.a."
+281,grupa,28,C,Fabricarea de mașini și utilaje de utilizare generală
+2811,clasa,28,C,"Fabricarea de motoare și turbine (cu excepția celor pentru avioane, autovehicule și motociclete)"
+2812,clasa,28,C,Fabricarea de motoare hidraulice
+2813,clasa,28,C,Fabricarea de pompe și compresoare
+2814,clasa,28,C,Fabricarea de articole de robinetărie
+2815,clasa,28,C,"Fabricarea lagărelor, angrenajelor, cutiilor de viteză și a elementelor mecanice de transmisie"
+282,grupa,28,C,Fabricarea altor mașini și utilaje de utilizare generală
+2821,clasa,28,C,"Fabricarea cuptoarelor, furnalelor și arzătoarelor"
+2822,clasa,28,C,Fabricarea echipamentelor de ridicat și manipulat
+2823,clasa,28,C,Fabricarea mașinilor și echipamentelor de birou (exceptând fabricarea calculatoarelor și a echipamentelor periferice)
+2824,clasa,28,C,Fabricarea mașinilor-unelte portabile acționate electric
+2825,clasa,28,C,"Fabricarea echipamentelor de ventilație și frigorifice, exceptând echipamentele de uz casnic"
+2829,clasa,28,C,Fabricarea altor mașini și utilaje de utilizare generală n.c.a.
+283,grupa,28,C,Fabricarea mașinilor și utilajelor pentru agricultură și exploatări forestiere
+2830,clasa,28,C,Fabricarea mașinilor și utilajelor pentru agricultură și exploatări forestiere
+284,grupa,28,C,Fabricarea utilajelor pentru prelucrarea metalului și a mașinilor-unelte
+2841,clasa,28,C,Fabricarea utilajelor și a mașinilor-unelte pentru prelucrarea metalului
+2842,clasa,28,C,Fabricarea altor mașini-unelte n.c.a.
+289,grupa,28,C,Fabricarea altor mașini și utilaje cu destinație specifică
+2891,clasa,28,C,Fabricarea utilajelor pentru metalurgie
+2892,clasa,28,C,Fabricarea utilajelor pentru extracție și construcții
+2893,clasa,28,C,"Fabricarea utilajelor pentru prelucrarea produselor alimentare, băuturilor și tutunului"
+2894,clasa,28,C,"Fabricarea utilajelor pentru industria textilă, a îmbrăcămintei și a pielăriei"
+2895,clasa,28,C,Fabricarea utilajelor pentru industria hârtiei și cartonului
+2896,clasa,28,C,Fabricarea utilajelor pentru prelucrarea maselor plastice și a cauciucului
+2897,clasa,28,C,Fabricarea mașinilor și utilajelor pentru fabricația aditivă (care utilizează tehnologia de fabricație aditivă)
+2899,clasa,28,C,Fabricarea altor mașini și utilaje specifice n.c.a.
+29,diviziune,,C,"Fabricarea autovehiculelor de transport rutier, a remorcilor și semiremorcilor"
+291,grupa,29,C,Fabricarea autovehiculelor de transport rutier
+2910,clasa,29,C,Fabricarea autovehiculelor de transport rutier
+292,grupa,29,C,Producția de caroserii pentru autovehicule; fabricarea de remorci și semiremorci
+2920,clasa,29,C,Producția de caroserii pentru autovehicule; fabricarea de remorci și semiremorci
+293,grupa,29,C,Producția de piese și accesorii pentru autovehicule și pentru motoare de autovehicule
+2931,clasa,29,C,Fabricarea de echipamente electrice și electronice pentru autovehicule și pentru motoare de autovehicule
+2932,clasa,29,C,Fabricarea altor piese și accesorii pentru autovehicule și pentru motoare de autovehicule
+30,diviziune,,C,Fabricarea altor mijloace de transport
+301,grupa,30,C,Construcția de nave și bărci
+3011,clasa,30,C,Construcția de nave civile și structuri plutitoare
+3012,clasa,30,C,Construcția de ambarcațiuni sportive și de agrement
+3013,clasa,30,C,Construcția de nave și vase militare
+302,grupa,30,C,Fabricarea materialului rulant
+3020,clasa,30,C,Fabricarea materialului rulant
+303,grupa,30,C,Fabricarea de aeronave și nave spațiale
+3031,clasa,30,C,"Fabricarea de aeronave și nave spațiale, civile"
+3032,clasa,30,C,"Fabricarea de aeronave și nave spațiale, militare"
+304,grupa,30,C,Fabricarea vehiculelor militare de luptă
+3040,clasa,30,C,Fabricarea vehiculelor militare de luptă
+309,grupa,30,C,Fabricarea altor echipamente de transport n.c.a.
+3091,clasa,30,C,Fabricarea de motociclete
+3092,clasa,30,C,Fabricarea de biciclete și de vehicule pentru invalizi
+3099,clasa,30,C,Fabricarea altor mijloace de transport n.c.a.
+31,diviziune,,C,Fabricarea de mobilă
+310,grupa,31,C,Fabricarea de mobilă
+3100,clasa,31,C,Fabricarea de mobilă
+32,diviziune,,C,Alte activități industriale
+321,grupa,32,C,"Fabricarea bijuteriilor, imitațiilor de bijuterii și articolelor similare"
+3211,clasa,32,C,Baterea monedelor
+3212,clasa,32,C,Fabricarea bijuteriilor și articolelor similare din metale și pietre prețioase
+3213,clasa,32,C,Fabricarea imitațiilor de bijuterii și articole similare
+322,grupa,32,C,Fabricarea instrumentelor muzicale
+3220,clasa,32,C,Fabricarea instrumentelor muzicale
+323,grupa,32,C,Fabricarea articolelor pentru sport
+3230,clasa,32,C,Fabricarea articolelor pentru sport
+324,grupa,32,C,Fabricarea jocurilor și jucăriilor
+3240,clasa,32,C,Fabricarea jocurilor și jucăriilor
+325,grupa,32,C,"Fabricarea de dispozitive, aparate și instrumente medicale și stomatologice"
+3250,clasa,32,C,"Fabricarea de dispozitive, aparate și instrumente medicale stomatologice"
+329,grupa,32,C,Alte activități industriale
+3291,clasa,32,C,Fabricarea măturilor și periilor
+3299,clasa,32,C,Fabricarea altor produse manufacturiere n.c.a.
+33,diviziune,,C,"Repararea, întreținerea și instalarea mașinilor și echipamentelor"
+331,grupa,33,C,"Repararea și întreținerea articolelor fabricate din metal, a mașinilor și echipamentelor"
+3311,clasa,33,C,Repararea și întreținerea articolelor fabricate din metal
+3312,clasa,33,C,Repararea și întreținerea mașinilor
+3313,clasa,33,C,Repararea și întreținerea echipamentelor electronice și optice
+3314,clasa,33,C,Repararea și întreținerea echipamentelor electrice
+3315,clasa,33,C,"Repararea și întreținerea navelor și bărcilor, civile"
+3316,clasa,33,C,"Repararea și întreținerea aeronavelor și navelor spațiale, civile"
+3317,clasa,33,C,Repararea și întreținerea altor echipamente civile de transport n.c.a.
+3318,clasa,33,C,"Repararea și întreținerea vehiculelor militare de luptă, a navelor, vaselor, aeronavelor și navelor spațiale, militare"
+3319,clasa,33,C,Repararea și întreținerea altor echipamente
+332,grupa,33,C,Instalarea mașinilor și echipamentelor industriale
+3320,clasa,33,C,Instalarea mașinilor și echipamentelor industriale
+35,diviziune,,D,"Producția și furnizarea de energie electrică și termică, gaze, apă caldă și aer condiționat"
+351,grupa,35,D,"Producția, transportul și distribuția energiei electrice"
+3511,clasa,35,D,Producția de energie electrică din resurse neregenerabile
+3512,clasa,35,D,Producția de energie electrică din resurse regenerabile
+3513,clasa,35,D,Transportul energiei electrice
+3514,clasa,35,D,Distribuția energiei electrice
+3515,clasa,35,D,Comercializarea energiei electrice
+3516,clasa,35,D,Depozitarea energiei electrice
+352,grupa,35,D,Producția gazelor; distribuția combustibililor gazoși prin conducte
+3521,clasa,35,D,Producția gazelor
+3522,clasa,35,D,"Distribuția combustibililor gazoși, prin conducte"
+3523,clasa,35,D,"Comercializarea combustibililor gazoși, prin conducte"
+3524,clasa,35,D,"Depozitarea gazelor, ca parte a serviciilor de furnizare"
+353,grupa,35,D,Furnizarea de abur și aer condiționat
+3530,clasa,35,D,Furnizarea de abur și aer condiționat
+354,grupa,35,D,Activități ale agenților și brokerilor din domeniul energiei electrice și a gazelor naturale
+3540,clasa,35,D,Activități ale agenților și brokerilor din domeniul energiei electrice și a gazelor naturale
+36,diviziune,,E,"Captarea, tratarea și distribuția apei"
+360,grupa,36,E,"Captarea, tratarea și distribuția apei"
+3600,clasa,36,E,"Captarea, tratarea și distribuția apei"
+37,diviziune,,E,Colectarea și epurarea apelor uzate
+370,grupa,37,E,Colectarea și epurarea apelor uzate
+3700,clasa,37,E,Colectarea și epurarea apelor uzate
+38,diviziune,,E,"Colectarea, tratarea și eliminarea deșeurilor; activități de recuperare a materialelor reciclabile"
+381,grupa,38,E,Colectarea deșeurilor
+3811,clasa,38,E,Colectarea deșeurilor nepericuloase
+3812,clasa,38,E,Colectarea deșeurilor periculoase
+382,grupa,38,E,Recuperarea materialelor
+3821,clasa,38,E,Recuperarea materialelor reciclabile
+3822,clasa,38,E,Producția de energie (electrică sau termică) prin tratarea deșeurilor (inclusiv prin incinerare)
+3823,clasa,38,E,Alte activități de tratare a deșeurilor
+383,grupa,38,E,Eliminarea deșeurilor
+3831,clasa,38,E,Incinerarea deșeurilor fără producție de energie
+3832,clasa,38,E,Activități ale gropilor de gunoi sau a depozitelor permanente de deșeuri
+3833,clasa,38,E,Alte activități de eliminare a deșeurilor
+39,diviziune,,E,Activități și servicii de decontaminare
+390,grupa,39,E,Activități și servicii de decontaminare
+3900,clasa,39,E,Activități și servicii de decontaminare
+41,diviziune,,F,Construcții de clădiri
+410,grupa,41,F,Lucrări de construcții a clădirilor rezidențiale și nerezidențiale
+4100,clasa,41,F,Lucrări de construcții a clădirilor rezidențiale și nerezidențiale
+42,diviziune,,F,Lucrări de geniu civil
+421,grupa,42,F,Lucrări de construcții a drumurilor și a căilor ferate
+4211,clasa,42,F,Lucrări de construcții a drumurilor și autostrăzilor
+4212,clasa,42,F,Lucrări de construcții a căilor ferate de suprafață și subterane
+4213,clasa,42,F,Construcția de poduri și tuneluri
+422,grupa,42,F,Lucrări de construcții a proiectelor utilitare
+4221,clasa,42,F,Lucrări de construcții a proiectelor utilitare pentru fluide
+4222,clasa,42,F,Lucrări de construcții a proiectelor utilitare pentru electricitate și telecomunicații
+429,grupa,42,F,Lucrări de construcții a altor proiecte inginerești
+4291,clasa,42,F,Construcții hidrotehnice
+4299,clasa,42,F,Lucrări de construcții a altor proiecte inginerești n.c.a.
+43,diviziune,,F,Lucrări speciale de construcții
+431,grupa,43,F,Lucrări de demolare și de pregătire a terenului
+4311,clasa,43,F,Lucrări de demolare a construcțiilor
+4312,clasa,43,F,Lucrări de pregătire a terenului
+4313,clasa,43,F,Lucrări de foraj și sondaj pentru construcții
+432,grupa,43,F,Lucrări de instalații electrice și tehnico-sanitare și alte lucrări de instalații pentru construcții
+4321,clasa,43,F,Lucrări de instalații electrice
+4322,clasa,43,F,"Lucrări de instalații sanitare, de încălzire și de aer condiționat"
+4323,clasa,43,F,Lucrări de izolații
+4324,clasa,43,F,Alte lucrări de instalații pentru construcții
+433,grupa,43,F,Lucrări de finisare
+4331,clasa,43,F,Lucrări de ipsoserie
+4332,clasa,43,F,Lucrări de tâmplărie și dulgherie
+4333,clasa,43,F,Lucrări de pardosire și placare a pereților
+4334,clasa,43,F,"Lucrări de vopsitorie, zugrăveli și montări de geamuri"
+4335,clasa,43,F,Alte lucrări de finisare
+434,grupa,43,F,Lucrări speciale de construcții pentru clădiri
+4341,clasa,43,F,"Lucrări de învelitori, șarpante și terase la construcții"
+4342,clasa,43,F,Alte lucrări speciale de construcții pentru clădiri
+435,grupa,43,F,Lucrări speciale de construcții pentru proiecte de geniu civil
+4350,clasa,43,F,Lucrări speciale de construcții pentru proiecte de geniu civil
+436,grupa,43,F,Servicii de intermediere pentru lucrări speciale de construcții
+4360,clasa,43,F,Servicii de intermediere pentru lucrări speciale de construcții
+439,grupa,43,F,Alte lucrări speciale de construcții
+4391,clasa,43,F,Activități de zidărie
+4399,clasa,43,F,Alte lucrări speciale de construcții n.c.a.
+46,diviziune,,G,Comerț cu ridicata
+461,grupa,46,G,Activități de intermediere în comerțul cu ridicata
+4611,clasa,46,G,"Intermedieri în comerțul cu materii prime agricole, animale vii, materii prime textile și cu semifabricate"
+4612,clasa,46,G,"Intermedieri în comerțul cu combustibili, minereuri, metale și produse chimice pentru industrie"
+4613,clasa,46,G,Intermedieri în comerțul cu material lemnos și materiale de construcții
+4614,clasa,46,G,"Intermedieri în comerțul cu mașini, echipamente industriale, nave și avioane"
+4615,clasa,46,G,"Intermedieri în comerțul cu mobilă, articole de menaj și de fierărie"
+4616,clasa,46,G,"Intermedieri în comerțul cu textile, confecții din blană, încălțăminte și articole din piele"
+4617,clasa,46,G,"Intermedieri în comerțul cu produse alimentare, băuturi și tutun"
+4618,clasa,46,G,"Intermedieri în comerțul specializat în vânzarea produselor cu caracter specific, n.c.a."
+4619,clasa,46,G,Intermedieri în comerțul cu produse diverse
+462,grupa,46,G,Comerț cu ridicata al produselor agricole brute și al animalelor vii
+4621,clasa,46,G,"Comerț cu ridicata al cerealelor, semințelor, furajelor și tutunului neprelucrat"
+4622,clasa,46,G,Comerț cu ridicata al florilor și al plantelor
+4623,clasa,46,G,Comerț cu ridicata al animalelor vii
+4624,clasa,46,G,"Comerț cu ridicata al blănurilor, pieilor brute și al pieilor prelucrate"
+463,grupa,46,G,"Comerț cu ridicata al produselor alimentare, al băuturilor și al tutunului"
+4631,clasa,46,G,Comerț cu ridicata al fructelor și legumelor
+4632,clasa,46,G,"Comerț cu ridicata al cărnii și produselor din carne, pește și produse din pește, crustacee și moluște"
+4633,clasa,46,G,"Comerț cu ridicata al produselor lactate, ouălor, uleiurilor și grăsimilor comestibile"
+4634,clasa,46,G,Comerț cu ridicata al băuturilor
+4635,clasa,46,G,Comerț cu ridicata al produselor din tutun
+4636,clasa,46,G,"Comerț cu ridicata al zahărului, ciocolatei și produselor zaharoase"
+4637,clasa,46,G,"Comerț cu ridicata cu cafea, ceai, cacao și condimente"
+4638,clasa,46,G,Comerț cu ridicata specializat al altor alimente
+4639,clasa,46,G,"Comerț cu ridicata nespecializat de produse alimentare, băuturi și tutun"
+464,grupa,46,G,Comerț cu ridicata al bunurilor de consum
+4641,clasa,46,G,Comerț cu ridicata al produselor textile
+4642,clasa,46,G,Comerț cu ridicata al îmbrăcămintei și încălțămintei
+4643,clasa,46,G,"Comerț cu ridicata al aparatelor electrice de uz gospodăresc, al aparatelor de radio și televizoarelor"
+4644,clasa,46,G,"Comerț cu ridicata al produselor din ceramică, sticlărie, și produse de întreținere"
+4645,clasa,46,G,Comerț cu ridicata al produselor cosmetice și de parfumerie
+4646,clasa,46,G,Comerț cu ridicata al produselor farmaceutice și medicale
+4647,clasa,46,G,"Comerț cu ridicata al mobilei (inclusiv de birou și pentru magazine), covoarelor și a articolelor de iluminat"
+4648,clasa,46,G,Comerț cu ridicata al ceasurilor și bijuteriilor
+4649,clasa,46,G,Comerț cu ridicata al altor bunuri de uz gospodăresc
+465,grupa,46,G,Comerț cu ridicata al echipamentului informatic și de telecomunicații
+4650,clasa,46,G,Comerț cu ridicata al echipamentului informatic și de telecomunicații
+466,grupa,46,G,"Comerț cu ridicata al altor mașini, echipamente și furnituri"
+4661,clasa,46,G,"Comerț cu ridicata al mașinilor agricole, echipamentelor și furniturilor"
+4662,clasa,46,G,Comerț cu ridicata al mașinilor-unelte
+4663,clasa,46,G,Comerț cu ridicata al mașinilor pentru industria minieră și construcții
+4664,clasa,46,G,Comerț cu ridicata al altor mașini și echipamente
+467,grupa,46,G,Comerț cu ridicata al autovehiculelor și motocicletelor; comerț cu ridicata al pieselor și accesoriilor pentru autovehicule și motociclete
+4671,clasa,46,G,Comerț cu ridicata al autovehiculelor
+4672,clasa,46,G,Comerț cu ridicata al pieselor și accesoriilor pentru autovehicule
+4673,clasa,46,G,Comerț cu ridicata al motocicletelor; comerț cu ridicata al pieselor și accesoriilor pentru motociclete
+468,grupa,46,G,Comerț cu ridicata specializat al altor produse
+4681,clasa,46,G,"Comerț cu ridicata al combustibililor solizi, lichizi și gazoși și al produselor derivate"
+4682,clasa,46,G,Comerț cu ridicata al metalelor și minereurilor metalice
+4683,clasa,46,G,Comerț cu ridicata al materialului lemnos și a materialelor de construcție și echipamentelor sanitare
+4684,clasa,46,G,Comerț cu ridicata al echipamentelor și furniturilor de fierărie pentru instalații sanitare și de încălzire
+4685,clasa,46,G,Comerț cu ridicata al produselor chimice
+4686,clasa,46,G,Comerț cu ridicata al altor produse intermediare
+4687,clasa,46,G,Comerț cu ridicata al deșeurilor și resturilor
+4689,clasa,46,G,Comerț cu ridicata specializat al altor produse n.c.a.
+469,grupa,46,G,Comerț cu ridicata nespecializat
+4690,clasa,46,G,Comerț cu ridicata nespecializat
+47,diviziune,,G,Comerț cu amănuntul
+471,grupa,47,G,Comerț cu amănuntul nespecializat
+4711,clasa,47,G,"Comerț cu amănuntul nespecializat, cu vânzare predominantă de produse alimentare, băuturi și tutun"
+4712,clasa,47,G,"Comerț cu amănuntul nespecializat, cu vânzare predominantă de produse nealimentare"
+472,grupa,47,G,"Comerț cu amănuntul al produselor alimentare, băuturilor și al produselor din tutun"
+4721,clasa,47,G,Comerț cu amănuntul al fructelor și legumelor proaspete
+4722,clasa,47,G,Comerț cu amănuntul al cărnii și al produselor din carne
+4723,clasa,47,G,"Comerț cu amănuntul al peștelui, crustaceelor și moluștelor"
+4724,clasa,47,G,"Comerț cu amănuntul al pâinii, produselor de patiserie și produselor zaharoase"
+4725,clasa,47,G,Comerț cu amănuntul al băuturilor
+4726,clasa,47,G,Comerț cu amănuntul al produselor din tutun
+4727,clasa,47,G,Comerț cu amănuntul al altor produse alimentare
+473,grupa,47,G,Comerț cu amănuntul al carburanților pentru autovehicule
+4730,clasa,47,G,Comerț cu amănuntul al carburanților pentru autovehicule
+474,grupa,47,G,Comerț cu amănuntul al echipamentului informatic și de telecomunicații
+4740,clasa,47,G,Comerț cu amănuntul al echipamentului informatic și de telecomunicații
+475,grupa,47,G,Comerț cu amănuntul al altor produse casnice
+4751,clasa,47,G,Comerț cu amănuntul al textilelor
+4752,clasa,47,G,"Comerț cu amănuntul al articolelor de fierărie, al materialelor de construcții, al articolelor din sticlă și a celor pentru vopsit"
+4753,clasa,47,G,"Comerț cu amănuntul al covoarelor, carpetelor, tapetelor și a altor acoperitoare de podea"
+4754,clasa,47,G,Comerț cu amănuntul al articolelor și aparatelor electrocasnice
+4755,clasa,47,G,"Comerț cu amănuntul al mobilei, al articolelor de iluminat și al altor articole de uz casnic n.c.a."
+476,grupa,47,G,Comerț cu amănuntul de bunuri culturale și recreative
+4761,clasa,47,G,Comerț cu amănuntul al cărților
+4762,clasa,47,G,Comerț cu amănuntul al ziarelor și articolelor de papetărie
+4763,clasa,47,G,Comerț cu amănuntul al echipamentelor sportive
+4764,clasa,47,G,Comerț cu amănuntul al jocurilor și jucăriilor
+4769,clasa,47,G,Comerț cu amănuntul de bunuri culturale și recreative n.c.a.
+477,grupa,47,G,"Comerț cu amănuntul al altor bunuri, cu excepția autovehiculelor și motocicletei"
+4771,clasa,47,G,Comerț cu amănuntul al îmbrăcămintei
+4772,clasa,47,G,Comerț cu amănuntul al încălțămintei și articolelor din piele
+4773,clasa,47,G,Comerț cu amănuntul al produselor farmaceutice
+4774,clasa,47,G,Comerț cu amănuntul al articolelor medicale și ortopedice
+4775,clasa,47,G,Comerț cu amănuntul al produselor cosmetice și de parfumerie
+4776,clasa,47,G,"Comerț cu amănuntul al florilor, plantelor și semințelor; comerț cu amănuntul al animalelor de companie și a hranei pentru acestea"
+4777,clasa,47,G,Comerț cu amănuntul al ceasurilor și bijuteriilor
+4778,clasa,47,G,Comerț cu amănuntul al altor bunuri noi
+4779,clasa,47,G,Comerț cu amănuntul al bunurilor de ocazie
+478,grupa,47,G,Comerț cu amănuntul al autovehiculelor și motocicletelor; comerț cu amănuntul al pieselor și accesoriilor pentru autovehicule și motociclete
+4781,clasa,47,G,Comerț cu amănuntul al autovehiculelor
+4782,clasa,47,G,Comerț cu amănuntul al pieselor și accesoriilor pentru autovehicule
+4783,clasa,47,G,Comerț cu amănuntul al motocicletelor; comerț cu amănuntul al pieselor și accesoriilor pentru motociclete
+479,grupa,47,G,Activități de intermediere în comerțul cu amănuntul
+4791,clasa,47,G,Intermedieri în comerțul cu amănuntul nespecializat
+4792,clasa,47,G,Intermedieri în comerțul cu amănuntul specializat
+49,diviziune,,H,Transporturi terestre și transporturi prin conducte
+491,grupa,49,H,Transporturi de călători pe calea ferată
+4911,clasa,49,H,Transport de pasageri pe căi ferate grele/magistrale
+4912,clasa,49,H,Alte transporturi de pasageri pe căi ferate ușoare
+492,grupa,49,H,Transporturi de marfă pe calea ferată
+4920,clasa,49,H,Transporturi de marfă pe calea ferată
+493,grupa,49,H,Alte transporturi terestre de călători
+4931,clasa,49,H,"Transporturi terestre de pasageri, pe bază de grafic"
+4932,clasa,49,H,"Transporturi terestre de pasageri, ocazionale"
+4933,clasa,49,H,"Transporturi terestre de pasageri cu vehicule cu șofer, pe bază de comandă"
+4934,clasa,49,H,"Transporturi de pasageri cu funiculare, teleferice și schilifturi"
+4939,clasa,49,H,Alte transporturi terestre de călători n.c.a.
+494,grupa,49,H,Transporturi rutiere de mărfuri și servicii de mutare
+4941,clasa,49,H,Transporturi rutiere de mărfuri
+4942,clasa,49,H,Servicii de mutare
+495,grupa,49,H,Transporturi prin conducte
+4950,clasa,49,H,Transporturi prin conducte
+50,diviziune,,H,Transporturi pe apă
+501,grupa,50,H,Transporturi maritime și costiere de pasageri
+5010,clasa,50,H,Transporturi maritime și costiere de pasageri
+502,grupa,50,H,Transporturi maritime și costiere de marfă
+5020,clasa,50,H,Transporturi maritime și costiere de marfă
+503,grupa,50,H,Transporturi de pasageri pe căi navigabile interioare
+5030,clasa,50,H,Transportul de pasageri pe căi navigabile interioare
+504,grupa,50,H,Transportul de marfă pe căi navigabile interioare
+5040,clasa,50,H,Transportul de marfă pe căi navigabile interioare
+51,diviziune,,H,Transporturi aeriene
+511,grupa,51,H,Transporturi aeriene de pasageri
+5110,clasa,51,H,Transporturi aeriene de pasageri
+512,grupa,51,H,Transporturi aeriene de marfă și transporturi spațiale
+5121,clasa,51,H,Transporturi aeriene de marfă
+5122,clasa,51,H,Transporturi spațiale
+52,diviziune,,H,Depozitare și activități auxiliare pentru transporturi
+521,grupa,52,H,Depozitări
+5210,clasa,52,H,Depozitări
+522,grupa,52,H,Activități anexe pentru transporturi
+5221,clasa,52,H,Activități de servicii anexe pentru transporturi terestre
+5222,clasa,52,H,Activități de servicii anexe transporturilor pe apă
+5223,clasa,52,H,Activități de servicii anexe transporturilor aeriene
+5224,clasa,52,H,Manipulări
+5225,clasa,52,H,Activități de servicii logistice pentru transporturi
+5226,clasa,52,H,Alte activități anexe transporturilor
+523,grupa,52,H,Activități de intermediere pentru transporturi
+5231,clasa,52,H,Activități de intermediere pentru transportul de marfă
+5232,clasa,52,H,Activități de intermediere pentru transportul de pasageri
+53,diviziune,,H,Activități de poștă și de curier
+531,grupa,53,H,Activități poștale desfășurate sub obligativitatea serviciului universal
+5310,clasa,53,H,Activități poștale desfășurate sub obligativitatea serviciului universal
+532,grupa,53,H,Alte activități poștale și de curier
+5320,clasa,53,H,Alte activități poștale și de curier
+533,grupa,53,H,Servicii de intermediere pentru activități poștale și de curier
+5330,clasa,53,H,Servicii de intermediere pentru activități poștale și de curier
+55,diviziune,,I,Hoteluri și alte facilități de cazare
+551,grupa,55,I,Hoteluri și alte facilități de cazare similare
+5510,clasa,55,I,Hoteluri și alte facilități de cazare similare
+552,grupa,55,I,Facilități de cazare pentru vacanțe și perioade de scurtă durată
+5520,clasa,55,I,Facilități de cazare pentru vacanțe și perioade de scurtă durată
+553,grupa,55,I,"Parcuri pentru rulote, campinguri și tabere"
+5530,clasa,55,I,"Parcuri pentru rulote, campinguri și tabere"
+554,grupa,55,I,Intermedieri pentru servicii de cazare
+5540,clasa,55,I,Intermedieri pentru servicii de cazare
+559,grupa,55,I,Alte servicii de cazare
+5590,clasa,55,I,Alte servicii de cazare
+56,diviziune,,I,Restaurante și alte activități de servicii de alimentație
+561,grupa,56,I,Restaurante
+5611,clasa,56,I,Restaurante
+5612,clasa,56,I,Activități ale unităților mobile de alimentație
+562,grupa,56,I,Activități de alimentație (catering) pentru evenimente și alte servicii de alimentație
+5621,clasa,56,I,Activități de alimentație (catering) pentru evenimente
+5622,clasa,56,I,Alte servicii de alimentație n.c.a.
+563,grupa,56,I,Baruri și alte activități de servire a băuturilor
+5630,clasa,56,I,Baruri și alte activități de servire a băuturilor
+564,grupa,56,I,Intermedieri pentru servicii de alimentație și de servire a băuturilor
+5640,clasa,56,I,Intermedieri pentru servicii de alimentație și de servire a băuturilor
+58,diviziune,,J,Activități de editare
+581,grupa,58,J,"Activități de editare a cărților, ziarelor, revistelor și alte activități de editare"
+5811,clasa,58,J,Activități de editare a cărților
+5812,clasa,58,J,Activități de editare a ziarelor
+5813,clasa,58,J,Activități de editare a revistelor și periodicelor
+5819,clasa,58,J,Alte activități de editare
+582,grupa,58,J,Activități de editare a produselor software
+5821,clasa,58,J,Activități de editare a jocurilor de calculator
+5829,clasa,58,J,Activități de editare a altor produse software
+59,diviziune,,J,"Activități de producție cinematografică, video și de programe de televiziune; înregistrări audio și activități de editare muzicală"
+591,grupa,59,J,"Activități de producție cinematografică, video și de programe de televiziune"
+5911,clasa,59,J,"Activități de producție cinematografică, video și de programe de televiziune"
+5912,clasa,59,J,"Activități post-producție cinematografică, video și de programe de televiziune"
+5913,clasa,59,J,"Activități de distribuție a filmelor cinematografice, video și a programelor de televiziune"
+5914,clasa,59,J,Proiecția de filme cinematografice
+592,grupa,59,J,Activități de realizare a înregistrărilor audio și activități de editare muzicală
+5920,clasa,59,J,Activități de realizare a înregistrărilor audio și activități de editare muzicală
+60,diviziune,,J,"Activități de difuzare și transmitere de programe, agenții de știri și alte activități de distribuție de conținut"
+601,grupa,60,J,"Activități radiodifuziune, activități de distribuție de programe audio"
+6010,clasa,60,J,"Activități radiodifuziune, activități de distribuție de programe audio"
+602,grupa,60,J,"Activități de difuzare a programelor de televiziune, activități de distribuție de programe video"
+6020,clasa,60,J,"Activități de difuzare a programelor de televiziune, activități de distribuție de programe video"
+603,grupa,60,J,Activități ale agențiilor de știri și de distribuție a altor conținuturi
+6031,clasa,60,J,Activități ale agențiilor de știri
+6039,clasa,60,J,Activități de distribuție a altor conținuturi
+61,diviziune,,K,Telecomunicații
+611,grupa,61,K,"Activități de telecomunicații prin rețele cu cablu, prin rețele fără cablu și prin satelit"
+6110,clasa,61,K,"Activități de telecomunicații prin rețele cu cablu, prin rețele fără cablu și prin satelit"
+612,grupa,61,K,Activități de revânzare a serviciilor de telecomunicații și servicii de intermediere pentru telecomunicații
+6120,clasa,61,K,Activități de revânzare a serviciilor de telecomunicații și servicii de intermediere pentru telecomunicații
+619,grupa,61,K,Alte activități de telecomunicații
+6190,clasa,61,K,Alte activități de telecomunicații
+62,diviziune,,K,Activități de programare și activități de consultanță în tehnologia informației
+621,grupa,62,K,Activități de programare
+6210,clasa,62,K,Activități de realizare a soft-ului la comandă (software orientat client)
+622,grupa,62,K,Activități de consultanță în tehnologia informației și de management (gestiune și exploatare) a mijloacelor de calcul
+6220,clasa,62,K,Activități de consultanță în tehnologia informației și de management (gestiune și exploatare) a mijloacelor de calcul
+629,grupa,62,K,Alte activități de servicii privind tehnologia informației
+6290,clasa,62,K,Alte activități de servicii privind tehnologia informației
+63,diviziune,,K,"Activități ale portalurilor web, prelucrarea datelor, administrarea paginilor web și activități conexe"
+631,grupa,63,K,"Prelucrarea datelor, administrarea paginilor web și activități conexe"
+6310,clasa,63,K,"Prelucrarea datelor, administrarea paginilor web și activități conexe"
+639,grupa,63,K,Activități ale portalurilor web și alte activități de servicii informaționale
+6391,clasa,63,K,Activități ale portalurilor web
+6392,clasa,63,K,Alte activități de servicii informaționale n.c.a.
+64,diviziune,,L,"Intermedieri financiare, cu excepția activităților de asigurări și ale fondurilor de pensii"
+641,grupa,64,L,Intermediere monetară
+6411,clasa,64,L,Activități ale băncii centrale (naționale)
+6419,clasa,64,L,Alte activități de intermedieri monetare
+642,grupa,64,L,Activități ale holding-urilor și canalelor de finanțare
+6421,clasa,64,L,Activități ale holding-urilor
+6422,clasa,64,L,Activități ale canalelor de finanțare
+643,grupa,64,L,Activități ale fondurilor de investiții; fonduri mutuale și alte entități financiare similare
+6431,clasa,64,L,Activități ale fondurilor de investiții de pe piața monetară și ale fondurilor de investiții din afara pieței monetare
+6432,clasa,64,L,Fonduri mutuale și alte entități financiare similare
+649,grupa,64,L,"Alte activități de intermedieri financiare, exceptând activități de asigurări și fonduri de pensii"
+6491,clasa,64,L,Leasing financiar
+6492,clasa,64,L,Alte activități de creditare
+6499,clasa,64,L,"Alte intermedieri financiare n.c.a., exceptând activități de asigurări și fonduri de pensii"
+65,diviziune,,L,"Activități de asigurări, reasigurări și ale fondurilor de pensii (cu excepția celor din sistemul public de asigurări sociale)"
+651,grupa,65,L,Activități de asigurări
+6511,clasa,65,L,Activități de asigurări de viață
+6512,clasa,65,L,Alte activități de asigurări (exceptând asigurările de viață)
+652,grupa,65,L,Activități de reasigurare
+6520,clasa,65,L,Activități de reasigurare
+653,grupa,65,L,Activități ale fondurilor de pensii (cu excepția celor din sistemul public de asigurări sociale)
+6530,clasa,65,L,Activități ale fondurilor de pensii (cu excepția celor din sistemul public de asigurări sociale)
+66,diviziune,,L,"Activități auxiliare pentru intermedieri financiare, activități de asigurare și fonduri de pensii"
+661,grupa,66,L,"Activități auxiliare intermedierilor financiare, cu excepția activităților de asigurări și fonduri de pensii"
+6611,clasa,66,L,Administrarea piețelor financiare
+6612,clasa,66,L,Activități de intermediere a tranzacțiilor financiare
+6619,clasa,66,L,"Activități auxiliare intermedierilor financiare, exceptând activități de asigurări și fonduri de pensii"
+662,grupa,66,L,Activități auxiliare de asigurări și fonduri de pensii
+6621,clasa,66,L,Activități de evaluare a riscului de asigurare și a pagubelor
+6622,clasa,66,L,Activități ale agenților și broker-ilor de asigurări
+6629,clasa,66,L,Alte activități auxiliare de asigurări și fonduri de pensii
+663,grupa,66,L,Activități de administrare a fondurilor
+6630,clasa,66,L,Activități de administrare a fondurilor
+68,diviziune,,M,Tranzacții imobiliare
+681,grupa,68,M,Cumpărarea și vânzarea de bunuri imobiliare proprii și dezvoltare imobiliară
+6811,clasa,68,M,Cumpărarea și vânzarea de bunuri imobiliare proprii
+6812,clasa,68,M,Dezvoltare (promovare) imobiliară
+682,grupa,68,M,Închirierea și subînchirierea bunurilor imobiliare proprii sau închiriate
+6820,clasa,68,M,Închirierea și subînchirierea bunurilor imobiliare proprii sau închiriate
+683,grupa,68,M,Activități imobiliare pe bază de comision sau contract
+6831,clasa,68,M,Servicii de intermediere a tranzacțiilor imobiliare
+6832,clasa,68,M,Alte activități pentru tranzacții imobiliare pe bază de comision sau contract
+69,diviziune,,N,Activități juridice și de contabilitate
+691,grupa,69,N,Activități juridice
+6910,clasa,69,N,Activități juridice
+692,grupa,69,N,Activități de contabilitate și audit financiar; consultanță în domeniul fiscal
+6920,clasa,69,N,Activități de contabilitate și audit financiar; consultanță în domeniul fiscal
+70,diviziune,,N,"Activități ale direcțiilor(centralelor), birourilor administrative centralizate; activități de management și de consultanță în management"
+701,grupa,70,N,"Activități ale direcțiilor(centralelor), birourilor administrative centralizate"
+7010,clasa,70,N,"Activități ale direcțiilor(centralelor), birourilor administrative centralizate"
+702,grupa,70,N,Activități de consultanță în afaceri și management
+7020,clasa,70,N,Activități de consultanță în afaceri și management
+71,diviziune,,N,Activități de arhitectură și inginerie; activități de testări și analiză tehnică
+711,grupa,71,N,"Activități de arhitectură, inginerie și servicii de consultanță tehnică legate de acestea"
+7111,clasa,71,N,Activități de arhitectură
+7112,clasa,71,N,Activități de inginerie și consultanță tehnică legate de acestea
+712,grupa,71,N,Activități de testări și analize tehnice
+7120,clasa,71,N,Activități de testări și analize tehnice
+72,diviziune,,N,Cercetare-dezvoltare
+721,grupa,72,N,Cercetare-dezvoltare în științe naturale și inginerie
+7210,clasa,72,N,Cercetare-dezvoltare în științe naturale și inginerie
+722,grupa,72,N,Cercetare-dezvoltare în științe sociale și umaniste
+7220,clasa,72,N,Cercetare-dezvoltare în științe sociale și umaniste
+73,diviziune,,N,"Publicitate, activități de studiere a pieței și relatii publice"
+731,grupa,73,N,Publicitate
+7311,clasa,73,N,Activități ale agențiilor de publicitate
+7312,clasa,73,N,Servicii de reprezentare media
+732,grupa,73,N,Activități de studiere a pieței și de sondare a opiniei publice
+7320,clasa,73,N,Activități de studiere a pieței și de sondare a opiniei publice
+733,grupa,73,N,Activități în domeniul relațiilor publice și al comunicării
+7330,clasa,73,N,Activități în domeniul relațiilor publice și al comunicării
+74,diviziune,,N,"Alte activități profesionale, stiințifice și tehnice"
+741,grupa,74,N,Activități de design specializat
+7411,clasa,74,N,Activități de design industrial și vestimentar
+7412,clasa,74,N,Design grafic și activități de comunicare vizuală
+7413,clasa,74,N,Activități de design de interior
+7414,clasa,74,N,Alte activități de design specializat
+742,grupa,74,N,Activități fotografice
+7420,clasa,74,N,Activități fotografice
+743,grupa,74,N,Activități de traducere scrisă și orală (interpreți)
+7430,clasa,74,N,Activități de traducere scrisă și orală (interpreți)
+749,grupa,74,N,"Alte activități profesionale, stiințifice și tehnice n.c.a."
+7491,clasa,74,N,Activități de brokeraj în materie de brevete și servicii de marketing
+7499,clasa,74,N,"Alte activități profesionale, stiințifice și tehnice n.c.a."
+75,diviziune,,N,Activități veterinare
+750,grupa,75,N,Activități veterinare
+7500,clasa,75,N,Activități veterinare
+77,diviziune,,O,Activități de închiriere și leasing
+771,grupa,77,O,Activități de închiriere și leasing cu autovehicule
+7711,clasa,77,O,Activități de închiriere și leasing cu autoturisme și autovehicule rutiere ușoare
+7712,clasa,77,O,Activități de închiriere și leasing cu autovehicule rutiere grele
+772,grupa,77,O,Activități de închiriere și leasing cu bunuri personale și gospodărești
+7721,clasa,77,O,Activități de închiriere și leasing cu bunuri recreaționale și echipament sportiv
+7722,clasa,77,O,Activități de închiriere și leasing cu alte bunuri personale și gospodărești n.c.a.
+773,grupa,77,O,"Activități de închiriere și leasing cu alte mașini, echipamente și bunuri tangibile"
+7731,clasa,77,O,Activități de închiriere și leasing cu mașini și echipamente agricole
+7732,clasa,77,O,Activități de închiriere și leasing cu mașini și echipamente pentru construcții
+7733,clasa,77,O,Activități de închiriere și leasing cu mașini și echipamente de birou (inclusiv calculatoare)
+7734,clasa,77,O,Activități de închiriere și leasing cu echipamente de transport pe apă
+7735,clasa,77,O,Activități de închiriere și leasing cu echipamente de transport aerian
+7739,clasa,77,O,"Activități de închirierea și leasing cu alte mașini, echipamente și bunuri tangibile n.c.a."
+774,grupa,77,O,Leasing cu bunuri intangibile (cu excepția lucrărilor care fac obiectul drepturilor de autor)
+7740,clasa,77,O,Leasing cu bunuri intangibile (cu excepția lucrărilor care fac obiectul drepturilor de autor)
+775,grupa,77,O,Servicii de intermediere pentru închirierea și leasingul de bunuri corporale și bunuri intangibile (exceptând financiare)
+7751,clasa,77,O,"Servicii de intermediere pentru închirierea și leasingul autoturismelor, autorulotelor și remorcilor"
+7752,clasa,77,O,Servicii de intermediere pentru închirierea și leasingul altor bunuri corporale și bunuri intangibile (exceptând financiare)
+78,diviziune,,O,Activități de servicii privind forța de muncă
+781,grupa,78,O,Activități ale agențiilor de plasare a forței de muncă
+7810,clasa,78,O,Activități ale agențiilor de plasare a forței de muncă
+782,grupa,78,O,Activități ale agențiilor de plasare temporară a forței de muncă și furnizarea altor resurse umane
+7820,clasa,78,O,Activități ale agențiilor de plasare temporară a forței de muncă și furnizarea altor resurse umane
+79,diviziune,,O,Activități ale agențiilor turistice și a tur-operatorilor; alte servicii de rezervare și asistență turistică
+791,grupa,79,O,Activități ale agențiilor turistice și a tur-operatorilor
+7911,clasa,79,O,Activități ale agențiilor turistice
+7912,clasa,79,O,Activități ale tur-operatorilor
+799,grupa,79,O,Alte servicii de rezervare și asistență turistică
+7990,clasa,79,O,Alte servicii de rezervare și asistență turistică
+80,diviziune,,O,Activități de investigații și protecție
+800,grupa,80,O,Activități de investigații și protecție
+8001,clasa,80,O,Activități de investigații și servicii private de protecție
+8009,clasa,80,O,Alte activități de protecție n.c.a.
+81,diviziune,,O,Activități de peisagistică și servicii pentru clădiri
+811,grupa,81,O,Activități de servicii suport combinate
+8110,clasa,81,O,Activități de servicii suport combinate
+812,grupa,81,O,Activități de curățenie
+8121,clasa,81,O,Activități generale de curățenie a clădirilor
+8122,clasa,81,O,Activități specializate de curățenie
+8123,clasa,81,O,Alte activități de curățenie
+813,grupa,81,O,Activități de înteținere peisagistică
+8130,clasa,81,O,Activități de întreținere peisagistică
+82,diviziune,,O,"Activități de secretariat, servicii suport și alte activități de servicii prestate în principal întreprinderilor"
+821,grupa,82,O,Activități de secretariat și servicii suport
+8210,clasa,82,O,Activități de secretariat și servicii suport
+822,grupa,82,O,Activități ale centrelor de intermediere telefonică (call center)
+8220,clasa,82,O,Activități ale centrelor de intermediere telefonică (call center)
+823,grupa,82,O,"Activități de organizare a expozițiilor, târgurilor și congreselor"
+8230,clasa,82,O,"Activități de organizare a expozițiilor, târgurilor și congreselor"
+824,grupa,82,O,Activități de intermediere pentru servicii suport pentru întreprinderi n.c.a.
+8240,clasa,82,O,Activități de intermediere pentru servicii suport pentru întreprinderi n.c.a.
+829,grupa,82,O,Activități de servicii suport pentru întreprinderi n.c.a.
+8291,clasa,82,O,Activități ale agențiilor de colectare și a birourilor (oficiilor) de raportare a creditului
+8292,clasa,82,O,Activități de ambalare
+8299,clasa,82,O,Alte activități de servicii suport pentru întreprinderi n.c.a.
+84,diviziune,,P,Administrație publică și apărare; asigurări sociale din sistemul public
+841,grupa,84,P,"Administrație publică generală, economică și socială"
+8411,clasa,84,P,Activități de administrație publică generală
+8412,clasa,84,P,"Reglementarea activităților organismelor care prestează servicii în domeniul îngrijirii sănătății, învățământului, culturii și al altor activități sociale, exceptând protecția socială"
+8413,clasa,84,P,Reglementarea și eficientizarea activităților economice
+842,grupa,84,P,Activități de servicii pentru societate
+8421,clasa,84,P,Activități de afaceri externe
+8422,clasa,84,P,Activități de apărare națională
+8423,clasa,84,P,Activități de justiție
+8424,clasa,84,P,Activități de ordine publică și de protecție civilă
+8425,clasa,84,P,Activități de luptă împotriva incendiilor și de prevenire a acestora
+843,grupa,84,P,Activități de protecție socială obligatorie
+8430,clasa,84,P,Activități de protecție socială obligatorie
+85,diviziune,,Q,Învățământ
+851,grupa,85,Q,Învățământ preșcolar
+8510,clasa,85,Q,Învățământ preșcolar
+852,grupa,85,Q,Învățământ primar
+8520,clasa,85,Q,Învățământ primar
+853,grupa,85,Q,Învățământ secundar
+8531,clasa,85,Q,Învățământ secundar general
+8532,clasa,85,Q,"Învățământ secundar, tehnic sau profesional"
+8533,clasa,85,Q,"Învățământ post-secundar, non-universitar"
+854,grupa,85,Q,Învățământ superior
+8540,clasa,85,Q,Învățământ superior universitar
+855,grupa,85,Q,Alte forme de învățământ
+8551,clasa,85,Q,Învățământ în domeniul sportiv și recreațional
+8552,clasa,85,Q,"Învățământ în domeniul cultural (muzică, teatru, dans, arte plastice, etc.)"
+8553,clasa,85,Q,Școli de conducere (pilotaj)
+8559,clasa,85,Q,Alte forme de învățământ n.c.a.
+856,grupa,85,Q,Activități de servicii suport pentru învățământ
+8561,clasa,85,Q,"Activități de intermediere pentru cursuri și tutori (îndrumători, profesori)"
+8569,clasa,85,Q,Activități de servicii suport pentru învățământ
+86,diviziune,,R,Activități referitoare la sănătatea umană
+861,grupa,86,R,Activități de asistență spitalicească
+8610,clasa,86,R,Activități de asistență spitalicească
+862,grupa,86,R,Activități de asistență medicală ambulatorie și stomatologică
+8621,clasa,86,R,Activități de asistență medicală generală
+8622,clasa,86,R,Activități de asistență medicală specializată
+8623,clasa,86,R,Activități de asistență stomatologică
+869,grupa,86,R,Alte activități referitoare la sănătatea umană
+8691,clasa,86,R,Servicii de diagnostic imagistic și activități ale laboratoarelor medicale
+8692,clasa,86,R,Transportul pacienților cu ambulanța
+8693,clasa,86,R,"Activități ale psihologilor și psihoterapeuților, cu excepția medicilor"
+8694,clasa,86,R,Activități ale infirmierelor și moașelor
+8695,clasa,86,R,Activități de fizioterapie
+8696,clasa,86,R,"Activități de medicină tradițională, complementară și alternativă"
+8697,clasa,86,R,"Servicii de intermediere pentru servicii medicale, stomatologice și pentru alte servicii referitoare la sănătatea umană"
+8699,clasa,86,R,Alte activități referitoare la sănătatea umană n.c.a.
+87,diviziune,,R,"Servicii combinate de îngrijire medicală și asistență socială, cu cazare"
+871,grupa,87,R,Activități ale centrelor de îngrijire medicală
+8710,clasa,87,R,Activități ale centrelor de îngrijire medicală
+872,grupa,87,R,"Activități ale centrelor de recuperare pshică și de dezintoxicare, exclusiv spitale"
+8720,clasa,87,R,"Activități ale centrelor de recuperare fizică și de dezintoxicare, exclusiv spitale"
+873,grupa,87,R,Activități ale căminelor de bătrâni și ale căminelor pentru persoane cu dizabilități aflate în incapacitate de a se îngriji singure
+8730,clasa,87,R,Activități ale căminelor de bătrâni și ale căminelor pentru persoane cu dizabilități aflate în incapacitate de a se îngriji singure
+879,grupa,87,R,"Alte activități de asistență socială, cu cazare"
+8791,clasa,87,R,Activități de intermediere pentru servicii de îngrijire la domiciliu
+8799,clasa,87,R,"Alte activități de asistență socială, cu cazare n.c.a."
+88,diviziune,,R,"Activități de asistență socială, fără cazare"
+881,grupa,88,R,"Activități de asistență socială, fără cazare, pentru bătrâni și pentru persoane cu dizabilități aflate în incapacitate de a se îngriji singure"
+8810,clasa,88,R,"Activități de asistență socială, fără cazare, pentru bătrâni și pentru persoane cu dizabilități aflate în incapacitate de a se îngriji singure"
+889,grupa,88,R,"Alte activități de asistență socială, fără cazare"
+8891,clasa,88,R,Activități de îngrijire zilnică pentru copii
+8899,clasa,88,R,"Alte activități de asistență socială, fără cazare, n.c.a."
+90,diviziune,,S,Activități de creație și interpretare artistică
+901,grupa,90,S,Activități de creație artistică
+9011,clasa,90,S,Activități de creație literară și compoziție muzicală
+9012,clasa,90,S,Activități de creație în domeniul artelor vizuale
+9013,clasa,90,S,Alte activități de creație artistică
+902,grupa,90,S,Activități de interpretare artistică (spectacole)
+9020,clasa,90,S,Activități de interpretare artistică (spectacole)
+903,grupa,90,S,Activități suport pentru creație și interpretare artistică
+9031,clasa,90,S,Activități de gestionare a sălilor și amplasamentelor de spectacole
+9039,clasa,90,S,Alte activități suport pentru creație și interpretare artistică
+91,diviziune,,S,"Activități ale bibliotecilor, arhivelor, muzeelor și alte activități culturale"
+911,grupa,91,S,Activități ale bibliotecilor și arhivelor
+9111,clasa,91,S,Activități ale bibliotecilor
+9112,clasa,91,S,Activități ale arhivelor
+912,grupa,91,S,"Activități ale muzeelor, colecțiilor, siturilor și monumentelor istorice"
+9121,clasa,91,S,Activități ale muzeelor și colecțiilor
+9122,clasa,91,S,Activități ale siturilor și monumentelor istorice
+913,grupa,91,S,"Activități de conservare, restaurare și alte activități suport pentru patrimoniul cultural"
+9130,clasa,91,S,"Activități de conservare, restaurare și alte activități suport pentru patrimoniul cultural"
+914,grupa,91,S,"Activități ale grădinilor botanice, zoologice și ale rezervațiilor naturale"
+9141,clasa,91,S,Activități ale grădinilor botanice și zoologice
+9142,clasa,91,S,Activități ale rezervațiilor naturale
+92,diviziune,,S,Activități de jocuri de noroc și pariuri
+920,grupa,92,S,Activități de jocuri de noroc și pariuri
+9200,clasa,92,S,Activități de jocuri de noroc și pariuri
+93,diviziune,,S,"Activități sportive, recreative și distractive"
+931,grupa,93,S,Activități sportive
+9311,clasa,93,S,Activități ale bazelor sportive
+9312,clasa,93,S,Activități ale cluburilor sportive
+9313,clasa,93,S,Activități ale centrelor de fitness
+9319,clasa,93,S,Alte activități sportive n.c.a
+932,grupa,93,S,Alte activități recreative și distractive
+9321,clasa,93,S,Activități ale parcurilor tematice și de distracții
+9329,clasa,93,S,Alte activități recreative și distractive n.c.a.
+94,diviziune,,T,Activități asociative diverse
+941,grupa,94,T,"Activități ale organizațiilor economice, patronale și profesionale"
+9411,clasa,94,T,Activități ale organizațiilor economice și patronale
+9412,clasa,94,T,Activități ale organizațiilor profesionale
+942,grupa,94,T,Activități ale sindicatelor salariaților
+9420,clasa,94,T,Activități ale sindicatelor salariaților
+949,grupa,94,T,Alte activități asociative
+9491,clasa,94,T,Activități ale organizațiilor religioase
+9492,clasa,94,T,Activități ale organizațiilor politice
+9499,clasa,94,T,Activități ale altor organizații n.c.a.
+95,diviziune,,T,"Repararea și întreținerea calculatoarelor, a articolelor personale și de uz gospodăresc, a autovehiculelor și motocicletelor"
+951,grupa,95,T,Repararea și întreținerea calculatoarelor și a echipamentelor de comunicații
+9510,clasa,95,T,Repararea și întreținerea calculatoarelor și a echipamentelor de comunicații
+952,grupa,95,T,Repararea și întreținerea articolelor personale și de uz gospodăresc
+9521,clasa,95,T,Repararea și întreținerea aparatelor electronice de uz casnic
+9522,clasa,95,T,Repararea și întreținerea dispozitivelor de uz gospodăresc și a echipamentelor pentru casă și grădină
+9523,clasa,95,T,Repararea și întreținerea încălțămintei și a articolelor din piele
+9524,clasa,95,T,Repararea și întreținerea mobilei și a furniturilor casnice
+9525,clasa,95,T,Repararea și întreținerea ceasurilor și a bijuteriilor
+9529,clasa,95,T,Repararea și întreținerea articolelor de uz personal și gospodăresc n.c.a.
+953,grupa,95,T,Repararea și întreținerea autovehiculelor și motocicletelor
+9531,clasa,95,T,Repararea și întreținerea autovehiculelor
+9532,clasa,95,T,Repararea și întreținerea motocicletelor
+954,grupa,95,T,"Servicii de intermediere pentru repararea și întreținerea calculatoarelor, a articolelor personale și de uz gospodăresc, a autovehiculelor și motocicletelor"
+9540,clasa,95,T,"Servicii de intermediere pentru repararea și întreținerea calculatoarelor, a articolelor personale și de uz gospodăresc, a autovehiculelor și motocicletelor"
+96,diviziune,,T,Alte activități de servicii
+961,grupa,96,T,Spălarea și curățarea articolelor textile și a produselor din blană
+9610,clasa,96,T,Spălarea și curățarea articolelor textile și a produselor din blană
+962,grupa,96,T,"Coafură, activități de înfrumusețare, tratamente spa și alte activități similare"
+9621,clasa,96,T,Activități de coafură și frizerie
+9622,clasa,96,T,Activități de tratament și înfrumusețare
+9623,clasa,96,T,"Activități ale centrelor spa, saunelor și băilor de abur"
+963,grupa,96,T,Activități de pompe funebre și similare
+9630,clasa,96,T,Activități de pompe funebre și similare
+964,grupa,96,T,Activități de intermediere pentru servicii personale
+9640,clasa,96,T,Activități de intermediere pentru servicii personale
+969,grupa,96,T,Alte servicii personale
+9691,clasa,96,T,Activități de servicii personale la domiciliu
+9699,clasa,96,T,Alte servicii personale n.c.a.
+97,diviziune,,U,Activități ale gospodăriilor private în calitate de angajator de personal casnic
+970,grupa,97,U,Activități ale gospodăriilor private în calitate de angajator de personal casnic
+9700,clasa,97,U,Activități ale gospodăriilor private în calitate de angajator de personal casnic
+98,diviziune,,U,Activități ale gospodăriilor private de producere de bunuri și servicii destinate consumului propriu
+981,grupa,98,U,Activități ale gospodăriilor private de producere de bunuri destinate consumului propriu
+9810,clasa,98,U,Activități ale gospodăriilor private de producere de bunuri destinate consumului propriu
+982,grupa,98,U,Activități ale gospodăriilor private de producere de servicii pentru scopuri proprii
+9820,clasa,98,U,Activități ale gospodăriilor private de producere de servicii pentru scopuri proprii
+99,diviziune,,V,Activități ale organizațiilor și organismelor extrateritoriale
+990,grupa,99,V,Activități ale organizațiilor și organismelor extrateritoriale
+9900,clasa,99,V,Activități ale organizațiilor și organismelor extrateritoriale

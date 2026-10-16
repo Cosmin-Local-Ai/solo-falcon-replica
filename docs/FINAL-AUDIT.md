@@ -32,16 +32,16 @@ Dependencies are minimal and standard: `react`, `react-dom`, `react-router-dom`
 |----------------|-------------------|-----------------------------------------------------|
 | `/dashboard`   | Panou de control  | —                                                   |
 | `/revenues`    | Venituri          | `inregistrata`, `in-asteptare`, `respinsa`          |
-| `/expenses`    | Cheltuieli        | `inregistrata`, `respinsa`                          |
+| `/expenses`    | Cheltuieli        | `inregistrata`, `in-procesare`, `respinsa`          |
 | `/efactura`    | e-Factura         | —                                                   |
 | `/declarations`| Declarații        | — (pending badge in nav)                            |
 | `/documents`   | Documente         | `Venituri`, `Cheltuieli`, `Raport`                  |
 | `/clients`     | Clienți           | —                                                   |
-| `/settings`    | Setări            | —                                                   |
+| `/settings`    | Setări            | `pfa`, `einvoice`, `bankaccounts`, `personal`      |
 
 **Hash aliases** (English → canonical) accepted in URLs:
 - `revenues`: `registered`→`inregistrata`, `pending`→`in-asteptare`, `rejected`→`respinsa`
-- `expenses`: `registered`→`inregistrata`, `rejected`→`respinsa`
+- `expenses`: `registered`→`inregistrata`, `queued`→`in-procesare`, `rejected`→`respinsa`
 
 Unknown pages fall back to `dashboard`; unknown tabs are dropped (page still renders).
 

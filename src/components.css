@@ -151,3 +151,116 @@
 .kv { display: grid; grid-template-columns: 180px 1fr; gap: 8px 16px; font-size: 13px; }
 .kv dt { color: var(--text-3); }
 .kv dd { margin: 0; color: var(--text); font-weight: 500; }
+
+/* ---------- TASK 8 — attention surfaces, styled from `severity` ----------
+ *
+ * Every rule here keys off `data-severity`, which the components set from `AttentionItem.severity` —
+ * the value the domain decided. Nothing in this file may key off `data-state`, `data-source`, a
+ * threshold `kind` or a distance: that would put the severity decision back into the presentation
+ * layer, which is the collapse TASK 8 removed. `data-state` / `data-source` are exposed for tests and
+ * for a reader inspecting the DOM, and are deliberately unstyled.
+ */
+.attention-row {
+  border-left: 3px solid transparent;
+  padding-left: 10px;
+}
+.attention-row[data-severity="high"]   { border-left-color: var(--danger-text); }
+.attention-row[data-severity="medium"] { border-left-color: var(--warning-text); }
+.attention-row[data-severity="low"]    { border-left-color: var(--primary); }
+
+.threshold-row[data-severity="high"]   { border-left: 3px solid var(--danger-text); padding-left: 10px; }
+.threshold-row[data-severity="medium"] { border-left: 3px solid var(--warning-text); padding-left: 10px; }
+.threshold-row[data-severity="low"]    { border-left: 3px solid var(--primary); padding-left: 10px; }
+
+.attention-controls { gap: 6px; align-items: center; }
+.attention-target {
+  font-size: 12.5px; font-weight: 600; color: var(--primary);
+  text-decoration: underline; text-underline-offset: 2px;
+}
+
+/* The three epistemic states of the estimate are three shapes, not one number with a footnote. */
+.estimate-state { letter-spacing: 0.01em; }
+[data-estimate-state="unavailable"] .tax-hero-value,
+.tax-hero-value[data-estimate-state="unavailable"] { color: var(--text-4); }
+.estimate-state-note[data-estimate-state="review_required"] { color: var(--warning-text); }
+.estimate-state-note[data-estimate-state="unavailable"] { color: var(--text-3); font-style: italic; }
+
+/* PG-1 — a state the old three covered up: a figure that is real but does not describe everything
+   recorded. It is warned, never greened. */
+.estimate-state-note[data-estimate-state="incomplete"] { color: var(--warning-text); }
+
+/* PG-1 — the coverage rows under the hero figure: one per reason group, each with its own link. */
+.estimate-coverage {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.estimate-coverage-title { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.estimate-coverage-row {
+  padding: 6px 0 0;
+  margin-top: 6px;
+  font-size: 13px;
+  border-top: 1px solid var(--border);
+  gap: 10px;
+}
+
+/* PG-1 — the weighted line in the completeness card, kept apart from the fact checks below it. */
+.amount-coverage {
+  padding: 6px 0 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* The record an attention target pointed at. */
+.row-focus { background: var(--warning-soft); box-shadow: inset 3px 0 0 var(--warning-text); }
+
+/* B-124 — the CAEN control: a list of up to five class pickers, each with a type-ahead.
+   The drawdown is absolutely positioned so adding a row never pushes the rest of the
+   Regim fiscal tab down the page while a person is mid-search. */
+.caen-list { display: flex; flex-direction: column; gap: 10px; }
+.caen-row { position: relative; display: flex; flex-direction: column; gap: 5px; }
+.caen-row-head { display: flex; align-items: center; gap: 8px; }
+.caen-row-head .input { flex: 1; }
+.caen-actions { display: flex; align-items: center; gap: 10px; }
+.caen-cap,
+.caen-provenance { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.caen-citation { color: var(--text-2); }
+.caen-options {
+  position: absolute;
+  z-index: 30;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.12);
+}
+.caen-option { padding: 7px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.caen-option-active { background: var(--primary-soft, #eef4ff); }
+.caen-option-header {
+  cursor: default;
+  font-weight: 600;
+  color: var(--text-2);
+  background: #f8fafc;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.caen-option-label { font-size: 13px; }
+.caen-option-lineage { font-size: 11.5px; color: var(--text-4); }
+.caen-empty { padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+
+.caen-card-list { display: flex; flex-direction: column; gap: 8px; }
+.caen-card-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}

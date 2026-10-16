@@ -1,31 +1,115 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ENTRY_CURRENCIES, formatBaniRON, formatMoney, moneyInputValue, parseMoneyInput, type CurrencyCode } from '../domain/money';
 import { useStore } from '../data/store';
-import { fmtRON, fmtDate, total, EXP_STATUS_LABEL, statusBadge } from '../data/types';
+import { fmtDate, sumTotalsByCurrency, total, statusBadge } from '../data/types';
 import type { Expense } from '../data/types';
+import { EXPENSE_CATEGORIES } from '../domain/fiscal/deductibility';
+import { selectDeductibleExpenses, selectEstimateOperands, coverageReasonForExclusion, type CoverageReason, type MeasurePair } from '../domain/estimateBasis';
+// PG-6f (B-30) — the money measure the engine ran on is decided by the declared VAT registration state.
+// The page reads the same predicate the engine reads, so the label beside a ceiling and the figure inside
+// it cannot disagree about which measure was chosen.
+import { registrationChargesVat } from '../domain/fiscal/vat';
+import { expenseFiscalDate, expenseDeclaredUnpaid, type FiscalDateField } from '../domain/aggregation';
+import { selectRuleSet } from '../domain/fiscal';
+import type { FiscalRule } from '../domain/fiscal/rules';
+import { isoCalendarDateProblem, isoCalendarDateProblemText, localDateISO, now } from '../domain/date';
 import { Card, Badge, Modal, Empty, Pagination } from '../components/ui';
+import { Disclosure } from '../components/ui/Disclosure';
+import { FiscalDateNote } from '../components/ui/FiscalDateNote';
+import { InterpretationNote } from '../components/ui/InterpretationNote';
+import { ProvisionalCeilingNote } from '../components/ui/ProvisionalCeilingNote';
+import { copy, empty, expenseCategoryLabels, expenses as expensesCopy, fields, moneyDate, recordStatus, validation, vehicles as vehiclesCopy, assets as assetsCopy } from '../ui/copy';
+import type { Vehicle } from '../data/types';
 
+/**
+ * TASK 6: the rules in force for the profile's fiscal year, selected rather than imported.
+ *
+ * This page used to import `PFA_2026_SYSTEM_REAL_PACKAGE` by name — the clearest example of the defect,
+ * because the call site had no year and no date in scope at all, so it could only ever ask for 2026. The
+ * year is now read from the profile the store already holds.
+ */
+function activeRulesFor(fiscalYear: number, asOfDate: string): FiscalRule[] {
+  const selection = selectRuleSet(fiscalYear, asOfDate);
+  return selection ? [...selection.rules] : [];
+}
+
+// Canonical route hash keys (English) mapped to the Romanian data statuses.
 const TABS = [
-  { key: 'inregistrata', label: 'Înregistrate' },
-  { key: 'respinsa', label: 'Respinse' },
+  { key: 'registered', label: recordStatus.tabs.inregistrata, status: 'inregistrata' },
+  { key: 'rejected', label: recordStatus.tabs.respinsa, status: 'respinsa' },
 ] as const;
+
+const statusFor = (tab: (typeof TABS)[number]['key']) =>
+  TABS.find(t => t.key === tab)!.status;
 
 const PAGE_SIZE = 8;
 
-function ExpenseForm({ initial, onSave, onClose }: {
+/**
+ * PG-1 — the per-record half of the estimate's coverage.
+ *
+ * The hero says how many records sit outside the figure; the register has to say WHICH, on the record
+ * itself, because a table row is where the person can actually do something about it. The reason comes
+ * from the same `ExcludedReason` the banner above counts — projected through `coverageReasonForExclusion`
+ * and labelled with the shared coverage label — so a row and a hero row can never name different causes
+ * for the same record.
+ */
+function OutOfEstimateNote({ reason }: { reason: CoverageReason | undefined }) {
+  if (reason === undefined) return null;
+  return (
+    <div className="text-sm muted" data-not-in-estimate style={{ marginTop: 3 }}>
+      {recordStatus.notInEstimate}: {copy.dashboard.estimate.coverage.reasonLabels[reason]}
+    </div>
+  );
+}
+
+function ExpenseForm({ initial, vehicles, fixedAssets, onSave, onClose }: {
   initial?: Expense;
+  /** PG-6c (D-VEH-3): the cars this register declares. Empty list => no control at all. */
+  vehicles: Vehicle[];
+  /** B-108: the assets this register declares. Empty list => no control at all. */
+  fixedAssets: { id: string; label: string }[];
   onSave: (e: Omit<Expense, 'id'>) => void;
   onClose: () => void;
 }) {
   const [f, setF] = useState({
     tip: initial?.tip ?? 'factura',
     nr: initial?.nr ?? '',
-    date: initial?.date ?? new Date().toISOString().slice(0, 10),
+    // PG-2 (B-46): see the same fix in `Revenues.tsx` — the UTC calendar day used to seed this field, so a
+    // record created in the first two hours of a Bucharest new year was born in the year before it.
+    date: initial?.date ?? localDateISO(),
+    // PG-2: the payment date, optional and stored as an absent field when empty. CF art. 68 alin. (4) lit. b)
+    // admits a cheltuială „al anului în cursul căruia au fost plătite”, so this is the date the deduction
+    // turns on; an unpaid expense is not deductible in the document year, and nothing here invents one.
+    paid: initial?.paid ?? '',
+    // B-159 — the declared non-payment. Before this the app had no state for „the money has not gone
+    // out”: an unpaid expense could only be `inregistrata` with an empty `paid`, and the engine deducted
+    // it in the document's year while the copy promised the opposite. `paid === null` is the state;
+    // an empty input alone stays the legacy single-date case.
+    notPaid: initial?.paid === null,
     furnizor: initial?.furnizor ?? '',
     cui: initial?.cui ?? '',
-    valoare: initial ? String(initial.valoareFaraTva) : '',
-    tva: initial ? String(initial.tva) : '',
+    // `moneyInputValue`, not `String(...)`: stored money is integer minor units; an input is a screen.
+    valoare: initial ? moneyInputValue(initial.valoareFaraTva) : '',
+    tva: initial ? moneyInputValue(initial.tva) : '',
+    // TASK 10a: the currency belongs to the amount. Defaults to RON — what every existing record has.
+    currency: (initial?.valoareFaraTva.currency ?? 'RON') as CurrencyCode,
     status: initial?.status ?? 'inregistrata',
     statusDetail: initial?.statusDetail ?? '',
+    // TASK 2b: '' means "no category", which is a legal state, not a half-filled field. It is stored as
+    // an ABSENT field, never as null — a null would fail the load gate on the next read and quarantine
+    // the payload. The option labels are the rule-set tokens on purpose: the Romanian wording of a
+    // legal category belongs to the language layer (TASK 7), and inventing 35 legal labels here would
+    // put unverified copy in front of a tax decision.
+    category: initial?.category ?? '',
+    // PG-6c: '' means "attributed to no vehicle", which is a real state, not a half-filled field. It is
+    // stored as an ABSENT field, never as null. Nothing here guesses the car from the supplier, from the
+    // category token or from anything else — the link is written only by the person.
+    vehicleId: initial?.vehicleId ?? '',
+    // B-108: '' means "linked to no fixed asset", which is a real state, not a half-filled field, and it is
+    // stored as an ABSENT field, never as null. Nothing here guesses the asset from the amount, the date,
+    // the supplier or the category token — art. 68 alin. (4) lit. d) connects the two routes to the same
+    // cost and gives no rule for attributing one to the other. The link is written only by the person.
+    assetId: initial?.assetId ?? '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -33,79 +117,166 @@ function ExpenseForm({ initial, onSave, onClose }: {
 
   const submit = () => {
     const e: Record<string, string> = {};
-    if (!f.nr.trim()) e.nr = 'Numărul documentului este obligatoriu';
-    if (!f.date) e.date = 'Data este obligatorie';
-    if (!f.furnizor.trim()) e.furnizor = 'Furnizorul este obligatoriu';
-    const v = parseFloat(f.valoare.replace(',', '.'));
-    const t = parseFloat(f.tva.replace(',', '.'));
-    if (!isFinite(v) || v < 0) e.valoare = 'Introduceți o valoare validă';
-    if (!isFinite(t) || t < 0) e.tva = 'Introduceți un TVA valid';
+    if (!f.nr.trim()) e.nr = validation.documentNumberRequired;
+    if (!f.date) e.date = validation.dateRequired;
+    const paidProblem = f.paid === '' ? null : isoCalendarDateProblem(f.paid);
+    if (paidProblem !== null) e.paid = isoCalendarDateProblemText(paidProblem);
+    if (!f.furnizor.trim()) e.furnizor = validation.providerRequired;
+    // Phase 10: form in major units, storage in minor units; `parseMoneyInput` refuses sub-minor-unit
+    // precision rather than rounding. TASK 10a: it parses in the currency the form is set to.
+    const v = parseMoneyInput(f.valoare, f.currency);
+    const t = parseMoneyInput(f.tva, f.currency);
+    if (v === null || v.amount < 0) e.valoare = validation.amountInvalid;
+    if (t === null || t.amount < 0) e.tva = validation.vatInvalid;
     setErrors(e);
     if (Object.keys(e).length) return;
+    if (v === null || t === null) return; // unreachable; narrows without a cast
     onSave({
       tip: f.tip as Expense['tip'], nr: f.nr, date: f.date, furnizor: f.furnizor, cui: f.cui,
+      paid: f.notPaid ? null : f.paid === '' ? undefined : f.paid,
       valoareFaraTva: v, tva: t, status: f.status as Expense['status'],
       statusDetail: f.statusDetail || undefined,
+      category: f.category === '' ? undefined : (f.category as Expense['category']),
+      vehicleId: f.vehicleId === '' ? undefined : f.vehicleId,
+      assetId: f.assetId === '' ? undefined : f.assetId,
     });
   };
 
   return (
     <Modal
-      title={initial ? `Editează ${initial.nr}` : 'Adaugă cheltuială'}
+      title={initial ? expensesCopy.editTitle(initial.nr) : expensesCopy.addTitle}
       onClose={onClose}
       footer={<>
-        <button className="btn btn-ghost" onClick={onClose}>Anulează</button>
-        <button className="btn btn-primary" onClick={submit}>{initial ? 'Salvează' : 'Adaugă'}</button>
+        <button className="btn btn-ghost" onClick={onClose}>{copy.ui.cancel}</button>
+        <button className="btn btn-primary" onClick={submit}>{initial ? copy.ui.save : copy.ui.add}</button>
       </>}
     >
       <div className="form-grid">
         <div className="field">
-          <label>Tip document <span className="req">*</span></label>
+          <label>{fields.documentType} <span className="req">*</span></label>
           <select value={f.tip} onChange={e => set('tip', e.target.value)}>
-            <option value="factura">Factură</option>
-            <option value="bon-fiscal">Bon fiscal</option>
+            <option value="factura">{expensesCopy.documentTypes.factura}</option>
+            <option value="bon-fiscal">{expensesCopy.documentTypes.bon}</option>
           </select>
         </div>
         <div className="field">
-          <label>Număr document <span className="req">*</span></label>
-          <input className={errors.nr ? 'invalid' : ''} value={f.nr} onChange={e => set('nr', e.target.value)} placeholder="FCT-09-112043" />
+          <label>{fields.documentNumber} <span className="req">*</span></label>
+          <input className={errors.nr ? 'invalid' : ''} value={f.nr} onChange={e => set('nr', e.target.value)} placeholder={expensesCopy.documentNumberPlaceholder} />
           {errors.nr && <span className="error">{errors.nr}</span>}
         </div>
         <div className="field">
-          <label>Data <span className="req">*</span></label>
+          <label>{fields.date} <span className="req">*</span></label>
           <input type="date" className={errors.date ? 'invalid' : ''} value={f.date} onChange={e => set('date', e.target.value)} />
           {errors.date && <span className="error">{errors.date}</span>}
         </div>
+        {/* PG-2 — the payment date. Optional, and the two sentences under it are the ones research/37 §5
+            cleared: completing it moves the sum to the year the money moved, and leaving it empty is a
+            legal state (no payment, no deduction), not an unfinished field. */}
         <div className="field">
-          <label>Furnizor <span className="req">*</span></label>
-          <input className={errors.furnizor ? 'invalid' : ''} value={f.furnizor} onChange={e => set('furnizor', e.target.value)} placeholder="SC … SA" />
+          <label>{moneyDate.expenseField} <span className="muted">{moneyDate.optionalTag}</span></label>
+          <input
+            type="date"
+            name="expense-paid"
+            className={errors.paid ? 'invalid' : ''}
+            value={f.paid}
+            disabled={f.notPaid}
+            onChange={e => set('paid', e.target.value)}
+          />
+          {errors.paid && <span className="error">{errors.paid}</span>}
+          {/* B-159 — the control the sentence under it has been describing since PG-2. */}
+          <label className="text-sm" style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
+            <input
+              type="checkbox"
+              name="expense-not-paid"
+              checked={f.notPaid}
+              onChange={e => setF(p => ({
+                ...p,
+                notPaid: e.target.checked,
+                paid: e.target.checked ? '' : p.paid,
+              }))}
+            />
+            {moneyDate.notPaid}
+          </label>
+          <span className="text-sm muted">{moneyDate.expenseHint}</span>
+          <span className="text-sm muted">{moneyDate.expenseEmpty}</span>
+          <span className="text-sm muted" data-money-date-effect="expense">{moneyDate.expenseEmptyEffect}</span>
+          {/* 12C (B-38) — the fallback named as a default, on the field that decides it. */}
+          <span className="text-sm muted" data-money-date-default="expense">{moneyDate.fallbackDefault}</span>
+        </div>
+        <div className="field">
+          <label>{expensesCopy.columns.provider} <span className="req">*</span></label>
+          <input className={errors.furnizor ? 'invalid' : ''} value={f.furnizor} onChange={e => set('furnizor', e.target.value)} placeholder={expensesCopy.providerPlaceholder} />
           {errors.furnizor && <span className="error">{errors.furnizor}</span>}
         </div>
         <div className="field">
-          <label>CUI</label>
-          <input value={f.cui} onChange={e => set('cui', e.target.value)} placeholder="RO…" />
+          <label>{fields.cui}</label>
+          <input value={f.cui} onChange={e => set('cui', e.target.value)} placeholder={fields.cuiPlaceholder} />
         </div>
         <div className="field">
-          <label>Valoare fără TVA (RON) <span className="req">*</span></label>
-          <input className={errors.valoare ? 'invalid' : ''} value={f.valoare} onChange={e => set('valoare', e.target.value)} placeholder="0,00" />
+          <label>{fields.currency} <span className="req">*</span></label>
+          <select value={f.currency} onChange={e => set('currency', e.target.value)}>
+            {ENTRY_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>{fields.amountWithoutVat} <span className="req">*</span></label>
+          <input className={errors.valoare ? 'invalid' : ''} value={f.valoare} onChange={e => set('valoare', e.target.value)} placeholder={fields.amountPlaceholder} />
           {errors.valoare && <span className="error">{errors.valoare}</span>}
         </div>
         <div className="field">
-          <label>TVA (RON) <span className="req">*</span></label>
-          <input className={errors.tva ? 'invalid' : ''} value={f.tva} onChange={e => set('tva', e.target.value)} placeholder="0,00" />
+          <label>{fields.vatAmount} <span className="req">*</span></label>
+          <input className={errors.tva ? 'invalid' : ''} value={f.tva} onChange={e => set('tva', e.target.value)} placeholder={fields.amountPlaceholder} />
           {errors.tva && <span className="error">{errors.tva}</span>}
         </div>
         <div className="field">
-          <label>Status</label>
+          <label>{fields.status}</label>
           <select value={f.status} onChange={e => set('status', e.target.value)}>
-            <option value="inregistrata">Înregistrată</option>
-            <option value="respinsa">Respinsă</option>
+            <option value="inregistrata">{recordStatus.labels.inregistrata}</option>
+            <option value="respinsa">{recordStatus.labels.respinsa}</option>
           </select>
         </div>
+        <div className="field">
+          <label>{expensesCopy.deductibilityLabel}</label>
+          <select value={f.category} onChange={e => set('category', e.target.value)}>
+            <option value="">{expensesCopy.deductibilityNone}</option>
+            {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{expenseCategoryLabels[c]}</option>)}
+          </select>
+          <span className="text-sm muted">{expensesCopy.deductibilityNoneHint}</span>
+        </div>
+        {/* PG-6c (D-VEH-3) — which car this running cost belongs to. The control appears only once the
+            register declares at least one vehicle: with no cars declared there is nothing to attribute
+            the cost to, and the expense keeps art. 68 alin. (7) lit. k)'s statutory 50 % default. Once a
+            car exists, an unattributed vehicle cost is refused rather than classified by another car's
+            facts, and this is the only place that link can be written. */}
+        {vehicles.length > 0 && (
+          <div className="field">
+            <label>{vehiclesCopy.expense.field}</label>
+            <select data-vehicle-select value={f.vehicleId} onChange={e => set('vehicleId', e.target.value)}>
+              <option value="">{vehiclesCopy.expense.none}</option>
+              {vehicles.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+            </select>
+            <span className="text-sm muted">{vehiclesCopy.expense.hint}</span>
+          </div>
+        )}
+        {/* B-108 — which fixed asset a hand-recorded cost belongs to. The control appears only once the
+            register declares at least one asset: with no assets declared there is nothing to link to, and
+            the depreciation conflict stays register-wide by fact rather than by choice. Once an asset
+            exists, this is the only place that link can be written — the chain step that opened the field
+            attributed nothing, and matching by amount, date or supplier stays the rejected inference. */}
+        {fixedAssets.length > 0 && (
+          <div className="field">
+            <label>{assetsCopy.expense.field}</label>
+            <select data-asset-select value={f.assetId} onChange={e => set('assetId', e.target.value)}>
+              <option value="">{assetsCopy.expense.none}</option>
+              {fixedAssets.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
+            </select>
+            <span className="text-sm muted">{assetsCopy.expense.hint}</span>
+          </div>
+        )}
         {f.status !== 'inregistrata' && (
           <div className="field full">
-            <label>Detaliu status</label>
-            <input value={f.statusDetail} onChange={e => set('statusDetail', e.target.value)} placeholder="motivul respingerii…" />
+            <label>{fields.statusDetail}</label>
+            <input value={f.statusDetail} onChange={e => set('statusDetail', e.target.value)} placeholder={fields.statusDetailPlaceholder} />
           </div>
         )}
       </div>
@@ -116,12 +287,15 @@ function ExpenseForm({ initial, onSave, onClose }: {
 interface ExpensesProps {
   initialTab?: (typeof TABS)[number]['key'];
   onTabChange?: (tab: (typeof TABS)[number]['key']) => void;
+  /** TASK 8 — the record an attention item pointed at; see `Revenues.tsx focusRecord`. */
+  focusRecord?: string;
 }
 
-export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
-  const { expenses, addExpense, updateExpense, deleteExpense, toast } = useStore();
+export default function Expenses({ initialTab, onTabChange, focusRecord }: ExpensesProps) {
+  const store = useStore();
+  const { expenses, addExpense, updateExpense, deleteExpense, vehicles, fixedAssets, toast } = store;
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>(
-    initialTab && TABS.some(t => t.key === initialTab) ? initialTab : 'inregistrata'
+    initialTab && TABS.some(t => t.key === initialTab) ? initialTab : 'registered'
   );
 
   // Sync tab when the URL changes (back/forward navigation).
@@ -138,33 +312,280 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
 
   const rows = useMemo(() =>
     expenses
-      .filter(e => e.status === tab)
+      .filter(e => e.status === statusFor(tab))
       .filter(e => !search || (e.nr + e.furnizor).toLowerCase().includes(search.toLowerCase()))
       .sort((a, b) => b.date.localeCompare(a.date)),
   [expenses, tab, search]);
 
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const counts = (k: string) => expenses.filter(e => e.status === k).length;
-  const sum = rows.reduce((s, e) => s + total(e), 0);
+  const counts = (k: (typeof TABS)[number]['key']) =>
+    expenses.filter(e => e.status === statusFor(k)).length;
+  const sums = sumTotalsByCurrency(rows);
+
+  // TASK 8: land the focused record on screen, whatever page of the register it sits on.
+  const focusIndex = focusRecord ? rows.findIndex(e => e.id === focusRecord) : -1;
+  useEffect(() => {
+    if (focusIndex >= 0) setPage(Math.floor(focusIndex / PAGE_SIZE) + 1);
+  }, [focusIndex]);
+
+  // TASK 2b — the residue the law cannot decide, counted where it can be acted on.
+  // This is the SAME selector the tax estimate runs (`estimateBasis.ts selectDeductibleExpenses`), so
+  // the number on this screen and the total the engine used cannot disagree: same status/period filter,
+  // same classification. A count built from `expenses.filter(e => !e.category)` would have been a
+  // different population — out-of-period and rejected records included.
+  const classification = useMemo(() => {
+    const asOf = localDateISO(now());
+    return selectDeductibleExpenses(store, asOf, activeRulesFor(store.profile.fiscalYear, asOf));
+  }, [store]);
+  const unclassifiedIds = classification.excluded
+    .filter(x => x.reason === 'undetermined')
+    .map(x => x.id);
+  const firstUnclassified = expenses.find(e => unclassifiedIds.includes(e.id));
+  // TASK 2c — a cap the app cannot measure is NOT a silent drop. The rule settled the ceiling; what is
+  // missing is a datum (a BNR rate, a payroll) or a primary text that picks a side. The expense stays out
+  // of the deductible total and the reason says which, in the words the rule itself carries.
+  const capBlocked = classification.excluded.filter(x => x.reason === 'cap_unresolved');
+  // TASK 10a (B-32): records the assembler kept out because they are not written in lei. Named here so the
+  // register says what left the deductible base — the same selector the estimate runs, so the count on this
+  // screen and the total the engine used cannot disagree.
+  const foreignBlocked = classification.excluded.filter(x => x.reason === 'foreign_currency');
+  // PG-6c — a vehicle cost the app could not decide is NOT a settled exclusion. Two situations put one
+  // here: the cost names no declared car, or the car is inside art. 68 alin. (5) lit. j) and the one-car
+  // allowance is not settled for it. In the second case the assembler's own detail carries BOTH readings of
+  // what happens to a second taxpayer-used car, and they are shown here verbatim — hiding the reading that
+  // was not applied would present an unresolved question as settled law (D-VEH-2).
+  const vehicleUnresolved = classification.excluded.filter(
+    x => x.reason === 'undetermined' && x.category === 'vehicle_related',
+  );
+  // PG-1 — the same exclusion list, keyed by record, for the row note. One list, three surfaces (hero
+  // count, banner, row), no second walk of the register.
+  const excludedReasonById = useMemo(() => {
+    const map = new Map<string, CoverageReason>();
+    for (const x of classification.excluded) map.set(x.id, coverageReasonForExclusion(x));
+    return map;
+  }, [classification]);
+  // PG-6c: the car behind an attributed cost, for the row note. Read off the declared collection; nothing
+  // here infers a vehicle for a cost that has none.
+  const vehicleLabelById = useMemo(
+    () => new Map(vehicles.map(v => [v.id, v.label])),
+    [vehicles],
+  );
+  // B-108 — the same discipline one register over: an id is not a name, and a link the person made has to
+  // come back to them as the asset they chose. Nothing here infers an asset for a cost that has none.
+  const assetLabelById = useMemo(
+    () => new Map(fixedAssets.map(a => [a.id, a.label])),
+    [fixedAssets],
+  );
+
+  // TASK 2d — a ceiling that WAS struck must be explained, not just applied. These are the numbers the
+  // estimate itself produced: the SAME assembler the tax engine runs (`selectEstimateOperands`), so the
+  // ceiling shown here and the deductible total the engine used cannot disagree. The alin. (6) letters
+  // carry both readings of the base because the law settles neither (research 22 §6) — hiding the one
+  // that was not applied would present an unresolved reading as settled law.
+  const capStruck = useMemo(() => {
+    const asOf = localDateISO(now());
+    return selectEstimateOperands(store, asOf, activeRulesFor(store.profile.fiscalYear, asOf)).capAdjustments;
+  }, [store]);
+  const alin6Struck = capStruck.filter(a => a.base !== undefined && a.ceilingAlt !== undefined);
+  // TASK 10b — a ceiling the law states in euro. It exists as a lei number only through a conversion, so
+  // the banner names the rate, the year it is anchored to and whether that rate is provisional, and shows
+  // the competing art. 9 ceiling beside the applied one. The conflict itself is the rule's own text, not a
+  // sentence written here.
+  const euroStruck = capStruck.filter(a => a.euro !== undefined);
+  // B-137 (D-FX-6) — the rates behind those ceilings that are provisional, i.e. a person recorded an annual
+  // average for a year BNR has not closed yet. The five-point note is keyed to these, because the note is an
+  // explanation of a stand-in figure and has no business appearing beside a published one.
+  const euroProvisional = euroStruck
+    .map(a => ({ year: a.euro!.paymentYear, rate: a.euro!.applied }))
+    .filter(x => x.rate.provisional);
+  // TASK 10b — ledger records that entered the lei base only because a recorded rate converted them.
+  const converted = classification.conversions;
+  // PG-6f (B-30) — the engine picks the money measure from the **declared VAT registration state**, not
+  // from the retired `vatExempt` boolean, and the page shows the one that actually moved the deductible
+  // total. When the state is undeclared the app does not silently adopt a measure: the index still has to
+  // name the number that is on screen, so the label says plainly that the choice is not established and
+  // which of the two figures is the one being displayed.
+  const registration = store.profile.vatRegistration;
+  const chargesVat = registration !== undefined && registrationChargesVat(registration.status);
+  const measure: keyof MeasurePair = registration === undefined ? 'exclVat' : chargesVat ? 'exclVat' : 'inclVat';
+  const measureLabel =
+    registration === undefined
+      ? expensesCopy.measureUndeclared
+      : chargesVat
+        ? expensesCopy.measureWithoutVat
+        : expensesCopy.measureWithVat;
 
   return (
     <div>
       <div className="page-header">
         <div>
-          <h1>Cheltuieli</h1>
-          <div className="sub">Facturi și bonuri fiscale primite de la furnizori.</div>
+          <h1>{expensesCopy.title}</h1>
+          <div className="sub">{expensesCopy.subtitle}</div>
         </div>
         <div className="actions">
           <input
-            placeholder="Caută după nr. sau furnizor…"
+            placeholder={expensesCopy.searchPlaceholder}
             style={{ border: '1px solid var(--border-strong)', borderRadius: 6, padding: '7px 10px', fontSize: 13, width: 220 }}
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
           />
-          <button className="btn btn-primary" onClick={() => setEditing('new')}>+ Adaugă cheltuială</button>
+          <button className="btn btn-primary" onClick={() => setEditing('new')}>+ {expensesCopy.add}</button>
         </div>
       </div>
+
+      {unclassifiedIds.length > 0 && (
+        <div className="banner banner-warn" role="status">
+          <strong>{unclassifiedIds.length}</strong>
+          {' '}{expensesCopy.unclassifiedLead(unclassifiedIds.length)} {expensesCopy.unclassifiedTail}
+          {firstUnclassified && (
+            <button
+              className="btn btn-sm"
+              style={{ marginLeft: 10 }}
+              onClick={() => setEditing(firstUnclassified)}
+            >
+              {expensesCopy.classify}
+            </button>
+          )}
+        </div>
+      )}
+
+      {alin6Struck.length > 0 && (
+        <div className="banner banner-warn" role="status">
+          <strong>{expensesCopy.capTitle}</strong>{' '}
+          — {alin6Struck.length === 1 ? expensesCopy.capHasOne : expensesCopy.capHasMany(alin6Struck.length)}{' '}
+          {expensesCopy.capAppliedReading}
+          {/* TASK 7: the unresolved reading is stated once, by the reusable Notă de interpretare, and the
+              full explanation of both readings sits behind „Surse și note de interpretare". Both figures
+              stay on screen — hiding the reading that was not applied would present an unresolved reading
+              as settled law. */}
+          <InterpretationNote note={copy.notes.capReading} />
+          {alin6Struck.map(a => (
+            <div className="text-sm" key={a.ruleId} style={{ marginTop: 6 }}>
+              <div>
+                <strong>{expenseCategoryLabels[a.category]}</strong>
+                {expensesCopy.capCitation(a.sourceArticle, a.cap.percent)}
+              </div>
+              <div>
+                {expensesCopy.capAppliedLead(measureLabel)}{' '}
+                <strong>{formatBaniRON(a.ceiling[measure])}</strong>
+                {' '}{expensesCopy.capAlternativeLead}{' '}
+                <strong>{formatBaniRON(a.ceilingAlt![measure])}</strong>
+              </div>
+            </div>
+          ))}
+          <Disclosure label={copy.disclosure.sources}>
+            <p className="hint">{copy.sources.capReadingChoice}</p>
+          </Disclosure>
+        </div>
+      )}
+
+      {euroStruck.length > 0 && (
+        <div className="banner banner-warn" role="status">
+          <strong>{expensesCopy.euroCapTitle}</strong>{' '}
+          — {euroStruck.length === 1 ? expensesCopy.capHasOne : expensesCopy.capHasMany(euroStruck.length)}{' '}
+          {expensesCopy.euroCapAppliedReading}
+          <InterpretationNote note={copy.notes.fxConversionConflict} />
+          {euroStruck.map(a => {
+            const euro = a.euro!;
+            return (
+              <div className="text-sm" key={a.ruleId} style={{ marginTop: 6 }}>
+                <div>
+                  <strong>{expenseCategoryLabels[a.category]}</strong>
+                  {expensesCopy.euroCapCitation(a.sourceArticle)}
+                  {' '}{formatMoney(euro.cap)}
+                </div>
+                <div>
+                  {expensesCopy.capAppliedLead(measureLabel)}{' '}
+                  <strong>{formatBaniRON(a.ceiling[measure])}</strong>
+                  {' '}{expensesCopy.euroCapRateLead}{' '}
+                  <strong>{euro.applied.rate}</strong>{' '}
+                  {expensesCopy.euroCapValidFor(euro.paymentYear)}
+                  {' '}· {euro.provisional ? copy.fx.provisionalBadge : copy.fx.finalBadge}
+                </div>
+                <div>
+                  {expensesCopy.euroCapAlternativeLead}{' '}
+                  {euro.alternative.ok ? (
+                    <strong>{formatBaniRON(euro.alternative.ceiling)}</strong>
+                  ) : (
+                    <span className="muted">{expensesCopy.euroCapAlternativeMissing} {euro.alternative.detail}</span>
+                  )}
+                </div>
+                {euro.provisional && <div className="muted">{expensesCopy.euroCapProvisionalTail}</div>}
+                <div className="muted">
+                  {expensesCopy.euroCapProvenance({
+                    series: euro.applied.seriesCode,
+                    how: copy.fx.entryModeLabels[euro.applied.entryMode],
+                    when: fmtDate(localDateISO(new Date(euro.applied.fetchedAt))),
+                    source: euro.applied.sourceUrl,
+                  })}
+                </div>
+                {euro.applied.carriedFrom !== undefined && (
+                  <div className="muted">{copy.fx.carriedFrom(euro.applied.carriedFrom)}</div>
+                )}
+              </div>
+            );
+          })}
+          <Disclosure label={copy.disclosure.sources}>
+            {euroStruck.map(a => (
+              <p className="hint" key={a.ruleId}>{a.conflict ?? ''}</p>
+            ))}
+          </Disclosure>
+          {euroProvisional.length > 0 && <ProvisionalCeilingNote figures={euroProvisional} />}
+        </div>
+      )}
+
+      {converted.length > 0 && (
+        <div className="banner banner-warn" role="status">
+          <strong>{converted.length}</strong>{' '}
+          {expensesCopy.fxConvertedLead(converted.length)}{' '}
+          {expensesCopy.fxConvertedTail}
+          {converted.map(c => (
+            <div className="text-sm" key={`${c.recordKind}-${c.recordId}`} style={{ marginTop: 6 }}>
+              {expensesCopy.fxConvertedRow(c.currency, c.onDate, c.rate)}
+              {' '}· {formatBaniRON(c.netLei)}
+              {c.carriedFrom !== undefined && <> {' '}{expensesCopy.fxConvertedCarried}</>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {foreignBlocked.length > 0 && (
+        <div className="banner banner-warn" role="status">
+          <strong>{foreignBlocked.length}</strong>{' '}
+          {expensesCopy.foreignCurrencyLead(foreignBlocked.length)}{' '}
+          {expensesCopy.foreignCurrencyTail}
+          <div className="text-sm muted" style={{ marginTop: 6 }}>{foreignBlocked[0].detail}</div>
+        </div>
+      )}
+
+      {vehicleUnresolved.length > 0 && (
+        <div className="banner banner-warn" role="status" data-vehicle-unresolved>
+          <strong>{vehicleUnresolved.length}</strong>{' '}
+          {vehicleUnresolved.length === 1 ? expensesCopy.capBlockedOne : expensesCopy.capBlockedMany(vehicleUnresolved.length)}{' '}
+          {vehiclesCopy.expense.bannerTitle}
+          <div className="text-sm muted" style={{ marginTop: 6 }}>{vehiclesCopy.expense.bannerTail}</div>
+          <div className="text-sm" style={{ marginTop: 6 }} data-vehicle-unresolved-detail>
+            {vehicleUnresolved[0].detail}
+          </div>
+        </div>
+      )}
+
+      {capBlocked.length > 0 && (
+        <div className="banner banner-warn" role="status">
+          <strong>{capBlocked.length}</strong>
+          {' '}{capBlocked.length === 1 ? expensesCopy.capBlockedOne : expensesCopy.capBlockedMany(capBlocked.length)}{' '}
+          {expensesCopy.capBlockedTail}
+          <InterpretationNote note={copy.notes.capUnmeasurable} />
+          <div className="text-sm muted" style={{ marginTop: 6 }}>{capBlocked[0].detail}</div>
+          <div className="text-sm" style={{ marginTop: 6 }} data-cap-blocked-fix>{expensesCopy.capBlockedFix}</div>
+          {capBlocked.length > 1 && (
+            <div className="text-sm muted">
+              {expensesCopy.capBlockedRest(capBlocked.length - 1)}
+            </div>
+          )}
+        </div>
+      )}
 
       <Card>
         <div style={{ padding: '0 18px' }}>
@@ -178,38 +599,75 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
         </div>
         {pageRows.length === 0 ? (
           <Empty
-            title="Nicio cheltuială în această categorie"
-            text={search ? 'Niciun rezultat pentru căutare.' : 'Adăugați prima cheltuială pentru a o vedea aici.'}
-            action={<button className="btn btn-primary" onClick={() => setEditing('new')}>+ Adaugă cheltuială</button>}
+            title={expensesCopy.emptyTitle}
+            text={search ? empty.noSearchResults : expensesCopy.emptyBody}
+            action={<button className="btn btn-primary" onClick={() => setEditing('new')}>+ {expensesCopy.add}</button>}
           />
         ) : (
           <>
             <table className="table">
               <thead>
                 <tr>
-                  <th>Document</th><th>Tip</th><th>Furnizor</th><th>CUI</th><th>Data</th>
-                  <th className="amount">Fără TVA</th><th className="amount">TVA</th><th className="amount">Total</th>
-                  <th>Status</th><th />
+                  <th>{expensesCopy.columns.document}</th><th>{expensesCopy.columns.type}</th><th>{expensesCopy.columns.provider}</th><th>{expensesCopy.columns.cui}</th><th>{expensesCopy.columns.date}</th><th>{expensesCopy.columns.currency}</th>
+                  <th className="amount">{expensesCopy.columns.withoutVat}</th><th className="amount">{expensesCopy.columns.vat}</th><th className="amount">{expensesCopy.columns.total}</th>
+                  <th>{expensesCopy.columns.status}</th><th />
                 </tr>
               </thead>
               <tbody>
                 {pageRows.map(e => (
-                  <tr key={e.id} className="clickable" onClick={() => setEditing(e)}>
+                  <tr
+                    key={e.id}
+                    data-record-id={e.id}
+                    className={`clickable${e.id === focusRecord ? ' row-focus' : ''}`}
+                    onClick={() => setEditing(e)}
+                  >
                     <td style={{ fontWeight: 500, color: 'var(--text)' }}>{e.nr}</td>
-                    <td>{e.tip === 'factura' ? 'Factură' : 'Bon fiscal'}</td>
+                    <td>{e.tip === 'factura' ? expensesCopy.documentTypeCell.factura : expensesCopy.documentTypeCell.bon}</td>
                     <td>{e.furnizor}</td>
                     <td className="muted">{e.cui}</td>
-                    <td>{fmtDate(e.date)}</td>
-                    <td className="amount">{fmtRON(e.valoareFaraTva)}</td>
-                    <td className="amount">{fmtRON(e.tva)}</td>
-                    <td className="amount">{fmtRON(total(e))}</td>
                     <td>
-                      <Badge kind={statusBadge(e.status)}>{EXP_STATUS_LABEL[e.status]}</Badge>
+                      {fmtDate(e.date)}
+                      {expenseDeclaredUnpaid(e) ? (
+                        <div className="text-sm muted" data-money-date="absent" style={{ marginTop: 3 }}>
+                          {moneyDate.noPayment}
+                        </div>
+                      ) : (
+                        <FiscalDateNote
+                          kind="expense"
+                          source={(e.paid !== undefined ? 'paid' : 'date') as FiscalDateField}
+                          fiscalDate={expenseFiscalDate(e)}
+                          documentDate={e.date}
+                        />
+                      )}
+                    </td>
+                    <td>{e.valoareFaraTva.currency}</td>
+                    <td className="amount">{formatMoney(e.valoareFaraTva)}</td>
+                    <td className="amount">{formatMoney(e.tva)}</td>
+                    <td className="amount">{formatMoney(total(e))}</td>
+                    <td>
+                      <Badge kind={statusBadge(e.status)}>{recordStatus.expenseLabels[e.status]}</Badge>
                       {e.statusDetail && <div className="text-sm muted" style={{ marginTop: 3 }}>{e.statusDetail}</div>}
+                      {/* PG-6c: the car the person attributed this cost to, when they attributed one. It is
+                          shown because the car's own facts — who uses it, how it is used, whether it is the
+                          designated one — are what decided the treatment of the amount. */}
+                      {e.vehicleId && vehicleLabelById.get(e.vehicleId) && (
+                        <div className="text-sm muted" data-expense-vehicle style={{ marginTop: 3 }}>
+                          {vehiclesCopy.expense.rowLabel}: {vehicleLabelById.get(e.vehicleId)}
+                        </div>
+                      )}
+                      {/* B-108: the asset the person linked this cost to, when they linked one. Shown for the
+                          same reason the car is shown — the link is what decided how wide the depreciation
+                          refusal reached, and a person cannot see that from an id. */}
+                      {e.assetId && assetLabelById.get(e.assetId) && (
+                        <div className="text-sm muted" data-expense-asset style={{ marginTop: 3 }}>
+                          {assetsCopy.expense.rowLabel}: {assetLabelById.get(e.assetId)}
+                        </div>
+                      )}
+                      <OutOfEstimateNote reason={excludedReasonById.get(e.id)} />
                     </td>
                     <td>
                       <div className="row-actions">
-                        <button className="btn btn-sm btn-ghost" onClick={ev => { ev.stopPropagation(); deleteExpense(e.id); toast('success', `${e.nr} a fost ștearsă`); }}>Șterge</button>
+                        <button className="btn btn-sm btn-ghost" onClick={ev => { ev.stopPropagation(); deleteExpense(e.id); toast('success', expensesCopy.deleted(e.nr)); }}>{copy.ui.remove}</button>
                       </div>
                     </td>
                   </tr>
@@ -217,8 +675,12 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'right' }} className="muted">Total: {rows.length} documente</td>
-                  <td className="amount" style={{ fontWeight: 600 }}>{fmtRON(sum)}</td>
+                  <td colSpan={8} style={{ textAlign: 'right' }} className="muted">{expensesCopy.totalDocuments(rows.length)}</td>
+                  {/* One subtotal per currency: a register holding lei and euro has two totals, and adding
+                      them would invent a figure in a unit neither record was written in. */}
+                  <td className="amount" style={{ fontWeight: 600 }}>
+                    {sums.map(s => <div key={s.currency}>{formatMoney(s)}</div>)}
+                  </td>
                   <td colSpan={2} />
                 </tr>
               </tfoot>
@@ -231,10 +693,12 @@ export default function Expenses({ initialTab, onTabChange }: ExpensesProps) {
       {editing && (
         <ExpenseForm
           initial={editing === 'new' ? undefined : editing}
+          vehicles={vehicles}
+          fixedAssets={fixedAssets}
           onClose={() => setEditing(null)}
           onSave={e => {
-            if (editing === 'new') { addExpense(e); toast('success', `Cheltuiala ${e.nr} a fost adăugată`); }
-            else { updateExpense({ ...e, id: editing.id }); toast('success', `Cheltuiala ${e.nr} a fost actualizată`); }
+            if (editing === 'new') { addExpense(e); toast('success', expensesCopy.added(e.nr)); }
+            else { updateExpense({ ...e, id: editing.id }); toast('success', expensesCopy.updated(e.nr)); }
             setEditing(null);
           }}
         />
