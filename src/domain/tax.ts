@@ -3,7 +3,7 @@
  * Consumes TaxInputsReference (derived.ts) + active rule release.
  * Domain purity: no React, DOM, localStorage, or store imports.
  */
-import type { CassLadderYear, ContributionCategories, FactState, PfaProfile } from './models';
+import type { CassLadderYear, ContributionCategories, FactState, FiscalLossSource, PfaProfile, PriorYearFiscalLoss } from './models';
 import { CASS_LADDER_CATEGORIES, CASS_LADDER_CATEGORY_HAS_CAS, cassLadderForYear, ladderAmountFor } from './models';
 import type { FiscalRule, RuleRelease } from './fiscal/rules';
 import type { DepreciationLeg } from './estimateBasis';
@@ -129,9 +129,13 @@ export interface TaxCalculationInput {
    * What it can no longer do is claim the figure is complete while the person's reported loss is nowhere —
    * the result now carries `lossCarryIn` saying what was given, what was used, and what expired.
    *
-   * **This is an in-memory input, not a persisted field.** D212 rd.5 asks for one total with no per-year
-   * column, so there is nothing to migrate and no ageing store to build; wiring it to a screen needs a
-   * persisted field and a migration step, which is a separate change and is reported rather than started.
+   * **B-145 closed the gap brief 70 reported rather than filled.** This used to be an in-memory input with
+   * no way for a person to reach it. It is now persisted on the profile as `PfaProfile.priorYearFiscalLosses`
+   * (chain step v24→v25) and collected on the Settings screen, and both estimate call sites thread it here.
+   * The per-year shape is kept because art. 118 alin. (4)-(5) cannot be applied to an aggregate: the 5-fiscal-
+   * year window, the per-source rule and the chronological order are all per-loss facts. What the app still
+   * cannot do is verify a declared split — D212 rd.5 asks for one total with no per-year column — and the
+   * screen says so.
    */
   priorYearLosses?: readonly PriorYearFiscalLoss[];
 }
@@ -147,41 +151,14 @@ export interface FiscalLossCarryForward {
 }
 
 /**
- * B-121 — the sources art. 118 alin. (4) names, in the article's own words: „pierderea fiscală anuală
- * înregistrată pe fiecare sursă din activități independente, din drepturi de proprietate intelectuală și din
- * activități agricole, silvicultură și piscicultură, determinată în sistem real”.
+ * B-121 / B-145 — the loss vocabulary now lives in `./models`, because the profile stores a value of it.
  *
- * The list is closed because the article is closed: a loss from any other source has no carry-forward route
- * in art. 118 alin. (4), and alin. (6) further excludes normă de venit agricultural income and any income
- * type where the tax is final.
+ * Re-exported here so every existing consumer of `FiscalLossSource` and `PriorYearFiscalLoss` from this
+ * module keeps compiling: the vocabulary is declared once and read by two layers, which is the standing
+ * reason in this repository (`B-70`) for not spelling a token space twice.
  */
-export type FiscalLossSource =
-  | 'activitate_independenta'
-  | 'drepturi_proprietate_intelectuala'
-  | 'activitati_agricole';
+export type { FiscalLossSource, PriorYearFiscalLoss } from './models';
 
-/**
- * B-121 — a fiscal loss reported in an EARLIER year, offered to the engine as an input.
- *
- * The engine has produced a `lossCarryForward` for the year being computed since Phase 5, but had no way to
- * be told about a loss from a year already filed. `tax.ts` therefore carried `pierderiReportate = lei(0)` as
- * a hardcoded constant and every later year's tax was overstated by the amount the person had already lost
- * and reported.
- *
- * `amount` is a positive magnitude, never a signed negative: every money row in this codebase is a magnitude
- * with its direction in the label, and D212 rd.5 validates „Doar valori pozitive”.
- *
- * `lossYear` is what makes art. 118 alin. (5) lit. a) — „reportul se efectuează cronologic, în funcție de
- * veşimea pierderii” — expressible at all. **It is an input, not a store**: the return itself asks for one
- * total on rd.5 with no per-year column, so nothing here persists an ageing schedule. A caller that only has
- * the form's aggregate can pass one entry with the oldest year it can stand behind.
- */
-export interface PriorYearFiscalLoss {
-  source: FiscalLossSource;
-  /** The fiscal year the loss was determined in — the year that produced rd.4 of that year's return. */
-  lossYear: number;
-  amount: Bani;
-}
 
 /** What the engine did with the losses it was given, reported rather than assumed away. */
 export interface FiscalLossCarryInReport {

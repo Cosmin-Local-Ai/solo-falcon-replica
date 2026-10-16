@@ -84,6 +84,11 @@ import {
 // regime a declared tenant puts the register in.
 import type { LeaseFactsYear, LeaseTenantNature } from '../domain/models';
 import { withLeaseFactsYear } from '../domain/models';
+// B-145 — the carried-in fiscal losses. Read and written through `domain/models.ts`, the one place the
+// vocabulary is declared, so the form, the persisted gate and the engine cannot hold three spellings of the
+// same three sources.
+import type { FiscalLossSource, PriorYearFiscalLoss } from '../domain/models';
+import { FISCAL_LOSS_SOURCE_VALUES } from '../domain/models';
 // PG-6d (D-OTH-1, D-OTH-2, B-41) — the six art. 155 alin. (1) lit. c)-h) amounts, read and written per
 // fiscal year. `withCassLadderYear` is used rather than a wholesale replace so editing 2026 cannot erase a
 // year the profile already holds for 2027.
@@ -187,6 +192,20 @@ function leaseFactsFromForm(
   );
   return answered ? year : undefined;
 }
+
+/**
+ * B-145 — one carried-in loss, as the form holds it. Every part is a string here and a fact only at save:
+ * an empty box must stay empty rather than arrive as year 0 or 0 lei, because both would be a declared loss
+ * the person never declared.
+ */
+type PriorLossRow = { source: FiscalLossSource | ''; lossYear: string; amountLei: string };
+
+const priorLossRows = (profile: PfaProfile): PriorLossRow[] =>
+  (profile.priorYearFiscalLosses ?? []).map((l) => ({
+    source: l.source,
+    lossYear: String(l.lossYear),
+    amountLei: leiInputValue(l.amount),
+  }));
 
 /**
  * B-97 (D-AIC-2) — the three consequences of answering „da”, computed rather than typed.
@@ -664,6 +683,9 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     leaseGuarantee: (leaseYearOf(profile)?.guaranteeAppliedToRent ?? '') as TriState,
     leaseContractDate: leaseYearOf(profile)?.contractDate ?? '',
     leaseRegistered: (leaseYearOf(profile)?.contractRegistered ?? '') as TriState,
+    // B-145 — the carried-in losses, read back row by row. An empty list is not "no losses": it is "nobody
+    // told the app", and the copy under the card says exactly that.
+    priorLosses: priorLossRows(profile),
     // PG-6d (D-OTH-1, B-41) — the six art. 155 alin. (1) lit. c)-h) amounts, read back for the fiscal year
     // the profile declares. Every one has a THIRD state: an empty box means "never answered", which is not
     // 0 lei and not "no income". The engine refuses to sum a partial answer set, so the form must be able
@@ -1006,6 +1028,32 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
     const ladderCassRetinut =
       fiscal.ladderCassRetinut.trim() === '' ? undefined : parseLeiInput(fiscal.ladderCassRetinut);
     if (ladderCassRetinut === null) e.ladderCassRetinut = validation.leiInvalid;
+    // B-145 — the carried-in losses. A row is a loss only when all three parts are there: art. 118 alin. (4)
+    // offsets „la nivelul fiecărei surse”, alin. (5) lit. a) orders „în funcție de veşimea pierderii” and
+    // alin. (4) gives a 5-an-fiscali window, so source, year and amount are each load-bearing and none may be
+    // defaulted. A row with nothing in it is an abandoned row, not a declared zero loss.
+    const priorLosses: PriorYearFiscalLoss[] = [];
+    for (const [i, row] of fiscal.priorLosses.entries()) {
+      if (row.source === '' && row.lossYear.trim() === '' && row.amountLei.trim() === '') continue;
+      let rowOk = row.source !== '';
+      if (!rowOk) e[`loss.${i}.source`] = validation.fiscalLossSourceRequired;
+      const lossYear = Number(row.lossYear.trim());
+      if (!Number.isInteger(lossYear) || lossYear < 2000 || lossYear > 2100) {
+        e[`loss.${i}.lossYear`] = validation.yearInvalid;
+        rowOk = false;
+      } else if (lossYear >= fy) {
+        e[`loss.${i}.lossYear`] = settingsCopy.fiscal.priorLossYearNotBeforeFiscalYear;
+        rowOk = false;
+      }
+      const amount = row.amountLei.trim() === '' ? null : parseLeiInput(row.amountLei);
+      if (amount === null || amount < 0) {
+        e[`loss.${i}.amountLei`] = validation.leiInvalid;
+        rowOk = false;
+      }
+      if (rowOk && row.source !== '' && amount !== null) {
+        priorLosses.push({ source: row.source, lossYear, amount });
+      }
+    }
     setErrors(e);
     if (Object.keys(e).length > 0) {
       toast('error', validation.checkForm);
@@ -1063,6 +1111,10 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
       // declared for 2027. An untouched section writes the year list back unchanged; a cleared one writes
       // absence, never a lease with an unstated tenant.
       leaseFactsYears: withLeaseFactsYear(profile.leaseFactsYears, leaseFactsFromForm(fy, fiscal)),
+      // B-145 — written whole, not merged per year: each row already carries its own loss year, so there is no
+      // "this fiscal year's entry" to merge into. An empty list writes absence, never an empty array standing
+      // in for "no losses" — the app was not told, which is a different statement from "there are none".
+      priorYearFiscalLosses: priorLosses.length > 0 ? priorLosses : undefined,
       // PG-6d — written per fiscal year, and only when the person actually declared something. An untouched
       // section writes the year list back unchanged; a cleared one writes absence, never six zeros.
       cassLadderYears: ladderYear
@@ -1851,6 +1903,108 @@ export default function Settings({ initialTab, onTabChange }: SettingsProps) {
                   <option value="nu">{copy.ui.answerNo}</option>
                 </select>
                 <span className="hint">{settingsCopy.fiscal.leaseRegisteredHint}</span>
+              </div>
+
+              {/* B-145 — the carried-in fiscal losses. The engine has applied art. 118 alin. (4)-(5) since
+                  brief 70 and had no way to be told about the loss: `pierderiReportate` was hardcoded zero,
+                  so every later year's tax was overstated by a loss the person had already declared.
+                  Per source and per loss year, because the window, the offset and the chronological order are
+                  all per-loss facts. And the limit the copy states rather than hides: formularul 212 rd.5 asks
+                  for one total with no per-year column, so the app can age a declared split but cannot verify
+                  it. */}
+              <div className="field" data-prior-losses>
+                <label htmlFor="set-prior-losses">{settingsCopy.fiscal.priorLossesSection}</label>
+                <span className="hint">{settingsCopy.fiscal.priorLossesIntro}</span>
+                <span className="hint">{settingsCopy.fiscal.priorLossesRules}</span>
+                {fiscal.priorLosses.length === 0 && (
+                  <span className="hint" data-prior-losses-empty>
+                    {settingsCopy.fiscal.priorLossEmpty}
+                  </span>
+                )}
+                {fiscal.priorLosses.map((row, i) => (
+                  <div className="row" key={i} data-prior-loss-row>
+                    <div className="field">
+                      <label htmlFor={`set-prior-loss-source-${i}`}>{settingsCopy.fiscal.priorLossSource}</label>
+                      <select
+                        id={`set-prior-loss-source-${i}`}
+                        value={row.source}
+                        onChange={ev =>
+                          setFiscal({
+                            ...fiscal,
+                            priorLosses: fiscal.priorLosses.map((r, j) =>
+                              j === i ? { ...r, source: ev.target.value as FiscalLossSource | '' } : r,
+                            ),
+                          })
+                        }
+                      >
+                        <option value="">{copy.ui.answerUnrecorded}</option>
+                        {FISCAL_LOSS_SOURCE_VALUES.map(s => (
+                          <option key={s} value={s}>{settingsCopy.fiscal.priorLossSourceLabels[s]}</option>
+                        ))}
+                      </select>
+                      {errors[`loss.${i}.source`] && <span className="error">{errors[`loss.${i}.source`]}</span>}
+                    </div>
+                    <div className="field">
+                      <label htmlFor={`set-prior-loss-year-${i}`}>{settingsCopy.fiscal.priorLossYear}</label>
+                      <input
+                        id={`set-prior-loss-year-${i}`}
+                        value={row.lossYear}
+                        onChange={ev =>
+                          setFiscal({
+                            ...fiscal,
+                            priorLosses: fiscal.priorLosses.map((r, j) =>
+                              j === i ? { ...r, lossYear: ev.target.value } : r,
+                            ),
+                          })
+                        }
+                      />
+                      <span className="hint">{settingsCopy.fiscal.priorLossYearHint}</span>
+                      {errors[`loss.${i}.lossYear`] && <span className="error">{errors[`loss.${i}.lossYear`]}</span>}
+                    </div>
+                    <div className="field">
+                      <label htmlFor={`set-prior-loss-amount-${i}`}>{settingsCopy.fiscal.priorLossAmount}</label>
+                      <input
+                        id={`set-prior-loss-amount-${i}`}
+                        value={row.amountLei}
+                        onChange={ev =>
+                          setFiscal({
+                            ...fiscal,
+                            priorLosses: fiscal.priorLosses.map((r, j) =>
+                              j === i ? { ...r, amountLei: ev.target.value } : r,
+                            ),
+                          })
+                        }
+                      />
+                      <span className="hint">{settingsCopy.fiscal.priorLossAmountHint}</span>
+                      {errors[`loss.${i}.amountLei`] && <span className="error">{errors[`loss.${i}.amountLei`]}</span>}
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() =>
+                        setFiscal({ ...fiscal, priorLosses: fiscal.priorLosses.filter((_, j) => j !== i) })
+                      }
+                    >
+                      {settingsCopy.fiscal.priorLossRemove}
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  data-prior-loss-add
+                  onClick={() =>
+                    setFiscal({
+                      ...fiscal,
+                      priorLosses: [...fiscal.priorLosses, { source: '', lossYear: '', amountLei: '' }],
+                    })
+                  }
+                >
+                  {settingsCopy.fiscal.priorLossAdd}
+                </button>
+                <span className="hint" data-prior-losses-unverifiable>
+                  {settingsCopy.fiscal.priorLossesUnverifiable}
+                </span>
               </div>
 
               {/* PG-6h-3 — the entry point to the occupancy sheet.

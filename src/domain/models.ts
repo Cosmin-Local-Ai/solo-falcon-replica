@@ -680,6 +680,50 @@ export const LEASE_TENANT_NATURE_VALUES = ['persoana_fizica', 'entitate_cu_evide
 export type LeaseTenantNature = (typeof LEASE_TENANT_NATURE_VALUES)[number];
 
 /**
+ * B-145 — the sources art. 118 alin. (4) names, in the article's own words: „pierderea fiscală anuală
+ * înregistrată pe fiecare sursă din activități independente, din drepturi de proprietate intelectuală și din
+ * activități agricole, silvicultură și piscicultură, determinată în sistem real”.
+ *
+ * The list is closed because the article is closed: a loss from any other source has no carry-forward route
+ * in art. 118 alin. (4), and alin. (6) further excludes normă de venit agricultural income and any income
+ * type where the tax is final.
+ *
+ * It lives here rather than beside the engine because the profile now stores a value of it. `domain/tax.ts`
+ * imports and re-exports both this and `PriorYearFiscalLoss`, exactly as it already does for `CassLadderYear`
+ * — one declaration of a vocabulary, two readers of it.
+ */
+export const FISCAL_LOSS_SOURCE_VALUES = [
+  'activitate_independenta',
+  'drepturi_proprietate_intelectuala',
+  'activitati_agricole',
+] as const;
+export type FiscalLossSource = (typeof FISCAL_LOSS_SOURCE_VALUES)[number];
+
+/**
+ * B-121 / B-145 — a fiscal loss determined in an EARLIER year, carried into this one.
+ *
+ * `amount` is a positive magnitude, never a signed negative: every money row in this codebase is a magnitude
+ * with its direction in the label, and D212 rd.5 validates „Doar valori pozitive”.
+ *
+ * `lossYear` is what makes art. 118 alin. (5) lit. a) — „reportul se efectuează cronologic, în funcție de
+ * veşimea pierderii” — expressible at all.
+ *
+ * **B-145 is what moved this from an in-memory input to a persisted field.** Brief 70 built the engine side
+ * and asserted it twelve ways, then reported rather than closed the gap: the app could compute the relief and
+ * could not be told about the loss. The design tension is real and is not resolved by pretending otherwise:
+ * **D212 rd.5 asks for one total with no per-year column**, so the return carries no split for the app to
+ * check a declared split against. Per-year entries are collected because art. 118 alin. (4)-(5) cannot be
+ * applied without them — the 5-fiscal-year window and the chronological order are both per-loss facts — and
+ * the screen says plainly that the split is the person's own, unverifiable from the form.
+ */
+export interface PriorYearFiscalLoss {
+  source: FiscalLossSource;
+  /** The fiscal year the loss was determined in — the year that produced rd.4 of that year's return. */
+  lossYear: number;
+  amount: Bani;
+}
+
+/**
  * The lease facts declared for ONE fiscal year.
  *
  * Every field is optional and none has a `.default()`, for the reason every other fact family in this file
@@ -1176,6 +1220,25 @@ export interface PfaProfile {
    * nothing for the same reason.
    */
   leaseFactsYears?: LeaseFactsYear[];
+  /**
+   * B-145 — the carried-in fiscal losses the person declares, one entry per source per loss year.
+   *
+   * art. 118 alin. (4)-(5), as `docs/ai/research/52_dividends_losses_withholding_fy2026.md` settled it: a
+   * loss is carried for **5 ani fiscali**, offset **per source**, **chronologically by age**, capped at
+   * **70 % of the net of that same source**, and **not elective** — „se reportează **și** se compensează”.
+   * None of those five rules can be applied to an aggregate, which is why the entries are per year and not
+   * one total.
+   *
+   * **What the app then cannot check, and says so on screen:** D212 rd.5 asks for **one total with no
+   * per-year column**. A persisted split lets the app age losses correctly; it does not let the app verify a
+   * taxpayer's split, because the return does not carry one. The screen states that in those words rather
+   * than implying a precision the source document does not have.
+   *
+   * Optional, no `.default()`, and the v24→v25 step backfills nothing: a loss carried in is a fact about a
+   * filed return, and no stored field records one. An empty list and an absent field are the same answer —
+   * „nothing was declared” — and neither is ever read as „there is no loss”.
+   */
+  priorYearFiscalLosses?: PriorYearFiscalLoss[];
   /** CASS status. */
   socialInsuranceStatus: PfaSocialInsuranceStatus;
   /**

@@ -136,6 +136,9 @@ export const validation = {
   amountInvalid: 'Introduceți o valoare validă',
   vatInvalid: 'Introduceți un TVA valid',
   yearInvalid: 'An invalid (2000–2100).',
+  // B-145 — a loss row with no source named is not a loss: art. 118 alin. (4) offsets „la nivelul fiecărei
+  // surse”, deci sursa este chiar câmpul după care regula este organizată.
+  fiscalLossSourceRequired: 'Alege sursa din care provine pierderea — art. 118 alin. (4) compensează pe fiecare sursă în parte.',
   leiInvalid: 'Valoare invalidă (lei, ≥ 0).',
   monthsInvalid: 'Luni invalide: numere întregi 1-12, separate prin virgulă (ex: 3,4).',
   // PG-6h-2 — the room count is a count, not an amount. A fraction or a negative is not a number of rooms,

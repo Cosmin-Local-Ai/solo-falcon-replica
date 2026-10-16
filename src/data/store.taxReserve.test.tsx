@@ -183,6 +183,13 @@ describe('a payload with no reserve field loads as null, not 0', () => {
     // PG-11 — appended after v20, never renumbered. It opens no collection and fills nothing in, so it
     // cannot mint a reserve either: the property on the next line is what this list guards.
     'document-blob-ref',
+    // Brief 76 — the four steps appended after v21, each re-pinning this list by one entry. None of them can
+    // mint a reserve: `efactura-deadline` retires one settings preference, and the other three open a field by
+    // writing nothing. The property on the next line is what this list guards.
+    'efactura-deadline',
+    'expense-asset-link',
+    'fixed-asset-disposal-proceeds',
+    'prior-year-fiscal-losses',
     ]);
     expect(storeRef!.reservedAmount).toBeNull();
     // And the next write stamps the current version — the upgrade is one-way and additive.

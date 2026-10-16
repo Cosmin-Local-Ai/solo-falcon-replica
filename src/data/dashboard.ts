@@ -480,6 +480,12 @@ export function getTaxEstimate(data: AppData, asOfDate: string): Promise<TaxEsti
     // resolved it from the declared lease facts, and the engine decides with it whether the 10 % is the
     // payer's to withhold or this taxpayer's to pay.
     flatRatioWithholdingBlocked: amounts.flatRatioWithholdingBlocked ?? false,
+    // B-145 — threaded, not re-read, and identical to `data/derived.ts useLatestTaxEstimate` by construction:
+    // the live path and the tested path must not disagree about whether a carried-in loss exists, because the
+    // two would then report two different taxes for one register. This is the call-site half of closing the
+    // gap brief 70 reported: the engine applied art. 118 alin. (4)-(5) from brief 70 on, but had no way to be
+    // told about a loss from a year already filed, so `pierderiReportate` was hardcoded zero.
+    priorYearLosses: data.profile.priorYearFiscalLosses ?? [],
     // B-147 / B-150 — threading only, identical to `data/derived.ts useLatestTaxEstimate` by construction:
     // the recorded DPI gross was cut by the art. 72 alin. (3) flag in `selectYtd`, and both halves travel to
     // the engine from that one pass. This call site does not read a record.

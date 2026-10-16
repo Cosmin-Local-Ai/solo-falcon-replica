@@ -475,8 +475,35 @@ export const DATA_VERSION_EXPENSE_ASSET_LINK = 23;
  * remainder rule is settled by the corpus (`research/36` §12.5, §12.9), so it is not decided here either.
  */
 export const DATA_VERSION_DISPOSAL_PROCEEDS = 24;
+/**
+ * B-145 — a carried-in fiscal loss can now be persisted.
+ *
+ * **The gap brief 70 reported and deliberately did not fill.** Brief 70 built the engine side of art. 118
+ * alin. (4)-(5) — per-source offset, chronological by age, 5-fiscal-year window, the 70 % cap, and the fact
+ * that the offset is not elective („se reportează **și** se compensează”) — and asserted it twelve ways. It
+ * then reported rather than closed the persistence gap, because the two halves of the rule want different
+ * shapes: **D212 rd.5 asks for one total with no per-year column**, while art. 118 alin. (4)-(5) cannot be
+ * applied to a total at all. The window, the per-source rule and the chronological order are each per-loss
+ * facts. Brief 70 chose not to invent a persisted ageing schedule from a form field that does not carry one,
+ * and that was the right call at the time — but it left the app able to compute the relief and unable to be
+ * told about the loss, so `pierderiReportate` stayed `lei(0)` and every later year's tax was overstated by
+ * the amount the person had already lost and reported.
+ *
+ * **What this step opens.** `profile.priorYearFiscalLosses`: one entry per source per loss year, each with
+ * the year the loss was *determined* in. That per-year shape is what makes alin. (5) lit. a)'s „reportul se
+ * efectuează cronologic, în funcție de veşimea pierderii” expressible, and alin. (4)'s „pentru o perioadă de
+ * 5 ani fiscali” checkable.
+ *
+ * **What this step refuses to fill in, and what the screen says about it.** The step writes the version and
+ * nothing else. A carried-in loss is a fact about a return already filed; no stored field records one, and
+ * deriving one from a negative result in this register would invent a loss the person never declared. And the
+ * honest limit stays on the record: because D212 rd.5 carries no per-year split, **the app can age a declared
+ * split but cannot verify one.** The Settings screen states that in those words rather than implying a
+ * precision the source form does not have.
+ */
+export const DATA_VERSION_PRIOR_YEAR_LOSSES = 25;
 /** The version this build writes. */
-export const CURRENT_DATA_VERSION = DATA_VERSION_DISPOSAL_PROCEEDS;
+export const CURRENT_DATA_VERSION = DATA_VERSION_PRIOR_YEAR_LOSSES;
 
 export interface MigrationStep {
   readonly from: number;
@@ -1260,6 +1287,18 @@ export function migrateDisposalProceedsV24(data: PersistedAppData): PersistedApp
   return { ...data, version: DATA_VERSION_DISPOSAL_PROCEEDS };
 }
 
+/**
+ * v24 → v25 (`prior-year-fiscal-losses`). Opens `profile.priorYearFiscalLosses` by writing nothing. See
+ * `DATA_VERSION_PRIOR_YEAR_LOSSES` for the rule the field makes reachable, for why the entries are per year
+ * when the return asks for one total, and for the split the app can age but cannot verify.
+ *
+ * The body is the version stamp and nothing else. A payload that already carries losses keeps them untouched,
+ * which is what makes re-running the step a no-op rather than a wipe.
+ */
+export function migratePriorYearLossesV25(data: PersistedAppData): PersistedAppData {
+  return { ...data, version: DATA_VERSION_PRIOR_YEAR_LOSSES };
+}
+
 /** The chain, in order. Append new steps at the end; never renumber old ones. */
 export const MIGRATION_CHAIN: MigrationStep[] = [
   {
@@ -1452,6 +1491,26 @@ export const MIGRATION_CHAIN: MigrationStep[] = [
     summary:
       'Un bun scos din gestiune poate înregistra acum suma realizată din înstrăinare. Normele Titlul II pct. 27 pun o primă limită valorii neamortizate — 1.500 lei × lunile rămase din durata declarată — iar normele Titlul IV pct. 7 alin. (5) lit. o) pun aceleiași valori a doua limită, „la nivelul venitului realizat din înstrăinare”. Aplicația cunoștea prima și nu avea unde să scrie a doua, de aceea cifra pct. 27 era arătată și nu era postată: fără preț, ea ar fi dedus mai mult decât permite norma ori de câte ori bunul s-a vândut sub valoarea neamortizată. Nimic nu a fost completat în acest pas: prețul este o faptă despre o tranzacție, și niciun câmp stocat nu o înregistrează; derivată din valoarea fiscală sau din residual, ea ar inventa chiar numărul față de care norma măsoară. Cifra este acum plafonul corect, nu deductibilul final: B-153 rămâne deschis — planul de amortizare continuă după luna ieșirii din gestiune, în timp ce figura calculată numără doar lunile folosite, iar cele două numărători nu se împacă.',
     apply: migrateDisposalProceedsV24,
+  },
+  {
+    from: DATA_VERSION_DISPOSAL_PROCEEDS,
+    to: DATA_VERSION_PRIOR_YEAR_LOSSES,
+    name: 'prior-year-fiscal-losses',
+    summary:
+      'Pierderea fiscală din anii anteriori poate fi acum păstrată în registru. Normele art. 118 alin. (4) și '
+      + '(5) permit ca pierderea determinată în sistem real să se reporte „pentru o perioadă de 5 ani fiscali” '
+      + 'și să se compenseze „la nivelul fiecărei surse”, „cronologic, în funcție de veşimea pierderii”, în '
+      + 'limit a 70 % din netul aceleiași surse. Motorul aplicației știa deja regula — o implementase și o '
+      + 'verificase în cel de-al 70-lea brief — dar nu avea cum să afle pierderea: cifra `pierderiReportate` '
+      + 'rămânea zero, iar impozitul din anii următori era mai mare cu suma pe care persoana o declarase deja. '
+      + 'Inregistrarea se face pe sursă și pe anul în care pierderea a fost determinată, pentru că cele trei '
+      + 'reguli — fereastra de 5 ani, compensarea pe sursă și ordinea cronologică — sunt fapte despre fiecare '
+      + 'pierdere în parte și niciuna nu se poate aplica unui total. De cealaltă parte, formularul 212 rd.5 '
+      + 'cere un singur total, fără coloană pe ani: aplicația poate ordona corect o împărțire declarată, dar '
+      + 'nu o poate verifica pe cea din formular. Ecranul spune acest lucru în acești termeni. Nimic nu a fost '
+      + 'completat în acest pas: o pierdere reportată este o faptă despre o declarație deja depusă, iar '
+      + 'inventată dintr-un rezultat negativ din acest registru ar fabrica o pierdere care nu a fost declarată.',
+    apply: migratePriorYearLossesV25,
   },
 ];
 

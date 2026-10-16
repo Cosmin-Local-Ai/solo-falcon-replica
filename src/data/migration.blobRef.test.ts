@@ -94,7 +94,7 @@ describe('the chain around it', () => {
     // still a one-step gap, and `document-blob-ref` still sits at that edge — it is now the second-to-last
     // rung rather than the last.
     expect(DATA_VERSION_DOCUMENT_BLOB_REF - DATA_VERSION_LEASE_FACTS).toBe(1);
-    const previous = MIGRATION_CHAIN[MIGRATION_CHAIN.length - 4]!;
+    const previous = MIGRATION_CHAIN[MIGRATION_CHAIN.length - 5]!;
     expect(previous.from).toBe(DATA_VERSION_LEASE_FACTS);
     expect(previous.to).toBe(DATA_VERSION_DOCUMENT_BLOB_REF);
     expect(previous.name).toBe('document-blob-ref');
@@ -125,6 +125,6 @@ describe('the chain around it', () => {
     const outcome = migratePersistedData(v20Payload());
     expect(outcome.fromVersion).toBe(DATA_VERSION_LEASE_FACTS);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
-    expect(outcome.stepsApplied).toEqual(['document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds']);
+    expect(outcome.stepsApplied).toEqual(['document-blob-ref', 'efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
   });
 });

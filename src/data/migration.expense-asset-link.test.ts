@@ -90,7 +90,11 @@ describe('B-108 — the `expense-asset-link` step (v22 → v23)', () => {
     const chain = migratePersistedData(payloadAtV22());
     expect(chain.fromVersion).toBe(DATA_VERSION_EFACTURA_DEADLINE);
     expect(chain.toVersion).toBe(CURRENT_DATA_VERSION);
-    expect(chain.stepsApplied).toEqual([step('expense-asset-link'), step('fixed-asset-disposal-proceeds')]);
+    expect(chain.stepsApplied).toEqual([
+      step('expense-asset-link'),
+      step('fixed-asset-disposal-proceeds'),
+      step('prior-year-fiscal-losses'),
+    ]);
     // v23 is a rung, not the head: brief 76 appended a step after it.
     expect(DATA_VERSION_EXPENSE_ASSET_LINK).toBeLessThan(CURRENT_DATA_VERSION);
   });

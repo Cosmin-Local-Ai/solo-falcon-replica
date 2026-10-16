@@ -151,7 +151,7 @@ describe('B-140 — the e-Factura sending-deadline value', () => {
 
     const outcome = migratePersistedData(parsed.data);
     expect(outcome.toVersion).toBe(CURRENT_DATA_VERSION);
-    expect(outcome.stepsApplied).toEqual(['efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds']);
+    expect(outcome.stepsApplied).toEqual(['efactura-deadline', 'expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
 
     // After the chain the value is gone from the payload, and it is gone because the step dropped it.
     expect('trimitere' in outcome.data.settings.eFactura).toBe(false);
@@ -185,7 +185,7 @@ describe('B-140 — the e-Factura sending-deadline value', () => {
     expect(twice.version).toBe(DATA_VERSION_EFACTURA_DEADLINE);
     // Re-running the chain at the head applies nothing. (`twice` sits at v22, so the one rung above it still
     // runs — the assertion about this step is that it does not run twice.)
-    expect(migratePersistedData(twice).stepsApplied).toEqual(['expense-asset-link', 'fixed-asset-disposal-proceeds']);
+    expect(migratePersistedData(twice).stepsApplied).toEqual(['expense-asset-link', 'fixed-asset-disposal-proceeds', 'prior-year-fiscal-losses']);
   });
 
   it('the on-screen contradiction is gone: no copy offers 2 days, and the 5-working-day citation stands', async () => {

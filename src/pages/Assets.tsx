@@ -268,6 +268,8 @@ function AssetForm({ initial, onSave, onClose }: {
         {select('m1ExceptionCategory', assetsCopy.form.m1ExceptionCategory, M1_EXCEPTION_CATEGORIES)}
         {text('disposedOn', assetsCopy.form.disposedOn, 'date')}
         {select('disposalKind', assetsCopy.form.disposalKind, ASSET_DISPOSAL_KINDS, assetsCopy.form.disposalKindHint)}
+        {/* B-65 / brief 76 — the second ceiling's input. Empty means "not recorded", and the hint says what
+            that leaves unmeasurable; it is never defaulted and never read as zero. */}
         {text('disposalProceeds', assetsCopy.form.disposalProceeds, 'text', assetsCopy.form.disposalProceedsHint)}
       </div>
     </Modal>

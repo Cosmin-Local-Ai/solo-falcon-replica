@@ -15,6 +15,9 @@
  */
 
 import type { VatRegistrationStatus } from '../../domain/fiscal/vat';
+// B-145 — the labels are keyed by the domain's own source vocabulary, so a fourth source added to
+// art. 118 alin. (4)'s list would fail the build here rather than render an undefined option.
+import type { FiscalLossSource } from '../../domain/models';
 
 export const settings = {
   title: 'Setări',
@@ -261,6 +264,53 @@ export const settings = {
     leaseRegistered: 'Ai înregistrat contractul la organul fiscal?',
     leaseRegisteredHint:
       'Se înregistrează cu formularul „Cerere de înregistrare a contractelor de locațiune”, cod C168 — instituit prin OPANAF 114/2019 și modificat prin OPANAF 2031/2022 și OPANAF 161/2025. Codul fiscal nu numește niciun formular: obligația este în lege, formularul este în ordinul ANAF, și cele două se citează separat. Aplicația înregistrează răspunsul tău despre depunere, nu îl verifică.',
+
+    // B-145 — carried-in fiscal losses. The engine has applied art. 118 alin. (4)-(5) since brief 70 and had
+    // no way to be told about the loss; this is the control that closes that gap, and the copy states the
+    // limit that came with it: the return asks for one total, so the app can age a split but cannot verify one.
+    priorLossesSection: 'Pierderi fiscale din anii anteriori, reportate în acest an',
+    priorLossesIntro:
+      'art. 118 alin. (4) din Codul fiscal: pierderea fiscală anuală înregistrată pe fiecare sursă din '
+      + 'activități independente, din drepturi de proprietate intelectuală și din activități agricole, '
+      + 'silvicultură și piscicultură, determinată în sistem real, se reportează „și se compensează cu profitul '
+      + 'brut anual realizat prin exercitarea acestor activități, pentru o perioadă de 5 ani fiscali”. '
+      + 'Compensarea nu este opțională: textul spune „se reportează și se compensează”, deci dacă pierderea '
+      + 'există și este în termen, engine-ul o aplică.',
+    priorLossesRules:
+      'Trei reguli fac anul și sursa obligatorii, nu opționale: alin. (5) lit. a) — „reportul se efectuează '
+      + 'cronologic, în funcție de veşimea pierderii”; alin. (4) — compensarea se face „la nivelul fiecărei '
+      + 'surse”, nu între surse; alin. (4) — fereastra este de 5 ani fiscali. În plus, alin. (5) lit. b) '
+      + 'oprește compensarea la 70 % din netul aceleiași surse. Pierderi din alte surse nu au acest traseu, '
+      + 'iar alin. (6) exclude venitul în normă de venit agricol și tipurile de venit unde impozitul este '
+      + 'final.',
+    priorLossesUnverifiable:
+      'Ce aplicația nu poate verifica: Declarația Unică 212 rd.5 cere „Total pierderi reportate” ca o singură '
+      + 'cifră, fără coloană pe ani. Formularul nu conține deci nicio împărțire pe care aplicația s-o poată '
+      + 'compara cu a ta. Înregistrarea pe an și pe sursă există pentru ca regula să poată fi aplicată corect '
+      + '(veşimea, sursa, fereastra de 5 ani sunt fapte despre fiecare pierdere), nu pentru ca aplicația să-ți '
+      + 'verifice declarația. Cifra din formular rămâne a ta.',
+    priorLossSource: 'Sursa din care provine pierderea',
+    // The three sources art. 118 alin. (4) names, in the article's own words. The list is closed because the
+    // article is closed — a loss from any other source has no carry-forward route in it.
+    priorLossSourceLabels: {
+      activitate_independenta: 'Activitate independentă (art. 68)',
+      drepturi_proprietate_intelectuala: 'Drepturi de proprietate intelectuală (art. 70)',
+      activitati_agricole: 'Activități agricole, silvicultură și piscicultură (art. 71)',
+    } as Record<FiscalLossSource, string>,
+    priorLossYear: 'Anul în care pierderea a fost determinată',
+    priorLossYearHint:
+      'Anul care a produs pierderea, nu anul pe care îl declari acum. Diferența este toată regula: fereastra '
+      + 'de 5 ani fiscali și ordinea cronologică se citesc după acest an.',
+    priorLossAmount: 'Pierderea (lei)',
+    priorLossAmountHint:
+      'Valoare pozitivă, așa cum o cere și rd.5 din formularul 212 („Doar valori pozitive”).',
+    priorLossAdd: 'Adaugă o pierdere',
+    priorLossRemove: 'Elimină',
+    priorLossEmpty:
+      'Nicio pierdere înregistrată. Aceasta nu înseamnă că nu ai pierderi — înseamnă că aplicația nu a fost '
+      + 'spusă despre ele, și calculul nu ține cont de niciuna.',
+    priorLossYearNotBeforeFiscalYear:
+      'Anul pierderii trebuie să fie anterior anului fiscal declarat — o pierdere din acest an nu este reportată, este pierderea anului curent.',
 
     accommodationSection: 'Cazare: câte camere și sub ce titlu intră venitul',
     accommodationRooms: 'Numărul de camere închiriate pe termen scurt, pentru anul fiscal de mai sus',

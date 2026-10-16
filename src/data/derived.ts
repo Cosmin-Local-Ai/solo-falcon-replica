@@ -133,6 +133,13 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
       // this taxpayer's to pay, and a second reading of the lease facts at a call site is how one register
       // ends up with two answers about the same tax.
       flatRatioWithholdingBlocked: amounts.flatRatioWithholdingBlocked ?? false,
+      // B-145 — threaded, not re-read, and this is the line that closes the gap brief 70 reported rather than
+      // filled. The engine has applied art. 118 alin. (4)-(5) since brief 70, but `pierderiReportate` stayed
+      // zero because nothing persisted the loss and no call site could supply one: the relief was reachable
+      // from a test and from nowhere else. The profile now carries it, and `?? []` is not a default — an
+      // absent field and an empty list are the same answer, „nothing was declared”, and neither is read as
+      // „there is no loss”.
+      priorYearLosses: store.profile.priorYearFiscalLosses ?? [],
       // B-147 / B-150 — threading only, identical to `data/dashboard.ts getTaxEstimate` by construction:
       // `selectYtd` cut the recorded DPI gross by the art. 72 alin. (3) flag, and this hands both halves to
       // the engine so it can put the quota-bearing one through the rule that states the quota. Neither is

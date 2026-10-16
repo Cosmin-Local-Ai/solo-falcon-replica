@@ -200,6 +200,28 @@ export const pfaProfileSchema: z.ZodType<PfaProfile> = z.object({
       }),
     )
     .optional(),
+  // B-145 — the carried-in fiscal losses art. 118 alin. (4)-(5) need. Declared because **zod strips
+  // undeclared keys**: an undeclared list would be erased on the next load and the engine would fall back to
+  // `pierderiReportate = 0` while the person believed the loss was on the return — the exact state brief 70
+  // reported, arrived at by accident instead of by decision. Optional, no `.default()`: the v24→v25 step
+  // backfills nothing, because a carried-in loss is a fact about a filed return and no stored field records
+  // one. Per source and per loss year, because the 5-fiscal-year window, the per-source offset and the
+  // chronological order in art. 118 alin. (5) lit. a) are all per-loss facts and none of them can be applied
+  // to an aggregate.
+  priorYearFiscalLosses: z
+    .array(
+      z.object({
+        source: z.enum(['activitate_independenta', 'drepturi_proprietate_intelectuala', 'activitati_agricole']),
+        // The year the loss was DETERMINED in, not the year being filed. Named `lossYear` so it cannot read
+        // as "the year this profile covers" — the two differ by up to five years and the whole rule turns on
+        // the difference.
+        lossYear: z.number().int().min(1990).max(2100),
+        // A positive magnitude: D212 rd.5 validates „Doar valori pozitive”, and every money row here is a
+        // magnitude with its direction in the label.
+        amount: z.number().int().min(0).finite().transform((n) => n as Bani),
+      }),
+    )
+    .optional(),
   socialInsuranceStatus: z.enum(['obligatoriu', 'exempt', 'neplata']),
   // PG-6f (B-30, D-LEG-1) — `vatExempt: z.boolean()` is **removed**, not widened. D-LEG-1 is standing
   // („we do not need legacy data. we have no users yet”): a retired shape is deleted from the type, the
