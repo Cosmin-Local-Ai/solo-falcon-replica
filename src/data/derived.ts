@@ -12,6 +12,7 @@ import {
   type TaxDerivedView,
 } from '../domain/derived';
 import { selectApplicableRules } from '../domain/fiscal/select';
+import { isSameCalculation } from '../domain/snapshots/snapshot';
 import { selectRuleSet } from '../domain/fiscal';
 import { localDateISO, now } from '../domain/date';
 import {
@@ -170,14 +171,27 @@ export function useLatestTaxEstimate(asOfDate: string = todayISO()): {
         // `computeTaxEstimate` already mints a `TaxCalculationSnapshot` with three content digests on
         // every computed result, and since Phase 20 the whole rule-immutability and R1/R2 replay
         // machinery reads that shape — but nothing in the running app ever wrote one, so the replay
-        // machinery was tested and dead and no calculation outlived the screen that produced it. This is
-        // the hand-off. It is guarded in the store (`addSnapshot` declines a calculation the register
-        // already holds, by digest) because this effect re-runs on every provider render: without the
-        // guard the register would mint a record per toast.
+        // machinery was tested and dead and no calculation outlived the screen that produced it.
+        // This is the hand-off.
+        //
+        // **The „is this already recorded?” test has to happen HERE, not only inside the store.** The
+        // first version guarded only in `addSnapshot`, returning the unchanged `AppData` for a duplicate.
+        // That is a render loop, and it cost 13 e2e tests before it was caught: this effect depends on
+        // `store`, `StoreProvider` mints a fresh context value on every render (`store.tsx:713`), and a
+        // `setData` that returns the same object still lets React re-render the provider once before it
+        // bails out — which mints a new `store`, which re-runs this effect, which calls `setData` again.
+        // The page never settles and every click on it times out. Asking first means no `setData` at all
+        // once the calculation is recorded, so the loop cannot start. The store keeps its own guard as
+        // defence in depth for every other caller.
         //
         // Only a `computed` result is recorded. A refusal is not a calculation, and storing one as if it
         // were is the mistake PG-1 made with the `taxEstimate` completeness check (`completeness.ts:448`).
-        if (result.status === 'computed') store.addSnapshot(result.snapshot);
+        if (
+          result.status === 'computed' &&
+          !store.snapshots.some(x => isSameCalculation(x, result.snapshot))
+        ) {
+          store.addSnapshot(result.snapshot);
+        }
         setLoading(false);
       }
     });

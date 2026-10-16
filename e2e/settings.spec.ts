@@ -665,18 +665,28 @@ test.describe('Phase 10c — a rate entered in Settings reconciles the ledger (B
     //
     // Phase 11: the app no longer loads a dataset of its own on a fresh profile, so the seed is explicit.
     await seedBrowserOnce(page);
-    await page.goto('/dashboard');
-    await page.evaluate(
-      ([key, eur]: [string, unknown]) => {
-        const data = JSON.parse(localStorage.getItem(key) ?? '{}');
-        data.revenues = [eur];
+    // B-49 re-pin. The rewrite used to be a post-load `page.evaluate` followed by `page.reload()`, and that
+    // is now a race against the app rather than against Playwright: since B-49 the app persists the
+    // calculation it computes, so it writes its own in-memory state back over the edited payload and the
+    // EUR record never reaches the screen. The edit therefore has to land BEFORE the app boots, which is
+    // what an init script does. The `sessionStorage` flag is what keeps this to the first document — the
+    // same reason the seed above is `seedBrowserOnce` and not `seedBrowser`: an init script that re-runs
+    // on the reload would overwrite the rate the UI saves later and the final assertion would prove nothing.
+    await page.addInitScript(
+      (arg: { key: string; eur: unknown }) => {
+        if (sessionStorage.getItem('fx-ledger-edited')) return;
+        sessionStorage.setItem('fx-ledger-edited', '1');
+        const raw = localStorage.getItem(arg.key);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        data.revenues = [arg.eur];
         data.expenses = [];
         delete data.fxRates;
-        localStorage.setItem(key, JSON.stringify(data));
+        localStorage.setItem(arg.key, JSON.stringify(data));
       },
-      [STORAGE_KEY, EUR_REVENUE],
+      { key: STORAGE_KEY, eur: EUR_REVENUE },
     );
-    await page.reload();
+    await page.goto('/dashboard');
 
     // The record has not vanished: the dashboard renders, and says the totals are not complete.
     await expect(page.getByRole('heading', { name: 'Tablou de bord' })).toBeVisible();
