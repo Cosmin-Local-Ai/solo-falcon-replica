@@ -37,20 +37,28 @@
  * the landlord owes no Declarația Unică for the income tax (art. 122 alin. (6) lit. a)) while still owing
  * one for the contributions. Persona 5 is the art. 84 half of the same pair.
  *
- * ## Why this persona holds no carried-in loss (brief 77)
+ * ## A carried-in loss it holds and does NOT use — B-154, closed 2026-10-16 (brief 81)
  *
- * Brief 77 suggested persona 6 for `profile.priorYearFiscalLosses`. Measured, it cannot carry one: with a
- * 30.000-lei loss declared here — `activitate_independenta` **or** `drepturi_proprietate_intelectuala`, year
- * 2022 — the estimate returns **no art. 118 row at all** and the 9.720,00 RON figure does not move. The
+ * Brief 77 measured this persona and concluded it could not carry a loss: with a 30.000-lei loss declared
+ * here the estimate returned **no art. 118 row at all** and the 9.720,00 RON figure did not move. The
  * composition that applies art. 118 alin. (2) lit. a) sits on the sistem-real path, and this register never
- * reaches it: its only register income is art. 84¹ rent under a flat ratio, and its DPI net arrives on the
- * art. 170 alin. (4) ladder. A loss declared here would be a fact the app is told about and then says
- * nothing about — the exact shape brief 77 refuses. The fact lives on persona 8 instead, whose cash-basis
- * mechanism is what produces a fiscal loss in the first place.
+ * reaches it — its only register income is art. 84¹ rent under a flat ratio, and its DPI net arrives on the
+ * art. 170 alin. (4) ladder. Brief 77 was right about the arithmetic and right to refuse the persona, but
+ * the reason it gave was a **defect wearing a persona fact**: the loss was neither applied nor refused, it
+ * was silently discarded. That is B-154.
  *
- * **The silence is itself worth recording**: a declared loss on a flat-ratio register is neither applied nor
- * refused. Nothing on screen says "this loss could not be used, and here is why". That is a finding for a
- * later brief, not something a persona may paper over.
+ * **B-154 settled which of the two it is: refused, with the reason on the row.** art. 118 reaches only net
+ * income measured în sistem real — alin. (2) opens „Pentru veniturile prevăzute la art. 61 lit. a), pentru
+ * care venitul net anual se determină în sistem real, pe baza datelor din contabilitate”, alin. (2) lit. a)
+ * offsets „din venitul net anual, determinat în sistem real”, and alin. (4) reports only a loss „determinată
+ * în sistem real” (`research/08_art118_income_tax_2026.md` Q118-A; `research/52` §Q1; `research/33` §3).
+ * This register has no such net, so the article does not open.
+ *
+ * So the loss is back, deliberately: **persona 6 is now the persona that proves the refusal**, and persona 8
+ * stays the one that proves the offset. The 9.720,00 RON hero does not move — a refused loss changes no
+ * figure — and `e2e/persona-6-investor.spec.ts` now asserts the refusal row appears beside it. A persona
+ * holding a loss the app cannot use is decoration only while the app is silent about it; it is evidence the
+ * moment the app says why.
  *
  * ## B-122 stays visible
  *
@@ -144,6 +152,14 @@ const profile = personaProfile('persona-passive-investor', IDENTITY, [
 ], {
   pfaStartYear: 2014,
   pfaStartDate: '2014-01-06',
+  // B-154 — declared, and refused on sight. This is the persona that proves the refusal half of art. 118:
+  // the register is measured by a flat ratio (art. 84¹), so there is no venit net determinat în sistem real
+  // for the article to offset against, and the row says exactly that. It is inside the 5-year window and
+  // after pfaStartYear on purpose — the refusal must be about the **method**, never about the window or the
+  // age, or it would not prove the thing it is here to prove.
+  priorYearFiscalLosses: [
+    { source: 'activitate_independenta', lossYear: 2022, amount: lei(30000) },
+  ],
   activityFamily: 'other',
   // The salariat fact. art. 150 alin. (2) reaches only art. 137 alin. (1) lit. b^1), so this does not by
   // itself switch CAS off, and the app does not treat it as if it did.

@@ -13,6 +13,10 @@ import { selectApplicableRules } from './fiscal/select';
 import { calculatorRegistry } from './fiscal/calculators';
 import { readCassExceptionFacts, readPensionSuspension, readPensionerStatus } from './pensionFacts';
 import { regimeRefusalReason } from './regimes';
+// B-154 — the refusal row the engine emits for a carried-in loss on a flat-ratio register has to name the
+// source the person declared. The row is embedded in the calculation snapshot, so it cannot lean on a
+// screen to expand a stored key; it reads the copy layer's own map instead of re-spelling it.
+import { priorLossSourceLabels } from '../ui/copy/settings';
 // PG-6f (B-30) — the base selection is the defect this phase owns, and the vocabulary it selects on
 // lives in `fiscal/vat.ts`. Importing the predicate rather than re-spelling the six states is what keeps
 // the engine and the Settings screen from disagreeing about which states charge TVA.
@@ -176,6 +180,16 @@ export interface FiscalLossCarryInReport {
   expirate: { lossYear: number; amount: Bani }[];
   /** Given, but from another source — art. 118 alin. (4) compensates „din aceeași sursă de venit”. */
   altaSursa: { source: FiscalLossSource; lossYear: number; amount: Bani }[];
+  /**
+   * B-154 — given, and this register has no venit net determinat în sistem real for art. 118 to act on at
+   * all. The distinction from `altaSursa` matters: `altaSursa` is a source mismatch inside a register the
+   * article does reach, `refuzate` is the article not reaching the register.
+   *
+   * The four D212 fields above are all zero on such a register, and that is the correct shape: rd.5–rd.7 of
+   * the return are simply not filled for income measured by a flat ratio. What must not happen is the
+   * silence this field exists to end — a loss offered, no row, no report, no reason.
+   */
+  refuzate: { source: FiscalLossSource; lossYear: number; amount: Bani }[];
 }
 
 /**
@@ -242,6 +256,43 @@ function resolveCarriedInLosses(
     ramase,
     expirate,
     altaSursa,
+    // The sistem-real path always has a net to measure the article against, so a loss it was given is
+    // classified into window / expired / other-source and never into `refuzate`.
+    refuzate: [],
+  };
+}
+
+/**
+ * B-154 — the flat-ratio branch's answer to a declared carried-in loss: **refused, with the reason said.**
+ *
+ * The narrow question this settles, and the corpus settles it: **art. 118 reaches only net income measured
+ * în sistem real.** `research/08_art118_income_tax_2026.md` Q118-A holds the article verbatim — alin. (2)
+ * opens „Pentru veniturile prevăzute la art. 61 lit. a), **pentru care venitul net anual se determină în
+ * sistem real, pe baza datelor din contabilitate**”, alin. (2) lit. a) offsets „din venitul net anual,
+ * **determinat în sistem real**”, and alin. (4) carries only a loss „**determinată în sistem real**”. The
+ * same qualifier is restated as FACT in `research/52_dividends_losses_withholding_fy2026.md` §Q1, and
+ * `research/33_income_categories_and_vat_periodicity.md` §3 draws the conclusion for this profile: „art.
+ * 118 alin. (2) applies only „Pentru veniturile prevăzute la art. 61 lit. a), pentru care venitul net anual
+ * se determină în sistem real, pe baza datelor din contabilitate”. An art. 68³ / art. 85 / art. 84 / art.
+ * 84¹ register replaces the net with a fixed ratio or with a final 10 % — alin. (6) closes the same door
+ * from the other side for normă de venit and for income types where the tax is final. **So the loss cannot
+ * be applied, and the app must say so.** It is not silently discarded, and it is not applied.
+ *
+ * Nothing here is arithmetic: no plafon, no compensata, because the article never opens. The losses are
+ * returned as given, per source and per year, so the person can see that the fact they stated was read.
+ */
+function refuseCarriedInLossesOnFlatRegister(
+  losses: readonly PriorYearFiscalLoss[],
+): FiscalLossCarryInReport {
+  return {
+    reportate: lei(0),
+    compensata: lei(0),
+    recalculat: lei(0),
+    plafon: lei(0),
+    ramase: [],
+    expirate: [],
+    altaSursa: [],
+    refuzate: losses.map((l) => ({ source: l.source, lossYear: l.lossYear, amount: l.amount })),
   };
 }
 
@@ -1266,6 +1317,31 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
   // at all. The guard is on the method, not on the presence of a leg — which is the difference between
   // guarding the arithmetic and guarding the code path.
   if (flatMethodRan) {
+    // B-154 — a declared carried-in loss on a register measured by a flat ratio used to vanish here. The
+    // art. 118 composition sits below this return, so the loss was read into the input, never consulted,
+    // and the result carried neither a row nor a report: neither applied nor refused. That third state is
+    // the worst one a field can have — the person stated a fact and the app threw it away without a word.
+    //
+    // It is **refused**, and the reason is on the row. art. 118 alin. (2) opens „Pentru veniturile prevăzute
+    // la art. 61 lit. a), pentru care venitul net anual se determină în sistem real, pe baza datelor din
+    // contabilitate”, alin. (2) lit. a) offsets „din venitul net anual, determinat în sistem real”, and
+    // alin. (4) reports only a loss „determinată în sistem real” — verbatim in
+    // `research/08_art118_income_tax_2026.md` Q118-A, restated in `research/52` §Q1, and applied to this
+    // profile in `research/33` §3. A flat-ratio register has no such net, so the article does not open.
+    //
+    // One row per declared loss, not one row for the total: the year and the source are the facts the
+    // person gave, and a single aggregate would hide which of several losses was set aside. The amount is
+    // the sum that was not used — the same shape as the `Pierdere definitivă` row below.
+    const offeredOnFlatRegister = priorYearLosses ?? [];
+    for (const loss of offeredOnFlatRegister) {
+      lines.push({
+        label:
+          `Pierdere fiscală reportată din ${loss.lossYear} — ${priorLossSourceLabels[loss.source]} — NEAPLICATĂ: ` +
+          'art. 118 alin. (2) și alin. (4) compensează numai un venit net „determinat în sistem real”, iar acest ' +
+          'registru are venitul măsurat prin raport fix, nu în sistem real. Pierderea nu a fost folosită și nu a fost pierdută: rămâne reportabilă în anii în care art. 118 chiar se aplică',
+        value: loss.amount,
+      });
+    }
     const total = sumBani([casRes.value, cassValue, cassLadderValue, taxDueByOwner]);
     lines.push({
       label:
@@ -1293,6 +1369,11 @@ export async function computeTaxEstimate(input: TaxCalculationInput): Promise<Ta
       snapshot: snap,
       bases: contributionBases(gross, deductibleBase, net, legs, cassLadderBase),
       contributionCategories,
+      // The report travels on the flat path too: a caller that offered a loss and got no `lossCarryIn` back
+      // cannot tell whether the engine ignored it or refused it for a reason. Now it can.
+      ...(offeredOnFlatRegister.length > 0
+        ? { lossCarryIn: refuseCarriedInLossesOnFlatRegister(offeredOnFlatRegister) }
+        : {}),
     };
   }
 

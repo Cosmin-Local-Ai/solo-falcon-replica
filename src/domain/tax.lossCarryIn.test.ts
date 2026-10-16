@@ -280,3 +280,117 @@ describe('B-121 — the loss can come in, and it comes in on the article’s own
     expect(line(res, 'Total taxe')).toBe(lei(40_870));
   });
 });
+
+/**
+ * B-154 — the third state a field can have, and the one this file had no test for until brief 81: the loss
+ * was neither applied nor refused, it was **discarded**, because the whole art. 118 composition sits behind
+ * the flat-method `return` and a flat-ratio register never reaches it.
+ *
+ * **The decision, and where it comes from.** The loss is **refused**, with the reason on the row. art. 118
+ * reaches only net income measured în sistem real: alin. (2) opens „Pentru veniturile prevăzute la art. 61
+ * lit. a), **pentru care venitul net anual se determină în sistem real, pe baza datelor din contabilitate**”,
+ * alin. (2) lit. a) offsets „din venitul net anual, **determinat în sistem real**”, and alin. (4) reports only
+ * a loss „**determinată în sistem real**”. Verbatim in `docs/ai/research/08_art118_income_tax_2026.md` Q118-A,
+ * restated as FACT in `docs/ai/research/52_dividends_losses_withholding_fy2026.md` §Q1, and drawn for exactly
+ * this profile in `docs/ai/research/33_income_categories_and_vat_periodicity.md` §3. alin. (6) closes the same
+ * door from the other side for normă de venit and for income types where the tax is final.
+ *
+ * So on a flat-ratio register the article never opens — which means its window, its 70 % ceiling and its
+ * per-source rule are never evaluated either. The tests below assert that: an expired loss and a
+ * wrong-source loss are reported as **refused**, not as `expirate` / `altaSursa`, because those categories
+ * would claim the article was read.
+ */
+const FLAT_GROSS = lei(100_000);
+
+async function flatEngine(losses?: readonly PriorYearFiscalLoss[]) {
+  const entry = selectRuleSet(2026, '2026-01-01');
+  if (!entry) throw new Error('no FY2026 rule set is registered');
+  return computeTaxEstimate({
+    inputs: inputs(),
+    profile: profile(),
+    revenues: FLAT_GROSS,
+    expenses: EXPENSES,
+    revenuesNet: FLAT_GROSS,
+    expensesNet: EXPENSES,
+    expenseBase: { netFirst: EXPENSES, grossFirst: EXPENSES, divergent: false },
+    flatRatioGross: FLAT_GROSS,
+    flatRatioMethod: 'accommodation-flat-ratio',
+    ruleRelease: entry.release,
+    rules: [...entry.rules],
+    ...(losses === undefined ? {} : { priorYearLosses: losses }),
+  });
+}
+
+const REFUSED = 'NEAPLICATĂ';
+const LOSS_2022: PriorYearFiscalLoss = { source: 'activitate_independenta', lossYear: 2022, amount: lei(30_000) };
+
+describe('B-154 — a declared loss on a flat-ratio register is refused, and the refusal is a row', () => {
+  it('the row exists, names the article, and carries the amount that was not used', async () => {
+    const res = ok(await flatEngine([LOSS_2022]));
+    const rows = res.lines.filter((l) => l.label.includes(REFUSED));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].value).toBe(lei(30_000));
+    expect(rows[0].label).toContain('art. 118 alin. (2)');
+    expect(rows[0].label).toContain('determinat în sistem real');
+    // The source the person declared is named, not left as a stored key.
+    expect(rows[0].label).toContain('Activitate independentă (art. 68)');
+    expect(rows[0].label).toContain('2022');
+  });
+
+  it('none of art. 118’s D212 rows appear, because the article never opens', async () => {
+    const res = ok(await flatEngine([LOSS_2022]));
+    expect(line(res, RD5)).toBeUndefined();
+    expect(line(res, RD6)).toBeUndefined();
+    expect(line(res, RD7)).toBeUndefined();
+    expect(line(res, CAP)).toBeUndefined();
+  });
+
+  it('a refused loss changes no figure: the refusal is a sentence, not a re-computation', async () => {
+    const without = ok(await flatEngine());
+    const withLoss = ok(await flatEngine([LOSS_2022]));
+    expect(withLoss.output.total).toBe(without.output.total);
+    expect(withLoss.lines.filter((l) => !l.label.includes(REFUSED)).map((l) => l.label))
+      .toEqual(without.lines.map((l) => l.label));
+  });
+
+  it('the report travels too, so a caller can tell refused from ignored', async () => {
+    const res = ok(await flatEngine([LOSS_2022]));
+    const report = res.lossCarryIn;
+    if (!report) throw new Error('the flat path returned no lossCarryIn although a loss was offered');
+    expect(report.refuzate).toEqual([LOSS_2022]);
+    // Nothing was computed against the loss, so none of the D212 quantities exist.
+    expect(report.reportate).toBe(lei(0));
+    expect(report.compensata).toBe(lei(0));
+    expect(report.plafon).toBe(lei(0));
+  });
+
+  it('the article’s own reasons are NOT claimed: an expired or wrong-source loss is refused, not aged', async () => {
+    // `expirate` and `altaSursa` would each assert that art. 118 was read and its window or its source rule
+    // applied. On this register neither happened, so both losses land in `refuzate` and nowhere else.
+    const res = ok(await flatEngine([
+      { source: 'activitate_independenta', lossYear: 2019, amount: lei(10_000) },
+      { source: 'drepturi_proprietate_intelectuala', lossYear: 2025, amount: lei(5_000) },
+    ]));
+    const report = res.lossCarryIn!;
+    expect(report.expirate).toEqual([]);
+    expect(report.altaSursa).toEqual([]);
+    expect(report.refuzate).toHaveLength(2);
+    // One row per declared loss, so a person with several can see which were set aside.
+    expect(res.lines.filter((l) => l.label.includes(REFUSED)).map((l) => l.value))
+      .toEqual([lei(10_000), lei(5_000)]);
+    expect(line(res, DEFINITIVE)).toBeUndefined();
+  });
+
+  it('nothing declared on a flat register: still silent, and that silence is correct', async () => {
+    const res = ok(await flatEngine());
+    expect(res.lines.some((l) => l.label.includes(REFUSED))).toBe(false);
+    expect(res.lossCarryIn).toBeUndefined();
+  });
+
+  it('the sistem-real path is untouched: its report classifies, and `refuzate` stays empty', async () => {
+    const res = ok(await engine([LOSS_2022]));
+    expect(res.lossCarryIn!.refuzate).toEqual([]);
+    expect(res.lossCarryIn!.compensata).toBe(lei(30_000)); // the whole loss: the ceiling is 70 % of the 100.000-lei net
+    expect(res.lines.some((l) => l.label.includes(REFUSED))).toBe(false);
+  });
+});

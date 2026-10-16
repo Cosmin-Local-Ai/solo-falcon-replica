@@ -329,10 +329,11 @@ describe('step 11 — the facts each persona exists to carry are actually presen
   });
 
   // Brief 77 — chain step v25 persisted a carried-in fiscal loss and no persona carried one. The brief
-  // suggested persona 6; that is the wrong home, because `tax.ts` offsets a carried-in loss against the
-  // sistem-real net of the SAME source and persona 6 has none (art. 84¹ rent under a flat ratio, DPI net
-  // declared on the art. 170 alin. (4) ladder). Persona 8 is the persona whose own documented mechanism —
-  // cash basis — produces a fiscal loss, and this test holds the declared fact inside the article.
+  // suggested persona 6; brief 77 measured that as the wrong home, and B-154 (brief 81) found that the
+  // reason was a defect wearing a persona fact: the offset sits on the sistem-real path and a flat-ratio
+  // register never reaches it, so a loss declared there was silently discarded. Persona 8 remains the
+  // persona whose own documented mechanism — cash basis — produces a fiscal loss, and this test holds the
+  // declared fact inside the article. Persona 6 now carries one too, as the refusal case.
   it('persona 8 carries a carried-in loss the engine can actually use', () => {
     const p = PERSONAS.find((x) => x.id === 'online-commerce')!;
     const losses = p.data.profile.priorYearFiscalLosses ?? [];
@@ -347,6 +348,24 @@ describe('step 11 — the facts each persona exists to carry are actually presen
     // read 0,00 and the persona would be decoration.
     expect(p.data.profile.activityFamily).toBe('other');
     expect(p.data.revenues.length).toBeGreaterThan(0);
+  });
+
+  // B-154 — the other half. Persona 6 declares a loss that is inside the window, from a source art. 118
+  // alin. (4) names, and dated after pfaStartYear, so the ONLY thing that can refuse it is the measurement
+  // method. If this ever starts offsetting, the refusal row is wrong and this test is the tripwire.
+  it('persona 6 carries a carried-in loss the engine must refuse, and refuses it for the method alone', async () => {
+    const p = PERSONAS.find((x) => x.id === 'passive-investor')!;
+    const losses = p.data.profile.priorYearFiscalLosses ?? [];
+    expect(losses.map((l) => [l.source, l.lossYear])).toEqual([['activitate_independenta', 2022]]);
+    const [loss] = losses;
+    // Not refused for age, and not refused for source — both of those are already refused elsewhere and
+    // would have proven nothing about art. 118's reach.
+    expect(p.data.profile.fiscalYear - loss.lossYear).toBeLessThanOrEqual(5);
+    expect(loss.lossYear).toBeGreaterThanOrEqual(p.data.profile.pfaStartYear);
+    // The refusal must be about the measurement method and nothing else: inside the window, from a source
+    // art. 118 alin. (4) names, after pfaStartYear. What the engine then says is probed in
+    // `personaCoverage.test.ts`, which is where the engine runs — this file asks what the dataset is.
+    expect(loss.amount).toBe(lei(30000));
   });
 
   it('persona 4 sits at the top of the art. 85 band, not past it', () => {

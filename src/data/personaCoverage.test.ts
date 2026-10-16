@@ -395,6 +395,38 @@ describe('B-129 / B-130 — the flat-ratio profiles: each minimum row agrees wit
     // amount concept in `FiscalBase`, which is the Phase 8 base-semantics surface, not B-129/B-130.
     expect(lineStartingWith(est, 'Venit cumulat pentru CAS (art. 148 alin. (3)')!.value).toBe(lei(30_000));
   });
+
+  // B-154 — the refusal half of art. 118, measured on the persona that declares a loss it cannot use.
+  // Before brief 81 this probe would have found **nothing at all**: no row, no report, no reason. The point
+  // is not that the figure is unchanged (it is, and must stay 9.720,00 lei) but that the app now says why.
+  it('passive-investor declares a carried-in loss and is told, in words, why it cannot offset', async () => {
+    const { est } = await evidence('passive-investor');
+    const refusals = est.lines.filter((l) => l.label.includes('NEAPLICATĂ'));
+    expect(refusals.map((l) => l.value)).toEqual([lei(30_000)]);
+    // The row names the article, the qualifier that refuses it, and the source the person declared.
+    expect(refusals[0].label).toContain('art. 118 alin. (2)');
+    expect(refusals[0].label).toContain('determinat în sistem real');
+    expect(refusals[0].label).toContain('Activitate independentă (art. 68)');
+    // Refused, not applied: art. 118 never opens here, so none of its D212 rows exist on this register.
+    expect(lineStartingWith(est, 'Pierderi fiscale reportate din anii precedenți')).toBeUndefined();
+    expect(lineStartingWith(est, 'Venit net anual recalculat')).toBeUndefined();
+    expect(est.lossCarryIn?.refuzate).toEqual([
+      { source: 'activitate_independenta', lossYear: 2022, amount: lei(30_000) },
+    ]);
+    expect(est.lossCarryIn?.compensata).toBe(lei(0));
+    expect(est.lossCarryIn?.reportate).toBe(lei(0));
+  });
+
+  // The counterpart, on the same article: persona 8 is sistem real, so its loss offsets and the D212 rows
+  // appear. Without this second probe the assertion above could be satisfied by a row that always prints.
+  it('online-commerce is sistem real, so its carried-in loss offsets and the D212 rows appear', async () => {
+    const { est } = await evidence('online-commerce');
+    expect(est.lines.filter((l) => l.label.includes('NEAPLICATĂ'))).toHaveLength(0);
+    expect(lineStartingWith(est, 'Pierderi fiscale reportate din anii precedenți')?.value).toBe(lei(30_000));
+    expect(lineStartingWith(est, 'Pierdere fiscală compensată în anul de raportare')).toBeDefined();
+    expect(lineStartingWith(est, 'Venit net anual recalculat')).toBeDefined();
+    expect(est.lossCarryIn?.refuzate).toEqual([]);
+  });
 });
 
 describe('step 11 — the CAEN→persona map (D-DEMO-3)', () => {

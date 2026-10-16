@@ -19,6 +19,21 @@ import type { VatRegistrationStatus } from '../../domain/fiscal/vat';
 // art. 118 alin. (4)'s list would fail the build here rather than render an undefined option.
 import type { FiscalLossSource } from '../../domain/models';
 
+/**
+ * The three sources art. 118 alin. (4) names, in the article's own words. The list is closed because the
+ * article is closed — a loss from any other source has no carry-forward route in it.
+ *
+ * **B-154 lifted this out of `settings.fiscal` because `domain/tax.ts` reads it too.** The refusal row the
+ * engine emits for a flat-ratio register has to name the source the person declared, and that row is
+ * embedded in the calculation snapshot, so it must be self-contained. One declaration of the three words,
+ * two readers — the standing reason in this repository (`B-70`) for not spelling a token space twice.
+ */
+export const priorLossSourceLabels: Record<FiscalLossSource, string> = {
+  activitate_independenta: 'Activitate independentă (art. 68)',
+  drepturi_proprietate_intelectuala: 'Drepturi de proprietate intelectuală (art. 70)',
+  activitati_agricole: 'Activități agricole, silvicultură și piscicultură (art. 71)',
+};
+
 export const settings = {
   title: 'Setări',
   subtitle: 'Datele PFA, regim fiscal, e-Factura, conturi bancare și cont personal',
@@ -290,13 +305,8 @@ export const settings = {
       + '(veşimea, sursa, fereastra de 5 ani sunt fapte despre fiecare pierdere), nu pentru ca aplicația să-ți '
       + 'verifice declarația. Cifra din formular rămâne a ta.',
     priorLossSource: 'Sursa din care provine pierderea',
-    // The three sources art. 118 alin. (4) names, in the article's own words. The list is closed because the
-    // article is closed — a loss from any other source has no carry-forward route in it.
-    priorLossSourceLabels: {
-      activitate_independenta: 'Activitate independentă (art. 68)',
-      drepturi_proprietate_intelectuala: 'Drepturi de proprietate intelectuală (art. 70)',
-      activitati_agricole: 'Activități agricole, silvicultură și piscicultură (art. 71)',
-    } as Record<FiscalLossSource, string>,
+    // B-154 — the map moved to a module-level export so the engine can read the same three words.
+    priorLossSourceLabels,
     priorLossYear: 'Anul în care pierderea a fost determinată',
     priorLossYearHint:
       'Anul care a produs pierderea, nu anul pe care îl declari acum. Diferența este toată regula: fereastra '

@@ -18,6 +18,15 @@ import { estimateBadge, estimateLine, loadPersona, taxHero } from './persona-har
  * - **Part D item 1** — arendă and asocieri are withholding sources under art. 174¹ alin. (3) and the engine
  *   does not model them. This persona holds both, so it is the one that lands on the gap.
  *
+ * ## A carried-in loss that is refused out loud (B-154, brief 81)
+ *
+ * This persona declares a 30.000-lei `activitate_independenta` loss from 2022 and **cannot use it**: art. 118
+ * alin. (2) and alin. (4) compensate only a venit net „determinat în sistem real”, and this register is
+ * measured by the art. 84¹ flat ratio. Brief 77 therefore kept the loss off persona 6 entirely, because the
+ * app discarded it in silence. Brief 81 closed that as B-154 — refused, with the reason on the row — and the
+ * loss came back precisely so the browser can show the refusal. The hero stays 9.720,00 RON: a refused loss
+ * changes no figure, and that is what the pair of assertions below pins together.
+ *
  * ## Why no DPI receipt is in the register
  *
  * Persona 2 records art. 70 receipts; this persona declares the DPI **net** on the art. 170 alin. (4) ladder.
@@ -36,6 +45,20 @@ test.describe('persona 6 — passive investor (art. 84¹, the ladder, the salari
     await expect(await estimateLine(page, 'Impozit reținut la sursă de plătitor')).toBeVisible();
     await expect(await estimateLine(page, 'Din care: reținut și virat de plătitorul de venit')).toBeVisible();
     // Only the CASS ladder is the person's to pay: 9.720,00 lei on the 24-smn rung.
+    await expect(taxHero(page)).toHaveText('9.720,00 RON');
+  });
+
+  test('a declared carried-in loss is refused, and the refusal says why (B-154)', async ({ page }) => {
+    await loadPersona(page, 'passive-investor');
+    // The row exists, names the article, and carries the amount that was NOT used.
+    const row = await estimateLine(page, 'Pierdere fiscală reportată din 2022');
+    await expect(row).toBeVisible();
+    await expect(row).toContainText('NEAPLICATĂ');
+    await expect(row).toContainText('art. 118 alin. (2)');
+    await expect(row).toContainText('30.000,00');
+    // Refused, not applied: none of art. 118's D212 rows exist on a flat-ratio register.
+    await expect(page.getByText('Venit net anual recalculat')).toHaveCount(0);
+    // And the money is untouched — the refusal is a sentence, not a re-computation.
     await expect(taxHero(page)).toHaveText('9.720,00 RON');
   });
 
