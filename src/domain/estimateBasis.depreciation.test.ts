@@ -538,4 +538,51 @@ describe('B-65 acceptance 4 (brief 74) — the pct. 27 disposal figure is report
     const gaps = depreciationCoverageGaps(selectAssetDepreciation(withAssets([M1_CAR]), AS_OF, RULES));
     expect(gaps.some((g) => g.recordId.endsWith(':disposal'))).toBe(false);
   });
+
+  it('B-156 — a disposed NON-M1 asset gets no pct. 27 figure, and the row names the limit that does apply', () => {
+    // The register's laptop: degresivă, 120.000 lei, 60 luni, pus în funcțiune pe 15 Februarie 2026, scos
+    // din gestiune pe 15 Octombrie 2026 cu un preț de 90.000 lei. 8 luni amortizate (Martie–Octombrie),
+    // 24.000 lei luați (36.000 cota degresivă × 8/12), 96.000 lei rămân neamortizați, 52 luni rămase.
+    //
+    // As an M1 the residual would have been cut to 1.500 × 52 = 78.000 lei. It is not an M1, so pct. 27
+    // never speaks of it: the only limit is the 90.000 lei price, and the residual is under it.
+    const DISPOSED_LAPTOP: FixedAsset = {
+      ...LAPTOP,
+      id: 'asset-laptop-disposed',
+      label: 'Laptop scos din gestiune',
+      disposedOn: '2026-10-15',
+      disposalKind: 'vanzare',
+      disposalProceeds: lei(90000),
+    };
+    const out = depreciationForFiscalYear(depreciationRule, [DISPOSED_LAPTOP], 2026);
+    expect(out.disposals).toHaveLength(1);
+    const d = out.disposals[0]!;
+    expect(d.isM1).toBe(false);
+    expect(d.cap).toBeNull();
+    expect(d.unamortised).toBe(lei(96000));
+    expect(d.remainingMonths).toBe(52);
+    expect(d.proceedsCap).toBe(lei(90000));
+    expect(d.deductible).toBe(lei(90000));
+    expect(d.bound).toBe('proceeds');
+    expect(d.complete).toBe(true);
+    // The money the ungated rule used to cost: the same asset carried an M1 ceiling of 78.000 lei.
+    expect(d.deductible).toBeGreaterThan(lei(78000));
+
+    const gaps = depreciationCoverageGaps(
+      selectAssetDepreciation(withAssets([DISPOSED_LAPTOP]), AS_OF, RULES),
+    );
+    const row = gaps.find((g) => g.recordId === 'asset:asset-laptop-disposed:disposal');
+    expect(row, 'a non-M1 disposal must still be reported').toBeDefined();
+    expect(row!.detail).toContain('nu este un autoturism M1 declarat');
+    expect(row!.detail).not.toContain('plafon 1.500 lei × luni');
+    expect(row!.detail).toContain('Limita care se aplică acestui bun este prețul înstrăinării:');
+    expect(row!.detail).toContain('90.000,00');
+  });
+
+  it('B-156 — the M1 branch keeps its pct. 27 ceiling, so the gate narrows the rule and does not delete it', () => {
+    const out = depreciationForFiscalYear(depreciationRule, [DISPOSED_M1], 2026);
+    const d = out.disposals[0]!;
+    expect(d.isM1).toBe(true);
+    expect(d.cap).toBe(lei(78000)); // 1.500 lei × 52 luni rămase
+  });
 });

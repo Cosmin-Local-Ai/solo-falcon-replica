@@ -452,17 +452,31 @@ function AssetCard({ asset, leg }: { asset: FixedAsset; leg: DepreciationLeg }) 
                   <span className="muted">{assetsCopy.schedule.disposalRemainingMonths}: </span>
                   <span data-testid={`asset-disposal-months-${asset.id}`}>{outcome.disposal.remainingMonths}</span>
                 </div>
-                <div className="text-sm">
-                  <span className="muted">{assetsCopy.schedule.disposalCap}: </span>
-                  <span data-testid={`asset-disposal-cap-${asset.id}`}>{formatBani(outcome.disposal.cap)}</span>
-                </div>
+                {/* B-156 — pct. 27 is written for category M1 only, so the M1 ceiling is shown only for an
+                    M1. A non-M1 residual is not uncapped: the row below shows the limit that does apply. */}
+                {outcome.disposal.cap !== null && (
+                  <div className="text-sm">
+                    <span className="muted">{assetsCopy.schedule.disposalCap}: </span>
+                    <span data-testid={`asset-disposal-cap-${asset.id}`}>{formatBani(outcome.disposal.cap)}</span>
+                  </div>
+                )}
+                {outcome.disposal.proceeds !== null && (
+                  <div className="text-sm">
+                    <span className="muted">{assetsCopy.schedule.disposalProceedsLimit}: </span>
+                    <span data-testid={`asset-disposal-proceeds-${asset.id}`}>{formatBani(outcome.disposal.proceeds)}</span>
+                  </div>
+                )}
                 <div className="text-sm">
                   <span className="muted">{assetsCopy.schedule.disposalDeductible}: </span>
                   <span data-testid={`asset-disposal-deductible-${asset.id}`}>
                     {formatBani(outcome.disposal.deductible)}
                   </span>
                 </div>
-                <div className="text-sm muted" style={{ marginTop: 6 }}>{assetsCopy.schedule.disposalRule}</div>
+                <div className="text-sm muted" style={{ marginTop: 6 }} data-testid={`asset-disposal-rule-${asset.id}`}>
+                  {outcome.disposal.isM1
+                    ? assetsCopy.schedule.disposalRule
+                    : assetsCopy.schedule.disposalRuleNonM1}
+                </div>
               </div>
             )}
           </>

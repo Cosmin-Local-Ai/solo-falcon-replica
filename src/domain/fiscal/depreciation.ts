@@ -316,32 +316,51 @@ export type DepreciationOutcome =
        * out of this flag rather than inferring it from a row count.
        */
       truncatedByDisposal?: boolean;
-      /** The disposal figure under pct. 27, when the asset has left the register. */
+      /**
+       * The disposal figure for an asset that has left the register. The pct. 27 ceiling inside it is
+       * **M1-only** — see `cap`.
+       */
       disposal?: {
         unamortised: Bani;
+        /** Months of the declared duration still unchargeable at the exit. A fact about any asset, M1 or not. */
         remainingMonths: number;
-        /** Titlul II pct. 27 — 1.500 lei × the months left of the declared duration. */
-        cap: Bani;
+        /**
+         * Whether this asset is a declared category M1 passenger vehicle. **Declared, never inferred** —
+         * `isM1Vehicle` is the only source, and it stays the only source.
+         */
+        isM1: boolean;
+        /**
+         * Titlul II pct. 27 — 1.500 lei × the months left of the declared duration, **or `null` when the
+         * asset is not an M1**. B-156: the norm is written „la momentul scăderii din gestiune a
+         * **mijloacelor de transport din categoria M1**” and is keyed to art. 28 alin. (14); it is not a
+         * general disposal ceiling. Applying it to a laptop or an electrotherapy apparatus caps a residual
+         * the norm never mentions, and because pct. 27 is a **deductibility limit**, applying it where it
+         * does not belong understates a deduction the person is entitled to.
+         *
+         * A non-M1 residual is not uncapped: it is still limited, by Titlul IV pct. 7 lit. o), at the
+         * proceeds of the disposal. This is the right cap on the right asset, not the cap removed.
+         */
+        cap: Bani | null;
         /**
          * Titlul IV pct. 7 alin. (5) lit. o) — „nivelul venitului realizat din înstrăinare”. `null` when the
-         * proceeds were never recorded, which means this second limit exists and cannot be measured.
+         * proceeds were never recorded, which means this limit exists and cannot be measured.
          */
         proceedsCap: Bani | null;
         /** The declared proceeds themselves, or `null`. Kept beside the cap so the screen can name its source. */
         proceeds: Bani | null;
         /**
-         * `unamortised` after whichever limit binds. **Only a deductible amount when `complete` is true** —
-         * with no proceeds recorded this is the pct. 27 ceiling alone, and the norm's second limit is still
-         * unapplied.
+         * `unamortised` after whichever limit applies **and can be measured**. **Only a deductible amount
+         * when `complete` is true** — with no proceeds recorded an M1 shows the pct. 27 ceiling alone and a
+         * non-M1 shows no limit at all, and in both cases a limit of the norm is still unapplied.
          */
         deductible: Bani;
         lost: Bani;
         capped: boolean;
-        /** Which limit bound: pct. 27, the proceeds, or neither. */
+        /** Which limit bound: pct. 27 (M1 only), the proceeds, or neither. */
         bound: 'pct-27' | 'proceeds' | 'none';
         /**
          * False while the proceeds are missing. Named so no caller can read `deductible` as postable without
-         * deciding whether the second cap was ever measured.
+         * deciding whether the norm's limit was ever measured.
          */
         complete: boolean;
       };
@@ -760,13 +779,24 @@ export function depreciationSchedule(rule: FiscalRule, asset: FixedAssetFacts): 
  *
  * The duration used is the one the taxpayer declared, never a Catalog default — that is the whole point of
  * the provision's wording, and it is why `normalLifeMonths` is a declared fact here.
+ *
+ * **B-156 — the norm is M1-only, and so is the figure this function produces for it.** It is keyed to
+ * art. 28 alin. (14) and speaks of *mijloacelor de transport din categoria M1*; it is not a general
+ * disposal ceiling (`research/55` §2). The gate reads `asset.isM1Vehicle === true`, which is a **declared**
+ * fact and is never inferred from a label or an expense category. A non-M1 asset that leaves the register
+ * still has a residual and that residual is still capped — by Titlul IV pct. 7 lit. o), at the proceeds —
+ * so this is the right limit on the right asset, not a cap removed. Because pct. 27 is a *deductibility*
+ * limit, running it over a non-M1 understates a deduction the taxpayer is owed: it is not a conservative
+ * error.
  */
 function disposalFigure(
   rule: FiscalRule,
   asset: FixedAssetFacts,
   years: DepreciationYear[],
 ): NonNullable<Extract<DepreciationOutcome, { status: 'computed' }>['disposal']> {
-  const monthlyCap = paramLei(rule, 'm1_disposal_monthly_cap');
+  // B-156 — pct. 27 reaches category M1 passenger vehicles only. The parameter is not even read for
+  // anything else, so a non-M1 asset cannot acquire an M1 ceiling by accident.
+  const isM1 = asset.isM1Vehicle === true;
   // Months amortised up to and including the month of the *scoatere din gestiune*, and the amount taken in
   // those months. pct. 27 counts the months **left** of the duration the taxpayer chose, so neither figure
   // may run past the disposal date.
@@ -794,24 +824,35 @@ function disposalFigure(
   }
   const unamortised = toBaniNearest(new Decimal(asset.fiscalValue).minus(depreciated));
   const remainingMonths = Math.max(0, (asset.normalLifeMonths ?? 0) - monthsUsed);
-  const cap = applyRateDecimal(monthlyCap, remainingMonths * 100).toNumber() as Bani;
-  // Titlul IV norm pct. 7 alin. (5) lit. o) caps the same residual a second time, at the proceeds of the
-  // disposal. Where the proceeds are recorded the two limits are applied together and the smaller binds;
-  // where they are not, the pct. 27 figure is a ceiling and nothing more — `complete` says which.
+  const cap: Bani | null = isM1
+    ? (applyRateDecimal(paramLei(rule, 'm1_disposal_monthly_cap'), remainingMonths * 100).toNumber() as Bani)
+    : null;
+  // Titlul IV norm pct. 7 lit. o) limits the same residual at the proceeds of the disposal. The limits that
+  // apply are the ones the asset's own facts open: pct. 27 for an M1, the proceeds whenever a price was
+  // recorded. Of those, the smallest measurable one binds; where none is measurable, `complete` is false and
+  // no ceiling is claimed.
   const proceeds = asset.disposalProceeds ?? null;
-  const binding: Bani = proceeds === null ? cap : proceeds < cap ? proceeds : cap;
-  const deductible: Bani = unamortised < binding ? unamortised : binding;
+  const limits: Bani[] = [];
+  if (cap !== null) limits.push(cap);
+  if (proceeds !== null) limits.push(proceeds);
+  const binding: Bani | null = limits.length === 0 ? null : limits.reduce((a, b) => (b < a ? b : a));
+  const deductible: Bani = binding === null || unamortised < binding ? unamortised : binding;
   const bound: 'pct-27' | 'proceeds' | 'none' =
-    unamortised <= binding ? 'none' : proceeds !== null && proceeds < cap ? 'proceeds' : 'pct-27';
+    binding === null || unamortised <= binding
+      ? 'none'
+      : cap !== null && binding === cap
+        ? 'pct-27'
+        : 'proceeds';
   return {
     unamortised,
     remainingMonths,
+    isM1,
     cap,
     proceeds,
     proceedsCap: proceeds,
     deductible,
     lost: subBani(unamortised, deductible),
-    capped: unamortised > binding,
+    capped: binding !== null && unamortised > binding,
     bound,
     complete: proceeds !== null,
   };
@@ -862,7 +903,7 @@ export interface AssetDepreciationForYear {
 }
 
 /**
- * B-65 — one disposed asset and the pct. 27 figure the schedule computed for it.
+ * B-65 — one disposed asset and the disposal figure the schedule computed for it.
  *
  * The shape is `DepreciationOutcome['disposal']` plus the identity of the asset, because the schedule
  * already refuses to state a disposal figure without a declared duration (pct. 27 measures the remaining
@@ -873,8 +914,14 @@ export interface AssetDepreciationDisposal {
   label: string;
   unamortised: Bani;
   remainingMonths: number;
-  /** 1.500 lei × the remaining months — the Titlul II pct. 27 ceiling itself. */
-  cap: Bani;
+  /** Declared M1 status — the only fact that opens the pct. 27 ceiling (B-156). */
+  isM1: boolean;
+  /**
+   * 1.500 lei × the remaining months — the Titlul II pct. 27 ceiling itself, **`null` for an asset that is
+   * not a declared category M1 vehicle**. pct. 27 is written for the M1 category only (B-156); a non-M1
+   * residual is limited by pct. 7 lit. o), at the proceeds of the disposal.
+   */
+  cap: Bani | null;
   /**
    * Titlul IV pct. 7 alin. (5) lit. o) — the proceeds, or `null` when they were never recorded and the
    * second limit therefore cannot be measured.

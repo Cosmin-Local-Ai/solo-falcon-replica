@@ -215,3 +215,75 @@ describe('B-153 — closed: the schedule and the residual use ONE month count', 
     expect(out.disposal.unamortised).toBe(L(117500));
   });
 });
+
+/**
+ * B-156 — Titlul II norm pct. 27 is written „la momentul scăderii din gestiune a **mijloacelor de transport
+ * din categoria M1**” and is keyed to art. 28 alin. (14). It is not a general disposal ceiling, and because
+ * it is a **deductibility limit**, running it over a non-M1 understates a deduction the person is owed — the
+ * error costs money, it does not conserve it.
+ *
+ * The gate reads `isM1Vehicle`, which is declared and never inferred, so an undeclared status opens no M1
+ * figure either. A non-M1 residual is not uncapped: it is limited by Titlul IV pct. 7 lit. o), at the
+ * proceeds. Both branches are pinned below.
+ */
+describe('B-156 — pct. 27 covers category M1 vehicles only', () => {
+  it('an M1 disposal carries the pct. 27 ceiling', () => {
+    const d = computed();
+    expect(d.isM1).toBe(true);
+    expect(d.cap).toBe(L(36000)); // 1.500 × the 24 months left of the declared 48
+  });
+
+  it('a declared non-M1 disposal carries NO M1 figure, and the proceeds limit instead', () => {
+    // The same 120.000 lei over 48 months, sold on 31.12.2027 for 50.000 lei: 60.000 lei unamortised with
+    // 24 months left. As an M1 the residual would have been cut to 1.500 × 24 = 36.000 lei. It is not an M1,
+    // so pct. 27 never speaks of it and the only limit is the 50.000 lei price — 14.000 lei more of the
+    // residual is deductible than the ungated rule allowed.
+    const d = computed({ isM1Vehicle: false, disposalProceeds: L(50000) });
+    expect(d.isM1).toBe(false);
+    expect(d.cap).toBeNull();
+    expect(d.unamortised).toBe(L(60000));
+    expect(d.remainingMonths).toBe(24);
+    expect(d.proceedsCap).toBe(L(50000));
+    expect(d.deductible).toBe(L(50000));
+    expect(d.bound).toBe('proceeds');
+    expect(d.capped).toBe(true);
+    expect(d.lost).toBe(L(10000));
+    expect(d.complete).toBe(true);
+    expect(d.deductible).toBeGreaterThan(L(36000));
+  });
+
+  it('an UNDECLARED M1 status opens no M1 ceiling either — the flag is declared, never inferred', () => {
+    // No `isM1Vehicle` fact and a price above the residual: nothing is capped, and no M1 figure appears.
+    // Inferring M1 from the label „Autoturism vândut” would have minted a ceiling out of a name.
+    const d = computed({ isM1Vehicle: undefined, disposalProceeds: L(90000) });
+    expect(d.isM1).toBe(false);
+    expect(d.cap).toBeNull();
+    expect(d.deductible).toBe(L(60000));
+    expect(d.bound).toBe('none');
+    expect(d.capped).toBe(false);
+    expect(d.lost).toBe(0);
+  });
+
+  it('a non-M1 disposal with no price recorded has no measurable limit at all, and says so', () => {
+    // pct. 7 lit. o) still puts a limit on this residual; with no price it cannot be measured. `complete`
+    // false and no ceiling claimed — the app does not fall back to the M1 figure it is not allowed to use.
+    const d = computed({ isM1Vehicle: false });
+    expect(d.cap).toBeNull();
+    expect(d.proceedsCap).toBeNull();
+    expect(d.complete).toBe(false);
+    expect(d.deductible).toBe(L(60000));
+    expect(d.bound).toBe('none');
+    expect(d.capped).toBe(false);
+  });
+
+  it('a non-M1 residual above the price is still capped — by pct. 7 lit. o), not by pct. 27', () => {
+    // „this is not the cap removed”: the same asset sold for 20.000 lei keeps the proceeds limit, and the
+    // 40.000 lei difference is lost exactly as it would be for an M1.
+    const d = computed({ isM1Vehicle: false, disposalProceeds: L(20000) });
+    expect(d.cap).toBeNull();
+    expect(d.deductible).toBe(L(20000));
+    expect(d.bound).toBe('proceeds');
+    expect(d.capped).toBe(true);
+    expect(d.lost).toBe(L(40000));
+  });
+});

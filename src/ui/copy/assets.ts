@@ -123,7 +123,9 @@ export const assets = {
       + 'venitului realizat din înstrăinare”, adică la prețul cu care bunul a fost vândut. Fără această sumă '
       + 'a doua limită nu poate fi măsurată, iar cifra calculată rămâne plafonul de la pct. 27, nu '
       + 'deductibilul final. Nu este o sumă derivată din valoarea fiscală sau din residual: este prețul '
-      + 'tranzacției, și numai tu îl poți declara.',
+      + 'tranzacției, și numai tu îl poți declara. Pentru un bun care nu este un autoturism din categoria '
+      + 'M1, plafonul pct. 27 nu se aplică deloc — norma este scrisă pentru mijloacele de transport din '
+      + 'categoria M1 — iar prețul înstrăinării rămâne singura limită a valorii neamortizate.',
     save: 'Salvează',
     cancel: 'Renunță',
     deleted: 'Bunul a fost șters din registrul local.',
@@ -184,7 +186,8 @@ export const assets = {
     disposalHeading: 'Scăderea din gestiune',
     disposalUnamortised: 'Valoare neamortizată',
     disposalRemainingMonths: 'Luni rămase din durata declarată',
-    disposalCap: 'Plafon deductibil',
+    disposalCap: 'Plafon pct. 27 — 1.500 lei × luni rămase',
+    disposalProceedsLimit: 'Limita din prețul înstrăinării — pct. 7 lit. o)',
     disposalDeductible: 'Deductibil la scăderea din gestiune',
     disposalLost: 'Pierdut definitiv la scăderea din gestiune',
     disposalRule:
@@ -192,6 +195,16 @@ export const assets = {
       'înmulțit cu numărul de luni rămase de amortizat din durata normală de funcționare stabilită de ' +
       'contribuabil. Lunile rămase se calculează din durata pe care ai declarat-o aici, nu dintr-o ' +
       'clasă de catalog.',
+    // B-156 — pct. 27 este scrisă pentru „mijloacele de transport din categoria M1”. Un laptop scos din
+    // gestiune nu are plafon M1; are aceeași valoare neamortizată, limitată de pct. 7 lit. o) la prețul
+    // înstrăinării. Nu scoatem plafonul — punem plafonul potrivit pe bunul potrivit.
+    disposalRuleNonM1:
+      'pct. 27 nu se aplică acestui bun: norma este scrisă „la momentul scăderii din gestiune a '
+      + 'mijloacelor de transport din categoria M1” și este legată de plafonul de 1.500 lei/lună din '
+      + 'art. 28 alin. (14), iar acest bun nu este un autoturism M1. Valoarea neamortizată rămâne și ea '
+      + 'are o limită — pct. 7 lit. o) o limitează „la nivelul venitului realizat din înstrăinare”, adică '
+      + 'la prețul cu care bunul a fost vândut. Faptul că nu este M1 este declarat de tine, nu dedus din '
+      + 'numele bunului.',
     // B-153 / D-DEPR-1 — the stop rule is a reading, and the card says so instead of presenting it as a
     // rule. The rejected alternative is written down here, not left in a commit message.
     stoppedAtDisposal:
