@@ -22,6 +22,9 @@ import type { Bani } from '../src/domain/money';
  *     explicit UTC one (2026-12-31T22:30:00Z) so the browser's own time zone cannot make the test pass.
  *  4. **B-66**: the exported RJIP posts the 10 Jan 2027 collection in the **2027** register, under
  *     10 Jan 2027, and the exported bytes are read back to prove it.
+ *  5. **12C (B-38)**: the default the app applies to an empty money date is stated **on the field that
+ *     decides it** — in the add form, in the expense form with the same words, and in the edit modal,
+ *     where the field is shown overruling it and the choice surviving a reload.
  */
 
 const STORAGE_KEY = 'pfa-app-data-v2';
@@ -182,6 +185,53 @@ test.describe('PG-2 — the money date end to end', () => {
 
     await page.getByRole('button', { name: 'Marchează ca depusă' }).click();
     await expect(page.locator('tr[data-record-id]').first()).toContainText('01.01.2027');
+  });
+
+  // ── 12C (B-38) — the default named where it is chosen ───────────────────────────────────────
+  //
+  // PG-2 proved the money date reaches the estimate. It did not prove that the person is told what happens
+  // when the field is left empty — and the sentence that WAS on the form promised the opposite of what the
+  // engine does (`revenueEmpty`: no collection, no venit brut; `revenueFiscalDate`: the record is read into
+  // the document's year). This test is the visible-default half of B-38, in a browser, because a default a
+  // person never sees is a default they never correct. The clock sits inside FY2026 on purpose: the case is
+  // about a field being empty, not about a closed year, and pinning it in an open year keeps the assertion
+  // about the form rather than about the year lifecycle.
+  test('the money-date default is stated on the field, in both forms, and the field overrules it (B-38)', async ({ page }) => {
+    await fixClock(page, new Date('2026-10-31T12:00:00'));
+    await seedBrowserOnce(page);
+
+    await page.goto('/revenues#!/registered');
+    await page.getByRole('button', { name: /Adaugă venit/ }).click();
+    const revenueNote = page.locator('[data-money-date-default="revenue"]');
+    await expect(revenueNote).toBeVisible();
+    // Beside the input it describes, not merely somewhere on the page.
+    await expect(revenueNote.locator('xpath=..').locator('input[type="date"]')).toHaveCount(1);
+    // Labelled as the app's assumption, which is the whole difference between a default and a fabricated fact.
+    await expect(revenueNote).toContainText('presupunerea aplicației');
+    const defaultSentence = (await revenueNote.textContent())!;
+    await page.getByRole('button', { name: 'Anulează' }).click();
+
+    // One sentence for both registers: the expense form must not grow its own paraphrase of art. 68.
+    await page.goto('/expenses#!/registered');
+    await page.getByRole('button', { name: /Adaugă cheltuială/ }).click();
+    await expect(page.locator('[data-money-date-default="expense"]')).toHaveText(defaultSentence);
+    await page.getByRole('button', { name: 'Anulează' }).click();
+
+    // Correctable where it is admitted: the edit modal states the same default, and writing the date beats it.
+    await page.goto('/revenues#!/registered');
+    await page.locator('tr[data-record-id]').filter({ hasText: 'FCT-2026-001' }).click();
+    await expect(page.locator('[data-money-date-default="revenue"]')).toBeVisible();
+    await modalDateInputs(page).nth(1).fill('2026-11-05');
+    await page.getByRole('button', { name: 'Salvează' }).click();
+
+    await page.reload();
+    await page.goto('/revenues#!/registered');
+    await expect(
+      page
+        .locator('tr[data-record-id]')
+        .filter({ hasText: 'FCT-2026-001' })
+        .locator('[data-fiscal-date-source="collected"]'),
+    ).toHaveText('data încasării: 05.11.2026');
   });
 
   test('the RJIP register posts a 10 Jan 2027 collection in the 2027 register, under that date (B-66)', async ({ page }) => {
