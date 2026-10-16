@@ -98,10 +98,48 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     effectiveTo: null,
     parameters: [
       { id: 'rate', label: 'CAS rate', value: 25, unit: 'percent' },
-      { id: 'min_base', label: 'Tier-1 floor (12 SM annual)', value: lei(48600), unit: 'lei' },
-      { id: 'tier2_base', label: 'Tier-2 floor (24 SM annual) — not a ceiling', value: lei(97200), unit: 'lei' },
-      { id: 'tier1_cas', label: 'CAS at the 12 SM floor', value: lei(12150), unit: 'lei' },
-      { id: 'tier2_cas', label: 'CAS at the 24 SM floor — not a ceiling', value: lei(24300), unit: 'lei' },
+      {
+        id: 'min_base',
+        label: 'Tier-1 floor (12 SM annual)',
+        value: lei(48600),
+        unit: 'lei',
+        // B-45 — the SM vintage a derived base was built from, said where the engine reads the base.
+        // `digestRule` projects a parameter onto {id, value, unit} (`ruleSetDigest.ts:99-102`), so a
+        // description is provenance the hash does not cover: this is not a rule-package release, and
+        // `fiscal/packageDigestStability.test.ts` pins the digest at the same bytes to prove it.
+        description:
+          '12 SM = 12 × 4.050 lei. SM-ul care guvernează FY2026 este cel în vigoare la 1 ianuarie a anului '
+          + 'de realizare a venitului, „indiferent dacă în cursul aceluiași an se utilizează mai multe valori” '
+          + '(art. 135¹ alin. (3) CF), deci 48.600 lei — nu 12 × 4.325. HG 1506/2024 art. 1.',
+      },
+      {
+        id: 'tier2_base',
+        label: 'Tier-2 floor (24 SM annual) — not a ceiling',
+        value: lei(97200),
+        unit: 'lei',
+        description:
+          '24 SM = 24 × 4.050 lei = 97.200 lei, aceeași ancoră de 1 ianuarie (art. 135¹ alin. (3) CF). '
+          + 'Art. 148 alin. (2) este o scară de praguri, nu un plafon: articolul nu conține niciun '
+          + '„nu poate fi mai mare decât”, spre deosebire de art. 170 alin. (1).',
+      },
+      {
+        id: 'tier1_cas',
+        label: 'CAS at the 12 SM floor',
+        value: lei(12150),
+        unit: 'lei',
+        description:
+          '25 % × 48.600 = 12.150 lei — derivat din rată și bază, nu o sumă scrisă în lege. Baza este '
+          + '12 SM = 12 × 4.050 lei, SM-ul de la 1 ianuarie 2026 (art. 135¹ alin. (3) CF).',
+      },
+      {
+        id: 'tier2_cas',
+        label: 'CAS at the 24 SM floor — not a ceiling',
+        value: lei(24300),
+        unit: 'lei',
+        description:
+          '25 % × 97.200 = 24.300 lei, pe o bază de 24 SM = 24 × 4.050 lei (art. 135¹ alin. (3) CF). '
+          + 'Nu este un maxim: art. 148 alin. (2) alege baza de calcul, nu o plafonează.',
+      },
     ],
     calculatorId: 'calc-cas',
     // CF art. 148 alin. (2) lit. a) — 12 SM minimum base for art. 137 alin. (1) lit. b)/b^1) income.
@@ -133,8 +171,25 @@ export const PFA_2026_SYSTEM_REAL_PACKAGE: FiscalRule[] = [
     effectiveTo: null,
     parameters: [
       { id: 'rate', label: 'CASS rate', value: 10, unit: 'percent' },
-      { id: 'min_base', label: 'Top-up floor (6 SM annual) — CF art. 174 alin. (6); conditional, not an unconditional minimum', value: lei(24300), unit: 'lei' },
-      { id: 'max_annual_base', label: 'Max annual base (72 SM)', value: lei(291600), unit: 'lei' },
+      {
+        id: 'min_base',
+        label: 'Top-up floor (6 SM annual) — CF art. 174 alin. (6); conditional, not an unconditional minimum',
+        value: lei(24300),
+        unit: 'lei',
+        description:
+          '6 SM = 6 × 4.050 lei = 24.300 lei, SM-ul de la 1 ianuarie 2026 (art. 135¹ alin. (3) CF). '
+          + 'Art. 174 alin. (6) este o diferență de contribuție condiționată pentru veniturile din art. 155 '
+          + 'alin. (1) lit. b), nu un minim necondiționat.',
+      },
+      {
+        id: 'max_annual_base',
+        label: 'Max annual base (72 SM)',
+        value: lei(291600),
+        unit: 'lei',
+        description:
+          '72 SM = 72 × 4.050 lei = 291.600 lei, aceeași ancoră de 1 ianuarie (art. 135¹ alin. (3) CF); '
+          + 'ANAF publică explicit „291.600 lei (72 x 4.050 lei)” pentru 2026. Plafonul este art. 170 alin. (1).',
+      },
       // ── PG-6d (D-OTH-1, B-41): the CF art. 170 alin. (2)-(4) ladder for art. 155 alin. (1) lit. c)-h) ──
       // These are NEW parameters on the existing CASS rule; no existing value or citation moved. They live
       // here rather than on a rule of their own because the ladder is not a second contribution: art. 174¹
