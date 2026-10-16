@@ -398,6 +398,10 @@ export function personaProfile(
       ? { accommodationTourismEligibility: parts.accommodationTourismEligibility }
       : {}),
     ...(parts.leaseFactsYears !== undefined ? { leaseFactsYears: parts.leaseFactsYears } : {}),
+    // B-145 / chain step v25 — a carried-in fiscal loss is a declared fact, never a derived one. The engine
+    // reads it off the profile and applies art. 118 alin. (4)-(5); this builder passes through exactly what
+    // a persona states and invents nothing when it states nothing.
+    ...(parts.priorYearFiscalLosses !== undefined ? { priorYearFiscalLosses: parts.priorYearFiscalLosses } : {}),
     socialInsuranceStatus: parts.socialInsuranceStatus ?? 'obligatoriu',
     ...(parts.vatRegistration !== undefined ? { vatRegistration: parts.vatRegistration } : {}),
     ...(parts.vatPeriodicityYears !== undefined ? { vatPeriodicityYears: parts.vatPeriodicityYears } : {}),

@@ -138,9 +138,11 @@ describe('step 11 — what a persona must never seed', () => {
       expect(p.data.occupancySheets).toEqual([]);
     });
 
-    it(`${p.id}: no prior-year loss, which the engine cannot consume (B-121)`, () => {
-      // The operand itself does not exist on a profile yet — which is the point: there is nowhere for a
-      // seeded loss to live, and no persona may invent a field to hold one.
+    it(`${p.id}: every revenue and expense amount is a whole, non-negative number of bani`, () => {
+      // The headline used to read "no prior-year loss, which the engine cannot consume (B-121)". That claim
+      // is closed: chain step v25 persisted `profile.priorYearFiscalLosses` and persona 8 now declares one,
+      // so the sentence was left standing over a body that never tested losses at all. The body is what this
+      // test actually checks.
       for (const r of p.data.revenues) {
         expect(Number.isSafeInteger(r.valoareFaraTva.amount)).toBe(true);
         expect(r.valoareFaraTva.amount).toBeGreaterThanOrEqual(0);
@@ -324,6 +326,27 @@ describe('step 11 — the facts each persona exists to carry are actually presen
     // 26.000 lei over a declared 60 months is 5.200 lei a year — the same charge the schedule produces, so
     // the conflict is a real double deduction and not two different sums pretending to be one.
     expect(typed[0].valoareFaraTva.amount).toBe(lei(5200));
+  });
+
+  // Brief 77 — chain step v25 persisted a carried-in fiscal loss and no persona carried one. The brief
+  // suggested persona 6; that is the wrong home, because `tax.ts` offsets a carried-in loss against the
+  // sistem-real net of the SAME source and persona 6 has none (art. 84¹ rent under a flat ratio, DPI net
+  // declared on the art. 170 alin. (4) ladder). Persona 8 is the persona whose own documented mechanism —
+  // cash basis — produces a fiscal loss, and this test holds the declared fact inside the article.
+  it('persona 8 carries a carried-in loss the engine can actually use', () => {
+    const p = PERSONAS.find((x) => x.id === 'online-commerce')!;
+    const losses = p.data.profile.priorYearFiscalLosses ?? [];
+    expect(losses.map((l) => [l.source, l.lossYear])).toEqual([['activitate_independenta', 2022]]);
+    const [loss] = losses;
+    // art. 118 alin. (4): the window is 5 ani fiscali, counted from the year that produced the loss.
+    expect(p.data.profile.fiscalYear - loss.lossYear).toBeLessThanOrEqual(5);
+    // A loss cannot predate the activity that produced it.
+    expect(loss.lossYear).toBeGreaterThanOrEqual(p.data.profile.pfaStartYear);
+    expect(loss.amount).toBe(lei(30000));
+    // The register must have a sistem-real net for the offset to land on — otherwise the rows would all
+    // read 0,00 and the persona would be decoration.
+    expect(p.data.profile.activityFamily).toBe('other');
+    expect(p.data.revenues.length).toBeGreaterThan(0);
   });
 
   it('persona 4 sits at the top of the art. 85 band, not past it', () => {

@@ -33,6 +33,40 @@
  * (5) lit. d) perisabilități *within* the norms are a different thing, and the persona shows the category
  * that exists rather than inventing one that would make the deduction look settled.
  *
+ * ## The 2022 loss this person carried in (brief 77)
+ *
+ * Chain step v25 persisted `profile.priorYearFiscalLosses`, and no persona carried one, so art. 118 alin.
+ * (4)-(5) had no browser proof. This is the persona that can state a loss honestly, for the reason the
+ * persona already states: **the register is cash basis**. art. 68 alin. (2) lit. a) measures „sumele
+ * încasate” and alin. (4) lit. b) assigns a cost to the year it was **paid** — so a year in which the
+ * supplier was paid and the customers were not is a year that closes on a fiscal loss, with no stock model
+ * and no estimate involved. Persona 8 already holds three delivered-but-uncollected invoices to show that
+ * divergence inside one year; the 2022 loss is the same mechanism run across a whole year.
+ *
+ * The declared fact: `activitate_independenta`, loss year **2022**, **30.000 lei**. The arithmetic the
+ * cockpit then shows:
+ *
+ * | | lei |
+ * |---|---|
+ * | rd.3 venit net anual | 119.300,00 |
+ * | plafonul art. 118 alin. (5) lit. b) — 70 % × rd.3 | 83.510,00 |
+ * | rd.5 pierderi reportate (2026 − 2022 = 4, inside the 5-year window) | 30.000,00 |
+ * | rd.6 compensată = min(rd.5, plafon) — the ceiling does **not** cut here | 30.000,00 |
+ * | rd.7 venit net anual recalculat | 89.300,00 |
+ * | impozit 10 % × (rd.7 − CAS 24.300 − CASS 11.930) | 5.307,00 (was 8.307,00) |
+ * | total | **41.537,00** (was 44.537,00) |
+ *
+ * The contributions do not move, and the reason is two separate articles, not an accident: art. 170 alin.
+ * (1) final sentence excludes „pierderile fiscale anuale prevăzute la art. 118” from the CASS base outright,
+ * and art. 148 alin. (3) measures the CAS rung on the net struck **before** the art. 118 offsetting. So the
+ * loss moves exactly one line — the income tax — by exactly 10 % of itself.
+ *
+ * **Why not persona 6.** The brief suggested the passive investor, and it is the wrong home: `tax.ts` applies
+ * a carried-in loss to the sistem-real net of the `activitate_independenta` source, and persona 6 has none —
+ * its register income is art. 84¹ rent under a flat ratio and its DPI net is declared on the art. 170 alin.
+ * (4) ladder. A loss declared there would offset nothing and every art. 118 row would read 0,00: a persona
+ * gaining a fact the engine cannot use, which is worse than an unexercised migration.
+ *
  * ## Thresholds it crosses
  *
  * The **395.000-lei TVA plafon**, crossed in August, with the exceedance date, the effective date and the
@@ -158,6 +192,13 @@ const profile = personaProfile('persona-online-commerce', IDENTITY, [
 ], {
   pfaStartYear: 2020,
   pfaStartDate: '2020-04-27',
+  // Brief 77 / chain step v25 — the year 2022 closed on a fiscal loss, and this is the only place that fact
+  // can live: the register cannot derive it, because deriving it would mean re-running a closed year on
+  // today's rules. Declared, per sursă, with the year that produced it — art. 118 alin. (5) lit. a) counts
+  // the window and the order from that year, not from the one being filed.
+  priorYearFiscalLosses: [
+    { source: 'activitate_independenta', lossYear: 2022, amount: lei(30000) },
+  ],
   activityFamily: 'other',
   vatRegistration: { status: 'plafon_depasit', effectiveFrom: REGISTRATION_EFFECTIVE_FROM },
   vatExceedanceDate: EXCEEDANCE_DATE,
@@ -187,6 +228,7 @@ export const onlineCommercePersona: PersonaDefinition = {
     'Divergența dintre venit și livrările TVA: trei facturi emise și livrate, încă neîncasate',
     'Furnizor din afara UE, plată în euro și conversie la data plății',
     'Stoc fără model de stoc: costul mărfii este cheltuială cash-basis, nu o contabilitate de stocuri',
+    'art. 118 alin. (4)-(5): o pierdere fiscală din 2022, reportată în 2026, se compensează pe aceeași sursă în limita a 70 % din net — și nu mișcă nici CAS, nici CASS',
   ],
   identity: IDENTITY,
   caen: { principal: '4791', secondary: ['4792', '5210', '5320', '6310'] },
