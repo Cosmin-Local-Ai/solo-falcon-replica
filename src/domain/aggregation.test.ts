@@ -416,6 +416,52 @@ describe('fiscal date (collected / paid)', () => {
     ).toBe(lei(59.5));
   });
 
+  // ── 12C (B-38) — the December case, pinned as a pair ──────────────────────────────────────────
+  //
+  // The two tests above show the money date winning. This pair shows the other half, which is the defect
+  // itself: the SAME receipt, read with no money date recorded, lands in the year the paper says and not
+  // the year the money moved. That is not a hypothetical — `revenueFiscalDate` / `expenseFiscalDate` fall
+  // back to `date` for every record whose money date nobody entered, which is every record in the published
+  // seed. Pinning the wrong-year reading next to the right-year reading is what stops the fix from being a
+  // field nobody uses: if the fallback ever starts being presented as the rule, or the money date stops
+  // being writable, one of these assertions breaks.
+
+  it('B-38: a 20 Dec 2026 invoice collected 10 Jan 2027 sits in FY2026 while no collection date is recorded', () => {
+    const issued = revenue('2026-12-20', lei(100), lei(19));
+    const collectedNextYear: Revenue = { ...issued, collected: '2027-01-10' };
+
+    // The reading the app is forced into when nobody told it when the money moved: FY2026.
+    expect(revenueFiscalDate(issued)).toBe('2026-12-20');
+    expect(selectYtd(makeData({ revenues: [issued] }), '2026-12-31').revenue).toBe(lei(119));
+    expect(
+      selectYtd(makeData({ profile: profile(2027), revenues: [issued] }), '2027-12-31').revenue,
+    ).toBe(0);
+
+    // The reading once the person enters the collection date: FY2027, and FY2026 releases it completely.
+    // Art. 68 alin. (2) lit. a) measures „sumele încasate", so 2027 is the only defensible answer.
+    expect(revenueFiscalDate(collectedNextYear)).toBe('2027-01-10');
+    expect(selectYtd(makeData({ revenues: [collectedNextYear] }), '2026-12-31').revenue).toBe(0);
+    expect(
+      selectYtd(makeData({ profile: profile(2027), revenues: [collectedNextYear] }), '2027-12-31').revenue,
+    ).toBe(lei(119));
+  });
+
+  it('B-38: a 30 Dec 2026 cost paid 12 Jan 2027 reduces FY2026 while no payment date is recorded', () => {
+    const documented = expense('2026-12-30', lei(50), lei(9.5));
+    const paidNextYear: Expense = { ...documented, paid: '2027-01-12' };
+
+    // Art. 68 alin. (4) lit. b) admits the cost to „anului în cursul căruia au fost plătite". With no
+    // payment recorded the app reads it into FY2026 — a deduction in a year in which nothing was paid.
+    expect(expenseFiscalDate(documented)).toBe('2026-12-30');
+    expect(selectYtd(makeData({ expenses: [documented] }), '2026-12-31').expenses).toBe(lei(59.5));
+
+    expect(expenseFiscalDate(paidNextYear)).toBe('2027-01-12');
+    expect(selectYtd(makeData({ expenses: [paidNextYear] }), '2026-12-31').expenses).toBe(0);
+    expect(
+      selectYtd(makeData({ profile: profile(2027), expenses: [paidNextYear] }), '2027-12-31').expenses,
+    ).toBe(lei(59.5));
+  });
+
   it('honours asOfDate against the collected date', () => {
     const r: Revenue = { ...revenue('2026-01-05', lei(100), lei(19)), collected: '2026-06-30' };
     expect(selectYtd(makeData({ revenues: [r] }), '2026-06-29').revenue).toBe(0);

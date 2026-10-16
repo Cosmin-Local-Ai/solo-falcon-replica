@@ -21,6 +21,7 @@ import Revenues from './Revenues';
 import { StoreProvider } from '../data/store';
 import { CURRENT_DATA_VERSION } from '../data/migration';
 import { seedData } from '../data/seed';
+import { moneyDate } from '../ui/copy';
 import type { Revenue } from '../data/types';
 import { ron } from '../domain/money';
 import { pinClock, unpinClock } from '../test/clock';
@@ -191,5 +192,65 @@ describe('Revenues — the collection date (PG-2)', () => {
     const note = noteFor('pg2-rev-same');
     expect(note?.source).toBe('collected');
     expect(note?.text).toBe('data încasării: 28.12.2026');
+  });
+
+  // ── 12C (B-38) — the default named on the field that decides it ──────────────────────────────
+  //
+  // PG-2 made `collected` writable and B-67 disclosed the fallback on the estimate, but the form itself
+  // never said what an empty field does. It said the OPPOSITE: `revenueEmpty` promises that without a
+  // collection the sum is not venit brut, while `revenueFiscalDate` resolves the empty field to the
+  // document date and counts the receipt in the document's year. A default that is only visible where its
+  // result is read is still invisible where it is chosen — which is how B-38 would have survived its own
+  // fix. These two tests pin the sentence and, more importantly, pin that it sits beside the input it
+  // describes and that the input can overrule it.
+
+  it('the add form states, beside the collection field, which year the app picks when it is left empty (B-38)', () => {
+    pinClock(fixedInstant());
+    seedWith([]);
+    render(
+      <StoreProvider>
+        <Revenues />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Adaugă venit/ }));
+    const note = document.querySelector('[data-money-date-default="revenue"]');
+    expect(note?.textContent).toBe(moneyDate.fallbackDefault);
+    // Not merely present somewhere on the page: it has to be in the same field as the collection input.
+    const field = note?.closest('.field');
+    expect(field).not.toBeNull();
+    expect(field!.contains(dateInputs()[1])).toBe(true);
+  });
+
+  it('the default is labelled as the app\u2019s assumption, never as a rule from the Cod fiscal (B-38)', () => {
+    // research/37 §5 forbids one specific claim on this surface: that the document date sets the fiscal
+    // year, or that any provision presumes document date = money date. The sentence is allowed to state the
+    // fallback only while it names the fallback as the app's own.
+    expect(moneyDate.fallbackDefault).toContain('presupunerea aplicației');
+    expect(moneyDate.fallbackDefault).toContain('nu o regulă din Codul fiscal');
+    expect(moneyDate.fallbackDefault).toContain('art. 68 alin. (2) lit. a)');
+    expect(moneyDate.fallbackDefault).not.toMatch(/conform Codului fiscal|prezumă că data documentului/);
+  });
+
+  it('the edit form states the same default and the field overrules it (B-38)', async () => {
+    pinClock(fixedInstant());
+    seedWith([revenue({ id: 'pg2-rev-default', nr: 'FCT-PG2-906', date: '2026-12-20' })]);
+    render(
+      <StoreProvider>
+        <Revenues />
+      </StoreProvider>,
+    );
+    fireEvent.click(document.querySelector('tr[data-record-id="pg2-rev-default"]')!);
+
+    expect(document.querySelector('[data-money-date-default="revenue"]')?.textContent).toBe(
+      moneyDate.fallbackDefault,
+    );
+    const collected = dateInputs()[1];
+    expect(collected.value).toBe('');
+
+    // Correctable, in the same modal that admitted the assumption.
+    fireEvent.change(collected, { target: { value: '2027-01-10' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvează' }));
+    await waitFor(() => expect(savedRevenue('FCT-PG2-906')?.collected).toBe('2027-01-10'));
+    expect(savedRevenue('FCT-PG2-906')!.date).toBe('2026-12-20');
   });
 });

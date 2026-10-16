@@ -10,9 +10,13 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen, cleanup, waitFor } from '@testing-library/react';
 import Expenses from './Expenses';
+// Imported only for the cross-form pin below: the two forms must read ONE sentence, and proving that needs
+// both surfaces mounted in one test.
+import Revenues from './Revenues';
 import { StoreProvider } from '../data/store';
 import { CURRENT_DATA_VERSION } from '../data/migration';
 import { seedData } from '../data/seed';
+import { moneyDate } from '../ui/copy';
 import type { Expense } from '../data/types';
 import { ron } from '../domain/money';
 import { pinClock, unpinClock } from '../test/clock';
@@ -156,5 +160,74 @@ describe('Expenses — the payment date (PG-2)', () => {
     const note = noteFor('pg2-exp-plain');
     expect(note?.source).toBe('date');
     expect(note?.text).toBe('data documentului');
+  });
+
+  // ── 12C (B-38) — the default named on the field that decides it ──────────────────────────────
+  //
+  // The expense side of the same finding, and the sharper half of it: `expenseEmpty` tells the person that
+  // an unpaid expense is not deductible, while `expenseFiscalDate` resolves an empty `paid` to the document
+  // date and deducts the cost in the document's year. Art. 68 alin. (4) lit. b) admits a cheltuială „al
+  // anului în cursul căruia au fost plătite", so that is the year the app picked on paper, not the year the
+  // money left. The sentence below is the app saying so on the field where the choice is made.
+
+  it('the add form states, beside the payment field, which year the app picks when it is left empty (B-38)', () => {
+    pinClock(fixedInstant());
+    seedWith([]);
+    render(
+      <StoreProvider>
+        <Expenses />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Adaugă cheltuială/ }));
+    const note = document.querySelector('[data-money-date-default="expense"]');
+    expect(note?.textContent).toBe(moneyDate.fallbackDefault);
+    const field = note?.closest('.field');
+    expect(field).not.toBeNull();
+    expect(field!.contains(dateInputs()[1])).toBe(true);
+  });
+
+  it('one sentence serves both forms: the fallback cannot grow a second paraphrase (B-38)', () => {
+    // The reason `moneyDate` is a single module is that the revenue form, the expense form and the RJIP
+    // register must not each re-word art. 68. This pins that the two forms read the SAME key.
+    pinClock(fixedInstant());
+    seedWith([]);
+    const { unmount } = render(
+      <StoreProvider>
+        <Revenues />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Adaugă venit/ }));
+    const revenueNote = document.querySelector('[data-money-date-default="revenue"]')?.textContent;
+    unmount();
+    render(
+      <StoreProvider>
+        <Expenses />
+      </StoreProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Adaugă cheltuială/ }));
+    expect(document.querySelector('[data-money-date-default="expense"]')?.textContent).toBe(revenueNote);
+    expect(revenueNote).toBe(moneyDate.fallbackDefault);
+  });
+
+  it('the edit form states the same default and the field overrules it (B-38)', async () => {
+    pinClock(fixedInstant());
+    seedWith([expense({ id: 'pg2-exp-default', nr: 'FCT-PG2-915', date: '2026-12-30' })]);
+    render(
+      <StoreProvider>
+        <Expenses />
+      </StoreProvider>,
+    );
+    fireEvent.click(document.querySelector('tr[data-record-id="pg2-exp-default"]')!);
+
+    expect(document.querySelector('[data-money-date-default="expense"]')?.textContent).toBe(
+      moneyDate.fallbackDefault,
+    );
+    const paid = dateInputs()[1];
+    expect(paid.value).toBe('');
+
+    fireEvent.change(paid, { target: { value: '2027-01-12' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvează' }));
+    await waitFor(() => expect(savedExpense('FCT-PG2-915')?.paid).toBe('2027-01-12'));
+    expect(savedExpense('FCT-PG2-915')!.date).toBe('2026-12-30');
   });
 });

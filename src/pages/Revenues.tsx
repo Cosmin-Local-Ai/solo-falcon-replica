@@ -209,6 +209,8 @@ function RevenueForm({ initial, onSave, onClose }: {
           {errors.collected && <span className="error">{errors.collected}</span>}
           <span className="text-sm muted">{moneyDate.revenueHint}</span>
           <span className="text-sm muted">{moneyDate.revenueEmpty}</span>
+          {/* 12C (B-38) — the fallback named as a default, on the field that decides it. */}
+          <span className="text-sm muted" data-money-date-default="revenue">{moneyDate.fallbackDefault}</span>
         </div>
         <div className="field">
           <label>{revenuesCopy.columns.client} <span className="req">*</span></label>

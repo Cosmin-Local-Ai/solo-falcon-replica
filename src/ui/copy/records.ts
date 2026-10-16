@@ -683,6 +683,29 @@ export const moneyDate = {
   expenseEmpty:
     'Poți lăsa câmpul gol cât timp banul nu s-a mișcat: fără plată cheltuiala nu este deductibilă '
     + '(art. 68 alin. (4) lit. b) din Codul fiscal).',
+  /**
+   * 12C (B-38) — the default stated where the decision is made, not only where its result is read.
+   *
+   * `revenueEmpty` / `expenseEmpty` tell the person that an empty money date is a legal state: no
+   * collection, no venit brut. What they do NOT say — and what the engine then does anyway — is that a
+   * record with no money date is attributed to the fiscal year of its DOCUMENT date, because
+   * `revenueFiscalDate` / `expenseFiscalDate` fall back to `date` when nothing else is recorded. So the
+   * form promised one consequence and the estimate produced another: the default was visible on the row
+   * (`FiscalDateNote`) and on the estimate (B-67's `assumedFromDocument`) but not on the two fields where
+   * the person chooses. That is B-38 surviving its own fix — the assumption becomes invisible exactly where
+   * it is being made.
+   *
+   * One key, not two: the revenue form and the expense form must not each grow their own paraphrase of the
+   * same stand-in (the reason `moneyDate` is one module at all). The wording is B-67's vocabulary, and it
+   * stays inside what `docs/ai/research/37_cash_basis_date_semantics.md` §5 permits — it names the
+   * fallback as the app's own assumption and denies, in the same breath, that any provision presumes
+   * document date = money date. It does not tell the person which date to record: that stays their call.
+   */
+  fallbackDefault:
+    'Fără dată de încasare sau de plată înregistrată, aplicația alege anul fiscal al datei documentului. '
+    + 'Aceasta este presupunerea aplicației, nu o regulă din Codul fiscal: legea alege anul după banul '
+    + 'încasat sau plătit (art. 68 alin. (2) lit. a) și alin. (4) lit. b) din Codul fiscal). '
+    + 'Completează data de mai sus ca s-o corectezi.',
   /** research/37 §5 sentence 1, the claim the whole surface rests on. */
   rule:
     'Anul fiscal rezultă din data încasării, respectiv din data plății — nu din data documentului '

@@ -179,6 +179,8 @@ function ExpenseForm({ initial, vehicles, fixedAssets, onSave, onClose }: {
           {errors.paid && <span className="error">{errors.paid}</span>}
           <span className="text-sm muted">{moneyDate.expenseHint}</span>
           <span className="text-sm muted">{moneyDate.expenseEmpty}</span>
+          {/* 12C (B-38) — the fallback named as a default, on the field that decides it. */}
+          <span className="text-sm muted" data-money-date-default="expense">{moneyDate.fallbackDefault}</span>
         </div>
         <div className="field">
           <label>{expensesCopy.columns.provider} <span className="req">*</span></label>
