@@ -366,7 +366,7 @@ describe('threshold bases (Phase 8 — amount semantics, on seeded data)', () =>
     // TASK 2b moves `cheltuieliDeductibile`, and that is the whole point of the task: the label stops
     // meaning "every expense" and starts meaning "the expenses a rule says are deductible". Derived by
     // hand before running, from seed.ts:
-    //   e1 120,00 lei `postal_and_telecom`  -> deductibilă (Normele pct. 7 alin. (5) lit. j))
+    //   e1 120,00 lei `postal_and_telecom`  -> deductibilă (Normele pct. 7 lit. j))
     //   e2  85,50 lei `personal_or_family_use` -> nedeductibilă (art. 68 alin. (7) lit. a))
     //   e3 340,00 lei `business_space_upkeep` -> exclusă de statusul 'respinsa', ca și până acum
     //   cheltuieli deductibile = 120,00 lei (a fost 205,50 lei)

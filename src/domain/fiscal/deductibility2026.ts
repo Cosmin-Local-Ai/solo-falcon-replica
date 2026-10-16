@@ -375,7 +375,7 @@ export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
     category: 'rent_business_space',
     treatment: 'deductible',
     note: 'Normele pct. 7 alin. (5) lit. d) — „în baza unui contract de închiriere". UNVERIFIED and deliberately not decided: rent paid by the PFA to the same individual\'s own patrimony has no express rule in the sources read.',
-    ...NORME('Normele HG 1/2016 pct. 7 alin. (5) lit. d)'),
+    ...NORME('Normele HG 1/2016 pct. 7 lit. d)'),
   }),
   rule({
     ruleId: 'EXPENSE_BANK_INTEREST_2026',
@@ -383,7 +383,7 @@ export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
     category: 'bank_interest',
     treatment: 'deductible',
     note: 'Normele pct. 7 alin. (5) lit. e). Interest on loans from NON-BANK persons is separately capped at the BNR reference rate by art. 68 alin. (5) lit. n), which borrows art. 27 alin. (7) lit. b) — one of the four named Titlul II borrowings.',
-    ...NORME('Normele HG 1/2016 pct. 7 alin. (5) lit. e); dobânzi persoane non-bancare art. 68 alin. (5) lit. n) coroborat cu art. 27 alin. (7) lit. b) titlul II'),
+    ...NORME('Normele HG 1/2016 pct. 7 lit. e); dobânzi persoane non-bancare art. 68 alin. (5) lit. n) coroborat cu art. 27 alin. (7) lit. b) titlul II'),
   }),
   rule({
     ruleId: 'EXPENSE_POSTAL_TELECOM_2026',
@@ -391,7 +391,7 @@ export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
     category: 'postal_and_telecom',
     treatment: 'deductible',
     note: 'Normele pct. 7 alin. (5) lit. i). NO percentage cap exists for a PFA pe sistem real — the only limits are the purpose test (art. 68 alin. (1), alin. (4) lit. j)), the documentation condition (alin. (4) lit. a)) and, where the line also serves the person privately, the apportionment rule at alin. (5) lit. i).',
-    ...NORME('Normele HG 1/2016 pct. 7 alin. (5) lit. i); art. 68 alin. (4) lit. a) și j)'),
+    ...NORME('Normele HG 1/2016 pct. 7 lit. i); art. 68 alin. (4) lit. a) și j)'),
   }),
   rule({
     ruleId: 'EXPENSE_ENERGY_WATER_2026',
@@ -399,7 +399,7 @@ export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
     category: 'energy_and_water',
     treatment: 'deductible',
     note: 'Normele pct. 7 alin. (5) lit. j). Same absence of cap as postal/telecom; a line that also serves the household falls to the apportionment residue (EXPENSE_HOME_OFFICE_SHARED_2026).',
-    ...NORME('Normele HG 1/2016 pct. 7 alin. (5) lit. j)'),
+    ...NORME('Normele HG 1/2016 pct. 7 lit. j)'),
   }),
   rule({
     ruleId: 'EXPENSE_BUSINESS_SPACE_UPKEEP_2026',
@@ -407,7 +407,7 @@ export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
     category: 'business_space_upkeep',
     treatment: 'deductible',
     note: 'Normele pct. 7 alin. (5), closing sentence: deductible „chiar dacă documentele sunt emise pe numele proprietarului, și nu pe numele contribuabilului".',
-    ...NORME('Normele HG 1/2016 pct. 7 alin. (5), closing sentence'),
+    ...NORME('Normele HG 1/2016 pct. 7, closing sentence'),
   }),
   rule({
     ruleId: 'EXPENSE_DEPRECIATION_BUSINESS_ASSET_2026',
@@ -610,7 +610,7 @@ export const DEDUCTIBILITY_RULES_2026: FiscalRule[] = [
     category: 'comodat_immovable_share',
     treatment: 'undetermined',
     missingFact: 'Normele pct. 7 alin. (5) lit. r) admit the running and maintenance costs of immovable goods subject to a comodat contract „pentru partea aferentă utilizării în scopul afacerii, potrivit înțelegerii din contract". The deductible share is a term of the contract, which the app does not hold.',
-    ...NORME('Normele HG 1/2016 pct. 7 alin. (5) lit. r); art. 68 alin. (5) lit. i)'),
+    ...NORME('Normele HG 1/2016 pct. 7 lit. r); art. 68 alin. (5) lit. i)'),
   }),
 
   // ── Where the law says there is no expense engine at all (defect B-29) ─────────────────────────

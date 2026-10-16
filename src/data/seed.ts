@@ -238,7 +238,7 @@ export const seedData: AppData = {
     // The three tokens are chosen so the demo shows all three fates, and each is the honest reading of
     // the document the fixture depicts — none is chosen to make a figure land somewhere:
     //   e1  Conectica SRL, factură de hosting/conectivitate → `postal_and_telecom`, deductibilă
-    //       (Normele HG 1/2016 pct. 7 alin. (5) lit. j)).
+    //       (Normele HG 1/2016 pct. 7 lit. j)).
     //   e2  Coșul Zilnic SRL, bon fiscal de la un supermarket → `personal_or_family_use`, expres nedeductibil
     //       (CF art. 68 alin. (7) lit. a): „cheltuielile efectuate în interes personal sau de familie”).
     //   e3  Papetaria SRL, factură de rechizite → `business_space_upkeep`, deductibilă ca categorie,

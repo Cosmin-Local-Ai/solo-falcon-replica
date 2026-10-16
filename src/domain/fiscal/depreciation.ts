@@ -7,7 +7,7 @@
  * `docs/ai/research/36_fixed_assets_and_depreciation_2026.md` §1.1 puts the borrowing rule in one
  * sentence: CF art. 68 alin. (4) lit. d) requires a Titlul IV expense „să respecte regulile privind
  * amortizarea, prevăzute în titlul II, după caz". The Titlul IV norms then make depreciation deductible
- * by name — pct. 7 alin. (5) lit. n): „cheltuielile cu amortizarea, în conformitate cu prevederile art.
+ * by name — pct. 7 lit. n): „cheltuielile cu amortizarea, în conformitate cu prevederile art.
  * 28 din Codul fiscal, după caz" — and pct. 7 alin. (7) expressly takes depreciation OUT of the 50 %
  * vehicle haircut and re-points it at art. 28: „cu excepția cheltuielilor privind amortizarea pentru care
  * se aplică regulile privind amortizarea prevăzute la art. 28 titlul II".
@@ -543,7 +543,7 @@ export function depreciationSchedule(rule: FiscalRule, asset: FixedAssetFacts): 
   const depreciationStartYear = monthOf(asset.putInFunctionDate) >= 12 ? startYear + 1 : startYear;
   const notes: string[] = [
     'art. 28 alin. (12) lit. a): amortizarea începe cu luna următoare punerii în funcțiune. Plata nu este ' +
-      'condiția — normele Titlul IV pct. 7 alin. (5) lit. n) fac amortizarea deductibilă fără nicio ' +
+      'condiția — normele Titlul IV pct. 7 lit. n) fac amortizarea deductibilă fără nicio ' +
       'condiție de plată. Citește contrară: art. 68 alin. (4) lit. b) cere cheltuieli „plătite" în ' +
       'exercițiu. Nicio sursă ANAF nu susține vreo latură — comportarea de aici este o citire a ' +
       'aplicației, nu o regulă citată.',
@@ -554,7 +554,7 @@ export function depreciationSchedule(rule: FiscalRule, asset: FixedAssetFacts): 
       gap: 'plata_vs_punere_in_functiune',
       reason:
         'Mijlocul fix este pus în funcțiune dar nu este integral plătit. art. 28 alin. (12) lit. a) cu ' +
-        'normele pct. 7 alin. (5) lit. n) spun că amortizarea începe în anul punerii în funcțiune; art. 68 ' +
+        'normele pct. 7 lit. n) spun că amortizarea începe în anul punerii în funcțiune; art. 68 ' +
         'alin. (4) lit. b) spune că sunt deductibile cheltuielile „plătite" în exercițiul financiar. ' +
         'research/36 §4.3 și §11.1 sunt un negativ documentat: nicio normă Titlul IV și nicio prevedere REF ' +
         'nu rezolvă coliziunea. Aplicația aplică citirea anului punerii în funcțiune când faptele nu o fac ' +

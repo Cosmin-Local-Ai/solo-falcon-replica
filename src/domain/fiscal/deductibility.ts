@@ -46,7 +46,7 @@ export type ExpenseCategory =
   // venitul net anual impozabil stage (art. 118 alin. (2) lit. b)). Deducting it here would
   // double-count it.
   | 'owner_social_contributions'
-  // Deductible ordinary business expenses — Normele HG 1/2016 pct. 7 alin. (5).
+  // Deductible ordinary business expenses — Normele HG 1/2016 pct. 7.
   | 'employer_social_contributions'
   | 'rent_business_space'
   | 'bank_interest'
